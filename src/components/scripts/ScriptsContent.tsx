@@ -2,7 +2,7 @@
 import { ScriptsRenderer } from './ScriptsRenderer';
 import { useState } from 'react';
 import { ALL_MOCK_SCRIPTS, MOCK_ACCOUNTS, MOCK_KNOWLEDGE_NEW, MOCK_TOPICS } from '@/lib/constants/mock-data';
-import { usePersistentState, STORAGE_KEYS, getStoredData, saveData } from '@/lib/storage';
+import { usePersistentState, STORAGE_KEYS, saveData, getStoredData } from '@/lib/storage';
 import type { Script, Topic } from '@/lib/constants/types';
 import { generateShortVideoScript, scoreVideoScript, checkScriptRisk } from '@/lib/ai/script-pipeline';
 
@@ -211,7 +211,6 @@ export default function ScriptsContent() {
     };
 
     setScripts(prev => [newScript, ...prev]);
-    saveData(STORAGE_KEYS.SCRIPTS, [...getStoredData(STORAGE_KEYS.SCRIPTS, ALL_MOCK_SCRIPTS), newScript]);
     setSelectedId(newScript.id);
     setAiResult({
       message: result.title ? '已生成短视频口播脚本「' + result.title + '」' : '已生成脚本',

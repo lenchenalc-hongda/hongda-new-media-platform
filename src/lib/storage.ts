@@ -1,5 +1,5 @@
 'use client';
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 
 // ===== 存储键名 =====
 export const STORAGE_KEYS = {
@@ -79,7 +79,16 @@ export function deleteManyData<T extends { id: string }>(key: string, data: T[],
 // ===== React Hook =====
 
 export function usePersistentState<T>(storageKey: string, fallback: T[]) {
-  const [data, setData] = useState<T[]>(() => loadData(storageKey, fallback));
+  // 先使用 fallback（mock 数据）进行 SSR 渲染
+  const [data, setData] = useState<T[]>(fallback);
+
+  // 客户端水合完成后，从 localStorage 加载已保存的数据
+  useEffect(() => {
+    const stored = loadData(storageKey, fallback);
+    if (stored !== fallback || (Array.isArray(stored) && stored.length > 0)) {
+      setData(stored);
+    }
+  }, []);
 
   const setPersisted = useCallback((update: T[] | ((prev: T[]) => T[])) => {
     setData(prev => {
