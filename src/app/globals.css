@@ -1,0 +1,84 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --primary: #2563eb;
+  --primary-50: #eff6ff;
+  --primary-100: #dbeafe;
+  --primary-200: #bfdbfe;
+  --primary-600: #2563eb;
+  --primary-700: #1d4ed8;
+  --gray-50: #f9fafb;
+  --gray-100: #f3f4f6;
+  --gray-200: #e5e7eb;
+  --gray-300: #d1d5db;
+  --gray-400: #9ca3af;
+  --gray-500: #6b7280;
+  --gray-600: #4b5563;
+  --gray-700: #374151;
+  --gray-800: #1f2937;
+  --gray-900: #111827;
+  --green-500: #22c55e;
+  --green-600: #16a34a;
+  --red-500: #ef4444;
+  --red-600: #dc2626;
+  --yellow-500: #eab308;
+  --amber-500: #f59e0b;
+  --blue-500: #3b82f6;
+  --purple-500: #a855f7;
+}
+
+body {
+  color: var(--gray-900);
+  background: var(--gray-50);
+}
+
+@layer base {
+  input, select, textarea {
+    @apply border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500;
+  }
+  button {
+    @apply text-sm font-medium rounded-lg transition-colors;
+  }
+}
+
+@layer components {
+  .btn-primary {
+    @apply bg-blue-600 text-white px-4 py-2 hover:bg-blue-700 disabled:opacity-50;
+  }
+  .btn-secondary {
+    @apply bg-white text-gray-700 border border-gray-300 px-4 py-2 hover:bg-gray-50;
+  }
+  .btn-danger {
+    @apply bg-red-600 text-white px-4 py-2 hover:bg-red-700;
+  }
+  .btn-sm {
+    @apply px-3 py-1.5 text-xs;
+  }
+  .card {
+    @apply bg-white rounded-lg border border-gray-200 p-4;
+  }
+  .badge {
+    @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium;
+  }
+  .badge-green { @apply badge bg-green-100 text-green-800; }
+  .badge-blue { @apply badge bg-blue-100 text-blue-800; }
+  .badge-yellow { @apply badge bg-yellow-100 text-yellow-800; }
+  .badge-red { @apply badge bg-red-100 text-red-800; }
+  .badge-gray { @apply badge bg-gray-100 text-gray-800; }
+  .badge-purple { @apply badge bg-purple-100 text-purple-800; }
+  
+  .input-field {
+    @apply w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500;
+  }
+  .select-field {
+    @apply w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500;
+  }
+  .table-header {
+    @apply px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider;
+  }
+  .table-cell {
+    @apply px-4 py-3 text-sm text-gray-700;
+  }
+}

@@ -1,0 +1,2 @@
+customer_name,company,product,material,quantity,requirement_type,phone,wechat,source_platform,is_urgent,pain_points
+王工,深圳电子厂,外壳印刷,ABS,5000,huamo,13800138000,wang123,weixin,FALSE,丝印效率太低
