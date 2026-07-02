@@ -210,6 +210,7 @@ export default function ScriptsContent() {
     };
 
     setScripts(prev => [newScript, ...prev]);
+    ALL_MOCK_SCRIPTS.push(newScript);
     setSelectedId(newScript.id);
     setAiResult({
       message: result.title ? '已生成短视频口播脚本「' + result.title + '」' : '已生成脚本',
