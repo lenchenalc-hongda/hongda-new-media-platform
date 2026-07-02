@@ -258,6 +258,8 @@ export interface Lead {
   next_follow_up_date: string | null;
   notes: string | null;
   created_at: string;
+  source_branch: string | null;
+  month: string | null;
 }
 
 export interface LeadInteraction {

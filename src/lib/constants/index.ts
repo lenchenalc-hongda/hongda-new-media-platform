@@ -353,3 +353,9 @@ export const QUALITY_DIMENSIONS = [
   { key: 'platform_fit', label: '适合视频号还是抖音', max: 10 },
   { key: 'cta_score', label: '结尾有没有让人想行动', max: 10 },
 ];
+
+// 线索承接来源
+export const SOURCE_BRANCHES = [
+  { value: '汕头宏达', label: '汕头宏达', color: 'red' },
+  { value: '东莞宏达', label: '东莞宏达', color: 'black' },
+];
