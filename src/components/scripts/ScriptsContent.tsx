@@ -23,7 +23,8 @@ export default function ScriptsContent() {
 
   const selected = scripts.find(s => s.id === selectedId);
 
-  const filtered = scripts.filter(s => {
+  // 按创建时间排序（最新在最前）
+  const filtered = [...scripts].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).filter(s => {
     if (search) {
       const q = search.toLowerCase();
       if (!s.title?.toLowerCase().includes(q) && !s.main_script?.toLowerCase().includes(q)) return false;
@@ -228,6 +229,17 @@ export default function ScriptsContent() {
     return Math.min(base, 98);
   };
 
+  const handleDeleteScript = (id: string) => {
+    setScripts(prev => prev.filter(s => s.id !== id));
+    if (selectedId === id) {
+      setSelectedId(null);
+      setEditingScriptId(null);
+      setEditForm({});
+    }
+    setAiResult({ message: '已删除脚本 ✅' });
+    setTimeout(() => setAiResult(null), 3000);
+  };
+
   const qualityScore = selected ? getQualityScore(selected) : 0;
 
   return <ScriptsRenderer
@@ -245,6 +257,7 @@ export default function ScriptsContent() {
     handleStartEdit={handleStartEdit}
     handleSaveEdit={handleSaveEdit}
     handleCancelEdit={handleCancelEdit}
+    handleDeleteScript={handleDeleteScript}
     handlePushToTopics={handlePushToTopics}
     setEditForm={setEditForm}
     setSelectedId={setSelectedId}
