@@ -6,6 +6,7 @@ import StatusBadge from '@/components/ui/StatusBadge';
 import AiResultCard from '@/components/ui/AiResultCard';
 import EmptyState from '@/components/ui/EmptyState';
 import { MOCK_LEADS, MOCK_ACCOUNTS } from '@/lib/constants/mock-data';
+import { usePersistentState, STORAGE_KEYS } from '@/lib/storage';
 import { getPlatformLabel, getRequirementTypeLabel, getLeadGradeLabel, truncate, formatDate } from '@/lib/utils';
 import { PLATFORMS, LEAD_STATUSES, LEAD_GRADES, REQUIREMENT_TYPES, SOURCE_BRANCHES } from '@/lib/constants';
 import type { Lead } from '@/lib/constants/types';
@@ -26,7 +27,7 @@ const BRANCH_COLORS: Record<string, string> = {
 };
 
 export default function LeadsPage() {
-  const [leads, setLeads] = useState<Lead[]>(MOCK_LEADS);
+  const [leads, setLeads] = usePersistentState<Lead>(STORAGE_KEYS.LEADS, MOCK_LEADS);
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [aiResult, setAiResult] = useState<any>(null);
   const [filters, setFilters] = useState<Record<string, string>>({});

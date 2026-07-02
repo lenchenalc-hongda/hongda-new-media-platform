@@ -7,6 +7,7 @@ import FilterBar from '@/components/ui/FilterBar';
 import EmptyState from '@/components/ui/EmptyState';
 import AiResultCard from '@/components/ui/AiResultCard';
 import { MOCK_TOPICS, MOCK_ACCOUNTS, MOCK_KNOWLEDGE, ALL_MOCK_SCRIPTS } from '@/lib/constants/mock-data';
+import { usePersistentState, STORAGE_KEYS } from '@/lib/storage';
 import {
   TOPIC_CONTENT_TYPES, TOPIC_SOURCE_OPTIONS, TOPIC_STATUSES_NEW,
   TOPIC_SCRIPT_STATUSES, TOPIC_PRIORITIES_NEW, TOPIC_PLATFORMS,
@@ -44,7 +45,7 @@ const getAccountLabel = (id: string) => MOCK_ACCOUNTS.find(a => a.id === id)?.na
 
 // ---------- Component ----------
 export default function TopicsPage() {
-  const [topics, setTopics] = useState<Topic[]>(MOCK_TOPICS);
+  const [topics, setTopics] = usePersistentState<Topic>(STORAGE_KEYS.TOPICS, MOCK_TOPICS);
   const [activeTab, setActiveTab] = useState<'all' | 'week'>('all');
   const [filters, setFilters] = useState<Record<string, string>>({});
   const [search, setSearch] = useState('');

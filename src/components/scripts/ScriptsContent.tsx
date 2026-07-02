@@ -2,11 +2,12 @@
 import { ScriptsRenderer } from './ScriptsRenderer';
 import { useState } from 'react';
 import { ALL_MOCK_SCRIPTS, MOCK_ACCOUNTS, MOCK_KNOWLEDGE_NEW, MOCK_TOPICS } from '@/lib/constants/mock-data';
+import { usePersistentState, STORAGE_KEYS, getStoredData, saveData } from '@/lib/storage';
 import type { Script, Topic } from '@/lib/constants/types';
 import { generateShortVideoScript, scoreVideoScript, checkScriptRisk } from '@/lib/ai/script-pipeline';
 
 export default function ScriptsContent() {
-  const [scripts, setScripts] = useState(ALL_MOCK_SCRIPTS);
+  const [scripts, setScripts] = usePersistentState<any>(STORAGE_KEYS.SCRIPTS, ALL_MOCK_SCRIPTS);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showWizard, setShowWizard] = useState(false);
   const [showAiMenu, setShowAiMenu] = useState(false);
@@ -148,7 +149,7 @@ export default function ScriptsContent() {
       created_by: 'u1',
       created_at: new Date().toISOString(),
     };
-    MOCK_TOPICS.push(newTopic);
+    saveData(STORAGE_KEYS.TOPICS, [...getStoredData(STORAGE_KEYS.TOPICS, MOCK_TOPICS), newTopic]);
     setPushedToTopics(prev => new Set(prev).add(scriptId));
     setAiResult({
       message: '已推进到选题库待审核 ✅',
@@ -210,7 +211,7 @@ export default function ScriptsContent() {
     };
 
     setScripts(prev => [newScript, ...prev]);
-    ALL_MOCK_SCRIPTS.push(newScript);
+    saveData(STORAGE_KEYS.SCRIPTS, [...getStoredData(STORAGE_KEYS.SCRIPTS, ALL_MOCK_SCRIPTS), newScript]);
     setSelectedId(newScript.id);
     setAiResult({
       message: result.title ? '已生成短视频口播脚本「' + result.title + '」' : '已生成脚本',

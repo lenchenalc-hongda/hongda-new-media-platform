@@ -9,9 +9,10 @@ import { MOCK_ACCOUNTS } from '@/lib/constants/mock-data';
 import { getPlatformLabel, truncate } from '@/lib/utils';
 import { PLATFORMS, ACCOUNT_STATUSES } from '@/lib/constants';
 import type { AccountWithStats, Platform, AccountStatus, ContentType } from '@/lib/constants/types';
+import { usePersistentState, STORAGE_KEYS } from '@/lib/storage';
 
 export default function AccountsPage() {
-  const [accounts, setAccounts] = useState<AccountWithStats[]>(MOCK_ACCOUNTS);
+  const [accounts, setAccounts] = usePersistentState<AccountWithStats>(STORAGE_KEYS.ACCOUNTS, MOCK_ACCOUNTS);
   const [filterPlatform, setFilterPlatform] = useState('');
   const [search, setSearch] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
