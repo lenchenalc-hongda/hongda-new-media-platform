@@ -149,7 +149,6 @@ export function ScriptsRenderer(p: ScriptsRendererProps) {
                   {s.hook && <span className="text-[10px] bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded truncate max-w-[180px]">{truncate(s.hook, 25)}</span>}
                 </div>
                 <div className="flex items-center justify-between mt-1.5 text-[10px] text-gray-400">
-                  <button onClick={(e) => { e.stopPropagation(); p.handleDeleteScript(s.id); }} className="text-red-400 hover:text-red-600 transition-colors">删除</button>
                   <span>{score}分</span>
                   <span>{formatDateTime(s.created_at)}</span>
                 </div>
@@ -201,7 +200,6 @@ export function ScriptsRenderer(p: ScriptsRendererProps) {
                             推进到选题库待审核
                           </button>
                         )}
-                        <button className="btn-danger btn-sm" onClick={() => { p.handleDeleteScript(p.selected!.id); }}>删除</button>
                       </>
                     )}
                   </div>
