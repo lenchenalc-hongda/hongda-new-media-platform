@@ -200,6 +200,7 @@ export function ScriptsRenderer(p: ScriptsRendererProps) {
                             推进到选题库待审核
                           </button>
                         )}
+                        <button className="btn-danger btn-sm" onClick={() => { p.handleDeleteScript(p.selected!.id); }}>删除</button>
                       </>
                     )}
                   </div>
