@@ -1,14 +1,16 @@
 'use client';
 import { ScriptsRenderer } from './ScriptsRenderer';
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { ALL_MOCK_SCRIPTS, MOCK_ACCOUNTS, MOCK_KNOWLEDGE_NEW, MOCK_TOPICS } from '@/lib/constants/mock-data';
 import { usePersistentState, STORAGE_KEYS, saveData, getStoredData } from '@/lib/storage';
 import type { Script, Topic } from '@/lib/constants/types';
-import { generateShortVideoScript, scoreVideoScript, checkScriptRisk } from '@/lib/ai/script-pipeline';
+import { generateShortVideoScript } from '@/lib/ai/script-pipeline';
+import { scoreScript, ScriptScoreResult } from '@/lib/ai/script-scoring';
 
 export default function ScriptsContent() {
   const [scripts, setScripts] = usePersistentState<any>(STORAGE_KEYS.SCRIPTS, ALL_MOCK_SCRIPTS);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [showWizard, setShowWizard] = useState(false);
   const [showAiMenu, setShowAiMenu] = useState(false);
   const [activeAiAction, setActiveAiAction] = useState<string | null>(null);
@@ -37,6 +39,7 @@ export default function ScriptsContent() {
     return true;
   });
 
+  const allSelected = filtered.length > 0 && selectedIds.size === filtered.length;
   const getAccountName = (id: string | null) => MOCK_ACCOUNTS.find(a => a.id === id)?.name || '-';
 
   const handleAiAction = async (action: string) => {
@@ -102,53 +105,24 @@ export default function ScriptsContent() {
       content_type: (s.ai_meta as any)?.structure || '客户问答',
       platform: account?.platform || '视频号',
       topic_source: '脚本工厂',
-      target_customer: null,
-      customer_pain: null,
-      product_process: null,
-      material: null,
-      content_angle: null,
-      core_point: null,
-      why_user_watch: null,
-      content_purpose: null,
-      conversion_goal: null,
-      comment_guidance: null,
-      private_message_action: null,
-      required_customer_info: null,
-      sample_guidance: null,
-      shooting_method: null,
-      video_length: null,
-      required_products: null,
-      required_shots: null,
-      required_factory_assets: null,
-      required_case_images: null,
-      logo_risk: null,
-      privacy_risk: null,
-      knowledge_refs: null,
-      faq_refs: null,
-      case_refs: null,
-      viral_refs: null,
-      review_refs: null,
-      risk_rules: null,
-      script_status: '已生成',
-      linked_script_id: scriptId,
-      linked_post_id: null,
-      topic_score: null,
-      score_detail: null,
-      risk_level: null,
-      risk_result: null,
-      owner_id: null,
-      last_action: null,
-      is_this_week: false,
-      planned_shoot_date: null,
-      planned_publish_date: null,
-      target_audience: null,
-      product_or_process: null,
-      source: '脚本工厂',
-      priority: '中',
-      status: '待审核',
+      target_customer: null, customer_pain: null, product_process: null,
+      material: null, content_angle: null, core_point: null,
+      why_user_watch: null, content_purpose: null, conversion_goal: null,
+      comment_guidance: null, private_message_action: null,
+      required_customer_info: null, sample_guidance: null,
+      shooting_method: null, video_length: null, required_products: null,
+      required_shots: null, required_factory_assets: null, required_case_images: null,
+      logo_risk: null, privacy_risk: null, knowledge_refs: null,
+      faq_refs: null, case_refs: null, viral_refs: null,
+      review_refs: null, risk_rules: null,
+      script_status: '已生成', linked_script_id: scriptId, linked_post_id: null,
+      topic_score: null, score_detail: null, risk_level: null, risk_result: null,
+      owner_id: null, last_action: null, is_this_week: false,
+      planned_shoot_date: null, planned_publish_date: null,
+      target_audience: null, product_or_process: null,
+      source: '脚本工厂', priority: '中', status: '待审核',
       notes: '从脚本工厂推进过来',
-      created_by: 'u1',
-      created_at: new Date().toISOString(),
+      created_by: 'u1', created_at: new Date().toISOString(),
     };
     saveData(STORAGE_KEYS.TOPICS, [...getStoredData(STORAGE_KEYS.TOPICS, MOCK_TOPICS), newTopic]);
     setPushedToTopics(prev => new Set(prev).add(scriptId));
@@ -167,91 +141,117 @@ export default function ScriptsContent() {
     const selectedCards = data.knowledge_refs
       ? MOCK_KNOWLEDGE_NEW.filter(k => data.knowledge_refs.includes(k.id))
       : [];
-
     const result = generateShortVideoScript({
-      ...data,
-      account: account || {},
+      ...data, account: account || {},
       video_length: data.video_length || '30',
       platform: data.platform || 'weixin',
       knowledgeCards: selectedCards,
       customer_pain: data.customer_pain || selectedCards[0]?.title || '',
       product_or_process: data.product_or_process || selectedCards[0]?.category || '',
     });
-
     const scriptText = result.script;
-    const score = scoreVideoScript(scriptText, account);
-    const risk = checkScriptRisk(scriptText, []);
-
+    const duration = data.video_length || '30';
+    const scoreResult = scoreScript(scriptText, duration);
     const newScript: Script = {
-      id: 's' + Date.now(),
-      org_id: 'org_001',
-      topic_id: null,
-      account_id: data.account_id || 'a1',
-      title: result.title,
-      hook: result.hook,
-      main_script: scriptText,
-      shot_list: [],
+      id: 's' + Date.now(), org_id: 'org_001',
+      topic_id: null, account_id: data.account_id || 'a1',
+      title: result.title, hook: result.hook,
+      main_script: scriptText, shot_list: [],
       subtitle_points: result.subtitlePoints,
       cover_text: (result as any).coverText || '',
       comment_reply: result.commentGuidance,
       private_message_cta: result.privateMessageCta,
-      risk_notes: result.riskNotes,
-      version: 1,
-      status: 'draft',
+      risk_notes: result.riskNotes, version: 1, status: 'draft',
       ai_meta: {
-        source: data.source || 'from_knowledge',
-        generated_by: 'wizard_v2',
-        quality_score: score.score,
-        score_detail: score,
-        risk_level: risk.riskLevel,
-        risk_points: risk.riskPoints,
+        source: data.source || 'from_knowledge', generated_by: 'wizard_v2',
+        quality_score: scoreResult.totalScore, score_detail: scoreResult,
+        risk_level: scoreResult.riskLevel, risk_points: scoreResult.riskPoints,
         word_count: result.wordCount,
       },
-      created_by: 'u1',
-      created_at: new Date().toISOString(),
+      created_by: 'u1', created_at: new Date().toISOString(),
     };
-
     setScripts(prev => [newScript, ...prev]);
     setSelectedId(newScript.id);
     setAiResult({
       message: result.title ? '已生成短视频口播脚本「' + result.title + '」' : '已生成脚本',
-      '副标题': result.hook,
-      '评分': score.score + '/100',
-      '等级': score.grade,
-      '风险': risk.riskLevel,
+      '副标题': result.hook, '评分': scoreResult.totalScore + '/100',
+      '等级': scoreResult.grade, '风险': scoreResult.riskLevel,
       '字数': result.wordCount + '字',
     });
   };
 
-  const getQualityScore = (s: Script): number => {
-    if (s.ai_meta?.quality_score) return s.ai_meta.quality_score as number;
-    const base = 65 + Math.floor(Math.random() * 25);
-    return Math.min(base, 98);
+  const getScoreResult = (s: Script): ScriptScoreResult => {
+    if (s.ai_meta?.score_detail) return s.ai_meta.score_detail as ScriptScoreResult;
+    const text = s.main_script || s.hook || '';
+    return scoreScript(text, '30');
   };
 
   const handleDeleteScript = (id: string) => {
     setScripts(prev => prev.filter(s => s.id !== id));
-    if (selectedId === id) {
-      setSelectedId(null);
-      setEditingScriptId(null);
-      setEditForm({});
-    }
+    if (selectedId === id) { setSelectedId(null); setEditingScriptId(null); setEditForm({}); }
     setAiResult({ message: '已删除脚本 ✅' });
     setTimeout(() => setAiResult(null), 3000);
   };
 
-  const qualityScore = selected ? getQualityScore(selected) : 0;
+  // === Multiselect & Bulk ===
+  const handleToggleSelect = (id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+  const handleToggleSelectAll = () => {
+    if (allSelected) setSelectedIds(new Set());
+    else setSelectedIds(new Set(filtered.map(s => s.id)));
+  };
+  const handleBulkSaveDraft = () => {
+    setScripts(prev => prev.map(s => selectedIds.has(s.id) ? { ...s, status: 'draft' as any } : s));
+    setSelectedIds(new Set());
+    setAiResult({ message: '已保存 ' + selectedIds.size + ' 个到草稿 ✅' });
+    setTimeout(() => setAiResult(null), 3000);
+  };
+  const handleBulkSavePendingReview = () => {
+    setScripts(prev => prev.map(s => selectedIds.has(s.id) ? { ...s, status: 'pending_review' as any } : s));
+    setSelectedIds(new Set());
+    setAiResult({ message: '已提交 ' + selectedIds.size + ' 个到待审核 ✅' });
+    setTimeout(() => setAiResult(null), 3000);
+  };
+  const handleBulkPolish = () => {
+    setAiResult({ message: '批量润色 ' + selectedIds.size + ' 个脚本（mock）' });
+    setTimeout(() => setAiResult(null), 3000);
+  };
+  const handleBulkRiskCheck = () => {
+    setAiResult({ message: '批量风险检查 ' + selectedIds.size + ' 个脚本（mock）' });
+    setTimeout(() => setAiResult(null), 3000);
+  };
+  const handleBulkScore = () => {
+    setAiResult({ message: '批量重新评分 ' + selectedIds.size + ' 个脚本（mock）' });
+    setTimeout(() => setAiResult(null), 3000);
+  };
+  const handleBulkDiscard = () => {
+    setScripts(prev => prev.filter(s => !selectedIds.has(s.id)));
+    setSelectedIds(new Set());
+    setAiResult({ message: '已丢弃 ' + selectedIds.size + ' 个脚本' });
+    setTimeout(() => setAiResult(null), 3000);
+  };
+
+  const selectedScoreResult = useMemo(() => {
+    if (!selected) return null;
+    return getScoreResult(selected);
+  }, [selected]);
 
   return <ScriptsRenderer
     scripts={scripts} filtered={filtered} selected={selected}
     search={search} filters={filters}
     showAiMenu={showAiMenu} showWizard={showWizard}
     aiResult={aiResult} activeAiAction={activeAiAction}
-    qualityScore={qualityScore} selectedId={selectedId}
+    scoreResult={selectedScoreResult} selectedId={selectedId}
     editingScriptId={editingScriptId} editForm={editForm}
     pushedToTopics={pushedToTopics}
+    selectedIds={selectedIds}
     getAccountName={getAccountName}
-    getQualityScore={getQualityScore}
+    getScoreResult={getScoreResult}
     handleAiAction={handleAiAction}
     handleWizardGenerate={handleWizardGenerate}
     handleStartEdit={handleStartEdit}
@@ -259,6 +259,14 @@ export default function ScriptsContent() {
     handleCancelEdit={handleCancelEdit}
     handleDeleteScript={handleDeleteScript}
     handlePushToTopics={handlePushToTopics}
+    onBulkSaveDraft={handleBulkSaveDraft}
+    onBulkSavePendingReview={handleBulkSavePendingReview}
+    onBulkPolish={handleBulkPolish}
+    onBulkRiskCheck={handleBulkRiskCheck}
+    onBulkScore={handleBulkScore}
+    onBulkDiscard={handleBulkDiscard}
+    onToggleSelect={handleToggleSelect}
+    onToggleSelectAll={handleToggleSelectAll}
     setEditForm={setEditForm}
     setSelectedId={setSelectedId}
     setSearch={setSearch} setFilters={setFilters}

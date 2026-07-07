@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import AppLayout from '@/components/layout/AppLayout';
 import PageHeader from '@/components/layout/PageHeader';
+import EnvStatusBadge from '@/components/system/EnvStatusBadge';
 import StatCard from '@/components/ui/StatCard';
 import AiResultCard from '@/components/ui/AiResultCard';
 import { MOCK_ACCOUNTS, MOCK_POSTS, MOCK_METRICS, MOCK_LEADS } from '@/lib/constants/mock-data';
@@ -43,6 +44,7 @@ export default function DashboardPage() {
       <PageHeader
         title="新媒体战情盘"
         description="团队本周运营概览"
+        actions={<EnvStatusBadge />}
       />
 
       {/* Stats Grid */}

@@ -1,2 +1,3 @@
-title,category,core_conclusion,plain_explanation,is_external_allowed,customer_questions,new_media_expression,dont_say
-热转印适用材质,material,ABS/PP/PC适合热转印,不是所有塑料都能做,TRUE,我的产品能不能做？,你的产品什么材质？,不能说全部能做
+知识卡标题,分类,卡类型,核心结论,简介,可用范围,状态,适用账号ID（逗号分隔）
+PE材质热转印附着力,工艺知识,工艺知识卡,PE材质表面能低需要专用胶水,PE材质热转印的注意事项,可对外,已确认,a1,a2
+客户问价格怎么回,客户FAQ,客户FAQ知识卡,不能直接报价需要先问材质和数量,标准话术模板,可对外,已确认,a1,a2,a3

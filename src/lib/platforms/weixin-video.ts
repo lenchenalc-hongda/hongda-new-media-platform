@@ -1,3 +1,4 @@
+// @server-only - uses secret env vars, cannot be imported in 'use client' modules
 /**
  * 微信视频号开放平台 API 对接模块
  * 

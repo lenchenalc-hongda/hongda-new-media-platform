@@ -1,3 +1,4 @@
+// @server-only - uses secret env vars, cannot be imported in 'use client' modules
 /**
  * 抖音开放平台 API 对接模块
  * 

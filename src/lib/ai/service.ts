@@ -1,3 +1,4 @@
+// @server-only - uses secret env vars, cannot be imported in 'use client' modules
 import OpenAI from 'openai';
 import {
   SYSTEM_PROMPT,
@@ -11,9 +12,12 @@ import {
   LEAD_REPLY_PROMPT,
   WEEKLY_REPORT_PROMPT,
 } from './prompts';
+import { logAiRun } from './logger';
 
 const openaiApiKey = process.env.OPENAI_API_KEY;
 const openaiModel = process.env.OPENAI_MODEL || 'gpt-4o';
+
+export const AI_MOCK_MODE = !openaiApiKey;
 
 function getClient() {
   if (!openaiApiKey) return null;
@@ -25,7 +29,6 @@ function parseJsonResponse(text: string): any {
   try {
     return JSON.parse(cleaned);
   } catch {
-    // Try to find JSON object in the text
     const match = cleaned.match(/\{[\s\S]*\}/);
     if (match) {
       try {
@@ -38,11 +41,36 @@ function parseJsonResponse(text: string): any {
   }
 }
 
+function detectRunType(prompt: string): string {
+  if (prompt.includes('account_diagnosis') || prompt.includes('诊断')) return 'account_diagnosis';
+  if (prompt.includes('generate_topics') || prompt.includes('选题')) return 'generate_topics';
+  if (prompt.includes('generate_script') || prompt.includes('脚本')) return 'generate_script';
+  if (prompt.includes('rewrite') || prompt.includes('改写')) return 'rewrite_script';
+  if (prompt.includes('viral_teardown') || prompt.includes('拆解')) return 'viral_teardown';
+  if (prompt.includes('post_review') || prompt.includes('复盘')) return 'post_review';
+  if (prompt.includes('lead_score') || prompt.includes('线索评分')) return 'lead_score';
+  if (prompt.includes('lead_reply') || prompt.includes('回复')) return 'lead_reply';
+  if (prompt.includes('weekly_report') || prompt.includes('周报')) return 'weekly_report';
+  return 'weekly_report';
+}
+
 export async function callAI(prompt: string, systemPrompt: string = SYSTEM_PROMPT): Promise<any> {
+  const startTime = Date.now();
+  const runType = detectRunType(prompt) as any;
   const client = getClient();
+
   if (!client) {
-    return getMockResponse(prompt);
+    const result = getMockResponse(prompt);
+    logAiRun({
+      run_type: runType,
+      input: { prompt: prompt.slice(0, 200) },
+      output: result,
+      success: true,
+      duration_ms: Date.now() - startTime,
+    });
+    return result;
   }
+
   try {
     const response = await client.chat.completions.create({
       model: openaiModel,
@@ -53,10 +81,27 @@ export async function callAI(prompt: string, systemPrompt: string = SYSTEM_PROMP
       response_format: { type: 'json_object' },
     });
     const content = response.choices[0]?.message?.content || '{}';
-    return parseJsonResponse(content);
+    const result = parseJsonResponse(content);
+    logAiRun({
+      run_type: runType,
+      input: { prompt: prompt.slice(0, 200) },
+      output: result,
+      success: true,
+      duration_ms: Date.now() - startTime,
+    });
+    return result;
   } catch (error: any) {
     console.error('AI call failed:', error.message);
-    return getMockResponse(prompt);
+    const mockResult = getMockResponse(prompt);
+    logAiRun({
+      run_type: runType,
+      input: { prompt: prompt.slice(0, 200) },
+      output: mockResult,
+      success: false,
+      error: error.message,
+      duration_ms: Date.now() - startTime,
+    });
+    return mockResult;
   }
 }
 
@@ -75,10 +120,10 @@ function getMockResponse(prompt: string): any {
       topics: [
         { title: '热转印和丝印到底差在哪？一次讲清楚', suitable_account: '老板讲工艺号', content_type: 'process', target_audience: '纠结工艺选择的客户', customer_pain: '不知道选什么工艺', opening_hook: '很多人问热转印和丝印哪个好，今天直接告诉你答案', conversion_goal: '引导咨询', shooting_advice: '准备好两种工艺的样品做对比', risk_reminder: '不要偏颇地说一种工艺全面优于另一种' },
         { title: '印了20年的老师傅告诉你：这个材质不能热转印', suitable_account: '老板讲工艺号', content_type: 'qa', target_audience: '有产品需要判断的客户', customer_pain: '不确定材质是否适合', opening_hook: '有些材质看起来可以，但热转印就是不行', conversion_goal: '获取产品需求', shooting_advice: '展示多种材质的测试对比', risk_reminder: '以实际测试为准' },
-        { title: '实拍：一条热转印生产线从开机到出成品', suitable_account: '工厂实拍号', content_type: 'factory', target_audience: '关心工厂实力的客户', customer_pain: '不了解生产工艺', opening_hook: '从开机到出成品，今天把完整流程拍给你看', conversion_goal: '建立信任', shooting_advice: '跟拍一整天，剪辑加速', risk_reminder: '注意员工隐私' },
+        { title: '实拍：从开机到出成品的完整流程', suitable_account: '工厂实拍号', content_type: 'factory', target_audience: '关心工厂实力的客户', customer_pain: '不了解生产工艺', opening_hook: '从开机到出成品，今天把完整流程拍给你看', conversion_goal: '建立信任', shooting_advice: '跟拍一整天，剪辑加速', risk_reminder: '注意员工隐私' },
         { title: '客户要求7天交货，我们是怎么做到的？', suitable_account: '工厂实拍号', content_type: 'case', target_audience: '关注交期的客户', customer_pain: '担心交期太长', opening_hook: '急单怎么办？今天看看我们怎么抢时间', conversion_goal: '展示产能实力', shooting_advice: '展示快速换模、加班安排等', risk_reminder: '不要承诺客户同等交期' },
-        { title: '从打样到量产：一个化妆品客户的全流程记录', suitable_account: '案例展示号', content_type: 'case', target_audience: '化妆品行业客户', customer_pain: '不清楚打样到量产流程', opening_hook: '化妆品瓶盖热转印，从打样到交付只用了12天', conversion_goal: '获取样品需求', shooting_advice: '展示每一步的实物和文件', risk_reminder: '客户信息脱敏' },
-        { title: '热转印最低起订量真的可以做100个吗？', suitable_account: '客户问答号', content_type: 'qa', target_audience: '小批量需求客户', customer_pain: '担心起订量太高', opening_hook: '100个能不能做？今天统一回答', conversion_goal: '引导私信', shooting_advice: '展示100个和1000个的包装区别', risk_reminder: '不能说具体价格' },
+        { title: '从打样到量产：化妆品客户全流程', suitable_account: '案例展示号', content_type: 'case', target_audience: '化妆品行业客户', customer_pain: '不清楚打样到量产流程', opening_hook: '化妆品瓶盖热转印，从打样到交付只用了12天', conversion_goal: '获取样品需求', shooting_advice: '展示每一步的实物和文件', risk_reminder: '客户信息脱敏' },
+        { title: '热转印最低起订量真的可以做100个吗？', suitable_account: '客户问答号', content_type: 'qa', target_audience: '小批量需求客户', customer_pain: '担心起订量太高', opening_hook: '100个能不能做？', conversion_goal: '引导私信', shooting_advice: '展示100个和1000个的包装区别', risk_reminder: '不能说具体价格' },
         { title: '为什么你的热转印总掉色？可能是这3个原因', suitable_account: '老板讲工艺号', content_type: 'process', target_audience: '有印刷质量困扰的客户', customer_pain: '转印效果不理想', opening_hook: '客户说热转印掉色，我一问发现是这个问题', conversion_goal: '树立专业形象', shooting_advice: '展示好的和差的对比', risk_reminder: '归因要客观' },
         { title: '车间实拍：这个产品的热转印难度在哪？', suitable_account: '工厂实拍号', content_type: 'product', target_audience: '有类似产品的客户', customer_pain: '不确定自己的产品能不能做', opening_hook: '这个产品看着简单，其实难度不小', conversion_goal: '建立信任', shooting_advice: '特写难度部位', risk_reminder: '不要过度强调难度吓退客户' },
         { title: '附着力测试现场：这个产品通过了吗？', suitable_account: '案例展示号', content_type: 'process', target_audience: '有测试要求的客户', customer_pain: '担心印刷品质', opening_hook: '附着力测试怎么做？今天现场测给你看', conversion_goal: '展示品控能力', shooting_advice: '完整记录测试过程', risk_reminder: '以实际测试报告为准' },
@@ -124,15 +169,8 @@ function getMockResponse(prompt: string): any {
       structure: '抛出问题 → 列出对比维度 → 逐点分析 → 给出判断标准 → 引导互动',
       trust_elements: '具有工厂实拍背景、有具体产品对比画面、有数据支撑',
       conversion_action: '评论区留言产品信息获取专业建议',
-      learnable_points: [
-        '开头制造认知冲突的句式效果明显',
-        '三要素对比结构清晰易懂',
-        '结尾的互动引导精准筛选目标客户',
-      ],
-      not_suitable: [
-        '如果没有真实产品对比素材，效果打折扣',
-        '过于通用的话术缺乏工厂特色',
-      ],
+      learnable_points: ['开头制造认知冲突的句式效果明显', '三要素对比结构清晰易懂', '结尾的互动引导精准筛选目标客户'],
+      not_suitable: ['如果没有真实产品对比素材，效果打折扣', '过于通用的话术缺乏工厂特色'],
       adapted_topics: [
         { title: '热转印还是水转印？3个维度帮你判断', suitable_account: '老板讲工艺号', approach: '用同样的三要素对比结构，结合宏达实际案例' },
         { title: '做小批量印刷，这2个工艺最省钱', suitable_account: '客户问答号', approach: '针对小批量需求做工艺对比，给出推荐方案' },

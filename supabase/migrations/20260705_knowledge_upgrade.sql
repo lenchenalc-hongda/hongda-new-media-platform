@@ -1,0 +1,36 @@
+-- Upgrade knowledge_cards with execution-grade fields
+ALTER TABLE knowledge_cards ADD COLUMN IF NOT EXISTS card_type text DEFAULT '';
+ALTER TABLE knowledge_cards ADD COLUMN IF NOT EXISTS core_conclusion text;
+ALTER TABLE knowledge_cards ADD COLUMN IF NOT EXISTS content_scope text DEFAULT '仅内部参考';
+ALTER TABLE knowledge_cards ADD COLUMN IF NOT EXISTS knowledge_status text DEFAULT '草稿';
+ALTER TABLE knowledge_cards ADD COLUMN IF NOT EXISTS owner_id uuid;
+ALTER TABLE knowledge_cards ADD COLUMN IF NOT EXISTS reviewer_id uuid;
+ALTER TABLE knowledge_cards ADD COLUMN IF NOT EXISTS version text DEFAULT 'v1';
+ALTER TABLE knowledge_cards ADD COLUMN IF NOT EXISTS last_updated_at timestamptz DEFAULT now();
+ALTER TABLE knowledge_cards ADD COLUMN IF NOT EXISTS applicable_platforms text[] DEFAULT '{}';
+ALTER TABLE knowledge_cards ADD COLUMN IF NOT EXISTS applicable_content_types text[] DEFAULT '{}';
+ALTER TABLE knowledge_cards ADD COLUMN IF NOT EXISTS applicable_customers text[] DEFAULT '{}';
+ALTER TABLE knowledge_cards ADD COLUMN IF NOT EXISTS forbidden_expressions text[] DEFAULT '{}';
+ALTER TABLE knowledge_cards ADD COLUMN IF NOT EXISTS risky_expressions text[] DEFAULT '{}';
+ALTER TABLE knowledge_cards ADD COLUMN IF NOT EXISTS safer_alternatives text[] DEFAULT '{}';
+ALTER TABLE knowledge_cards ADD COLUMN IF NOT EXISTS topic_ideas jsonb DEFAULT '[]';
+ALTER TABLE knowledge_cards ADD COLUMN IF NOT EXISTS script_angles jsonb DEFAULT '[]';
+ALTER TABLE knowledge_cards ADD COLUMN IF NOT EXISTS linked_topic_ids uuid[] DEFAULT '{}';
+ALTER TABLE knowledge_cards ADD COLUMN IF NOT EXISTS linked_script_ids uuid[] DEFAULT '{}';
+ALTER TABLE knowledge_cards ADD COLUMN IF NOT EXISTS usage_count int DEFAULT 0;
+
+COMMENT ON COLUMN knowledge_cards.card_type IS '知识卡类型：工艺/材料/FAQ/话术/模板等';
+COMMENT ON COLUMN knowledge_cards.core_conclusion IS '核心结论（一句话说清楚）';
+COMMENT ON COLUMN knowledge_cards.content_scope IS '可用范围：可对外/可模糊对外/仅内部参考/禁止对外';
+COMMENT ON COLUMN knowledge_cards.knowledge_status IS '状态：草稿/待审核/已确认/需更新/已过期/停用';
+COMMENT ON COLUMN knowledge_cards.applicable_platforms IS '适用平台列表';
+COMMENT ON COLUMN knowledge_cards.applicable_content_types IS '适用内容类型列表';
+COMMENT ON COLUMN knowledge_cards.applicable_customers IS '适用客户类型列表';
+COMMENT ON COLUMN knowledge_cards.forbidden_expressions IS '禁止表达列表';
+COMMENT ON COLUMN knowledge_cards.risky_expressions IS '风险表达列表';
+COMMENT ON COLUMN knowledge_cards.safer_alternatives IS '安全替代表达列表';
+COMMENT ON COLUMN knowledge_cards.topic_ideas IS '可生成选题建议（JSON数组）';
+COMMENT ON COLUMN knowledge_cards.script_angles IS '可生成脚本角度（JSON数组）';
+COMMENT ON COLUMN knowledge_cards.linked_topic_ids IS '关联选题ID列表';
+COMMENT ON COLUMN knowledge_cards.linked_script_ids IS '关联脚本ID列表';
+COMMENT ON COLUMN knowledge_cards.usage_count IS '被引用次数';

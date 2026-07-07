@@ -1,7 +1,8 @@
 'use client';
-import React from 'react';
+import React, { useMemo } from 'react';
 import StatusBadge from '@/components/ui/StatusBadge';
-import { MOCK_ACCOUNTS, ALL_MOCK_SCRIPTS } from '@/lib/constants/mock-data';
+import { MOCK_ACCOUNTS } from '@/lib/constants/mock-data';
+import { getStoredData, STORAGE_KEYS } from '@/lib/storage';
 import {
   TOPIC_CONTENT_TYPES, TOPIC_SOURCE_OPTIONS, TOPIC_STATUSES_NEW,
   TOPIC_SCRIPT_STATUSES, TOPIC_PRIORITIES_NEW, TOPIC_PLATFORMS,
@@ -12,9 +13,6 @@ import {
   getPlatformLabel, getStatusBadgeClass, getStatusLabel
 } from '@/lib/utils';
 import type { Topic } from '@/lib/constants/types';
-
-// ===== IMPORTED DIRECTLY FROM ORIGINAL TOPICDETAILDRAWER =====
-// Copied with p.xxx prop access pattern (no destructuring)
 
 const QUALITY_DIMENSIONS_CN = [
   { key: 'customer_pain', label: '客户痛点明确度', max: 20 },
@@ -27,6 +25,12 @@ const QUALITY_DIMENSIONS_CN = [
 ];
 
 export default function DetailContent(p: any) {
+  // Load scripts from localStorage (not just static mock data)
+  const liveScripts = useMemo(() => getStoredData<any>(STORAGE_KEYS.SCRIPTS, []), []);
+  const linkedScript = p.detailTopic?.linked_script_id
+    ? liveScripts.find((s: any) => s.id === p.detailTopic.linked_script_id)
+    : null;
+
   return (
     <div className="fixed inset-0 bg-black/20 z-40" onClick={() => p.setDetailTopic(null)}>
       <div className="absolute right-0 top-0 bottom-0 w-full max-w-2xl bg-white shadow-xl overflow-y-auto" onClick={e => e.stopPropagation()}>
@@ -53,29 +57,31 @@ export default function DetailContent(p: any) {
             ]} />
           </Section>
 
-          {/* Linked Script Content */}
-          {(() => {
-            const linkedScript = ALL_MOCK_SCRIPTS.find((s: any) => s.id === p.detailTopic.linked_script_id);
-            if (!linkedScript) return null;
-            return (
-              <Section title="关联脚本内容">
-                <div className="space-y-3 text-sm">
-                  <div>
-                    <p className="text-xs text-gray-400 font-medium mb-0.5">脚本标题</p>
-                    <p className="text-gray-800">{linkedScript.title}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-gray-400 font-medium mb-0.5">前3秒钩子</p>
-                    <p className="text-gray-800 bg-yellow-50 p-2 rounded text-sm">{linkedScript.hook || '-'}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-gray-400 font-medium mb-1">完整口播</p>
-                    <div className="bg-gray-50 p-3 rounded text-sm text-gray-700 whitespace-pre-wrap">{linkedScript.main_script || '-'}</div>
-                  </div>
+          {/* 1b. Linked Script Content — right after basic info */}
+          {linkedScript && (
+            <Section title="关联脚本内容">
+              <div className="space-y-3 text-sm">
+                <div>
+                  <p className="text-xs text-gray-400 font-medium mb-0.5">脚本标题</p>
+                  <p className="text-gray-800 font-medium">{linkedScript.title}</p>
                 </div>
-              </Section>
-            );
-          })()}
+                <div>
+                  <p className="text-xs text-gray-400 font-medium mb-0.5">前3秒钩子</p>
+                  <p className="text-gray-800 bg-yellow-50 p-2 rounded text-sm">{linkedScript.hook || '-'}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-400 font-medium mb-1">完整口播</p>
+                  <div className="bg-gray-50 p-3 rounded text-sm text-gray-700 whitespace-pre-wrap">{linkedScript.main_script || '-'}</div>
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-xs text-gray-500 mt-1">
+                  {linkedScript.cover_text && <div><span className="text-gray-400">封面标题：</span>{linkedScript.cover_text}</div>}
+                  {linkedScript.comment_reply && <div><span className="text-gray-400">评论区引导：</span>{linkedScript.comment_reply}</div>}
+                  {linkedScript.private_message_cta && <div className="col-span-2"><span className="text-gray-400">私信承接话术：</span>{linkedScript.private_message_cta}</div>}
+                  {linkedScript.risk_notes && <div className="col-span-2"><span className="text-gray-400">风险提醒：</span>{linkedScript.risk_notes}</div>}
+                </div>
+              </div>
+            </Section>
+          )}
 
           {/* 2. Planning Info */}
           <Section title="选题策划信息">
@@ -141,12 +147,8 @@ export default function DetailContent(p: any) {
           {p.detailTopic.topic_score != null && (
             <Section title={'AI选题评分：' + p.detailTopic.topic_score + '/100'}>
               <div className="space-y-2">
-                <div className="flex items-center gap-2">
-                  <span className={'text-sm font-medium px-2 py-0.5 rounded-full ' + (p.detailTopic.topic_score >= 80 ? 'bg-green-100 text-green-800' : p.detailTopic.topic_score >= 60 ? 'bg-yellow-100 text-yellow-800' : 'bg-red-100 text-red-800')}>
-                    {p.detailTopic.topic_score >= 80 ? '✅ 建议拍摄' : p.detailTopic.topic_score >= 60 ? '⚠️ 需优化后拍摄' : '❌ 不建议'}
-                  </span>
-                  <span className="text-xs text-gray-400">适合账号：{p.getAccountName(p.detailTopic.account_id)}</span>
-                  <span className="text-xs text-gray-400">适合平台：{p.detailTopic.platform || '视频号'}</span>
+                <div className={'text-sm font-medium px-2 py-0.5 rounded-full inline-block ' + (p.detailTopic.topic_score >= 80 ? 'bg-green-100 text-green-800' : p.detailTopic.topic_score >= 60 ? 'bg-yellow-100 text-yellow-800' : 'bg-red-100 text-red-800')}>
+                  {p.detailTopic.topic_score >= 80 ? '✅ 建议拍摄' : p.detailTopic.topic_score >= 60 ? '⚠️ 需优化后拍摄' : '❌ 不建议'}
                 </div>
               </div>
             </Section>
@@ -154,7 +156,7 @@ export default function DetailContent(p: any) {
 
           {/* AI Operations */}
           <Section title="AI操作">
-            <div className="flex flex-wrap gap-2 mb-3">
+            <div className="grid grid-cols-3 gap-2 mb-3">
               {[
                 ['AI选题评分', () => p.setShowAiResult({ '评分': '建议拍摄', '得分': '85/100' })],
                 ['AI优化标题', () => p.setShowAiResult({ '原标题': p.detailTopic.title, '优化建议': '更具体、更有冲突感' })],
@@ -165,17 +167,12 @@ export default function DetailContent(p: any) {
                 ['生成私信话术', () => p.setShowAiResult({ '话术': '发产品图片，免费评估工艺。' })],
                 ['生成拍摄清单', () => p.setShowAiResult({ '清单': '产品样品、打样板、对比案例' })],
                 ['AI检查风险', () => p.setShowAiResult({ '风险等级': '低', '风险点': '无重大风险' })],
-                ['查重合并', () => p.setShowAiResult({ '查重结果': '未发现重复选题' })],
-                ['生成系列选题', () => p.setShowAiResult({ '系列1': '材质判断系列' })],
               ].map(([label, onClick]) => (
                 <button key={label as string} className="btn-secondary btn-sm text-xs" onClick={onClick as any}>
                   {label as string}
                 </button>
               ))}
             </div>
-            <button className="bg-green-600 text-white w-full mt-3 px-4 py-2 rounded-lg text-sm font-medium hover:bg-green-700 transition-colors" onClick={() => { p.setTopics((prev: any[]) => prev.map((t: any) => t.id === p.detailTopic.id ? { ...t, status: '已审核', last_action: '审核通过', updated_at: new Date().toISOString() } : t)); p.setDetailTopic(null); }}>
-              ✓ 审核通过
-            </button>
           </Section>
         </div>
       </div>
