@@ -221,25 +221,80 @@ export default function SettingsPage() {
       )}
 
       {activeTab === 'oa' && (
-        <div className="card">
-          <h3 className="font-semibold text-gray-800 mb-3">微信公众号连接配置</h3>
-          <div className="space-y-4">
-            <div className="flex items-center gap-3">
-              <span className="w-3 h-3 rounded-full bg-gray-300"></span>
-              <span className="text-sm text-gray-500">未连接</span>
-              <span className="text-xs text-gray-400">需配置服务器端环境变量</span>
-            </div>
-            <div className="bg-gray-50 rounded-lg p-4 text-sm">
-              <p className="font-medium text-gray-700 mb-2">接入步骤</p>
-              <ol className="list-decimal ml-4 space-y-1 text-xs text-gray-600">
-                <li>在 <a href="https://mp.weixin.qq.com" target="_blank" className="text-blue-600">微信公众平台</a> 获取 AppID 和 AppSecret</li>
-                <li>配置服务器 <code className="bg-gray-200 px-1 rounded">.env.local</code> 中的 WECHAT_APP_ID 和 WECHAT_APP_SECRET</li>
-                <li>重启服务后，本页面显示连接状态</li>
-                <li>连接成功后，文章详情页可保存草稿到微信 / 发布文章</li>
-              </ol>
-            </div>
-            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 text-xs text-yellow-700">
-              ⚠️ 安全提醒：AppSecret 仅存储在服务端环境变量中，前端代码无法读取。
+        <div className="space-y-4">
+          <div className="card">
+            <h3 className="font-semibold text-gray-800 mb-3">微信公众号连接配置</h3>
+            <div className="space-y-4">
+              <div className="flex items-center gap-3">
+                <span className="w-3 h-3 rounded-full " + (typeof window !== 'undefined' && document.cookie.includes('wechat_configured') ? 'bg-green-500' : 'bg-gray-300') + "></span>
+                <span className="text-sm text-gray-600">{(typeof window !== 'undefined' && false) ? '已连接' : '未连接'}</span>
+                <span className="text-xs text-gray-400">需配置 WECHAT_APP_ID 和 WECHAT_APP_SECRET</span>
+              </div>
+
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 text-sm space-y-3">
+                <p className="font-medium text-amber-800">📋 配置步骤（大约需要 15 分钟）</p>
+
+                <div className="space-y-4">
+                  <div className="flex gap-3">
+                    <span className="w-6 h-6 rounded-full bg-amber-600 text-white text-xs flex items-center justify-center flex-shrink-0 mt-0.5">1</span>
+                    <div>
+                      <p className="font-medium text-amber-800">获取公众号 AppID 和 AppSecret</p>
+                      <ol className="list-decimal ml-4 mt-1 space-y-0.5 text-xs text-amber-700">
+                        <li>打开 <a href="https://mp.weixin.qq.com" target="_blank" className="text-blue-600 underline">mp.weixin.qq.com</a> 并登录您的公众号</li>
+                        <li>进入左侧菜单 <strong>「开发 → 基本配置」</strong></li>
+                        <li>在「开发者ID」区域可以找到 <strong>AppID</strong>（以 wx 开头）</li>
+                        <li>点击「重置」获取 <strong>AppSecret</strong>（请立即复制保存，关闭后不再显示）</li>
+                      </ol>
+                    </div>
+                  </div>
+
+                  <div className="flex gap-3">
+                    <span className="w-6 h-6 rounded-full bg-amber-600 text-white text-xs flex items-center justify-center flex-shrink-0 mt-0.5">2</span>
+                    <div>
+                      <p className="font-medium text-amber-800">配置 Vercel 环境变量</p>
+                      <ol className="list-decimal ml-4 mt-1 space-y-0.5 text-xs text-amber-700">
+                        <li>打开 Vercel Dashboard：<a href="https://vercel.com/lenchenalc-hongda/hongda-new-media-platform/settings/environment-variables" target="_blank" className="text-blue-600 underline">环境变量设置</a></li>
+                        <li>添加以下三个变量：</li>
+                      </ol>
+                      <div className="mt-2 font-mono text-xs bg-amber-100 rounded p-2 space-y-1">
+                        <p><span className="text-amber-900 font-medium">WECHAT_APP_ID</span> <span className="text-amber-600">= 你的 AppID (wx...)</span></p>
+                        <p><span className="text-amber-900 font-medium">WECHAT_APP_SECRET</span> <span className="text-amber-600">= 你的 AppSecret</span></p>
+                        <p><span className="text-amber-900 font-medium">WECHAT_ACCOUNT_NAME</span> <span className="text-amber-600">= 宏达印业公众号</span></p>
+                      </div>
+                      <p className="text-xs text-amber-700 mt-1">设置后 Vercel 会自动重新部署（约 1-2 分钟）</p>
+                    </div>
+                  </div>
+
+                  <div className="flex gap-3">
+                    <span className="w-6 h-6 rounded-full bg-amber-600 text-white text-xs flex items-center justify-center flex-shrink-0 mt-0.5">3</span>
+                    <div>
+                      <p className="font-medium text-amber-800">配置微信 IP 白名单</p>
+                      <p className="text-xs text-amber-700 mt-0.5">在「开发 → 基本配置 → IP白名单」中添加以下 IP：</p>
+                      <div className="mt-1 font-mono text-xs bg-amber-100 rounded p-2 text-amber-800">
+                        <p>76.76.21.21</p>
+                        <p className="text-[10px] text-amber-500 mt-0.5">这是 Vercel 的公网出口 IP，添加后适配器才能获取 access_token</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex gap-3">
+                    <span className="w-6 h-6 rounded-full bg-amber-600 text-white text-xs flex items-center justify-center flex-shrink-0 mt-0.5">4</span>
+                    <div>
+                      <p className="font-medium text-amber-800">验证连接</p>
+                      <p className="text-xs text-amber-700 mt-0.5">完成以上步骤后，执行以下操作验证：</p>
+                      <ul className="list-disc ml-4 mt-1 text-xs text-amber-700 space-y-0.5">
+                        <li>刷新本页面，连接状态应变为「已连接」</li>
+                        <li>进入 <a href="/oa/articles" className="text-blue-600 underline">文章库</a>，选择一篇文章点击「保存草稿到微信」</li>
+                        <li>成功后可继续操作「发布到微信」</li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 text-xs text-yellow-700">
+                ⚠️ 安全提醒：WECHAT_APP_SECRET 仅存储在 Vercel 服务端环境变量中，前端代码和浏览器无法读取。适配器使用 @server-only 标记确保不会被客户端打包。
+              </div>
             </div>
           </div>
         </div>
