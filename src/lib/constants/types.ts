@@ -294,6 +294,12 @@ export interface KnowledgeCard {
   owner: string | null;
   version: number;
   updated_at: string;
+  external_draft_id?: string | null;
+  external_publish_id?: string | null;
+  external_status?: string | null;
+  published_at?: string | null;
+  cover_media_id?: string | null;
+  content_media_ids?: string[] | null;
   created_at: string;
 }
 
@@ -440,6 +446,12 @@ export interface WechatTemplate {
   layout_json: Record<string, unknown>;
   created_at: string;
   updated_at: string;
+  external_draft_id?: string | null;
+  external_publish_id?: string | null;
+  external_status?: string | null;
+  published_at?: string | null;
+  cover_media_id?: string | null;
+  content_media_ids?: string[] | null;
 }
 
 export interface ArticleBodyBlock {
@@ -473,6 +485,12 @@ export interface WechatArticle {
   updated_by: string | null;
   created_at: string;
   updated_at: string;
+  external_draft_id?: string | null;
+  external_publish_id?: string | null;
+  external_status?: string | null;
+  published_at?: string | null;
+  cover_media_id?: string | null;
+  content_media_ids?: string[] | null;
 }
 
 export interface PublishJob {
@@ -487,4 +505,10 @@ export interface PublishJob {
   last_error: string | null;
   created_at: string;
   updated_at: string;
+  external_draft_id?: string | null;
+  external_publish_id?: string | null;
+  external_status?: string | null;
+  published_at?: string | null;
+  cover_media_id?: string | null;
+  content_media_ids?: string[] | null;
 }
