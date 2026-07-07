@@ -41,13 +41,13 @@ export const PORTAL_GROUPS: PortalGroup[] = [
     icon: '📢',
     color: 'green',
     items: [
-      { label: '文章库', path: '/official/articles', icon: '📄' },
-      { label: '文章工厂', path: '/official/article-factory', icon: '✏️' },
-      { label: '模板中心', path: '/official/templates', icon: '📐' },
-      { label: '素材中心', path: '/official/assets', icon: '🖼️' },
-      { label: '排期日历', path: '/official/calendar', icon: '📅' },
-      { label: '发布队列', path: '/official/queue', icon: '📤' },
-      { label: '数据分析', path: '/official/analytics', icon: '📈' },
+      { label: '文章库', path: '/oa/articles', icon: '📄' },
+      { label: '文章工厂', path: '/oa/article-factory', icon: '✏️' },
+      { label: '模板中心', path: '/oa/templates', icon: '📐' },
+      { label: '素材中心', path: '/oa/assets', icon: '🖼️' },
+      { label: '排期日历', path: '/oa/calendar', icon: '📅' },
+      { label: '发布队列', path: '/oa/publish-queue', icon: '📤' },
+      { label: '数据分析', path: '/oa/analytics', icon: '📈' },
     ],
   },
   {
@@ -82,20 +82,14 @@ export const PORTAL_GROUPS: PortalGroup[] = [
   },
 ];
 
-// All flat nav items (for backward compatibility)
 export const ALL_NAV_ITEMS = PORTAL_GROUPS.flatMap(g => g.items);
-
-// Home path
 export const WORKSPACE_HOME = '/workspace-home';
 
-// Map old paths to portal groups
 export function getPortalForPath(path: string): string {
   if (path.startsWith('/dashboard') || path.startsWith('/accounts') || path.startsWith('/topics') ||
       path.startsWith('/scripts') || path.startsWith('/teardowns') || path.startsWith('/calendar') ||
-      path.startsWith('/posts') || path.startsWith('/leads') || path.startsWith('/reports')) {
-    return 'media';
-  }
-  if (path.startsWith('/official')) return 'official';
+      path.startsWith('/posts') || path.startsWith('/leads') || path.startsWith('/reports')) return 'media';
+  if (path.startsWith('/oa')) return 'official';
   if (path.startsWith('/knowledge')) return 'knowledge';
   if (path.startsWith('/settings')) return 'admin';
   return 'media';

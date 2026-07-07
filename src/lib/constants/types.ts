@@ -423,3 +423,68 @@ export interface LeadWithDetails extends Lead {
   post_title?: string;
   assignee_name?: string;
 }
+
+// ===== 公众号 (OA) Types =====
+export type OaArticleType = '知识解释类' | '宣传信任类' | '节日/节气类';
+export type OaPublishStatus = 'draft' | 'pending_review' | 'approved' | 'scheduled' | 'published_mock' | 'published_real' | 'failed';
+
+export interface WechatTemplate {
+  id: string;
+  name: string;
+  article_type: OaArticleType;
+  header_style: string | null;
+  body_style: string | null;
+  cta_style: string | null;
+  footer_style: string | null;
+  is_default: boolean;
+  layout_json: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ArticleBodyBlock {
+  type: 'title' | 'subtitle' | 'paragraph' | 'image' | 'quote' | 'tip' | 'cta' | 'divider';
+  content: string;
+  image_url?: string;
+  caption?: string;
+}
+
+export interface WechatArticle {
+  id: string;
+  title: string;
+  subtitle: string | null;
+  summary: string | null;
+  article_type: OaArticleType;
+  column_name: string | null;
+  cover_asset_id: string | null;
+  template_id: string | null;
+  body_blocks: ArticleBodyBlock[];
+  body_markdown: string | null;
+  source_knowledge_card_ids: string[];
+  holiday_tag: string | null;
+  schedule_at: string | null;
+  publish_status: OaPublishStatus;
+  reviewer_id: string | null;
+  risk_level: string;
+  risk_notes: string[];
+  word_count: number;
+  estimated_read_time: number;
+  created_by: string | null;
+  updated_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PublishJob {
+  id: string;
+  channel_type: string;
+  entity_type: string;
+  entity_id: string;
+  schedule_at: string | null;
+  job_status: 'pending' | 'processing' | 'success' | 'failed';
+  retry_count: number;
+  mock_publish_id: string | null;
+  last_error: string | null;
+  created_at: string;
+  updated_at: string;
+}
