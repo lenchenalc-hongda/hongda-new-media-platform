@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import AppLayout from '@/components/layout/AppLayout';
 import PageHeader from '@/components/layout/PageHeader';
 import CsvImportDialog from '@/components/csv/CsvImportDialog';
@@ -12,6 +12,14 @@ import { STORAGE_KEYS } from '@/lib/storage';
 export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState('users');
   const [importEntity, setImportEntity] = useState<CsvEntity | null>(null);
+  const [oaStatus, setOaStatus] = useState<{connected:boolean; accountName?:string; error?:string}>({connected:false});
+
+  useEffect(() => {
+    fetch('/api/oa/connect')
+      .then(r => r.json())
+      .then(d => setOaStatus({connected: d.connected, accountName: d.accountName, error: d.error}))
+      .catch(() => setOaStatus({connected: false, error: '无法连接'}));
+  }, []);
 
   const entities: { key: CsvEntity; label: string }[] = [
     { key: 'accounts', label: '账号' },
@@ -169,21 +177,35 @@ export default function SettingsPage() {
         <div className="card">
           <h3 className="font-semibold text-gray-800 mb-3">微信公众号连接配置</h3>
           <div className="flex items-center gap-3 mb-4">
-            <span className="w-3 h-3 rounded-full bg-gray-300"></span>
-            <span className="text-sm text-gray-500">未连接</span>
-            <span className="text-xs text-gray-400">需配置 WECHAT_APP_ID 和 WECHAT_APP_SECRET</span>
+            <span className={`w-3 h-3 rounded-full ${oaStatus.connected ? 'bg-green-500' : 'bg-gray-300'}`}></span>
+            <span className={`text-sm font-medium ${oaStatus.connected ? 'text-green-700' : 'text-gray-500'}`}>
+              {oaStatus.connected ? '已连接' : '未连接'}
+            </span>
+            {oaStatus.connected && oaStatus.accountName && (
+              <span className="text-xs text-green-600">{oaStatus.accountName}</span>
+            )}
+            {!oaStatus.connected && oaStatus.error && (
+              <span className="text-xs text-red-400 max-w-md truncate">{oaStatus.error}</span>
+            )}
           </div>
-          <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 text-sm">
-            <p className="font-medium text-amber-800 mb-2">接入步骤</p>
-            <ol className="list-decimal ml-4 space-y-2 text-xs text-amber-700">
-              <li>在微信公众平台 → 设置与开发 → 开发接口管理，获取 AppID 和 AppSecret</li>
-              <li>在 Vercel 项目设置环境变量：WECHAT_APP_ID、WECHAT_APP_SECRET、WECHAT_ACCOUNT_NAME</li>
-              <li>在微信后台 IP 白名单中添加 Vercel IP：76.76.21.21</li>
-              <li>部署完成后可在文章库中保存草稿和发布</li>
-            </ol>
-          </div>
+          {oaStatus.connected && (
+            <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-xs text-green-700 mb-4">
+              ✅ 公众号已成功接入。可通过代理服务器（DigitalOcean 固定 IP）调用微信 API。
+            </div>
+          )}
+          {!oaStatus.connected && (
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 text-sm">
+              <p className="font-medium text-amber-800 mb-2">接入步骤</p>
+              <ol className="list-decimal ml-4 space-y-2 text-xs text-amber-700">
+                <li>在微信公众平台 → 设置与开发 → 开发接口管理，获取 AppID 和 AppSecret</li>
+                <li>在 Vercel 项目设置环境变量：WECHAT_APP_ID、WECHAT_APP_SECRET、WECHAT_ACCOUNT_NAME</li>
+                <li>已在 IP 白名单添加 DigitalOcean 固定 IP：139.59.112.84</li>
+                <li>部署完成后可在文章库中保存草稿和发布</li>
+              </ol>
+            </div>
+          )}
           <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 text-xs text-yellow-700 mt-3">
-            安全提醒：AppSecret 仅存储在服务端环境变量中，前端不会暴露。
+            安全提醒：AppSecret 仅存储在服务端环境变量中，前端不会暴露。微信 API 通过 DigitalOcean 固定 IP 代理调用。
           </div>
         </div>
       )}
