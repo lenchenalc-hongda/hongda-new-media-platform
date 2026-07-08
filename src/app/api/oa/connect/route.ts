@@ -22,9 +22,5 @@ export async function GET() {
     all_wechat_env_vars: envKeys,
     env_count: envKeys.length,
     node_env: process.env.NODE_ENV,
-    help: '如果 env_keys_present 为 false，说明环境变量在 Vercel 中未正确配置。请检查：
-    1. 变量名是否完全等于 WECHAT_APP_ID（注意大小写）
-    2. Environment 是否选择了 Production
-    3. 添加后是否有新部署完成',
   });
 }

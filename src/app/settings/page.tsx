@@ -22,24 +22,20 @@ export default function SettingsPage() {
   ];
 
   const handleImport = (entity: CsvEntity, rows: Record<string, string>[], sourceHeaders: string[]): CsvImportResult => {
-    const key = STORAGE_KEYS[entity.toUpperCase() as keyof typeof STORAGE_KEYS] || `hongda_${entity}`;
+    const key = STORAGE_KEYS[entity.toUpperCase() as keyof typeof STORAGE_KEYS] || 'hongda_' + entity;
     const existing = typeof window !== 'undefined' ? JSON.parse(localStorage.getItem(key) || '[]') : [];
     const result: CsvImportResult = {
       total: rows.length, created: 0, updated: 0, failed: 0, errors: [], preview: []
     };
-
     rows.forEach((row, i) => {
-      const newItem: any = { id: `${entity}_csv_${Date.now()}_${i}` };
+      const newItem: any = { id: entity + '_csv_' + Date.now() + '_' + i };
       const defs = CSV_FIELD_DEFS[entity];
       let hasError = false;
-
       defs.forEach(def => {
-        // Try source label first, then field key
         const sourceIdx = sourceHeaders.findIndex(h => h === def.label || h === def.key);
         const val = sourceIdx >= 0 ? (row[sourceHeaders[sourceIdx]] || '').trim() : (row[def.key] || row[def.label] || '').trim();
-        
         if (def.required && !val) {
-          result.errors.push({ row: i + 2, field: def.key, message: `"${def.label}" 必填` });
+          result.errors.push({ row: i + 2, field: def.key, message: '"' + def.label + '" 必填' });
           hasError = true;
           return;
         }
@@ -48,7 +44,6 @@ export default function SettingsPage() {
           else newItem[def.key] = val;
         }
       });
-
       if (hasError) {
         result.failed++;
       } else {
@@ -60,7 +55,6 @@ export default function SettingsPage() {
         result.created++;
       }
     });
-
     localStorage.setItem(key, JSON.stringify(existing));
     return result;
   };
@@ -71,11 +65,16 @@ export default function SettingsPage() {
     { key: 'dicts', label: '字典管理' },
     { key: 'platform', label: '平台接入' },
     { key: 'oa', label: '公众号连接' },
-    { key: 'oa', label: '公众号连接' },
     { key: 'ai', label: 'AI规则设置' },
-    { key: 'oa', label: '公众号连接' },
     { key: 'csv', label: 'CSV导入导出' },
   ];
+
+  const getRoleBadge = (role: string) => {
+    const map: Record<string, string> = {
+      admin: 'badge-red', manager: 'badge-purple', operator: 'badge-blue', sales: 'badge-green', viewer: 'badge-gray',
+    };
+    return map[role] || 'badge-gray';
+  };
 
   return (
     <AppLayout>
@@ -97,9 +96,7 @@ export default function SettingsPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-gray-200">
-                  <th className="table-header">姓名</th>
-                  <th className="table-header">邮箱</th>
-                  <th className="table-header">角色</th>
+                  <th className="table-header">姓名</th><th className="table-header">邮箱</th><th className="table-header">角色</th>
                 </tr>
               </thead>
               <tbody>
@@ -108,7 +105,7 @@ export default function SettingsPage() {
                     <td className="table-cell font-medium">{u.full_name}</td>
                     <td className="table-cell text-gray-500">{u.email}</td>
                     <td className="table-cell">
-                      <span className={'badge-' + ((String(u.role) === 'admin' || String(u.role) === 'manager') ? 'purple' : 'blue')}>
+                      <span className={getRoleBadge(u.role)}>
                         {String(u.role) === 'admin' ? '管理员' : String(u.role) === 'manager' ? '管理者' : '运营'}
                       </span>
                     </td>
@@ -125,18 +122,11 @@ export default function SettingsPage() {
         <div className="card">
           <h3 className="font-semibold text-gray-800 mb-3">角色权限说明</h3>
           <div className="space-y-3 text-sm">
-            {[
-              { role: 'admin', label: '管理员', color: 'red', desc: '系统管理员，可以管理所有数据' },
-              { role: 'manager', label: '管理者', color: 'purple', desc: '可以看所有账号、复盘、线索' },
-              { role: 'operator', label: '运营', color: 'blue', desc: '可以管理选题、脚本、发布、复盘、线索' },
-              { role: 'sales', label: '销售', color: 'green', desc: '可以查看和跟进分配给自己的线索' },
-              { role: 'viewer', label: '只读', color: 'gray', desc: '只读角色' },
-            ].map(r => (
-              <div key={r.role} className={'p-3 bg-' + r.color + '-50 rounded'}>
-                <span className={'font-medium text-' + r.color + '-700'}>{r.label}：</span>
-                <span className={'text-' + r.color + '-600'}>{r.desc}</span>
-              </div>
-            ))}
+            <div className="p-3 bg-red-50 rounded"><span className="font-medium text-red-700">管理员：</span><span className="text-red-600"> 系统管理员，可以管理所有数据</span></div>
+            <div className="p-3 bg-purple-50 rounded"><span className="font-medium text-purple-700">管理者：</span><span className="text-purple-600"> 可以看所有账号、复盘、线索</span></div>
+            <div className="p-3 bg-blue-50 rounded"><span className="font-medium text-blue-700">运营：</span><span className="text-blue-600"> 可以管理选题、脚本、发布、复盘、线索</span></div>
+            <div className="p-3 bg-green-50 rounded"><span className="font-medium text-green-700">销售：</span><span className="text-green-600"> 可以查看和跟进分配给自己的线索</span></div>
+            <div className="p-3 bg-gray-50 rounded"><span className="font-medium text-gray-700">只读：</span><span className="text-gray-600"> 只读角色</span></div>
           </div>
         </div>
       )}
@@ -146,17 +136,10 @@ export default function SettingsPage() {
           <h3 className="font-semibold text-gray-800 mb-3">字典管理</h3>
           <p className="text-sm text-gray-500">以下字典项已在系统中配置：</p>
           <div className="mt-3 grid grid-cols-2 gap-4 text-sm">
-            {[
-              { title: '内容类型', desc: '产品展示、工艺讲解、案例分析、问答解惑、工厂实拍、行业观点、教程指南' },
-              { title: '需求类型', desc: '花膜、加工、设备、工艺咨询、不明确' },
-              { title: '知识分类', desc: '公司介绍、工艺知识、材料适配、产品设备、客户FAQ、人设指南、爆款拆解、复盘案例、线索话术、风险规则' },
-              { title: '线索等级', desc: 'A-高价值、B-中价值、C-待观察、D-低价值' },
-            ].map(d => (
-              <div key={d.title} className="p-3 bg-gray-50 rounded">
-                <p className="font-medium text-gray-700">{d.title}</p>
-                <p className="text-xs text-gray-500 mt-1">{d.desc}</p>
-              </div>
-            ))}
+            <div className="p-3 bg-gray-50 rounded"><p className="font-medium text-gray-700">内容类型</p><p className="text-xs text-gray-500 mt-1">产品展示、工艺讲解、案例分析、问答解惑、工厂实拍、行业观点、教程指南</p></div>
+            <div className="p-3 bg-gray-50 rounded"><p className="font-medium text-gray-700">需求类型</p><p className="text-xs text-gray-500 mt-1">花膜、加工、设备、工艺咨询、不明确</p></div>
+            <div className="p-3 bg-gray-50 rounded"><p className="font-medium text-gray-700">知识分类</p><p className="text-xs text-gray-500 mt-1">公司介绍、工艺知识、材料适配、产品设备、客户FAQ、人设指南、爆款拆解、复盘案例、线索话术、风险规则</p></div>
+            <div className="p-3 bg-gray-50 rounded"><p className="font-medium text-gray-700">线索等级</p><p className="text-xs text-gray-500 mt-1">A-高价值、B-中价值、C-待观察、D-低价值</p></div>
           </div>
         </div>
       )}
@@ -179,123 +162,28 @@ export default function SettingsPage() {
               ))}
             </div>
           </div>
-
-          <div className="card">
-            <h3 className="font-semibold text-gray-800 mb-3">模板字段说明</h3>
-            <p className="text-sm text-gray-500 mb-2">各类型 CSV 模板的字段定义：</p>
-            {entities.map(ent => {
-              const defs = CSV_FIELD_DEFS[ent.key];
-              return (
-                <details key={ent.key} className="mb-2">
-                  <summary className="text-sm font-medium text-gray-700 cursor-pointer hover:text-blue-600">{ent.label}</summary>
-                  <div className="mt-2 overflow-x-auto">
-                    <table className="w-full text-xs">
-                      <thead>
-                        <tr className="bg-gray-50"><th className="px-2 py-1 text-left text-gray-500">字段</th><th className="px-2 py-1 text-left text-gray-500">必填</th><th className="px-2 py-1 text-left text-gray-500">类型</th><th className="px-2 py-1 text-left text-gray-500">可选值</th></tr>
-                      </thead>
-                      <tbody>
-                        {defs.map(d => (
-                          <tr key={d.key} className="border-t border-gray-100">
-                            <td className="px-2 py-1 font-medium text-gray-700">{d.label}</td>
-                            <td className="px-2 py-1">{d.required ? <span className="text-red-500">是</span> : '否'}</td>
-                            <td className="px-2 py-1 text-gray-500">{d.type || '文本'}</td>
-                            <td className="px-2 py-1 text-gray-400 max-w-[200px] truncate">{d.enumValues?.join('、') || '-'}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </details>
-              );
-            })}
-          </div>
-
-          {importEntity && (
-            <CsvImportDialog
-              entity={importEntity}
-              onImport={(rows, sourceHeaders) => handleImport(importEntity, rows, sourceHeaders)}
-              onClose={() => setImportEntity(null)}
-            />
-          )}
         </div>
       )}
 
       {activeTab === 'oa' && (
-        <div className="space-y-4">
-          <div className="card">
-            <h3 className="font-semibold text-gray-800 mb-3">微信公众号连接配置</h3>
-            <div className="space-y-4">
-              <div className="flex items-center gap-3">
-                <span className="w-3 h-3 rounded-full " + (typeof window !== 'undefined' && document.cookie.includes('wechat_configured') ? 'bg-green-500' : 'bg-gray-300') + "></span>
-                <span className="text-sm text-gray-600">{(typeof window !== 'undefined' && false) ? '已连接' : '未连接'}</span>
-                <span className="text-xs text-gray-400">需配置 WECHAT_APP_ID 和 WECHAT_APP_SECRET</span>
-              </div>
-
-              <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 text-sm space-y-3">
-                <p className="font-medium text-amber-800">📋 配置步骤（大约需要 15 分钟）</p>
-
-                <div className="space-y-4">
-                  <div className="flex gap-3">
-                    <span className="w-6 h-6 rounded-full bg-amber-600 text-white text-xs flex items-center justify-center flex-shrink-0 mt-0.5">1</span>
-                    <div>
-                      <p className="font-medium text-amber-800">获取公众号 AppID 和 AppSecret</p>
-                      <ol className="list-decimal ml-4 mt-1 space-y-0.5 text-xs text-amber-700">
-                        <li>打开 <a href="https://mp.weixin.qq.com" target="_blank" className="text-blue-600 underline">mp.weixin.qq.com</a> 并登录您的公众号</li>
-                        <li>进入左侧菜单 <strong>「开发 → 基本配置」</strong></li>
-                        <li>在「开发者ID」区域可以找到 <strong>AppID</strong>（以 wx 开头）</li>
-                        <li>点击「重置」获取 <strong>AppSecret</strong>（请立即复制保存，关闭后不再显示）</li>
-                      </ol>
-                    </div>
-                  </div>
-
-                  <div className="flex gap-3">
-                    <span className="w-6 h-6 rounded-full bg-amber-600 text-white text-xs flex items-center justify-center flex-shrink-0 mt-0.5">2</span>
-                    <div>
-                      <p className="font-medium text-amber-800">配置 Vercel 环境变量</p>
-                      <ol className="list-decimal ml-4 mt-1 space-y-0.5 text-xs text-amber-700">
-                        <li>打开 Vercel Dashboard：<a href="https://vercel.com/lenchenalc-hongda/hongda-new-media-platform/settings/environment-variables" target="_blank" className="text-blue-600 underline">环境变量设置</a></li>
-                        <li>添加以下三个变量：</li>
-                      </ol>
-                      <div className="mt-2 font-mono text-xs bg-amber-100 rounded p-2 space-y-1">
-                        <p><span className="text-amber-900 font-medium">WECHAT_APP_ID</span> <span className="text-amber-600">= 你的 AppID (wx...)</span></p>
-                        <p><span className="text-amber-900 font-medium">WECHAT_APP_SECRET</span> <span className="text-amber-600">= 你的 AppSecret</span></p>
-                        <p><span className="text-amber-900 font-medium">WECHAT_ACCOUNT_NAME</span> <span className="text-amber-600">= 宏达印业公众号</span></p>
-                      </div>
-                      <p className="text-xs text-amber-700 mt-1">设置后 Vercel 会自动重新部署（约 1-2 分钟）</p>
-                    </div>
-                  </div>
-
-                  <div className="flex gap-3">
-                    <span className="w-6 h-6 rounded-full bg-amber-600 text-white text-xs flex items-center justify-center flex-shrink-0 mt-0.5">3</span>
-                    <div>
-                      <p className="font-medium text-amber-800">配置微信 IP 白名单</p>
-                      <p className="text-xs text-amber-700 mt-0.5">在「开发 → 基本配置 → IP白名单」中添加以下 IP：</p>
-                      <div className="mt-1 font-mono text-xs bg-amber-100 rounded p-2 text-amber-800">
-                        <p>76.76.21.21</p>
-                        <p className="text-[10px] text-amber-500 mt-0.5">这是 Vercel 的公网出口 IP，添加后适配器才能获取 access_token</p>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="flex gap-3">
-                    <span className="w-6 h-6 rounded-full bg-amber-600 text-white text-xs flex items-center justify-center flex-shrink-0 mt-0.5">4</span>
-                    <div>
-                      <p className="font-medium text-amber-800">验证连接</p>
-                      <p className="text-xs text-amber-700 mt-0.5">完成以上步骤后，执行以下操作验证：</p>
-                      <ul className="list-disc ml-4 mt-1 text-xs text-amber-700 space-y-0.5">
-                        <li>刷新本页面，连接状态应变为「已连接」</li>
-                        <li>进入 <a href="/oa/articles" className="text-blue-600 underline">文章库</a>，选择一篇文章点击「保存草稿到微信」</li>
-                        <li>成功后可继续操作「发布到微信」</li>
-                      </ul>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 text-xs text-yellow-700">
-                ⚠️ 安全提醒：WECHAT_APP_SECRET 仅存储在 Vercel 服务端环境变量中，前端代码和浏览器无法读取。适配器使用 @server-only 标记确保不会被客户端打包。
-              </div>
-            </div>
+        <div className="card">
+          <h3 className="font-semibold text-gray-800 mb-3">微信公众号连接配置</h3>
+          <div className="flex items-center gap-3 mb-4">
+            <span className="w-3 h-3 rounded-full bg-gray-300"></span>
+            <span className="text-sm text-gray-500">未连接</span>
+            <span className="text-xs text-gray-400">需配置 WECHAT_APP_ID 和 WECHAT_APP_SECRET</span>
+          </div>
+          <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 text-sm">
+            <p className="font-medium text-amber-800 mb-2">接入步骤</p>
+            <ol className="list-decimal ml-4 space-y-2 text-xs text-amber-700">
+              <li>在微信公众平台 → 设置与开发 → 开发接口管理，获取 AppID 和 AppSecret</li>
+              <li>在 Vercel 项目设置环境变量：WECHAT_APP_ID、WECHAT_APP_SECRET、WECHAT_ACCOUNT_NAME</li>
+              <li>在微信后台 IP 白名单中添加 Vercel IP：76.76.21.21</li>
+              <li>部署完成后可在文章库中保存草稿和发布</li>
+            </ol>
+          </div>
+          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 text-xs text-yellow-700 mt-3">
+            安全提醒：AppSecret 仅存储在服务端环境变量中，前端不会暴露。
           </div>
         </div>
       )}
@@ -322,27 +210,21 @@ export default function SettingsPage() {
             <h3 className="font-semibold text-gray-800 mb-3">微信视频号接入</h3>
             <div className="flex items-center gap-3 mb-4">
               <span className="w-3 h-3 rounded-full bg-gray-300"></span>
-              <span className="text-sm text-gray-600">未连接</span>
-              <span className="text-xs text-gray-400 ml-1">（需企业微信认证）</span>
+              <span className="text-sm text-gray-600">未连接（需企业微信认证）</span>
             </div>
             <div className="bg-gray-50 rounded p-3 text-sm">
-              <p className="text-gray-500 mb-2">接入说明：</p>
-              <p className="text-gray-500 mb-2">个人号接入（免费）：身份证实名即可，无需营业执照。基础数据接口可用。</p>
-              <p className="text-gray-500 mb-2">企业号接入（¥300/年认证费）：需要营业执照，调用频率更高。</p>
-              <p className="text-xs text-gray-400 mt-2">当前版本：手动录入 + CSV导入 + AI生成。平台API对接将在第二期实现。</p>
-            </div>
-          </div>
-          <div className="card">
-            <h3 className="font-semibold text-gray-800 mb-3">抖音开放平台接入</h3>
-            <div className="flex items-center gap-3 mb-4">
-              <span className="w-3 h-3 rounded-full bg-gray-300"></span>
-              <span className="text-sm text-gray-600">未连接</span>
-            </div>
-            <div className="bg-gray-50 rounded p-3 text-sm">
-              <p className="text-xs text-gray-400">当前未连接。平台API对接将在第二期实现。</p>
+              <p className="text-gray-500 mb-2">平台API对接将在第二期实现。当前通过手动录入 + 知识库 + AI生成。</p>
             </div>
           </div>
         </div>
+      )}
+
+      {importEntity && (
+        <CsvImportDialog
+          entity={importEntity}
+          onImport={(rows, sourceHeaders) => handleImport(importEntity, rows, sourceHeaders)}
+          onClose={() => setImportEntity(null)}
+        />
       )}
     </AppLayout>
   );
