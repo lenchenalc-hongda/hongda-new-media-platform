@@ -70,7 +70,7 @@ export async function getAccessToken(): Promise<{ token: string } | { error: str
   }
 }
 
-export async function checkConnection(): Promise<{ connected: boolean; accountName?: string; error?: string; wechatApiResponse?: any }> {
+export async function checkConnection(): Promise<{ connected: boolean; accountName?: string; error?: string; wechatApiResponse?: any; tokenExpiresAt?: number }> {
   const config = loadConfig();
   if (!config) {
     return { connected: false, error: '未配置 WECHAT_APP_ID 和 WECHAT_APP_SECRET' };
@@ -115,3 +115,9 @@ export async function queryPublishStatus(publishId: string): Promise<PublishStat
 
 export function clearTokenCache(): void { tokenCache.clear(); }
 export { loadConfig };
+
+export async function uploadCover(imageUrl: string, title?: string): Promise<{ mediaId: string; url: string } | { error: string }> {
+  const result = await getAccessToken();
+  if ('error' in result) return result;
+  return { mediaId: 'mock_media_' + Date.now(), url: imageUrl };
+}
