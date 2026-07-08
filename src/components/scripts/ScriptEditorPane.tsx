@@ -61,16 +61,7 @@ export default function ScriptEditorPane({
 }: ScriptEditorPaneProps) {
   if (!selected) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center py-16 border border-dashed border-gray-200 rounded-lg">
-        <p className="text-4xl mb-3">✍️</p>
-        <h3 className="text-sm font-bold text-gray-700">三栏脚本工作台</h3>
-        <p className="text-xs text-gray-400 mt-1">从左栏选择脚本开始编辑</p>
-        <div className="mt-4 flex gap-2">
-          <button className="btn-primary btn-sm text-xs" onClick={() => {}}>从选题库生成</button>
-          <button className="btn-secondary btn-sm text-xs" onClick={() => {}}>从知识库生成</button>
-          <button className="btn-secondary btn-sm text-xs" onClick={() => {}}>新脚本</button>
-        </div>
-      </div>
+      <div className="flex-1 border border-dashed border-gray-200 rounded-lg" />
     );
   }
 

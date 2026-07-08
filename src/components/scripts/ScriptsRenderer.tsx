@@ -82,6 +82,7 @@ export function ScriptsRenderer(p: ScriptsRendererProps) {
         {/* Left: Script List Pane */}
         <ScriptListPane
           scripts={p.filtered}
+          onGenerateClick={() => p.setShowWizard(true)}
           search={p.search}
           onSearchChange={p.setSearch}
           filters={p.filters}

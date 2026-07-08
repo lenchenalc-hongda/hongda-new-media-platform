@@ -7,6 +7,8 @@ import type { ScriptScoreResult } from '@/lib/ai/script-scoring';
 
 interface ScriptListPaneProps {
   scripts: Script[];
+  // Added by ScriptsContent
+  onGenerateClick?: () => void;
   search: string;
   onSearchChange: (q: string) => void;
   filters: Record<string, string>;
@@ -22,12 +24,19 @@ interface ScriptListPaneProps {
 export default function ScriptListPane({
   scripts, search, onSearchChange, filters, onFilterChange,
   selectedId, onSelect, selectedIds, onToggleSelect, onToggleSelectAll,
-  getScoreResult,
+  getScoreResult, onGenerateClick,
 }: ScriptListPaneProps) {
   const allSelected = scripts.length > 0 && selectedIds.size === scripts.length;
 
   return (
     <div className="w-[320px] flex-shrink-0 flex flex-col h-full">
+      {/* Generate Button */}
+      <div className="mb-2">
+        <button className="btn-primary w-full py-2 text-xs font-medium" onClick={() => onGenerateClick?.()}>
+          ✨ AI生成脚本
+        </button>
+      </div>
+
       {/* Search + Filters */}
       <div className="space-y-2 mb-2">
         <input type="text" placeholder="搜索脚本标题、口播..." className="input-field w-full text-xs"
@@ -93,7 +102,7 @@ export default function ScriptListPane({
           );
         })}
         {scripts.length === 0 && (
-          <div className="text-center py-6 text-[10px] text-gray-400">无匹配脚本，点击上方"AI生成脚本"开始创作</div>
+          <div className="text-center py-6 text-[10px] text-gray-400">暂无脚本，点击上方"AI生成脚本"开始创作</div>
         )}
       </div>
     </div>
