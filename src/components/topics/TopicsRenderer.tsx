@@ -351,9 +351,12 @@ export default function TopicsRenderer(p: TopicsRendererProps) {
         onClose={() => p.setDetailTopic(null)}
         onConvertToScript={p.handleConvertToScript}
         onUpdateStatus={(topicId, newStatus) => {
-          p.setTopics((prev: any[]) => prev.map(t => t.id === topicId ? { ...t, status: newStatus } : t));
+          const updatedTopics = p.topics.map(t => t.id === topicId ? { ...t, status: newStatus } : t);
+          p.setTopics(updatedTopics as any);
           // Update the detail view
-          p.setDetailTopic((prev: any) => prev?.id === topicId ? { ...prev, status: newStatus } : prev);
+          if (p.detailTopic?.id === topicId) {
+            p.setDetailTopic({ ...p.detailTopic, status: newStatus });
+          }
         }}
         accounts={MOCK_ACCOUNTS}
         scripts={liveScripts}
