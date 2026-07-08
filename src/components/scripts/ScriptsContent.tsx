@@ -137,6 +137,46 @@ export default function ScriptsContent() {
 
   // === Wizard generate ===
   const handleWizardGenerate = (data: any) => {
+    // If pipelineResult is available, use the best variant from pipeline
+    if (data.pipelineResult) {
+      const pr = data.pipelineResult;
+      const duration = data.selectedDuration || data.video_length || '30';
+      const variant = pr.variants.find((v: any) => v.duration === duration) || pr.bestVariant || pr.variants[0];
+      if (!variant) return;
+
+      const account = MOCK_ACCOUNTS.find(a => a.id === data.account_id);
+      const scoreResult = variant.score || scoreScript(variant.script, duration);
+      const newScript: Script = {
+        id: 's' + Date.now(), org_id: 'org_001',
+        topic_id: null, account_id: data.account_id || 'a1',
+        title: pr.strategy.topic || '未命名脚本', hook: variant.hook,
+        main_script: variant.script, shot_list: [],
+        subtitle_points: variant.subtitlePoints?.join(' · ') || '',
+        cover_text: '',
+        comment_reply: '',
+        private_message_cta: pr.strategy.conversionGoal || '',
+        risk_notes: '不要承诺具体价格和交期，以实际打样为准',
+        version: 1, status: pr.recommendedStatus === 'pending_review' ? 'pending_review' : 'draft',
+        ai_meta: {
+          source: 'pipeline_v3', generated_by: 'script_factory_v3',
+          quality_score: scoreResult.totalScore, score_detail: scoreResult,
+          risk_level: scoreResult.riskLevel, risk_points: scoreResult.riskPoints,
+          word_count: variant.wordCount,
+        },
+        created_by: 'u1', created_at: new Date().toISOString(),
+      };
+      setScripts(prev => [newScript, ...prev]);
+      setSelectedId(newScript.id);
+      setAiResult({
+        message: '已生成短视频口播脚本「' + newScript.title + '」',
+        '副标题': variant.hook, '评分': scoreResult.totalScore + '/100',
+        '等级': scoreResult.grade, '风险': scoreResult.riskLevel,
+        '字数': variant.wordCount + '字', '时长': duration + '秒',
+      });
+      return;
+    }
+
+    // Legacy: no pipelineResult, use old generation
     const account = MOCK_ACCOUNTS.find(a => a.id === data.account_id);
     const selectedCards = data.knowledge_refs
       ? MOCK_KNOWLEDGE_NEW.filter(k => data.knowledge_refs.includes(k.id))
@@ -179,7 +219,6 @@ export default function ScriptsContent() {
       '字数': result.wordCount + '字',
     });
   };
-
   const getScoreResult = (s: Script): ScriptScoreResult => {
     if (s.ai_meta?.score_detail) return s.ai_meta.score_detail as ScriptScoreResult;
     const text = s.main_script || s.hook || '';

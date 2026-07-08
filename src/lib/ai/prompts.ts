@@ -373,3 +373,52 @@ ${script}
 - rewriteSuggestions: 修改建议（数组）
 - recommendedStatus: 推荐状态`;
 
+
+// ===== 端到端流水线提示词 =====
+
+export const GENERATE_PIPELINE_PROMPT = (input: any) => `请根据以下信息，完成脚本工厂的端到端流水线。
+
+【输入信息】
+账号：${JSON.stringify(input.account)}
+主题/痛点：${input.customerPain || input.topic}
+产品/工艺：${input.productOrProcess}
+材质：${input.material || '未知'}
+目标时长：${input.video_length || '30'}秒
+参考知识卡：${JSON.stringify((input.knowledgeCards || []).slice(0, 3))}
+
+请按以下步骤执行：
+
+**第1步：判断输入是否太宽泛**
+- 如果输入是"客户常见问题一次性说清楚"、"热转印注意事项"、"数码热转印介绍"这类大主题，先拆成5-10个具体子选题
+- 只选择最相关的一个子选题继续
+
+**第2步：生成开头钩子**
+- 必须≤25个中文字
+- 直接点出客户具体问题或冲突
+- 禁止：很多客户问我这个问题、今天统一回答一下、今天给大家讲一下、最近很多朋友问、大家都知道
+
+**第3步：生成策略卡**
+- 明确目标客户、客户痛点、核心观点、用户为什么愿意看
+
+**第4步：生成脚本正文**
+- 语言必须像工厂老板/业务员在说话，不像文章
+- 句子要短，每句不超过30字
+- 禁止：首先/其次/最后、第一/第二/第三、综上所述、显而易见、赋能、助力
+- 结尾必须有客户下一步动作引导
+- 不能承诺价格、交期、附着力
+
+**第5步：按时长生成变体**
+- 15秒：80-120字，只讲1个核心点
+- 30秒：150-220字，最多2个核心点
+- 60秒：280-420字，最多3个核心点
+
+请输出 JSON 格式，包含以下字段：
+- isBroad: boolean（输入是否宽泛）
+- subTopics: string[]（如果宽泛，列出子选题）
+- selectedSubTopic: string（选中的子选题）
+- strategy: { topic, hook, targetCustomer, customerPain, corePoint, whyWatch, solveWhat, structure, conversionGoal, risksToAvoid }
+- variants: [{ duration: '15'|'30'|'60', hook, script, wordCount, subtitlePoints }]
+- bestDuration: string
+- mock: false
+
+注意：如果没有配置OpenAI API Key，请用模拟数据返回。`;

@@ -1,7 +1,7 @@
 'use client';
 import AppLayout from '@/components/layout/AppLayout';
 import PageHeader from '@/components/layout/PageHeader';
-import ScriptWizard from '@/components/scripts/ScriptWizard';
+import ScriptGeneratorWizard from '@/components/scripts/ScriptGeneratorWizard';
 import ScriptListPane from '@/components/scripts/ScriptListPane';
 import ScriptEditorPane from '@/components/scripts/ScriptEditorPane';
 import ScriptAIPane from '@/components/scripts/ScriptAIPane';
@@ -138,7 +138,7 @@ export function ScriptsRenderer(p: ScriptsRendererProps) {
       </div>
 
       {/* ScriptWizard Modal */}
-      <ScriptWizard open={p.showWizard} onClose={() => p.setShowWizard(false)} onGenerate={p.handleWizardGenerate} />
+      <ScriptGeneratorWizard open={p.showWizard} onClose={() => p.setShowWizard(false)} onGenerate={p.handleWizardGenerate} />
     </AppLayout>
   );
 }
