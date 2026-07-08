@@ -51,10 +51,6 @@ export default function ScriptAIPane({
       {/* Save / Status actions */}
       <div className="space-y-1.5 mb-3">
         <div className="flex gap-1">
-          <button className="btn-primary btn-sm text-[10px] flex-1" onClick={onSaveDraft}>存草稿</button>
-          <button className="btn-primary btn-sm text-[10px] flex-1 bg-blue-600" onClick={onSavePendingReview}>存待审核</button>
-        </div>
-        <div className="flex gap-1">
           {pushedToTopics ? (
             <span className="flex-1 text-center text-[10px] text-green-600 bg-green-50 px-2 py-1 rounded">✅ 已推进选题库</span>
           ) : (

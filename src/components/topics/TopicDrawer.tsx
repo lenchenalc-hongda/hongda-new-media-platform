@@ -8,6 +8,7 @@ interface TopicDrawerProps {
   topic: Topic | null;
   onClose: () => void;
   onConvertToScript: (t: Topic) => void;
+  onUpdateStatus: (topicId: string, newStatus: string) => void;
   accounts: typeof MOCK_ACCOUNTS;
   scripts: Script[];
 }
@@ -40,13 +41,29 @@ function StatusBadgeSmall({ label, color }: { label: string; color: string }) {
   return <span className={'inline-block px-2 py-0.5 rounded text-[10px] font-medium ' + (colors[color] || colors.gray)}>{label}</span>;
 }
 
-export default function TopicDrawer({ topic, onClose, onConvertToScript, accounts, scripts }: TopicDrawerProps) {
+export default function TopicDrawer({ topic, onClose, onConvertToScript, onUpdateStatus, accounts, scripts }: TopicDrawerProps) {
   if (!topic) return null;
 
   const account = accounts.find(a => a.id === topic.account_id);
   const linkedScript = topic.linked_script_id
     ? scripts.find(s => s.id === topic.linked_script_id)
     : null;
+
+  // Status progression map
+  const STATUS_NEXT: Record<string, string> = {
+    '待审核': '已审核',
+    '已审核': '已发布',
+    '已发布': '待复盘',
+    '待复盘': '可复制',
+  };
+  const STATUS_ACTIONS: Record<string, { label: string; color: string }> = {
+    '待审核': { label: '审核通过 → 已审核', color: 'green' },
+    '已审核': { label: '标记发布 → 已发布', color: 'green' },
+    '已发布': { label: '开始复盘 → 待复盘', color: 'yellow' },
+    '待复盘': { label: '标记可复制 → 可复制', color: 'purple' },
+  };
+  const nextAction = STATUS_ACTIONS[topic.status];
+  const nextStatus = STATUS_NEXT[topic.status];
 
   return (
     <div className="fixed inset-0 bg-black/20 z-40" onClick={onClose}>
@@ -64,7 +81,12 @@ export default function TopicDrawer({ topic, onClose, onConvertToScript, account
             </div>
           </div>
           <div className="flex items-center gap-2 ml-4">
-            <button className="btn-primary btn-sm text-xs" onClick={() => onConvertToScript(topic)}>转入脚本工厂</button>
+            {nextAction && (
+              <button className={'btn-sm text-xs px-3 py-1 rounded font-medium text-white ' + (nextAction.color === 'green' ? 'bg-green-600 hover:bg-green-700' : nextAction.color === 'yellow' ? 'bg-yellow-600 hover:bg-yellow-700' : 'bg-purple-600 hover:bg-purple-700')}
+                onClick={() => onUpdateStatus(topic.id, nextStatus)}>
+                {nextAction.label}
+              </button>
+            )}
             <button className="text-gray-400 hover:text-gray-600 text-xl" onClick={onClose}>✕</button>
           </div>
         </div>
