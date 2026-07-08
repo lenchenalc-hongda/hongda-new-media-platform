@@ -45,12 +45,13 @@ export async function GET(request: NextRequest) {
       .from('site_data')
       .select('data, updated_at')
       .eq('key', key)
-      .single();
+      .maybeSingle();
 
-    if (!error && row) {
+    if (!error) {
+      // Row found → return it. No row → return empty.
       return NextResponse.json({
-        data: row.data,
-        updatedAt: row.updated_at,
+        data: row?.data || [],
+        updatedAt: row?.updated_at || new Date().toISOString(),
         source: 'supabase',
       });
     }

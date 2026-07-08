@@ -35,3 +35,11 @@ CREATE TRIGGER set_site_data_timestamp
   BEFORE UPDATE ON site_data
   FOR EACH ROW
   EXECUTE FUNCTION update_site_data_timestamp();
+
+-- 显式授权（避免 service_role 权限不足）
+GRANT USAGE ON SCHEMA public TO service_role;
+GRANT USAGE ON SCHEMA public TO anon;
+GRANT USAGE ON SCHEMA public TO authenticated;
+GRANT ALL ON TABLE site_data TO service_role;
+GRANT ALL ON TABLE site_data TO anon;
+GRANT ALL ON TABLE site_data TO authenticated;
