@@ -47,9 +47,12 @@ export async function GET(request: NextRequest) {
     env_keys_present: {
       WECHAT_APP_ID: !!process.env.WECHAT_APP_ID,
       WECHAT_APP_SECRET: !!process.env.WECHAT_APP_SECRET,
+      WECHAT_PROXY_URL: !!process.env.WECHAT_PROXY_URL,
+      WECHAT_PROXY_API_KEY: !!process.env.WECHAT_PROXY_API_KEY,
     },
     all_wechat_env_vars: envKeys,
     env_count: envKeys.length,
+    wechat_proxy_url: process.env.WECHAT_PROXY_URL || null,
     node_env: process.env.NODE_ENV,
     check_time: new Date().toISOString(),
   });
