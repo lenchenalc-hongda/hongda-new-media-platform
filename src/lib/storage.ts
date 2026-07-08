@@ -83,11 +83,10 @@ export function usePersistentState<T>(storageKey: string, fallback: T[]) {
   const [data, setData] = useState<T[]>(fallback);
 
   // 客户端水合完成后，从 localStorage 加载已保存的数据
+  // 从 localStorage 加载已保存的数据，不再依赖复杂条件判断
   useEffect(() => {
     const stored = loadData(storageKey, fallback);
-    if (stored !== fallback || (Array.isArray(stored) && stored.length > 0)) {
-      setData(stored);
-    }
+    setData(stored);
   }, []);
 
   const setPersisted = useCallback((update: T[] | ((prev: T[]) => T[])) => {
