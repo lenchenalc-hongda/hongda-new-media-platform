@@ -20,6 +20,7 @@ export interface PublishStatusResult { status: string; publishId: string; failRe
 
 const tokenCache = new Map<string, TokenCacheEntry>();
 const WECHAT_API_BASE = 'https://api.weixin.qq.com';
+const PROXY_BASE = process.env.WECHAT_PROXY_URL || '';
 
 function loadConfig(): WechatConnectionConfig | null {
   const appId = process.env.WECHAT_APP_ID?.trim();
@@ -41,10 +42,26 @@ export async function getAccessToken(): Promise<{ token: string } | { error: str
   }
 
   try {
-    const url = WECHAT_API_BASE + '/cgi-bin/token?grant_type=client_credential&appid=' + config.appId + '&secret=' + config.appSecret;
+    let url: string;
+    const proxyApiKey = process.env.WECHAT_PROXY_API_KEY || '';
+
+    if (PROXY_BASE) {
+      // Use fixed-IP proxy
+      url = PROXY_BASE + '/wechat-token?appid=' + config.appId + '&secret=' + config.appSecret;
+    } else {
+      url = WECHAT_API_BASE + '/cgi-bin/token?grant_type=client_credential&appid=' + config.appId + '&secret=' + config.appSecret;
+    }
+
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 10000);
-    const res = await fetch(url, { signal: controller.signal });
+    const fetchOptions: any = { signal: controller.signal };
+
+    // Add API key if using proxy
+    if (PROXY_BASE && proxyApiKey) {
+      fetchOptions.headers = { 'x-api-key': proxyApiKey };
+    }
+
+    const res = await fetch(url, fetchOptions);
     clearTimeout(timeout);
     const data = await res.json();
 

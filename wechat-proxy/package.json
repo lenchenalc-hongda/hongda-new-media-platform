@@ -1,0 +1,12 @@
+{
+  "name": "wechat-api-proxy",
+  "version": "1.0.0",
+  "description": "Fixed-IP proxy for WeChat Official Account API calls",
+  "main": "proxy.js",
+  "scripts": {
+    "start": "node proxy.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2"
+  }
+}
