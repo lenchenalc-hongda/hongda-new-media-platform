@@ -168,6 +168,7 @@ export function generateHook(input: {
   const hooks = HOOK_FRAGMENTS[catKey || 'price'] || HOOK_FRAGMENTS.price;
   const hook = hooks[Math.floor(Math.random() * hooks.length)];
 
+  const chineseChars = hook.match(/[u4e00-u9fff]/g);
   // 3. Ensure ≤ 25 Chinese characters
   if (chineseChars && chineseChars.length > 25) {
     return hook.slice(0, 30) + '？';
