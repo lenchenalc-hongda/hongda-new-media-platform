@@ -6,3 +6,7 @@ export { BRAND_VOICE, checkBrandCompliance } from './brand-voice';
 export type { BrandVoiceConfig } from './brand-voice';
 export { scoreArticle } from './article-scoring';
 export type { ArticleScoreResult } from './article-scoring';
+export { MockPublishAdapter, WeChatMpPublishAdapter, getPublishAdapter } from './publish-adapter';
+export type { PublishRequest, PublishResult, IPublishAdapter } from './publish-adapter';
+export { createPublishJob, executePublishJob, retryPublishJob, getAllPublishJobs, getPublishLogs, checkPublishGate } from './publish-queue';
+export type { PublishJob, PublishLog, PublishGateCheck } from './publish-queue';
