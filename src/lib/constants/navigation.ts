@@ -36,11 +36,12 @@ export const PORTAL_GROUPS: PortalGroup[] = [
   },
   {
     id: 'official',
-    label: '公众号',
-    description: '微信公众号内容管理',
+    label: '公众号工厂',
+    description: '微信公众号内容生产与管理',
     icon: '📢',
     color: 'green',
     items: [
+      { label: '总览', path: '/oa', icon: '📊' },
       { label: '文章库', path: '/oa/articles', icon: '📄' },
       { label: '文章工厂', path: '/oa/article-factory', icon: '✏️' },
       { label: '模板中心', path: '/oa/templates', icon: '📐' },
