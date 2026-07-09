@@ -14,6 +14,18 @@ const FILE = (key: string) => path.join(DATA_DIR, `${key}.json`);
 async function ensure() { try { await fs.mkdir(DATA_DIR, { recursive: true }); } catch {} }
 
 async function readData(key: string): Promise<any[]> {
+  // Try Supabase first
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (supabaseUrl && supabaseServiceKey) {
+    try {
+      const { createClient } = await import('@supabase/supabase-js');
+      const sb = createClient(supabaseUrl, supabaseServiceKey, { auth: { persistSession: false } });
+      const { data: row } = await sb.from('site_data').select('data').eq('key', key).maybeSingle();
+      if (row && Array.isArray(row.data) && row.data.length > 0) return row.data;
+    } catch {}
+  }
+  // Fallback to file
   await ensure();
   try {
     const c = await fs.readFile(FILE(key), 'utf-8');
@@ -22,8 +34,19 @@ async function readData(key: string): Promise<any[]> {
 }
 
 async function writeData(key: string, data: any[]): Promise<void> {
+  // Write to file
   await ensure();
   await fs.writeFile(FILE(key), JSON.stringify(data, null, 2), 'utf-8');
+  // Also write to Supabase
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (supabaseUrl && supabaseServiceKey) {
+    try {
+      const { createClient } = await import('@supabase/supabase-js');
+      const sb = createClient(supabaseUrl, supabaseServiceKey, { auth: { persistSession: false } });
+      await sb.from('site_data').upsert({ key, data, updated_at: new Date().toISOString() }, { onConflict: 'key' });
+    } catch {}
+  }
 }
 
 export async function POST(req: NextRequest) {
