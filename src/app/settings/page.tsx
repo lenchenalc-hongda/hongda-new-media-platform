@@ -75,6 +75,7 @@ export default function SettingsPage() {
     { key: 'oa', label: '公众号连接' },
     { key: 'ai', label: 'AI规则设置' },
     { key: 'csv', label: 'CSV导入导出' },
+    { key: 'migrate', label: '数据迁移' },
   ];
 
   const getRoleBadge = (role: string) => {
@@ -223,6 +224,53 @@ export default function SettingsPage() {
             <p>// 5. 复盘必须连接业务结果</p>
           </div>
           <p className="text-xs text-gray-400 mt-3">当前模型：{process.env.NEXT_PUBLIC_OPENAI_MODEL || 'gpt-4o (未配置，使用mock)'}</p>
+        </div>
+      )}
+
+      {activeTab === 'migrate' && (
+        <div className="card">
+          <h3 className="font-semibold text-gray-800 mb-3">数据迁移</h3>
+          <p className="text-sm text-gray-500 mb-4">将现有知识卡、选题、脚本数据补齐新字段，并重算评分与风险等级。</p>
+          <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-700 mb-4">
+            建议先运行 Dry Run 预览变更，确认无误后再执行完整迁移。
+          </div>
+          <div className="flex gap-3">
+            <button id="btn-migrate-dryrun"
+              className="btn-secondary text-sm"
+              onClick={async () => {
+                const btn = document.getElementById('btn-migrate-dryrun') as HTMLButtonElement;
+                btn.disabled = true; btn.textContent = '运行中...';
+                try {
+                  const res = await fetch('/api/data/migrate', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({mode:'dry_run'}) });
+                  const data = await res.json();
+                  const r = data.report;
+                  alert('Dry Run 完成\n知识卡：' + r.knowledge.total + ' 总/' + r.knowledge.fixed + ' 需修复\n选题：' + r.topics.total + ' 总/' + r.topics.fixed + ' 需修复\n脚本：' + r.scripts.total + ' 总/' + r.scripts.scored + ' 需评分\n' + (data.suggestion || ''));
+                } catch(e:any) { alert('Error: ' + e.message); }
+                btn.disabled = false; btn.textContent = 'Dry Run 预览';
+              }}>
+              Dry Run 预览
+            </button>
+            <button id="btn-migrate-execute"
+              className="btn-primary text-sm"
+              onClick={async () => {
+                if (!confirm('确定要执行数据迁移吗？建议先运行 Dry Run 预览。')) return;
+                const btn = document.getElementById('btn-migrate-execute') as HTMLButtonElement;
+                btn.disabled = true; btn.textContent = '迁移中...';
+                try {
+                  const res = await fetch('/api/data/migrate', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({mode:'execute'}) });
+                  const data = await res.json();
+                  if (data.success) {
+                    const r = data.report;
+                    alert('迁移完成！\n知识卡：' + r.knowledge.fixed + ' 条已修复\n选题：' + r.topics.fixed + ' 条已修复\n脚本：' + r.scripts.scored + ' 条已评分\n建议人工复核列表：请检查数据完整性');
+                  } else {
+                    alert('迁移失败：' + (data.error || '未知错误'));
+                  }
+                } catch(e:any) { alert('Error: ' + e.message); }
+                btn.disabled = false; btn.textContent = '执行迁移';
+              }}>
+              执行迁移
+            </button>
+          </div>
         </div>
       )}
 
