@@ -2,7 +2,7 @@
 import { ScriptsRenderer } from './ScriptsRenderer';
 import { useState, useMemo } from 'react';
 import { ALL_MOCK_SCRIPTS, MOCK_ACCOUNTS, MOCK_KNOWLEDGE_NEW, MOCK_TOPICS } from '@/lib/constants/mock-data';
-import { usePersistentState, STORAGE_KEYS, saveData, getStoredData } from '@/lib/storage';
+import { usePersistentState, STORAGE_KEYS, saveData, getStoredData, saveToServer, loadFromServer } from '@/lib/storage';
 import type { Script, Topic } from '@/lib/constants/types';
 import { generateShortVideoScript } from '@/lib/ai/script-pipeline';
 import { scoreScript, ScriptScoreResult } from '@/lib/ai/script-scoring';
@@ -93,9 +93,9 @@ export default function ScriptsContent() {
   };
 
   // === Push to topics ===
-  const handlePushToTopics = (scriptId: string) => {
+  const handlePushToTopics = async (scriptId: string) => {
     const s = scripts.find(x => x.id === scriptId);
-    if (!s) return;
+    if (!s) { console.warn('[push] Script not found:', scriptId); return; }
     const account = MOCK_ACCOUNTS.find(a => a.id === s.account_id);
     const newTopic: Topic = {
       id: 't' + Date.now(),
@@ -124,7 +124,11 @@ export default function ScriptsContent() {
       notes: '从脚本工厂推进过来',
       created_by: 'u1', created_at: new Date().toISOString(),
     };
-    saveData(STORAGE_KEYS.TOPICS, [...getStoredData(STORAGE_KEYS.TOPICS, MOCK_TOPICS), newTopic]);
+    // Save to localStorage + server (for cross-page sync via Supabase)
+    const currentTopics = getStoredData(STORAGE_KEYS.TOPICS, MOCK_TOPICS);
+    const updated = [...currentTopics, newTopic];
+    saveData(STORAGE_KEYS.TOPICS, updated);
+    await saveToServer(STORAGE_KEYS.TOPICS, updated);
     setPushedToTopics(prev => new Set(prev).add(scriptId));
     setAiResult({
       message: '已推进到选题库待审核 ✅',

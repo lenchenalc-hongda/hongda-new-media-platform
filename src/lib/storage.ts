@@ -84,7 +84,7 @@ export function deleteManyData<T extends { id: string }>(
  * 返回 { data: T[], updatedAt: string, source: string }
  * 如果服务器没有数据或出错，data 为 null。
  */
-async function loadFromServer<T>(key: string): Promise<{
+export async function loadFromServer<T>(key: string): Promise<{
   data: T[] | null;
   updatedAt: string;
   source: string;
@@ -116,7 +116,7 @@ async function loadFromServer<T>(key: string): Promise<{
   return { data: null, updatedAt: new Date(0).toISOString(), source: 'none' };
 }
 
-async function saveToServer<T>(key: string, data: T[]): Promise<void> {
+export async function saveToServer<T>(key: string, data: T[]): Promise<void> {
   try {
     await fetch('/api/data?key=' + encodeURIComponent(key), {
       method: 'POST',
