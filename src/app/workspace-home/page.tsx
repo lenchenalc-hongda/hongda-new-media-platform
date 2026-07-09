@@ -156,7 +156,43 @@ export default function WorkspaceHome() {
           </div>
         </section>
 
-        {/* === THIRD SCREEN: Quick Actions === */}
+        {/* === THIRD SCREEN: 最近待办 === */}
+        <section>
+          <h2 className="text-lg font-bold text-gray-800 mb-4">最近待办</h2>
+          <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-gray-50 border-b border-gray-200">
+                  <th className="text-left px-4 py-2.5 text-xs font-medium text-gray-500">事项</th>
+                  <th className="text-left px-4 py-2.5 text-xs font-medium text-gray-500">所属模块</th>
+                  <th className="text-left px-4 py-2.5 text-xs font-medium text-gray-500">状态</th>
+                  <th className="text-right px-4 py-2.5 text-xs font-medium text-gray-500">操作</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {[
+                  { task: '待审核脚本', module: '新媒体', status: '待审核', color: 'text-yellow-600', path: '/scripts' },
+                  { task: '待审核选题', module: '新媒体', status: '待审核', color: 'text-yellow-600', path: '/topics' },
+                  { task: '待发布文章', module: '公众号', status: '草稿', color: 'text-blue-600', path: '/oa/articles' },
+                  { task: '待确认知识卡', module: '知识库', status: '待确认', color: 'text-purple-600', path: '/knowledge' },
+                  { task: '未分配线索', module: '新媒体', status: '待跟进', color: 'text-orange-600', path: '/leads' },
+                ].map((item, i) => (
+                  <tr key={i} className="hover:bg-gray-50 transition-colors">
+                    <td className="px-4 py-2.5 text-gray-700">{item.task}</td>
+                    <td className="px-4 py-2.5 text-xs text-gray-400">{item.module}</td>
+                    <td className={`px-4 py-2.5 text-xs font-medium ${item.color}`}>{item.status}</td>
+                    <td className="px-4 py-2.5 text-right">
+                      <a href={item.path}
+                        className="text-xs text-blue-600 hover:text-blue-800 no-underline">去处理 →</a>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        {/* === FOURTH SCREEN: Quick Actions === */}
         <section>
           <h2 className="text-lg font-bold text-gray-800 mb-4">快速新建</h2>
           <div className="flex flex-wrap gap-3">
