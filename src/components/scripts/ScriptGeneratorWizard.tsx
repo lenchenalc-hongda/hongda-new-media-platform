@@ -65,7 +65,7 @@ export default function ScriptGeneratorWizard({ open, onClose, onGenerate }: Scr
   };
 
   const handleGenerate = () => {
-    // Run the full pipeline
+    // Run the pipeline (synchronous fallback in client; async DeepSeek via API)
     const selectedCards = form.knowledge_refs
       ? MOCK_KNOWLEDGE_NEW.filter(k => form.knowledge_refs.includes(k.id))
       : [];

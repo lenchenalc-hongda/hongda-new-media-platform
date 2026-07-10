@@ -4,7 +4,6 @@
 // ============================================================
 
 import { scoreScript, ScriptScoreResult } from './script-scoring';
-import { LLMAdapter } from './llm';
 
 // ===== Adapter-based Pipeline Interfaces =====
 export interface PipelineConfig {
@@ -572,7 +571,7 @@ export function generateShortVideoScript(input: {
 
 // ===== 5. runPipeline(): 完整端到端流水线 =====
 
-export async function runPipeline(input: {
+export function runPipeline(input: {
   account?: any;
   topic?: string;
   customerPain?: string;
@@ -582,7 +581,7 @@ export async function runPipeline(input: {
   video_length?: string;
   source_type?: string;
   pipelineConfig?: PipelineConfig;
-}): Promise<PipelineResult> {
+}): PipelineResult {
   const topic = input.customerPain || input.topic || '';
   const config = input.pipelineConfig || {};
   const isDeepSeek = config.aiProvider === 'deepseek' || process.env.AI_PROVIDER === 'deepseek';
@@ -598,53 +597,12 @@ export async function runPipeline(input: {
     topic: subTopics[0] || topic,
   });
 
-  // 3. Try LLM for angles, hooks, draft (if provider available)
+  // 3. Rule engine: no AI in synchronous path
   let angleCandidates: any[] = [];
   let hookCandidates: any[] = [];
   let selectedHook = strategy.hook;
   let aiDraft: any = null;
   let aiUsed = false;
-
-  if (isDeepSeek) {
-    try {
-      const llm = new LLMAdapter();
-      // 3a. Generate angle candidates
-      angleCandidates = (await llm.generateAngles({
-        topic: strategy.topic,
-        customerPain: input.customerPain,
-        productOrProcess: input.productOrProcess,
-        material: input.material,
-      })) || [];
-
-      // 3b. Generate hook candidates  
-      const bestAngle = angleCandidates.length > 0 ? angleCandidates[0].angle : strategy.topic;
-      hookCandidates = (await llm.generateHooks({
-        topic: strategy.topic,
-        angle: bestAngle,
-        customerPain: input.customerPain,
-      })) || [];
-
-      if (hookCandidates.length > 0) {
-        hookCandidates.sort((a: any, b: any) => (b.strength || 0) - (a.strength || 0));
-        selectedHook = hookCandidates[0].hook;
-      }
-
-      // 3c. Generate draft
-      aiDraft = await llm.generateDraft({
-        hook: selectedHook,
-        angle: bestAngle,
-        targetCustomer: strategy.targetCustomer,
-        customerPain: strategy.customerPain,
-        productOrProcess: input.productOrProcess,
-      });
-
-      if (aiDraft && aiDraft.body) {
-        aiUsed = true;
-      }
-    } catch (err: any) {
-      console.warn('[Pipeline] LLM adapter failed, falling back to rule engine:', err.message);
-    }
-  }
 
   // 4. Generate variants (use AI draft if available, otherwise rule engine)
   const durations: ('15' | '30' | '60')[] = ['15', '30', '60'];
@@ -728,24 +686,7 @@ export async function runPipeline(input: {
     else recommendedStatus = 'discard';
   }
 
-  // 8. If AI draft scored < 80, try rewrite
-  if (aiDraft && bestScore && bestScore.totalScore < 80 && isDeepSeek) {
-    try {
-      const llm = new LLMAdapter();
-      const rewriteResult = await llm.rewriteScript({
-        script: bestVariant?.script || '',
-        feedback: '评分偏低，请更口语化、用更短的句子、直接点出客户问题',
-      });
-      if (rewriteResult && rewriteResult.body) {
-        const rewritten = removeAiTone(rewriteResult.body);
-        const newScore = scoreScript(rewritten, bestVariant?.duration || '30');
-        if (newScore.totalScore > (bestScore?.totalScore || 0)) {
-          bestVariant!.script = rewritten;
-          bestVariant!.score = newScore;
-        }
-      }
-    } catch {}
-  }
+  // 8. (AI rewrite skipped in synchronous path)
 
   return {
     strategy,
@@ -769,29 +710,9 @@ export async function runPipeline(input: {
   };
 }
 
-// ===== Hybrid Scoring (local rules + optional AI judgement) =====
-export async function scoreScriptHybrid(script: string, duration: string = '30', useAI: boolean = false): Promise<ScriptScoreResult> {
-  // 1. Local scoring (ALWAYS runs)
-  const localScore = scoreScript(script, duration);
-
-  // 2. AI judgement (optional enhancement)
-  if (useAI) {
-    try {
-      const llm = new LLMAdapter();
-      const aiJudgement = await llm.judgeScript({ script, duration });
-      if (aiJudgement) {
-        const aiTotal = (aiJudgement.structureScore || 0) + (aiJudgement.spokenScore || 0) + (aiJudgement.painScore || 0) + (aiJudgement.ctascore || 0);
-        // Merge: 70% local + 30% AI
-        const merged = Math.round(localScore.totalScore * 0.7 + aiTotal * 0.3);
-        return {
-          ...localScore,
-          totalScore: Math.min(100, Math.max(0, merged)),
-          rewriteSuggestions: [...localScore.rewriteSuggestions, ...(aiJudgement.suggestions || [])],
-        };
-      }
-    } catch {}
-  }
-  return localScore;
+// ===== Hybrid Scoring (local rules only, AI judgement via API) =====
+export function scoreScriptHybrid(script: string, duration: string = '30', useAI: boolean = false): ScriptScoreResult {
+  return scoreScript(script, duration);
 }
 
 // ===== Helper =====
