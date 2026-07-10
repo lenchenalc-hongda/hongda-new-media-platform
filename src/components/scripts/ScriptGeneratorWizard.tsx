@@ -67,13 +67,55 @@ export default function ScriptGeneratorWizard({ open, onClose, onGenerate }: Scr
     } catch (e) { 
       console.warn("[Wizard] Hook fetch failed, using fallback:", e);
       // Fallback hooks that always work
-      const fallbackHooks = [
-        { hook: { id: 'fb_1', hookText: 'PE瓶能不能做热转印？先别急着回答。', hookType: 'direct_question', tensionType: 'can_or_cannot', targetCustomer: selectedAccount?.target_audience || '', whyItWorks: '客户自己也有这个疑问，点进来找答案', riskNotes: '', similarityToRecentScripts: 0 }, totalScore: 85, grade: 'A', dimensions: [], penalties: [], strengths: ['开头有明确冲突'], weaknesses: [], rank: 1 },
-        { hook: { id: 'fb_2', hookText: '客户问PE会不会掉，我最怕直接说不会。', hookType: 'material_risk', tensionType: 'fear_of_failure', targetCustomer: selectedAccount?.target_audience || '', whyItWorks: '直接击中客户怕翻车的顾虑', riskNotes: '', similarityToRecentScripts: 0 }, totalScore: 83, grade: 'A', dimensions: [], penalties: [], strengths: ['材质风险导向直接'], weaknesses: [], rank: 2 },
-        { hook: { id: 'fb_3', hookText: '500个杯子做热转印，起步价多少？', hookType: 'direct_question', tensionType: 'price', targetCustomer: selectedAccount?.target_audience || '', whyItWorks: '跟钱有关客户都在意', riskNotes: '', similarityToRecentScripts: 0 }, totalScore: 80, grade: 'A', dimensions: [], penalties: [], strengths: ['价格冲突明确'], weaknesses: [], rank: 3 },
-        { hook: { id: 'fb_4', hookText: '只看图片报价的，建议你不要信。', hookType: 'warning', tensionType: 'cost_waste', targetCustomer: selectedAccount?.target_audience || '', whyItWorks: '怕踩坑的内容天然吸引', riskNotes: '', similarityToRecentScripts: 0 }, totalScore: 78, grade: 'B', dimensions: [], penalties: [], strengths: ['风险预警明确'], weaknesses: [], rank: 4 },
-        { hook: { id: 'fb_5', hookText: '同样的瓶子，不一样的材质，结果是两个方案。', hookType: 'material_risk', tensionType: 'wrong_assumption', targetCustomer: selectedAccount?.target_audience || '', whyItWorks: '客户容易忽略的误区', riskNotes: '', similarityToRecentScripts: 0 }, totalScore: 76, grade: 'B', dimensions: [], penalties: [], strengths: ['材质误区有教育意义'], weaknesses: [], rank: 5 },
-      ];
+      const pain = form.customer_pain || selectedAngle?.customerPain || form.product_or_process || '热转印';
+                      const mat = form.material || '';
+                      const accName = selectedAccount?.name?.split('-')[0] || '';
+                      const accTarget = selectedAccount?.target_audience || '';
+                      const angleTitle = selectedAngle?.title || pain;
+                      
+                      // Generate hooks dynamically based on input
+                      const hookTexts = [
+                        { text: mat ? mat + '能不能做热转印？先别急着回答。' : pain.slice(0,12) + '？先别急着回答。', type: 'direct_question', tension: 'can_or_cannot', why: '客户自己也在问' + pain.slice(0,12) + '的问题' },
+                        { text: accName ? '客户问' + accName + '，' + (mat || pain.slice(0,8)) + '能不能做？' : '客户问' + pain.slice(0,14) + '，怎么回？', type: 'direct_question', tension: 'fear_of_failure', why: '直接回答客户最关心的问题' },
+                        { text: mat ? mat + '不是不能印，是不能直接承诺。' : pain.slice(0,10) + '不是不能做，是不能直接承诺。', type: 'material_risk', tension: 'can_or_cannot', why: '帮客户理解风险边界' },
+                        { text: '只看图片就报价的，建议你不要信。', type: 'warning', tension: 'cost_waste', why: '客户怕踩坑，预警天然吸引关注' },
+                        { text: '"按上次一样做就行"——这话不能直接听。', type: 'customer_quote', tension: 'quality_risk', why: '这句话客户太熟悉了，想知道正确的做法' },
+                        { text: mat ? mat + '的价格，不是一张图能报的。' : pain.slice(0,8) + '的价格，不是一句话能说清的。', type: 'cost_conflict', tension: 'price', why: '跟价格有关客户都在意' },
+                        { text: '不打样就直接做大货，十个有八个翻车。', type: 'warning', tension: 'fear_of_failure', why: '怕翻车是客户最大的顾虑' },
+                        { text: '客户只发一张图，我必须问三个问题。', type: 'direct_question', tension: 'price', why: '帮客户理解报价需要什么信息' },
+                        { text: '同样的' + (mat || '产品') + '，不一样的工艺，效果差一倍。', type: 'comparison', tension: 'wrong_assumption', why: '纠正客户的错误认知' },
+                        { text: '做了20年印刷，最大的坑是沟通问题。', type: 'boss_experience', tension: 'fear_of_failure', why: '老板身份自带权威感' },
+                        { text: '刚入行的时候，看材质我也分不清。', type: 'nini_perspective', tension: 'wrong_assumption', why: '新手视角更容易代入' },
+                        { text: '客户说之前做的掉了，原因可能不是附着力。', type: 'test_risk', tension: 'fear_of_failure', why: '怕翻车是客户最大的顾虑' },
+                        { text: '免费打样，反而让我更谨慎了。', type: 'counterintuitive', tension: 'price', why: '反常识让人想了解原因' },
+                        { text: '报价不是越便宜越好，是越准越好。', type: 'counterintuitive', tension: 'price', why: '反常识让人想了解原因' },
+                        { text: '评论区最热门问题：' + (pain.slice(0,14) || '热转印') + '怎么选？', type: 'comment_reply', tension: 'wrong_assumption', why: '真实问题引起共鸣' },
+                      ];
+                      
+                      // Shuffle and pick top 5
+                      const shuffled = [...hookTexts].sort(() => Math.random() - 0.5);
+                      const topHooks = shuffled.slice(0, 5);
+                      const fallbackHooks = topHooks.map((h, i) => ({
+                        hook: {
+                          id: 'fb_' + Date.now() + '_' + i,
+                          hookText: h.text,
+                          hookType: h.type,
+                          tensionType: h.tension,
+                          targetCustomer: accTarget,
+                          whyItWorks: h.why,
+                          riskNotes: '',
+                          similarityToRecentScripts: 0,
+                          score: 0,
+                          scoreDetail: { specificity: 0, conflictStrength: 0, spokenNaturalness: 0, ctaPotential: 0, riskSafety: 0 },
+                        },
+                        totalScore: Math.round(85 - i * 3 + Math.random() * 5),
+                        grade: 'A',
+                        dimensions: [],
+                        penalties: [],
+                        strengths: [h.type === 'direct_question' ? '开头有明确问题' : h.type === 'warning' ? '风险预警明确' : h.type === 'material_risk' ? '材质风险直接' : '内容有冲突'],
+                        weaknesses: [],
+                        rank: i + 1,
+                      }));
       setHookResults(fallbackHooks);
       if (fallbackHooks.length > 0) {
         setSelectedHookId(fallbackHooks[0].hook.id);
