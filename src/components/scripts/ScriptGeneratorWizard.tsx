@@ -64,25 +64,47 @@ export default function ScriptGeneratorWizard({ open, onClose, onGenerate }: Scr
     return true;
   };
 
-  const handleGenerate = () => {
-    // Run the pipeline (synchronous fallback in client; async DeepSeek via API)
+  const handleGenerate = async () => {
     const selectedCards = form.knowledge_refs
       ? MOCK_KNOWLEDGE_NEW.filter(k => form.knowledge_refs.includes(k.id))
       : [];
-
-    const result = runPipeline({
-      account: selectedAccount || {},
-      topic: form.product_or_process || form.customer_pain,
-      customerPain: form.customer_pain,
-      productOrProcess: form.product_or_process,
-      material: form.material,
-      knowledgeCards: selectedCards,
-      video_length: form.video_length,
-    });
-
+    let result = null;
+    // Try DeepSeek API first
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 15000);
+      const res = await fetch('/api/ai/script/pipeline', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          account: selectedAccount || {},
+          topic: form.product_or_process || form.customer_pain,
+          customerPain: form.customer_pain,
+          productOrProcess: form.product_or_process,
+          material: form.material,
+          knowledgeCards: selectedCards,
+          video_length: form.video_length,
+          pipelineConfig: { useAI: true, aiProvider: 'deepseek' },
+        }),
+        signal: controller.signal,
+      });
+      clearTimeout(timeout);
+      if (res.ok) { const data = await res.json(); if (data && data.variants && data.variants.length > 0) { result = data; } }
+    } catch (e) { console.warn('[Wizard] AI API failed, using rule engine:', e); }
+    // Fall back to rule engine
+    if (!result) {
+      result = runPipeline({
+        account: selectedAccount || {},
+        topic: form.product_or_process || form.customer_pain,
+        customerPain: form.customer_pain,
+        productOrProcess: form.product_or_process,
+        material: form.material,
+        knowledgeCards: selectedCards,
+        video_length: form.video_length,
+      });
+    }
     setPipelineResult(result);
     setSelectedDuration((form.video_length || '30') as '15' | '30' | '60');
-    setStep(5); // Move to result step
+    setStep(5);
   };
 
   const handleConfirmGenerate = () => {
