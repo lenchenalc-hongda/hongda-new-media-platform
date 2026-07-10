@@ -321,21 +321,23 @@ export default function ScriptGeneratorWizard({ open, onClose, onGenerate }: Scr
                       setAnglesLoading(true);
                       try {
                         const actrl = new AbortController();
-                        const atimeout = setTimeout(() => actrl.abort(), 8000);
+                        const atimeout = setTimeout(() => actrl.abort(), 5000);
                         const res = await fetch('/api/ai/script/angles', {
                           method: 'POST', headers: {'Content-Type':'application/json'},
                           signal: actrl.signal,
                           body: JSON.stringify({ customerPain: form.customer_pain, productOrProcess: form.product_or_process, material: form.material, account: selectedAccount || {} }),
                         });
                         clearTimeout(atimeout);
-                        const data = await res.json();
-                        if (data.angles) setAngles(data.angles);
-                      } catch {
-                        // Client-side fallback angles
-                        const pain = form.customer_pain || form.product_or_process || '热转印';
-                        const material = form.material || '';
-                        const accountName = selectedAccount?.name?.split('-')[0] || '';
-                        const fallbackAngles = [
+                        if (res.ok) {
+                          const data = await res.json();
+                          if (data.angles && data.angles.length > 0) { setAngles(data.angles); return; }
+                        }
+                      } catch {}
+                      // Client-side fallback angles
+                      const pain = form.customer_pain || form.product_or_process || '热转印';
+                      const material = form.material || '';
+                      const accountName = selectedAccount?.name?.split('-')[0] || '';
+                      const fallbackAngles = [
                           { id: 'fa_1', title: '客户对' + pain.slice(0,10) + '最常犯的错', angleType: 'customer_misunderstanding', targetCustomer: selectedAccount?.target_audience || '', customerPain: pain, coreConflict: '客户以为很简单，实际很多细节要注意', whyItWorks: '客户想知道自己是不是做错了', recommendedAccount: accountName, recommendedPlatform: '视频号', riskLevel: '低', score: 82, similarity: 0 },
                           { id: 'fa_2', title: (material || pain) + '能不能做热转印？判断逻辑', angleType: 'material_risk', targetCustomer: selectedAccount?.target_audience || '', customerPain: pain, coreConflict: material ? material + '看着能印，但附着力不一定过关' : '不先确认就看图报价风险很大', whyItWorks: '客户怕做错了浪费钱', recommendedAccount: accountName, recommendedPlatform: '视频号', riskLevel: '中', score: 88, similarity: 0 },
                           { id: 'fa_3', title: (material || pain) + '的报价逻辑，一次说清楚', angleType: 'cost_logic', targetCustomer: '正在询价的客户', customerPain: pain, coreConflict: '只看图片报的价格不靠谱，需要知道材质和数量', whyItWorks: '客户想知道价格但不知道怎么问', recommendedAccount: accountName, recommendedPlatform: '视频号', riskLevel: '低', score: 80, similarity: 0 },
@@ -346,7 +348,6 @@ export default function ScriptGeneratorWizard({ open, onClose, onGenerate }: Scr
                           { id: 'fa_8', title: (material || '价格') + '相关的3个最坑误区', angleType: 'customer_misunderstanding', targetCustomer: selectedAccount?.target_audience || '', customerPain: pain, coreConflict: '客户以为知道，其实搞反了', whyItWorks: '纠正认知有传播力', recommendedAccount: accountName, recommendedPlatform: '视频号', riskLevel: '低', score: 81, similarity: 0 },
                         ];
                         setAngles(fallbackAngles);
-                      }
                       setAnglesLoading(false);
                     }}>
                     {anglesLoading ? '生成中...' : angles.length > 0 ? '重新生成' : '生成角度建议'}
