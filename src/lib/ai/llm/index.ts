@@ -50,9 +50,26 @@ export class LLMAdapter {
           outputFormat: 'json',
           temperature: 0.8,
         });
-        const parsed = schema.safeParse(response.parsed);
-        if (parsed.success) return parsed.data;
-        console.warn(`[LLM] Schema validation failed (attempt ${i+1}):`, parsed.error.issues.map(i => i.message).join('; '));
+        // Try schema validation
+        if (response.parsed) {
+          const parsed = schema.safeParse(response.parsed);
+          if (parsed.success) return parsed.data;
+          console.warn(`[LLM] Schema validation failed (attempt ${i+1}):`, 
+            parsed.error.issues.map((e: any) => e.message).join('; '));
+          // Still return raw content as fallback
+          if (response.parsed.hook || response.parsed.body || response.parsed.angles || response.parsed.hooks) {
+            console.log('[LLM] Using raw response despite schema failure');
+            return response.parsed;
+          }
+        }
+        // Try to extract JSON from response.content
+        if (response.content) {
+          try {
+            const extracted = JSON.parse(response.content);
+            const parsedAgain = schema.safeParse(extracted);
+            if (parsedAgain.success) return parsedAgain.data;
+          } catch {}
+        }
       } catch (err: any) {
         console.warn(`[LLM] API call failed (attempt ${i+1}):`, err.message);
       }
