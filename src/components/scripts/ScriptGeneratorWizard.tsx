@@ -21,6 +21,9 @@ export default function ScriptGeneratorWizard({ open, onClose, onGenerate }: Scr
   });
   // Pipeline preview state
   const [pipelineResult, setPipelineResult] = useState<any>(null);
+  const [angles, setAngles] = useState<any[]>([]);
+  const [selectedAngle, setSelectedAngle] = useState<any>(null);
+  const [anglesLoading, setAnglesLoading] = useState(false);
   const [selectedDuration, setSelectedDuration] = useState<'15' | '30' | '60'>('30');
 
   const update = (key: string, value: any) => setForm({ ...form, [key]: value });
@@ -243,6 +246,57 @@ export default function ScriptGeneratorWizard({ open, onClose, onGenerate }: Scr
                     ))}
                   </select>
                 </div>
+              </div>
+
+              {/* Angle Generator */}
+              <div className="border-t border-gray-100 pt-3 mt-1">
+                <div className="flex items-center justify-between mb-2">
+                  <h4 className="text-xs font-medium text-gray-600">内容角度建议</h4>
+                  <button className="btn-secondary text-[10px] px-2 py-1" disabled={anglesLoading}
+                    onClick={async () => {
+                      if (!form.customer_pain && !form.product_or_process) return;
+                      setAnglesLoading(true);
+                      try {
+                        const res = await fetch('/api/ai/script/angles', {
+                          method: 'POST', headers: {'Content-Type':'application/json'},
+                          body: JSON.stringify({ customerPain: form.customer_pain, productOrProcess: form.product_or_process, material: form.material, account: selectedAccount || {} }),
+                        });
+                        const data = await res.json();
+                        if (data.angles) setAngles(data.angles);
+                      } catch {}
+                      setAnglesLoading(false);
+                    }}>
+                    {anglesLoading ? '生成中...' : angles.length > 0 ? '重新生成' : '生成角度建议'}
+                  </button>
+                </div>
+
+                {angles.length > 0 && (
+                  <div className="grid grid-cols-2 gap-1.5 max-h-48 overflow-y-auto">
+                    {angles.map(a => (
+                      <button key={a.id}
+                        onClick={() => { setSelectedAngle(a); update('customer_pain', a.customerPain || form.customer_pain); }}
+                        className={`text-left p-2 rounded border text-[10px] transition-all ${
+                          selectedAngle?.id === a.id
+                            ? 'border-blue-400 bg-blue-50'
+                            : 'border-gray-200 hover:border-gray-300 bg-white'
+                        }`}>
+                        <span className={`text-[9px] px-1 py-0.5 rounded ${
+                          a.riskLevel === '高' ? 'bg-red-100 text-red-600' :
+                          a.riskLevel === '中' ? 'bg-yellow-100 text-yellow-600' :
+                          'bg-green-100 text-green-600'
+                        }`}>{a.angleType}</span>
+                        <p className="mt-0.5 text-gray-700 font-medium leading-tight">{a.title}</p>
+                        <p className="text-[8px] text-gray-400 mt-0.5 line-clamp-1">{a.coreConflict}</p>
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {!anglesLoading && angles.length === 0 && form.customer_pain && (
+                  <p className="text-[10px] text-gray-400">点击"生成角度建议"获取不同内容方向</p>
+                )}
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
               </div>
 
               {/* Broad topic warning */}
