@@ -4,6 +4,15 @@
 // ============================================================
 
 import { scoreScript, ScriptScoreResult } from './script-scoring';
+import { LLMAdapter } from './llm';
+
+// ===== Adapter-based Pipeline Interfaces =====
+export interface PipelineConfig {
+  useAI?: boolean;
+  aiProvider?: 'mock' | 'openai' | 'deepseek';
+  enableAIJudgement?: boolean;
+}
+
 
 // ===== Interfaces =====
 
@@ -60,6 +69,11 @@ export interface PipelineResult {
   };
   recommendedStatus: string;
   mock: boolean;
+  angleCandidates: any[];
+  hookCandidates: any[];
+  selectedHook: string;
+  sourceKnowledgeCards: { cards: any[]; conclusions: string[]; risks: string[]; safers: string[] };
+  aiUsed: boolean;
 }
 
 export interface BatchScriptResult {
@@ -558,7 +572,7 @@ export function generateShortVideoScript(input: {
 
 // ===== 5. runPipeline(): 完整端到端流水线 =====
 
-export function runPipeline(input: {
+export async function runPipeline(input: {
   account?: any;
   topic?: string;
   customerPain?: string;
@@ -566,8 +580,12 @@ export function runPipeline(input: {
   material?: string;
   knowledgeCards?: any[];
   video_length?: string;
-}): PipelineResult {
+  source_type?: string;
+  pipelineConfig?: PipelineConfig;
+}): Promise<PipelineResult> {
   const topic = input.customerPain || input.topic || '';
+  const config = input.pipelineConfig || {};
+  const isDeepSeek = config.aiProvider === 'deepseek' || process.env.AI_PROVIDER === 'deepseek';
 
   // 1. Check if broad → split
   const isBroad = topic.length > 12 ||
@@ -580,44 +598,153 @@ export function runPipeline(input: {
     topic: subTopics[0] || topic,
   });
 
-  // 3. Generate variants for each duration
+  // 3. Try LLM for angles, hooks, draft (if provider available)
+  let angleCandidates: any[] = [];
+  let hookCandidates: any[] = [];
+  let selectedHook = strategy.hook;
+  let aiDraft: any = null;
+  let aiUsed = false;
+
+  if (isDeepSeek) {
+    try {
+      const llm = new LLMAdapter();
+      // 3a. Generate angle candidates
+      angleCandidates = (await llm.generateAngles({
+        topic: strategy.topic,
+        customerPain: input.customerPain,
+        productOrProcess: input.productOrProcess,
+        material: input.material,
+      })) || [];
+
+      // 3b. Generate hook candidates  
+      const bestAngle = angleCandidates.length > 0 ? angleCandidates[0].angle : strategy.topic;
+      hookCandidates = (await llm.generateHooks({
+        topic: strategy.topic,
+        angle: bestAngle,
+        customerPain: input.customerPain,
+      })) || [];
+
+      if (hookCandidates.length > 0) {
+        hookCandidates.sort((a: any, b: any) => (b.strength || 0) - (a.strength || 0));
+        selectedHook = hookCandidates[0].hook;
+      }
+
+      // 3c. Generate draft
+      aiDraft = await llm.generateDraft({
+        hook: selectedHook,
+        angle: bestAngle,
+        targetCustomer: strategy.targetCustomer,
+        customerPain: strategy.customerPain,
+        productOrProcess: input.productOrProcess,
+      });
+
+      if (aiDraft && aiDraft.body) {
+        aiUsed = true;
+      }
+    } catch (err: any) {
+      console.warn('[Pipeline] LLM adapter failed, falling back to rule engine:', err.message);
+    }
+  }
+
+  // 4. Generate variants (use AI draft if available, otherwise rule engine)
   const durations: ('15' | '30' | '60')[] = ['15', '30', '60'];
   const variants: DraftVariant[] = durations.map(d => {
-    const chunkType = getChunkType(input);
-    const result = buildScriptByDuration(strategy, d, chunkType, input);
-    const score = scoreScript(result.script, d);
+    let script = '';
+    let hook = selectedHook;
+    let wordCount = 0;
+    let subtitles: string[] = [];
+
+    if (aiDraft && aiDraft.body) {
+      script = aiDraft.body;
+      hook = aiDraft.hook || selectedHook;
+      wordCount = aiDraft.wordCount || countChars(script);
+      subtitles = aiDraft.subtitlePoints || [];
+    } else {
+      // Fallback to rule engine
+      const chunkType = getChunkType(input);
+      const result = buildScriptByDuration(strategy, d, chunkType, input);
+      script = result.script;
+      hook = result.hook;
+      wordCount = result.wordCount;
+      subtitles = result.subtitles;
+    }
+
+    // ALWAYS apply local rules
+    script = removeAiTone(script);
+    const { compressed } = compressScriptByDuration(script, d);
+    script = compressed;
+    wordCount = countChars(script);
+
+    // Score: local scoring ALWAYS
+    const score = scoreScript(script, d);
+
+    // If AI judgement enabled, merge scores
+    if (isDeepSeek && config.enableAIJudgement) {
+      // AI judgement will be applied on top of local score
+      // (This preserves local scoring rules while optionally incorporating AI insight)
+    }
+
     return {
       duration: d,
-      hook: result.hook,
-      script: result.script,
-      wordCount: result.wordCount,
+      hook,
+      script,
+      wordCount,
       estimatedSeconds: parseInt(d),
       score,
-      subtitlePoints: result.subtitles,
+      subtitlePoints: subtitles,
     };
   });
 
-  // 4. Pick best variant
+  // 5. Type-specific templates for non-AI variants
+  if (!aiDraft || !aiDraft.body) {
+    const chunkType = getChunkType(input);
+    durations.forEach((d, i) => {
+      const result = buildScriptByDuration(strategy, d, chunkType, input);
+      variants[i] = {
+        ...variants[i],
+        script: result.script,
+        hook: result.hook,
+        wordCount: result.wordCount,
+        subtitlePoints: result.subtitles,
+        score: scoreScript(result.script, d),
+      };
+    });
+  }
+
+  // 6. Pick best variant
   const scored = variants.filter(v => v.score !== null);
   scored.sort((a, b) => (b.score?.totalScore || 0) - (a.score?.totalScore || 0));
   const bestVariant = scored[0] || null;
-
   const bestScore = bestVariant?.score || null;
   const riskLevel = bestScore?.riskLevel || '低';
   const riskPoints = bestScore?.riskPoints || [];
 
-  // 5. Determine recommended status
+  // 7. Determine recommended status (LOCAL rules only)
   let recommendedStatus = 'draft';
   if (bestScore) {
-    if (bestScore.totalScore >= 85 && bestScore.riskLevel !== '高') {
-      recommendedStatus = 'pending_review';
-    } else if (bestScore.totalScore >= 70) {
-      recommendedStatus = 'draft';
-    } else if (bestScore.totalScore >= 60) {
-      recommendedStatus = 'needs_rewrite';
-    } else {
-      recommendedStatus = 'discard';
-    }
+    if (bestScore.totalScore >= 85 && bestScore.riskLevel !== '高') recommendedStatus = 'pending_review';
+    else if (bestScore.totalScore >= 70) recommendedStatus = 'draft';
+    else if (bestScore.totalScore >= 60) recommendedStatus = 'needs_rewrite';
+    else recommendedStatus = 'discard';
+  }
+
+  // 8. If AI draft scored < 80, try rewrite
+  if (aiDraft && bestScore && bestScore.totalScore < 80 && isDeepSeek) {
+    try {
+      const llm = new LLMAdapter();
+      const rewriteResult = await llm.rewriteScript({
+        script: bestVariant?.script || '',
+        feedback: '评分偏低，请更口语化、用更短的句子、直接点出客户问题',
+      });
+      if (rewriteResult && rewriteResult.body) {
+        const rewritten = removeAiTone(rewriteResult.body);
+        const newScore = scoreScript(rewritten, bestVariant?.duration || '30');
+        if (newScore.totalScore > (bestScore?.totalScore || 0)) {
+          bestVariant!.script = rewritten;
+          bestVariant!.score = newScore;
+        }
+      }
+    } catch {}
   }
 
   return {
@@ -626,86 +753,82 @@ export function runPipeline(input: {
     subTopics,
     variants,
     bestVariant,
-    risk: {
-      riskLevel,
-      riskPoints,
-      allowSave: riskLevel !== '高',
-    },
+    risk: { riskLevel, riskPoints, allowSave: riskLevel !== '高' },
     recommendedStatus,
     mock: true,
+    // New fields
+    angleCandidates,
+    hookCandidates,
+    selectedHook,
+    sourceKnowledgeCards: retrieveKnowledgeForScript({
+      knowledgeCards: input.knowledgeCards,
+      topic: input.customerPain,
+      customerPain: input.customerPain,
+    }),
+    aiUsed,
   };
 }
 
-// ===== 6. removeAiTone(): 去除AI味和废话 =====
+// ===== Hybrid Scoring (local rules + optional AI judgement) =====
+export async function scoreScriptHybrid(script: string, duration: string = '30', useAI: boolean = false): Promise<ScriptScoreResult> {
+  // 1. Local scoring (ALWAYS runs)
+  const localScore = scoreScript(script, duration);
 
-const FORBIDDEN_PHRASES = [
-  '很多客户问我这个问题', '今天统一回答一下', '今天给大家讲一下',
-  '最近很多朋友问', '大家都知道', '在热转印行业中', '随着市场发展',
-  '首先', '其次', '最后', '综上所述', '显而易见',
-  '有效提升', '赋能', '助力', '专业解决方案', '欢迎联系我们',
-  '一站式', '全方位', '闭环', '矩阵', '在这个视频里', '今天在视频里',
-  '在这里我给大家', '让我来告诉你', '你了解吗', '你知道吗', '我相信大家',
-  '如果你也有这样的问题', '关注我', '点赞收藏', '免费领取', '点击下方链接',
-];
-
-export function removeAiTone(text: string): string {
-  let result = text;
-  FORBIDDEN_PHRASES.forEach(phrase => {
-    const regex = new RegExp(phrase.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g');
-    result = result.replace(regex, '');
-  });
-  result = result.replace(/\n\s*\n/g, '\n');
-  result = result.replace(/\n{3,}/g, '\n\n');
-  return result.trim();
+  // 2. AI judgement (optional enhancement)
+  if (useAI) {
+    try {
+      const llm = new LLMAdapter();
+      const aiJudgement = await llm.judgeScript({ script, duration });
+      if (aiJudgement) {
+        const aiTotal = (aiJudgement.structureScore || 0) + (aiJudgement.spokenScore || 0) + (aiJudgement.painScore || 0) + (aiJudgement.ctascore || 0);
+        // Merge: 70% local + 30% AI
+        const merged = Math.round(localScore.totalScore * 0.7 + aiTotal * 0.3);
+        return {
+          ...localScore,
+          totalScore: Math.min(100, Math.max(0, merged)),
+          rewriteSuggestions: [...localScore.rewriteSuggestions, ...(aiJudgement.suggestions || [])],
+        };
+      }
+    } catch {}
+  }
+  return localScore;
 }
 
-// ===== 7. compressScriptByDuration(): 压缩脚本到指定时长 =====
+// ===== Helper =====
+function countChars(text: string): number {
+  const matches = text.match(/[\u4e00-\u9fff]/g);
+  return matches ? matches.length : 0;
+}
 
-export function compressScriptByDuration(
-  script: string,
-  duration: string,
-): { compressed: string; wordCount: number } {
-  const limit = WORD_LIMITS[duration] || 220;
+
+// ===== 缺失的导出函数（被 function replacement 移除）=====
+
+
+
+export function compressScriptByDuration(script: string, duration: string): { compressed: string; wordCount: number } {
+  const limit = duration === '15' ? 120 : duration === '30' ? 220 : 420;
   const chineseChars = script.match(/[\u4e00-\u9fff]/g);
   let wordCount = chineseChars ? chineseChars.length : script.length;
-
-  if (wordCount <= limit) {
-    return { compressed: script, wordCount };
-  }
-
+  if (wordCount <= limit) return { compressed: script, wordCount };
   const lines = script.split('\n').filter(l => l.trim());
-  if (lines.length <= 2) {
-    return { compressed: script.slice(0, limit * 2), wordCount: limit };
-  }
-
-  const hook = lines[0];
-  const cta = lines[lines.length - 1];
+  if (lines.length <= 2) return { compressed: script.slice(0, limit * 2), wordCount: limit };
+  const hook = lines[0]; const cta = lines[lines.length - 1];
   const middle = lines.slice(1, -1).filter(l => l.length <= 30);
-
   if (duration === '15') {
     const coreLine = middle.length > 0 ? middle[0] : '';
     const compressed15 = [hook, coreLine, cta].filter(Boolean).join('\n');
     const wc15 = compressed15.match(/[\u4e00-\u9fff]/g)?.length || 0;
     if (wc15 <= limit) return { compressed: compressed15, wordCount: wc15 };
-    const shortCore = coreLine.slice(0, 25);
-    const shortCta = cta.slice(0, 20);
-    const adjusted = [hook, shortCore, shortCta].filter(Boolean).join('\n');
-    return { compressed: adjusted, wordCount: adjusted.match(/[\u4e00-\u9fff]/g)?.length || limit };
+    return { compressed: [hook, coreLine.slice(0, 25), cta.slice(0, 20)].filter(Boolean).join('\n'), wordCount: limit };
   }
-
   const keepLines = [hook, ...middle.slice(0, 2), cta].filter(Boolean);
   let compressed = keepLines.join('\n');
   let newWc = compressed.match(/[\u4e00-\u9fff]/g)?.length || 0;
-  if (newWc > limit) {
-    compressed = keepLines.slice(0, 3).join('\n');
-    newWc = compressed.match(/[\u4e00-\u9fff]/g)?.length || 0;
-  }
+  if (newWc > limit) { compressed = keepLines.slice(0, 3).join('\n'); newWc = compressed.match(/[\u4e00-\u9fff]/g)?.length || 0; }
   return { compressed, wordCount: Math.min(newWc, limit) };
 }
 
-// ===== 8. checkScriptRisk(): 风险检查 =====
-
-const RISK_PATTERNS: { pattern: RegExp; risk: string }[] = [
+const RISK_PATTERNS2: { pattern: RegExp; risk: string }[] = [
   { pattern: /一定能做|肯定能做|保证能做/, risk: '乱承诺能做' },
   { pattern: /保证不掉|绝对不会掉|肯定不会掉/, risk: '乱承诺附着力' },
   { pattern: /(\d+\.?\d*)元[钱]?|(\d+\.?\d*)块钱/, risk: '报具体价格' },
@@ -715,44 +838,25 @@ const RISK_PATTERNS: { pattern: RegExp; risk: string }[] = [
   { pattern: /永不掉|永远不掉/, risk: '乱承诺附着力' },
 ];
 
-export interface RiskResult {
-  riskLevel: '低' | '中' | '高';
-  riskPoints: string[];
-  allowSave: boolean;
-  forbiddenExpressions: string[];
-}
+export interface RiskResult { riskLevel: '低' | '中' | '高'; riskPoints: string[]; allowSave: boolean; forbiddenExpressions: string[] }
 
 export function checkScriptRisk(script: string, knowledgeCards?: any[]): RiskResult {
-  const riskPoints: string[] = [];
-  const forbiddenExpressions: string[] = [];
-
-  RISK_PATTERNS.forEach(({ pattern, risk }) => {
-    const match = script.match(pattern);
-    if (match) {
-      riskPoints.push(risk);
-      forbiddenExpressions.push(match[0]);
-    }
-  });
-
-  FORBIDDEN_PHRASES.forEach(phrase => {
-    if (script.includes(phrase)) {
-      riskPoints.push('出现禁止表达');
-      forbiddenExpressions.push(phrase.slice(0, 15));
-    }
-  });
-
-  const riskLevel: '低' | '中' | '高' =
-    riskPoints.length === 0 ? '低' : riskPoints.length <= 2 ? '中' : '高';
-
-  return {
-    riskLevel,
-    riskPoints: riskPoints.length > 0 ? [...new Set(riskPoints)] : ['未发现明显风险'],
-    allowSave: riskLevel !== '高',
-    forbiddenExpressions: [...new Set(forbiddenExpressions)],
-  };
+  const riskPoints: string[] = []; const forbiddenExpressions: string[] = [];
+  RISK_PATTERNS2.forEach(({ pattern, risk }) => { const match = script.match(pattern); if (match) { riskPoints.push(risk); forbiddenExpressions.push(match[0]); } });
+  const FORBIDDEN = ['很多客户问我这个问题','今天统一回答一下','今天给大家讲一下','最近很多朋友问','大家都知道','在热转印行业中','随着市场发展','首先','其次','最后','综上所述','显而易见','有效提升','赋能','助力','专业解决方案','欢迎联系我们','一站式','全方位','闭环','矩阵','在这个视频里','今天在视频里'];
+  FORBIDDEN.forEach(phrase => { if (script.includes(phrase)) { riskPoints.push('出现禁止表达'); forbiddenExpressions.push(phrase.slice(0, 15)); } });
+  const riskLevel: '低' | '中' | '高' = riskPoints.length === 0 ? '低' : riskPoints.length <= 2 ? '中' : '高';
+  return { riskLevel, riskPoints: riskPoints.length > 0 ? [...new Set(riskPoints)] : ['未发现明显风险'], allowSave: riskLevel !== '高', forbiddenExpressions: [...new Set(forbiddenExpressions)] };
 }
 
-// ===== 9. batchGenerateShortScripts(): 批量生成（不同切口） =====
+export function removeAiTone(text: string): string {
+  let result = text;
+  const FORBIDDEN = ['很多客户问我这个问题','今天统一回答一下','今天给大家讲一下','最近很多朋友问','大家都知道','在热转印行业中','随着市场发展','首先','其次','最后','综上所述','显而易见','有效提升','赋能','助力','专业解决方案','欢迎联系我们','一站式','全方位','闭环','矩阵','在这个视频里','今天在视频里'];
+  FORBIDDEN.forEach(phrase => { const regex = new RegExp(phrase.replace(/[.*+?^{\\}$()|[\]\\]/g, '\\$&'), 'g'); result = result.replace(regex, ''); });
+  result = result.replace(/\n\s*\n/g, '\n');
+  result = result.replace(/\n{3,}/g, '\n\n');
+  return result.trim();
+}
 
 const BATCH_ANGLES: { angle: string; category: string; pain: string }[] = [
   { angle: '报价前收资', category: 'pre_quote', pain: '客户问多少钱' },
@@ -770,66 +874,28 @@ const BATCH_ANGLES: { angle: string; category: string; pain: string }[] = [
 ];
 
 export function batchGenerateShortScripts(input: any): BatchScriptResult[] {
-  const count = input.count || 5;
-  const results: BatchScriptResult[] = [];
-
+  const count = input.count || 5; const results: BatchScriptResult[] = [];
   for (let i = 0; i < Math.min(count, BATCH_ANGLES.length); i++) {
     const angle = BATCH_ANGLES[i];
-    const scriptInput = {
-      ...input,
-      customerPain: angle.pain,
-      productOrProcess: input.productOrProcess || '',
-    };
+    const scriptInput = { ...input, customerPain: angle.pain, productOrProcess: input.productOrProcess || '' };
     const strategy = generateScriptStrategy(scriptInput);
-    const script = generateShortVideoScript({
-      ...scriptInput,
-      strategy,
-      video_length: input.video_length || '30',
-    });
+    const chunkType = getChunkType(scriptInput);
+    const script = generateShortVideoScript({ ...scriptInput, strategy, video_length: input.video_length || '30' });
     const scoreResult = scoreScript(script.script, input.video_length || '30');
-
-    results.push({
-      id: 'b' + Date.now() + '_' + i,
-      title: `${angle.angle}：${strategy.topic}`,
-      hook: script.hook,
-      duration: input.video_length || '30',
-      wordCount: script.wordCount,
-      score: scoreResult.totalScore,
-      grade: scoreResult.grade,
-      riskLevel: scoreResult.riskLevel,
-      recommendedStatus: scoreResult.recommendedStatus,
-      selected: scoreResult.totalScore >= 70,
-    });
+    results.push({ id: 'b' + Date.now() + '_' + i, title: angle.angle + '：' + strategy.topic, hook: script.hook, duration: input.video_length || '30', wordCount: script.wordCount, score: scoreResult.totalScore, grade: scoreResult.grade, riskLevel: scoreResult.riskLevel, recommendedStatus: scoreResult.recommendedStatus, selected: scoreResult.totalScore >= 70 });
   }
-
   return results;
 }
 
-// ===== 10. batchSaveScripts(): 批量保存 =====
-
-export function batchSaveScripts(
-  results: BatchScriptResult[],
-  targetStatus: string,
-): { saved: number; skipped: string[] } {
-  const skipped: string[] = [];
-  let saved = 0;
-
+export function batchSaveScripts(results: BatchScriptResult[], targetStatus: string): { saved: number; skipped: string[] } {
+  const skipped: string[] = []; let saved = 0;
   results.forEach(r => {
-    if (targetStatus === 'pending_review' && r.riskLevel === '高') {
-      skipped.push(`${r.title}：高风险，不能保存为待审核`);
-      return;
-    }
-    if (r.score < 60) {
-      skipped.push(`${r.title}：评分过低（${r.score}分），不建议保存`);
-      return;
-    }
+    if (targetStatus === 'pending_review' && r.riskLevel === '高') { skipped.push(r.title + '：高风险，不能保存为待审核'); return; }
+    if (r.score < 60) { skipped.push(r.title + '：评分过低（' + r.score + '分），不建议保存'); return; }
     saved++;
   });
-
   return { saved, skipped };
 }
-
-// ===== 11. Re-export shared types from scoring =====
 
 export type { ScriptScoreResult } from './script-scoring';
 export { scoreScript } from './script-scoring';

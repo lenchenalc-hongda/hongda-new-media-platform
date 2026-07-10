@@ -23,7 +23,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Run the full pipeline
-    const result: PipelineResult = runPipeline({
+    const result: PipelineResult = await runPipeline({
       account,
       topic: topic || customerPain,
       customerPain,

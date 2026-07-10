@@ -139,3 +139,33 @@ export const BatchScriptResultSchema = z.object({
   recommendedStatus: z.string(),
   selected: z.boolean(),
 });
+
+// ===== LLM Adapter Schemas =====
+
+export const PipelineInputSchema = z.object({
+  topic: z.string().optional(),
+  customerPain: z.string().optional(),
+  productOrProcess: z.string().optional(),
+  material: z.string().optional(),
+  account: z.any().optional(),
+  knowledgeCards: z.array(z.any()).optional(),
+  video_length: z.enum(['15', '30', '60']).default('30'),
+  source_type: z.string().optional(),
+});
+
+export const PipelineOutputSchema = z.object({
+  strategy: z.any(),
+  isBroad: z.boolean(),
+  subTopics: z.array(z.string()),
+  angleCandidates: z.array(z.any()),
+  hookCandidates: z.array(z.any()),
+  selectedHook: z.string(),
+  variants: z.array(z.any()),
+  bestVariant: z.any().nullable(),
+  risk: z.object({ riskLevel: z.string(), riskPoints: z.array(z.string()), allowSave: z.boolean() }),
+  score: z.any().nullable(),
+  recommendedStatus: z.string(),
+  sourceKnowledgeCards: z.array(z.any()),
+  aiUsed: z.boolean(),
+  mock: z.boolean(),
+});
