@@ -1,5 +1,5 @@
 'use client';
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { MOCK_ACCOUNTS, MOCK_KNOWLEDGE_NEW } from '@/lib/constants/mock-data';
 import { PLATFORMS, SCRIPT_STRUCTURES, ACTING_STYLES, TONE_STYLES, CONVERSION_GOALS } from '@/lib/constants';
 import { generateHook, splitBroadTopic, generateScriptStrategy, runPipeline } from '@/lib/ai/script-pipeline';
@@ -25,8 +25,49 @@ export default function ScriptGeneratorWizard({ open, onClose, onGenerate }: Scr
   const [selectedAngle, setSelectedAngle] = useState<any>(null);
   const [anglesLoading, setAnglesLoading] = useState(false);
   const [selectedDuration, setSelectedDuration] = useState<'15' | '30' | '60'>('30');
+  const [hookResults, setHookResults] = useState<any[]>([]);
+  const [hooksLoading, setHooksLoading] = useState(false);
+  const [selectedHookId, setSelectedHookId] = useState<string | null>(null);
+  const [selectedHookText, setSelectedHookText] = useState<string>('');
 
   const update = (key: string, value: any) => setForm({ ...form, [key]: value });
+
+  useEffect(() => {
+    if (selectedAngle && form.customer_pain) {
+      fetchHooks();
+    }
+  }, [selectedAngle?.id]);
+
+  const fetchHooks = async () => {
+    setHooksLoading(true);
+    try {
+      const res = await fetch("/api/ai/script/hooks", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          customerPain: form.customer_pain,
+          productOrProcess: form.product_or_process,
+          material: form.material,
+          account: selectedAccount || {},
+          angle: selectedAngle || undefined,
+        }),
+      });
+      const data = await res.json();
+      if (data.hooks) {
+        setHookResults(data.hooks);
+        if (data.hooks.length > 0) {
+          setSelectedHookId(data.hooks[0].hook.id);
+          setSelectedHookText(data.hooks[0].hook.hookText);
+        }
+      }
+    } catch (e) { console.warn("[Wizard] Hook fetch failed:", e); }
+    setHooksLoading(false);
+  };
+
+  const handleSelectHook = (hook: any) => {
+    setSelectedHookId(hook.id);
+    setSelectedHookText(hook.hookText);
+  };
+
   const selectedAccount = MOCK_ACCOUNTS.find(a => a.id === form.account_id);
 
   // Auto-suggest pain points and hooks based on selection
@@ -63,7 +104,9 @@ export default function ScriptGeneratorWizard({ open, onClose, onGenerate }: Scr
   const canNext = () => {
     if (step === 1) return !!form.account_id && !!form.platform;
     if (step === 2) return true;
-    if (step === 3) return true;
+    if (step === 3) return !!selectedHookText;
+    if (step === 4) return true;
+    if (step === 5) return true;
     return true;
   };
 
@@ -109,7 +152,7 @@ export default function ScriptGeneratorWizard({ open, onClose, onGenerate }: Scr
     }
     setPipelineResult(result);
     setSelectedDuration((form.video_length || '30') as '15' | '30' | '60');
-    setStep(5);
+    setStep(6);
   };
 
   const handleConfirmGenerate = () => {
@@ -138,23 +181,24 @@ export default function ScriptGeneratorWizard({ open, onClose, onGenerate }: Scr
           <div>
             <h2 className="text-lg font-bold text-gray-800">短视频脚本流水线</h2>
             <p className="text-xs text-gray-400 mt-1">
-              {step <= 4 ? `第${step}步 / 共4步` : '生成结果'}
+              {step <= 5 ? `第${step}步 / 共5步` : '生成结果'}
             </p>
           </div>
           <button onClick={handleClose} className="text-gray-400 hover:text-gray-600 text-xl">✕</button>
         </div>
 
         {/* Progress bar (only for steps 1-4) */}
-        {step <= 4 && (
+        {step <= 5 && (
           <>
             <div className="flex px-5 pt-4 gap-1">
-              {[1, 2, 3, 4].map(s => (
+              {[1, 2, 3, 4, 5].map(s => (
                 <div key={s} className={`flex-1 h-1.5 rounded ${s <= step ? 'bg-blue-600' : 'bg-gray-200'}`} />
               ))}
             </div>
             <div className="flex justify-between px-5 text-xs text-gray-400 mt-1">
               <span>账号平台</span>
               <span>内容定位</span>
+              <span>钩子选择</span>
               <span>脚本参数</span>
               <span>参考知识</span>
             </div>
@@ -329,8 +373,99 @@ export default function ScriptGeneratorWizard({ open, onClose, onGenerate }: Scr
             </div>
           )}
 
-          {/* Step 3: Script Parameters */}
+                    {/* Step 3: Hook Selection */}
           {step === 3 && (
+            <div className="space-y-4">
+              <h3 className="font-medium text-gray-700">选择开头钩子</h3>
+              <p className="text-xs text-gray-400">
+                一个好的钩子决定了视频的前3秒。系统已生成{hookResults.length}个钩子候选，默认选最高分。
+              </p>
+              {!selectedAngle && (
+                <div className="bg-yellow-50 border border-yellow-200 rounded p-4 text-center text-sm text-yellow-700">
+                  请先在"内容定位"步骤选择一个内容角度，然后系统会为你生成对应的钩子
+                </div>
+              )}
+              {selectedAngle && hookResults.length === 0 && !hooksLoading && (
+                <div className="text-center py-8 text-gray-400 text-sm">
+                  <button className="btn-secondary text-xs px-3 py-1.5" onClick={fetchHooks}>
+                    生成钩子候选
+                  </button>
+                </div>
+              )}
+              {(() => {
+                if (hooksLoading) {
+                  return <div className="text-center py-8 text-gray-400 text-sm">正在生成钩子候选...</div>;
+                }
+                if (hookResults.length === 0) return null;
+                const top5 = hookResults.slice(0, 5);
+                return (
+                  <div className="space-y-2">
+                    {top5.map((result: any, idx: number) => {
+                      const hook = result.hook;
+                      const isSelected = selectedHookId === hook.id;
+                      const typeColor =
+                        hook.hookType === 'direct_question' ? 'bg-blue-50 border-blue-200 text-blue-700' :
+                        hook.hookType === 'customer_quote' ? 'bg-purple-50 border-purple-200 text-purple-700' :
+                        hook.hookType === 'warning' ? 'bg-red-50 border-red-200 text-red-700' :
+                        hook.hookType === 'counterintuitive' ? 'bg-orange-50 border-orange-200 text-orange-700' :
+                        hook.hookType === 'cost_conflict' ? 'bg-green-50 border-green-200 text-green-700' :
+                        hook.hookType === 'material_risk' ? 'bg-yellow-50 border-yellow-200 text-yellow-700' :
+                        hook.hookType === 'test_risk' ? 'bg-pink-50 border-pink-200 text-pink-700' :
+                        'bg-gray-50 border-gray-200 text-gray-700';
+                      const typeLabel: Record<string, string> = {
+                        direct_question: '直接提问', customer_quote: '客户原话', warning: '风险警告',
+                        counterintuitive: '反常识', cost_conflict: '价格反转', material_risk: '材质风险',
+                        test_risk: '测试风险', comparison: '对比', factory_secret: '工厂内幕',
+                        comment_reply: '评论回复', boss_experience: '老板经验', nini_perspective: '小林/小陈视角',
+                      };
+                      return (
+                        <button key={hook.id}
+                          onClick={() => handleSelectHook(hook)}
+                          className={`w-full text-left p-3 rounded-lg border transition-all ${
+                            isSelected
+                              ? 'border-blue-500 bg-blue-50 ring-2 ring-blue-200'
+                              : 'border-gray-200 bg-white hover:border-gray-300'
+                          }`}>
+                          <div className="flex items-start gap-3">
+                            <div className={`flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
+                              idx === 0 ? 'bg-yellow-100 text-yellow-700' :
+                              idx === 1 ? 'bg-gray-100 text-gray-600' :
+                              'bg-orange-100 text-orange-600'
+                            }`}>{idx + 1}</div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-1.5 mb-1 flex-wrap">
+                                <span className={`text-[10px] px-1.5 py-0.5 rounded ${typeColor}`}>
+                                  {typeLabel[hook.hookType] || hook.hookType}
+                                </span>
+                              </div>
+                              <p className={`text-sm font-medium ${isSelected ? 'text-blue-800' : 'text-gray-800'}`}>
+                                {hook.hookText}
+                              </p>
+                              <p className="text-[10px] text-gray-400 mt-0.5">{hook.whyItWorks}</p>
+                            </div>
+                            <div className="flex-shrink-0 text-center">
+                              <div className={`text-lg font-bold ${
+                                result.totalScore >= 85 ? 'text-green-600' :
+                                result.totalScore >= 70 ? 'text-yellow-600' :
+                                'text-red-600'
+                              }`}>{result.totalScore}</div>
+                              <div className="text-[9px] text-gray-400">分</div>
+                            </div>
+                          </div>
+                        </button>
+                      );
+                    })}
+                    {hookResults.length > 5 && (
+                      <p className="text-center text-xs text-gray-400">
+                        还有{hookResults.length - 5}个钩子候选（点击"下一步"即可确认选择）
+                      </p>
+                    )}
+                  </div>
+                );
+              })()}
+            </div>
+          )}{/* Step 4: Script Parameters */}
+          {step === 4 && (
             <div className="space-y-4">
               <h3 className="font-medium text-gray-700">脚本参数</h3>
               <p className="text-xs text-gray-400">
@@ -380,8 +515,8 @@ export default function ScriptGeneratorWizard({ open, onClose, onGenerate }: Scr
             </div>
           )}
 
-          {/* Step 4: Knowledge References */}
-          {step === 4 && (
+                    {/* Step 5: Knowledge References */}
+          {step === 5 && (
             <div className="space-y-4">
               <h3 className="font-medium text-gray-700">选择参考知识卡</h3>
               <p className="text-xs text-gray-400">
@@ -442,8 +577,8 @@ export default function ScriptGeneratorWizard({ open, onClose, onGenerate }: Scr
             </div>
           )}
 
-          {/* Step 5: Preview Results */}
-          {step === 5 && pipelineResult && (
+{/* Step 6: Preview Results */}
+          {step === 6 && pipelineResult && (
             <div className="space-y-4">
               {/* Strategy Summary */}
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
@@ -582,7 +717,7 @@ export default function ScriptGeneratorWizard({ open, onClose, onGenerate }: Scr
         {/* Footer */}
         <div className="p-5 border-t border-gray-200 flex justify-between items-center">
           <div>
-            {step > 1 && step <= 4 && (
+            {step > 1 && step <= 5 && (
               <button className="btn-secondary text-sm" onClick={() => setStep(step - 1)}>
                 上一步
               </button>
@@ -590,18 +725,18 @@ export default function ScriptGeneratorWizard({ open, onClose, onGenerate }: Scr
           </div>
           <div className="flex gap-2">
             <button className="btn-secondary text-sm" onClick={handleClose}>取消</button>
-            {step < 4 && (
+            {step < 5 && (
               <button className="btn-primary text-sm" disabled={!canNext()}
                 onClick={() => setStep(step + 1)}>
                 下一步
               </button>
             )}
-            {step === 4 && (
+            {step === 5 && (
               <button className="btn-primary text-sm" onClick={handleGenerate}>
                 生成脚本
               </button>
             )}
-            {step === 5 && (
+            {step === 6 && (
               <button className="btn-primary text-sm" onClick={handleConfirmGenerate}>
                 确认并添加到工作台
               </button>
