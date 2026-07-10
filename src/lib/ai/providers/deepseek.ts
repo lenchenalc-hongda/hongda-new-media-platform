@@ -51,7 +51,15 @@ export class DeepSeekProvider implements AIProvider {
       const completion = await this.client.chat.completions.create(body as any);
       const content = completion.choices[0]?.message?.content || '{}';
       let parsed: Record<string, unknown> = {};
-      try { parsed = JSON.parse(content); } catch { parsed = { raw: content }; }
+      try { parsed = JSON.parse(content); } catch {
+        // Try to extract JSON from the content (DeepSeek may add text before/after JSON)
+        const jsonMatch = content.match(/\{[\s\S]*\}|\[[\s\S]*\]/);
+        if (jsonMatch) {
+          try { parsed = JSON.parse(jsonMatch[0]); } catch { parsed = { raw: content }; }
+        } else {
+          parsed = { raw: content };
+        }
+      }
       return {
         content, parsed, provider: 'deepseek', mock: false,
         usage: { promptTokens: completion.usage?.prompt_tokens || 0, completionTokens: completion.usage?.completion_tokens || 0, totalTokens: completion.usage?.total_tokens || 0 },
