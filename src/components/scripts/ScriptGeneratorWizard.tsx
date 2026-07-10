@@ -320,13 +320,33 @@ export default function ScriptGeneratorWizard({ open, onClose, onGenerate }: Scr
                       if (!form.customer_pain && !form.product_or_process) return;
                       setAnglesLoading(true);
                       try {
+                        const actrl = new AbortController();
+                        const atimeout = setTimeout(() => actrl.abort(), 8000);
                         const res = await fetch('/api/ai/script/angles', {
                           method: 'POST', headers: {'Content-Type':'application/json'},
+                          signal: actrl.signal,
                           body: JSON.stringify({ customerPain: form.customer_pain, productOrProcess: form.product_or_process, material: form.material, account: selectedAccount || {} }),
                         });
+                        clearTimeout(atimeout);
                         const data = await res.json();
                         if (data.angles) setAngles(data.angles);
-                      } catch {}
+                      } catch {
+                        // Client-side fallback angles
+                        const pain = form.customer_pain || form.product_or_process || '热转印';
+                        const material = form.material || '';
+                        const accountName = selectedAccount?.name?.split('-')[0] || '';
+                        const fallbackAngles = [
+                          { id: 'fa_1', title: '客户对' + pain.slice(0,10) + '最常犯的错', angleType: 'customer_misunderstanding', targetCustomer: selectedAccount?.target_audience || '', customerPain: pain, coreConflict: '客户以为很简单，实际很多细节要注意', whyItWorks: '客户想知道自己是不是做错了', recommendedAccount: accountName, recommendedPlatform: '视频号', riskLevel: '低', score: 82, similarity: 0 },
+                          { id: 'fa_2', title: (material || pain) + '能不能做热转印？判断逻辑', angleType: 'material_risk', targetCustomer: selectedAccount?.target_audience || '', customerPain: pain, coreConflict: material ? material + '看着能印，但附着力不一定过关' : '不先确认就看图报价风险很大', whyItWorks: '客户怕做错了浪费钱', recommendedAccount: accountName, recommendedPlatform: '视频号', riskLevel: '中', score: 88, similarity: 0 },
+                          { id: 'fa_3', title: (material || pain) + '的报价逻辑，一次说清楚', angleType: 'cost_logic', targetCustomer: '正在询价的客户', customerPain: pain, coreConflict: '只看图片报的价格不靠谱，需要知道材质和数量', whyItWorks: '客户想知道价格但不知道怎么问', recommendedAccount: accountName, recommendedPlatform: '视频号', riskLevel: '低', score: 80, similarity: 0 },
+                          { id: 'fa_4', title: '做过20年印刷的老师傅说' + (material || pain.slice(0,6)), angleType: 'factory_experience', targetCustomer: '关心工艺细节的客户', customerPain: pain, coreConflict: '看起来一样的工艺，细节差很多', whyItWorks: '老师傅经验值得信', recommendedAccount: accountName, recommendedPlatform: '视频号', riskLevel: '低', score: 86, similarity: 0 },
+                          { id: 'fa_5', title: '一个做' + (pain.slice(0,8) || material || '热转印') + '客户的真实经历', angleType: 'case_story', targetCustomer: '有类似需求的客户', customerPain: pain, coreConflict: '客户之前踩过坑，换对方法才做对', whyItWorks: '真实案例有说服力', recommendedAccount: accountName, recommendedPlatform: '视频号', riskLevel: '低', score: 87, similarity: 0 },
+                          { id: 'fa_6', title: (material || pain) + '要不要先测试？', angleType: 'test_requirement', targetCustomer: '有测试要求的客户', customerPain: pain, coreConflict: '不打样测试直接大货，翻车是迟早的事', whyItWorks: '客户怕测试太麻烦，但更怕出问题', recommendedAccount: accountName, recommendedPlatform: '视频号', riskLevel: '低', score: 84, similarity: 0 },
+                          { id: 'fa_7', title: '回答一下关于' + (pain.slice(0,8) || material || '热转印') + '的高赞评论', angleType: 'comment_reply', targetCustomer: '正搜索相关问题的客户', customerPain: pain, coreConflict: '很多人问但答案没那么简单', whyItWorks: '真实问题引起共鸣', recommendedAccount: accountName, recommendedPlatform: '视频号', riskLevel: '低', score: 79, similarity: 0 },
+                          { id: 'fa_8', title: (material || '价格') + '相关的3个最坑误区', angleType: 'customer_misunderstanding', targetCustomer: selectedAccount?.target_audience || '', customerPain: pain, coreConflict: '客户以为知道，其实搞反了', whyItWorks: '纠正认知有传播力', recommendedAccount: accountName, recommendedPlatform: '视频号', riskLevel: '低', score: 81, similarity: 0 },
+                        ];
+                        setAngles(fallbackAngles);
+                      }
                       setAnglesLoading(false);
                     }}>
                     {anglesLoading ? '生成中...' : angles.length > 0 ? '重新生成' : '生成角度建议'}
@@ -356,6 +376,20 @@ export default function ScriptGeneratorWizard({ open, onClose, onGenerate }: Scr
                 )}
                 {!anglesLoading && angles.length === 0 && form.customer_pain && (
                   <p className="text-[10px] text-gray-400">点击"生成角度建议"获取不同内容方向</p>
+                )}
+                {/* Selected angle status */}
+                {selectedAngle && (
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-2.5 mt-2">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-xs text-blue-600">✓ 已选择角度</span>
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-100 text-blue-700">{selectedAngle.angleType || '客户问题型'}</span>
+                      </div>
+                      <button className="text-[9px] text-blue-400 hover:text-blue-600" onClick={() => setSelectedAngle(null)}>取消</button>
+                    </div>
+                    <p className="text-xs font-medium text-blue-800 mt-1">{selectedAngle.title || selectedAngle.customerPain}</p>
+                    <p className="text-[10px] text-blue-500 mt-0.5">{selectedAngle.coreConflict}</p>
+                  </div>
                 )}
               </div>
 

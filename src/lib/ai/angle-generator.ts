@@ -335,12 +335,17 @@ ${cardInfo || '无'}
   ]
 }`;
 
-    const response = await provider.generateStructured({
-      systemPrompt: '你是宏达印业的新媒体策划顾问。输出JSON，不要markdown包裹。',
-      userPrompt: prompt,
-      outputFormat: 'json',
-      temperature: 0.8,
-    });
+    const angleResponse = await Promise.race([
+      provider.generateStructured({
+        systemPrompt: '你是宏达印业的新媒体策划顾问。输出JSON，不要markdown包裹。',
+        userPrompt: prompt,
+        outputFormat: 'json',
+        temperature: 0.8,
+      }),
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), 6000)),
+    ]);
+    if (!angleResponse) throw new Error('Angle generation timeout');
+    const response = angleResponse;
 
     if (response.parsed && Array.isArray(response.parsed.angles)) {
       const angles: Angle[] = response.parsed.angles.map((a: any, i: number) => ({
