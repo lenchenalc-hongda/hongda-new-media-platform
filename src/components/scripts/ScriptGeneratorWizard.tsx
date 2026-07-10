@@ -88,7 +88,9 @@ export default function ScriptGeneratorWizard({ open, onClose, onGenerate }: Scr
         signal: controller.signal,
       });
       clearTimeout(timeout);
-      if (res.ok) { const data = await res.json(); if (data && data.variants && data.variants.length > 0) { result = data; } }
+      const data = await res.json(); 
+      if (data && data.variants && data.variants.length > 0) { result = data; }
+      else if (data && data.error) { console.warn('[Wizard] API error:', data.error); }
     } catch (e) { console.warn('[Wizard] AI API failed, using rule engine:', e); }
     // Fall back to rule engine
     if (!result) {
