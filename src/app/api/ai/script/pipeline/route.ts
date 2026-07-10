@@ -1,93 +1,92 @@
 // POST /api/ai/script/pipeline
-// AI-powered pipeline: DeepSeek generates angles → hooks → draft
-// Local rules ALWAYS applied: removeAiTone → compress → score → risk check
+// Calls DeepSeek directly with a single comprehensive prompt
+// Falls back to rule engine if DeepSeek fails
 
 import { NextRequest, NextResponse } from 'next/server';
-import {
-  runPipeline, generateScriptStrategy, generateHook, splitBroadTopic,
-  removeAiTone, compressScriptByDuration, scoreScript, checkScriptRisk,
-  retrieveKnowledgeForScript, ScriptScoreResult,
-} from '@/lib/ai/script-pipeline';
-import { LLMAdapter } from '@/lib/ai/llm';
+import { getProvider } from '@/lib/ai/providers';
+import { runPipeline, removeAiTone, compressScriptByDuration, scoreScript, checkScriptRisk, generateScriptStrategy, splitBroadTopic, retrieveKnowledgeForScript } from '@/lib/ai/script-pipeline';
 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const { account, topic, customerPain, productOrProcess, material, knowledgeCards, video_length } = body;
 
-    if (!topic && !customerPain && !productOrProcess) {
-      return NextResponse.json({ error: '需要至少提供 topic、customerPain 或 productOrProcess' }, { status: 400 });
-    }
-
-    // 1. Strategy (rule engine)
+    // 1. Strategy (local rules)
     const isBroad = (topic||'').length > 12 || ['介绍','注意事项','说清楚','全部','常见问题'].some((k: string) => (topic||'').includes(k));
     const subTopics = isBroad ? splitBroadTopic(topic || '') : [];
-    const strategy = generateScriptStrategy({
-      account, topic: subTopics[0] || topic || customerPain,
-      customerPain, productOrProcess, material, knowledgeCards,
-    });
+    const strategy = generateScriptStrategy({ account, topic: subTopics[0] || topic || customerPain, customerPain, productOrProcess, material, knowledgeCards });
 
-    // 2. Try DeepSeek for draft
-    let aiDraft: any = null;
-    let selectedHook = strategy.hook;
-    let angleCandidates: any[] = [];
-    let hookCandidates: any[] = [];
-
+    // 2. Try DeepSeek directly with one comprehensive prompt
+    let aiOutput: any = null;
+    let aiError: string | null = null;
     try {
-      const llm = new LLMAdapter();
-      angleCandidates = (await llm.generateAngles({ topic: strategy.topic, customerPain, productOrProcess, material })) || [];
-      const bestAngle = angleCandidates.length > 0 ? angleCandidates[0].angle : strategy.topic;
-      hookCandidates = (await llm.generateHooks({ topic: strategy.topic, angle: bestAngle, customerPain })) || [];
-      if (hookCandidates.length > 0) {
-        hookCandidates.sort((a: any, b: any) => (b.strength || 0) - (a.strength || 0));
-        selectedHook = hookCandidates[0].hook;
+      const provider = await getProvider();
+      const accountInfo = account ? `账号人设：${account.name || ''} ${account.persona || ''}` : '';
+      const cardInfo = knowledgeCards?.length ? `参考知识：${knowledgeCards.slice(0, 3).map((k: any) => k.title + '：' + (k.core_conclusion || '').slice(0, 100)).join('|')}` : '';
+
+      const prompt = `请为以下输入生成一条短视频口播脚本。
+
+${accountInfo}
+目标客户：${strategy.targetCustomer}
+客户痛点：${customerPain || '无'}
+产品/工艺：${productOrProcess || '无'}
+材质：${material || '无'}
+${cardInfo}
+
+要求：
+1. 开头前3秒用具体客户问题或冲突（如"PE瓶能不能做热转印？"）
+2. 中间讲清楚一个核心判断逻辑，用客户场景支撑
+3. 语言像工厂老板/业务员在说话，每句话不超过30字
+4. 不要用"首先""其次""最后""很多客户问我这个问题""今天统一回答一下"
+5. 结尾自然引导下一步
+
+输出严格JSON格式（不要任何额外文字）：
+{
+  "hook": "开头钩子，不超过25字",
+  "body": "完整口播稿，每行一句，总字数控制在60-150字之间",
+  "wordCount": "中文字数"
+}`;
+
+      const response = await provider.generateStructured({
+        systemPrompt: '你是宏达印业的新媒体顾问。输出JSON，不要markdown包裹。',
+        userPrompt: prompt,
+        outputFormat: 'json',
+        temperature: 0.7,
+      });
+
+      if (response.parsed && response.parsed.body) {
+        aiOutput = response.parsed;
+      } else if (response.content) {
+        // Try to extract JSON from content
+        try {
+          const extracted = JSON.parse(response.content);
+          if (extracted.body) aiOutput = extracted;
+        } catch {}
       }
-      aiDraft = await llm.generateDraft({ hook: selectedHook, angle: bestAngle, targetCustomer: strategy.targetCustomer, customerPain: customerPain || '', productOrProcess });
+      if (!aiOutput) aiError = 'DeepSeek returned incomplete response';
     } catch (e: any) {
-      console.warn('[Pipeline-API] DeepSeek failed, falling back to rule engine:', e.message);
+      aiError = e.message;
     }
 
-    // 3. Build variants
+    // 3. Fall back to rule engine if DeepSeek failed
+    if (!aiOutput) {
+      console.warn('[Pipeline] DeepSeek failed:', aiError);
+      const ruleResult = runPipeline({ account, topic: topic||customerPain, customerPain, productOrProcess, material, knowledgeCards, video_length });
+      return NextResponse.json({ ...ruleResult, aiUsed: false, mock: true, aiError });
+    }
+
+    // 4. Apply local rules to AI output
     const durations: ('15' | '30' | '60')[] = ['15', '30', '60'];
-    const variants: any[] = durations.map((d) => {
-      let script = '';
-      let hook = selectedHook;
-      let wordCount = 0;
-      let subtitles: string[] = [];
-      const limit = d === '15' ? 120 : d === '30' ? 220 : 420;
-
-      if (aiDraft && aiDraft.body) {
-        script = aiDraft.body;
-        hook = aiDraft.hook || selectedHook;
-        wordCount = (script.match(/[\u4e00-\u9fff]/g) || []).length;
-        subtitles = aiDraft.subtitlePoints || [];
-      }
-
-      // ALWAYS apply local rules
-      script = removeAiTone(script);
+    const variants: any[] = durations.map(d => {
+      let script = removeAiTone(aiOutput.body || '');
       const { compressed } = compressScriptByDuration(script, d);
       script = compressed;
-      wordCount = (script.match(/[\u4e00-\u9fff]/g) || []).length;
-
-      // Always score locally
+      const wordCount = (script.match(/[\u4e00-\u9fff]/g) || []).length;
       const score = scoreScript(script, d);
-      const risk = checkScriptRisk(script);
-
-      return { duration: d, hook, script, wordCount, estimatedSeconds: parseInt(d), score, risk, subtitlePoints: subtitles, limit };
+      return { duration: d, hook: aiOutput.hook, script, wordCount, estimatedSeconds: parseInt(d), score, subtitlePoints: [] };
     });
 
-    // 4. If AI failed, fall back to rule engine for all variants
-    if (!aiDraft || !aiDraft.body) {
-      const ruleResult = runPipeline({ account, topic: topic||customerPain, customerPain, productOrProcess, material, knowledgeCards, video_length });
-      return NextResponse.json({
-        ...ruleResult, angleCandidates, hookCandidates, selectedHook,
-        sourceKnowledgeCards: retrieveKnowledgeForScript({ knowledgeCards, topic: customerPain, customerPain }),
-        aiUsed: false, mock: true,
-      });
-    }
-
-    // 5. Pick best variant & determine status
-    const scored = [...variants].filter(v => v.score !== null).sort((a, b) => (b.score?.totalScore||0) - (a.score?.totalScore||0));
+    const scored = [...variants].sort((a, b) => (b.score?.totalScore||0) - (a.score?.totalScore||0));
     const bestVariant = scored[0] || null;
     const bestScore = bestVariant?.score || null;
     let recommendedStatus = 'draft';
@@ -97,38 +96,19 @@ export async function POST(req: NextRequest) {
       else if (bestScore.totalScore >= 60) recommendedStatus = 'needs_rewrite';
       else recommendedStatus = 'discard';
     }
-
-    // 6. If AI draft scored < 80, try rewrite
-    if (aiDraft && bestScore && bestScore.totalScore < 80) {
-      try {
-        const llm = new LLMAdapter();
-        const rewrite = await llm.rewriteScript({ script: bestVariant?.script||'', feedback: '评分偏低，请更口语化、更短句、直接点出客户问题' });
-        if (rewrite?.body) {
-          const rewritten = removeAiTone(rewrite.body);
-          const newScore = scoreScript(rewritten, bestVariant?.duration||'30');
-          if (newScore.totalScore > (bestScore?.totalScore||0)) { bestVariant!.script = rewritten; bestVariant!.score = newScore; }
-        }
-      } catch {}
-    }
-
-    // 7. Return
-    const risk = bestVariant ? { riskLevel: bestVariant.risk?.riskLevel||'低', riskPoints: bestVariant.risk?.riskPoints||[], allowSave: (bestVariant.risk?.riskLevel||'低') !== '高' } : { riskLevel: '低' as const, riskPoints: [], allowSave: true };
+    const risk = bestVariant ? { riskLevel: bestVariant.score?.riskLevel||'低', riskPoints: bestVariant.score?.riskPoints||[], allowSave: (bestVariant.score?.riskLevel||'低') !== '高' } : { riskLevel: '低' as const, riskPoints: [], allowSave: true };
 
     return NextResponse.json({
       strategy, isBroad, subTopics, variants, bestVariant, risk, recommendedStatus,
-      angleCandidates, hookCandidates, selectedHook,
+      angleCandidates: [], hookCandidates: [], selectedHook: aiOutput.hook || strategy.hook,
       sourceKnowledgeCards: retrieveKnowledgeForScript({ knowledgeCards, topic: customerPain, customerPain }),
-      aiUsed: true, mock: true,
+      aiUsed: true, mock: false,
     });
   } catch (err: any) {
-    console.error('[Pipeline-API] Error:', err.message);
-    // Final fallback: pure rule engine
+    console.error('[Pipeline] Error:', err.message);
     try {
-      const body = await req.json();
-      const result = runPipeline(body);
+      const result = runPipeline(await req.json());
       return NextResponse.json({ ...result, aiUsed: false, mock: true });
-    } catch {
-      return NextResponse.json({ error: 'Pipeline failed', details: err.message }, { status: 500 });
-    }
+    } catch { return NextResponse.json({ error: err.message }, { status: 500 }); }
   }
 }
