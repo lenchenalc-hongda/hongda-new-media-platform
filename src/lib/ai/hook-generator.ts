@@ -231,12 +231,17 @@ ${cardInfo ? '参考知识：\n' + cardInfo : ''}
   ]
 }`;
 
-    const response = await provider.generateStructured({
-      systemPrompt: '你是宏达印业的新媒体文案专家。输出JSON，不要markdown包裹。',
-      userPrompt: prompt,
-      outputFormat: 'json',
-      temperature: 0.9,
-    });
+    const dsResponse = await Promise.race([
+      provider.generateStructured({
+        systemPrompt: '你是宏达印业的新媒体文案专家。输出JSON，不要markdown包裹。',
+        userPrompt: prompt,
+        outputFormat: 'json',
+        temperature: 0.9,
+      }),
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), 6000)),
+    ]);
+    if (!dsResponse) throw new Error('DeepSeek timeout');
+    const response = dsResponse;
 
     if (response.parsed && Array.isArray(response.parsed.hooks)) {
       const hooks: HookCandidate[] = response.parsed.hooks.map((h: any, i: number) => ({
