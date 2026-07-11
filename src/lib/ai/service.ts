@@ -87,3 +87,4 @@ export async function callAIText(prompt: string, systemPrompt?: string, options?
 export const AI_MOCK_MODE = isMockMode();
 export const AI_PROVIDER = getCurrentProviderName();
 export { getProvider, isMockMode, getCurrentProviderName } from './providers';
+export { getLLMAdapter, getCurrentAdapterName, resetAdapter } from './providers/adapter';

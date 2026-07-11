@@ -4,6 +4,181 @@
 // ============================================================
 
 import { scoreScript, ScriptScoreResult } from './script-scoring';
+import { getLLMAdapter } from './providers/adapter';
+import { z } from 'zod';
+
+// ===== Canonical Pipeline =====
+// runCanonicalPipeline() is THE ONLY path that produces script results.
+// ALL providers (DeepSeek, OpenAI, Mock) go through this same pipeline.
+// Providers generate candidate content; local rules own scoring, risk, status.
+
+export const CanonicalPipelineRequestSchema = z.object({
+  accountId: z.string().optional(),
+  account: z.any().optional(),
+  platform: z.string().optional(),
+  topic: z.string().optional(),
+  customerPain: z.string().optional(),
+  productOrProcess: z.string().optional(),
+  material: z.string().optional(),
+  durationSeconds: z.enum(['15', '30', '60']).default('30'),
+  video_length: z.enum(['15', '30', '60']).optional(),
+  knowledgeCards: z.array(z.any()).optional(),
+  knowledgeCardIds: z.array(z.string()).optional(),
+  selectedAngleId: z.string().nullable().optional(),
+  selectedHookId: z.string().nullable().optional(),
+  source_type: z.string().optional(),
+});
+export type ScriptPipelineRequest = z.infer<typeof CanonicalPipelineRequestSchema>;
+
+export async function runCanonicalPipeline(req: ScriptPipelineRequest): Promise<PipelineResult> {
+  const input = CanonicalPipelineRequestSchema.parse(req);
+  const topic = input.customerPain || input.topic || '';
+  const adapter = await getLLMAdapter();
+  const duration = input.durationSeconds || input.video_length || '30';
+
+  // 1. Check if broad topic → split
+  const isBroad = topic.length > 12 || ['介绍','注意事项','说清楚','全部','常见问题'].some(k => topic.includes(k));
+  const subTopics = isBroad ? splitBroadTopic(topic) : [];
+
+  // 2. Generate strategy (local rules — always)
+  const strategy = generateScriptStrategy({
+    account: input.account,
+    topic: subTopics[0] || topic,
+    customerPain: input.customerPain,
+    productOrProcess: input.productOrProcess,
+    material: input.material,
+    knowledgeCards: input.knowledgeCards,
+  });
+
+  // 3. Retrieve knowledge (local — always)
+  const sourceKnowledgeCards = retrieveKnowledgeForScript({
+    knowledgeCards: input.knowledgeCards,
+    topic: input.customerPain, customerPain: input.customerPain,
+  });
+
+  // 4. Generate angles via adapter (try, never throw)
+  let angleCandidates: any[] = [];
+  let hookCandidates: any[] = [];
+  let selectedHook = strategy.hook;
+  let aiUsed = false;
+  try {
+    const angleResult = await adapter.generateAngles({
+      account: input.account, productOrProcess: input.productOrProcess,
+      customerPain: input.customerPain, material: input.material,
+      knowledgeCards: input.knowledgeCards,
+    });
+    angleCandidates = angleResult.angles || [];
+    aiUsed = angleResult.method === 'ai';
+  } catch {}
+
+  // 5. Generate hooks via adapter (try, never throw)
+  try {
+    const hookResult = await adapter.generateHooks({
+      account: input.account, productOrProcess: input.productOrProcess,
+      customerPain: input.customerPain, material: input.material,
+      knowledgeCards: input.knowledgeCards,
+    });
+    hookCandidates = hookResult.hooks || [];
+  } catch {}
+
+  // 6. Bind selected hook (local rules only)
+  if (input.selectedHookId && hookCandidates.length > 0) {
+    const found = hookCandidates.find((h: any) => h.id === input.selectedHookId);
+    if (found) selectedHook = found.hookText;
+  } else if (hookCandidates.length > 0) {
+    selectedHook = hookCandidates[0].hookText;
+  }
+
+  // 7. Generate draft via adapter
+  let aiDraft: any = null;
+  try {
+    aiDraft = await adapter.generateDraft({
+      hook: selectedHook,
+      angle: angleCandidates.find((a: any) => a.id === input.selectedAngleId) || angleCandidates[0],
+      targetCustomer: strategy.targetCustomer,
+      customerPain: input.customerPain || strategy.customerPain,
+      productOrProcess: input.productOrProcess,
+      knowledgeCards: input.knowledgeCards,
+    });
+  } catch {}
+
+  // 8. Build variants (LOCAL RULES ALWAYS — no exceptions)
+  const durations: ('15' | '30' | '60')[] = ['15', '30', '60'];
+  const variants: DraftVariant[] = durations.map(d => {
+    let script = '';
+    let hook = selectedHook;
+    let wordCount = 0;
+    let subtitles: string[] = [];
+
+    if (aiDraft && aiDraft.body) {
+      script = aiDraft.body;
+      hook = aiDraft.hook || selectedHook;
+      wordCount = aiDraft.wordCount || countChars(script);
+      subtitles = aiDraft.subtitlePoints || [];
+    } else {
+      // Local rule fallback
+      const chunkType = getChunkType(input);
+      const result = buildScriptByDuration(strategy, d, chunkType, input);
+      script = result.script; hook = result.hook; wordCount = result.wordCount; subtitles = result.subtitles;
+    }
+
+    // ALWAYS apply local rules: remove AI tone, compress, score
+    script = removeAiTone(script);
+    const compressed = compressScriptByDuration(script, d);
+    script = compressed.compressed; wordCount = compressed.wordCount;
+
+    // Score — local rules ALWAYS, provider never owns scoring
+    const score = scoreScript(script, d);
+    return { duration: d, hook, script, wordCount, estimatedSeconds: parseInt(d), score, subtitlePoints: subtitles };
+  });
+
+  // 9. Pick best variant
+  const scored = variants.filter(v => v.score !== null);
+  scored.sort((a, b) => (b.score?.totalScore || 0) - (a.score?.totalScore || 0));
+  const bestVariant = scored[0] || null;
+  const bestScore = bestVariant?.score || null;
+  const riskLevel = bestScore?.riskLevel || '低';
+  const riskPoints = bestScore?.riskPoints || [];
+
+  // 10. Determine recommended status (LOCAL RULES ONLY — never allow provider override)
+  let recommendedStatus = 'draft';
+  if (bestScore) {
+    if (bestScore.totalScore >= 85 && bestScore.riskLevel !== '高') recommendedStatus = 'pending_review';
+    else if (bestScore.totalScore >= 70) recommendedStatus = 'draft';
+    else if (bestScore.totalScore >= 60) recommendedStatus = 'needs_rewrite';
+    else recommendedStatus = 'discard';
+  }
+
+  // 11. If score < 80 AND no matching hook selected, try rewrite via adapter
+  if (bestScore && bestScore.totalScore < 80 && !input.selectedHookId) {
+    try {
+      const rewriteResult = await adapter.rewriteScript({
+        script: bestVariant?.script || '',
+        hook: selectedHook,
+        feedback: '请更口语化、去掉空话、直接点出客户问题',
+        targetCustomer: strategy.targetCustomer,
+      });
+      if (rewriteResult && rewriteResult.body) {
+        // Apply local rules after rewrite too
+        let rewritten = removeAiTone(rewriteResult.body);
+        const cr = compressScriptByDuration(rewritten, duration as '15' | '30' | '60');
+        rewritten = cr.compressed;
+        // Update best variant with rewrite
+        bestVariant.script = rewritten;
+        bestVariant.wordCount = cr.wordCount;
+        bestVariant.score = scoreScript(rewritten, duration as string);
+      }
+    } catch {}
+  }
+
+  return {
+    strategy, isBroad, subTopics, variants, bestVariant,
+    risk: { riskLevel, riskPoints, allowSave: riskLevel !== '高' },
+    recommendedStatus, mock: !aiUsed,
+    angleCandidates, hookCandidates, selectedHook,
+    sourceKnowledgeCards, aiUsed,
+  };
+}
 
 // ===== Adapter-based Pipeline Interfaces =====
 export interface PipelineConfig {
@@ -716,7 +891,7 @@ export function scoreScriptHybrid(script: string, duration: string = '30', useAI
 }
 
 // ===== Helper =====
-function countChars(text: string): number {
+export function countChars(text: string): number {
   const matches = text.match(/[\u4e00-\u9fff]/g);
   return matches ? matches.length : 0;
 }
