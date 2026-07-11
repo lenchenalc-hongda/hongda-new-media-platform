@@ -191,6 +191,8 @@ export default function ScriptGeneratorWizard({ open, onClose, onGenerate }: Scr
           material: form.material,
           knowledgeCards: selectedCards,
           video_length: form.video_length,
+          selectedAngleId: selectedAngle?.id || null,
+          selectedHookId: selectedHookId || null,
           pipelineConfig: { useAI: true, aiProvider: 'deepseek' },
         }),
         signal: controller.signal,

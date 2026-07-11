@@ -175,7 +175,7 @@ export async function runCanonicalPipeline(req: ScriptPipelineRequest): Promise<
     strategy, isBroad, subTopics, variants, bestVariant,
     risk: { riskLevel, riskPoints, allowSave: riskLevel !== '高' },
     recommendedStatus, mock: !aiUsed,
-    angleCandidates, hookCandidates, selectedHook,
+    angleCandidates, hookCandidates, selectedHook, selectedAngle: null,
     sourceKnowledgeCards, aiUsed,
   };
 }
@@ -246,6 +246,7 @@ export interface PipelineResult {
   angleCandidates: any[];
   hookCandidates: any[];
   selectedHook: string;
+  selectedAngle: any;
   sourceKnowledgeCards: { cards: any[]; conclusions: string[]; risks: string[]; safers: string[] };
   aiUsed: boolean;
 }
@@ -871,11 +872,11 @@ export function runPipeline(input: {
     bestVariant,
     risk: { riskLevel, riskPoints, allowSave: riskLevel !== '高' },
     recommendedStatus,
-    mock: true,
-    // New fields
+    mock: !aiUsed,
     angleCandidates,
     hookCandidates,
     selectedHook,
+    selectedAngle: null,
     sourceKnowledgeCards: retrieveKnowledgeForScript({
       knowledgeCards: input.knowledgeCards,
       topic: input.customerPain,

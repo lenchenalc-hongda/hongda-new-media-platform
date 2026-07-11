@@ -37,7 +37,13 @@ export async function POST(req: NextRequest) {
     // Sync mode: run directly
     const result = await runCanonicalPipeline(parsed);
     return NextResponse.json({
-      ...result, aiUsed: !result.mock, endpoint: 'canonical', mode: 'sync',
+      ...result,
+      aiUsed: !result.mock,
+      endpoint: 'canonical',
+      mode: 'sync',
+      selectedAngle: result.selectedAngle || null,
+      selectedHook: result.hookCandidates?.find((h: any) => h.id === parsed.selectedHookId)
+        || (result.hookCandidates?.[0] || null),
     });
   } catch (err: any) {
     console.error('[Pipeline] Error:', err.message);
