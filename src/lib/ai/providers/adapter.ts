@@ -179,22 +179,31 @@ class DeepSeekLLMAdapter implements LLMProviderAdapter {
     this.available = provider.available;
   }
 
-  private async call(prompt: string, systemPrompt?: string): Promise<any> {
-    const timeout = new Promise<null>((resolve) => setTimeout(() => resolve(null), 45000));
-    const response = await Promise.race([
-      this.provider.generateStructured({
-        systemPrompt: systemPrompt || '你是宏达印业的新媒体策划顾问。输出JSON，不要markdown包裹。',
-        userPrompt: prompt,
-        outputFormat: 'json',
-        temperature: 0.7,
-      }),
-      timeout,
-    ]);
-    if (!response) {
-      console.warn('[Adapter] AI provider timeout after 45s');
-      throw new Error('AI provider timeout (45s)');
+  private async call(prompt: string, systemPrompt?: string, retries = 1): Promise<any> {
+    for (let attempt = 0; attempt <= retries; attempt++) {
+      try {
+        const timeout = new Promise<null>((resolve) => setTimeout(() => resolve(null), 60000));
+        const response = await Promise.race([
+          this.provider.generateStructured({
+            systemPrompt: systemPrompt || '你是宏达印业的新媒体策划顾问。输出JSON，不要markdown包裹。',
+            userPrompt: prompt,
+            outputFormat: 'json',
+            temperature: 0.7,
+          }),
+          timeout,
+        ]);
+        if (!response) {
+          console.warn(`[Adapter] AI provider timeout on attempt ${attempt + 1}`);
+          continue;
+        }
+        return response.parsed || {};
+      } catch (err: any) {
+        console.warn(`[Adapter] AI call failed on attempt ${attempt + 1}: ${err.message}`);
+        if (attempt < retries) continue;
+        throw err;
+      }
     }
-    return response.parsed || {};
+    throw new Error('AI provider failed after ' + (retries + 1) + ' attempts');
   }
 
   async generateAngles(input: any): Promise<{ angles: AngleCandidate[]; method: string }> {
@@ -253,12 +262,28 @@ ${kcInfo ? '\n## 参考知识\n' + kcInfo : ''}
   "wordCount": 中文字数
 }`;
 
-    const parsed = await this.call(prompt);
-    const validated = DraftSchema.safeParse(parsed);
-    if (!validated.success) {
-      console.warn('[Adapter] DraftSchema validation failed, using fallback');
+    try {
+      const parsed = await this.call(prompt, undefined, 1);
+      const validated = DraftSchema.safeParse(parsed);
+      if (validated.success) {
+        console.log(`[Adapter] generateDraft succeeded in ${Date.now() - startTime}ms`);
+        return validated.data;
+      }
+      throw new Error('Schema validation failed');
+    } catch (err: any) {
+      console.warn(`[Adapter] generateDraft failed: ${err.message}, retrying with simpler prompt`);
+      // Retry with simpler prompt
+      const simplePrompt = `口播脚本。钩子：${input.hook || ''}。角度：${input.angle?.title || ''}。客户：${input.customerPain || ''}。工艺：${input.productOrProcess || ''}。材质：${input.material || ''}。${kcInfo ? '参考知识：' + kcInfo.slice(0, 200) : ''}。每句话不超过30字，总共5-8句，从钩子开始，结尾引导下一步。输出JSON格式：{"hook":"${input.hook || ''}","body":"完整口播稿，每行一句","wordCount":数字}`;
+      try {
+        const sResult = await this.call(simplePrompt, '输出JSON，不要markdown包裹。', 1);
+        const sValidated = DraftSchema.safeParse(sResult);
+        if (sValidated.success) return sValidated.data;
+        return { hook: input.hook || '', body: sResult.body || sResult.script || input.hook || '', wordCount: 0 };
+      } catch (retryErr: any) {
+        console.warn(`[Adapter] generateDraft retry also failed: ${retryErr.message}`);
+        throw new Error('AI draft generation failed after retry');
+      }
     }
-    return validated.success ? validated.data : { hook: input.hook, body: parsed.body || parsed.script || '', wordCount: 0 };
   }
 
   async rewriteScript(input: any): Promise<RewriteResult> {
@@ -317,16 +342,44 @@ class MockLLMAdapter implements LLMProviderAdapter {
     const mat = input.material || '';
     const accName = input.account?.name?.split('-')[0] || '';
     const targetAud = input.account?.target_audience || '';
-    const angles: AngleCandidate[] = [
-      { id: 'ma_1', title: '客户对' + pain.slice(0,10) + '最常犯的错', angleType: 'customer_misunderstanding', targetCustomer: targetAud, customerPain: pain, coreConflict: '客户以为很简单，实际很多细节要注意', whyItWorks: '客户想知道自己是不是做错了', recommendedAccount: accName, riskLevel: '低', score: 82 },
-      { id: 'ma_2', title: (mat || pain) + '能不能做？判断逻辑', angleType: 'material_risk', targetCustomer: targetAud, customerPain: pain, coreConflict: mat ? mat + '看着能印，但附着力不一定过关' : '不先确认风险很大', whyItWorks: '客户怕做错了浪费钱', recommendedAccount: accName, riskLevel: '中', score: 88 },
-      { id: 'ma_3', title: (mat || pain) + '的报价逻辑', angleType: 'cost_logic', targetCustomer: '正在询价的客户', customerPain: pain, coreConflict: '只看图片报的价格不靠谱', whyItWorks: '客户想知道价格但不知道怎么问', recommendedAccount: accName, riskLevel: '低', score: 80 },
-      { id: 'ma_4', title: '老师傅说' + (mat || pain.slice(0,6)), angleType: 'factory_experience', targetCustomer: '关心工艺细节的客户', customerPain: pain, coreConflict: '看起来一样的工艺，细节差很多', whyItWorks: '老师傅经验值得信', recommendedAccount: accName, riskLevel: '低', score: 86 },
-      { id: 'ma_5', title: '一个做' + (pain.slice(0,8) || '热转印') + '客户的经历', angleType: 'case_story', targetCustomer: '有类似需求的客户', customerPain: pain, coreConflict: '客户之前踩过坑，换对方法才做对', whyItWorks: '真实案例有说服力', recommendedAccount: accName, riskLevel: '低', score: 87 },
-      { id: 'ma_6', title: (mat || pain) + '要不要先测试？', angleType: 'test_requirement', targetCustomer: '有测试要求的客户', customerPain: pain, coreConflict: '不打样直接大货翻车是迟早的事', whyItWorks: '客户怕测试太麻烦但更怕出问题', recommendedAccount: accName, riskLevel: '低', score: 84 },
-      { id: 'ma_7', title: '回答一下关于' + pain.slice(0,8) + '的最高赞问题', angleType: 'comment_reply', targetCustomer: '正搜索相关问题的客户', customerPain: pain, coreConflict: '很多人问但答案没那么简单', whyItWorks: '真实问题引起共鸣', recommendedAccount: accName, riskLevel: '低', score: 79 },
-      { id: 'ma_8', title: (mat || '价格') + '的3个误区', angleType: 'customer_misunderstanding', targetCustomer: targetAud, customerPain: pain, coreConflict: '客户以为知道其实搞反了', whyItWorks: '纠正认知有传播力', recommendedAccount: accName, riskLevel: '低', score: 81 },
+    const topicPairs = [
+      { conflict: '客户以为很简单，实际很多细节要注意', why: '客户想知道自己是不是做错了' },
+      { conflict: mat ? mat + '看着能印，但附着力不一定过关' : '不先确认风险很大', why: '客户怕做错了浪费钱' },
+      { conflict: '只看图片报的价格不靠谱，需要知道材质和数量', why: '客户想知道价格但不知道怎么问' },
+      { conflict: '看起来一样的工艺，细节差很多', why: '老师傅经验值得信' },
+      { conflict: '客户之前踩过坑，换对方法才做对', why: '真实案例有说服力' },
+      { conflict: '不打样直接大货翻车是迟早的事', why: '客户怕测试太麻烦但更怕出问题' },
+      { conflict: '很多人问但答案没那么简单', why: '真实问题引起共鸣' },
+      { conflict: '客户以为知道其实搞反了', why: '纠正认知有传播力' },
     ];
+    const types = ['customer_misunderstanding', 'material_risk', 'cost_logic', 'factory_experience', 'case_story', 'test_requirement', 'comment_reply', 'customer_question'];
+    const titles = [
+      '客户对' + pain.slice(0,8) + '最常犯的错',
+      (mat || pain.slice(0,8)) + '能不能做？先看这个判断逻辑',
+      (mat || pain.slice(0,6)) + '的价格到底怎么算的？',
+      '做了20年' + (mat || pain.slice(0,6)) + '的老师傅说',
+      '一个客户做' + (pain.slice(0,8) || '热转印') + '踩过的坑',
+      (mat || pain.slice(0,6)) + '要不要先测试？不打样风险多大',
+      '评论区最多人问的' + pain.slice(0,8) + '问题',
+      (mat || '价格') + '的3个常见误区，你中了几个？',
+    ];
+    const riskLevels = ['低', '中', '低', '低', '低', '低', '低', '低'];
+    const angles: AngleCandidate[] = [];
+    for (let i = 0; i < 8; i++) {
+      const idx = (i + new Date().getMilliseconds()) % 8;
+      angles.push({
+        id: 'mk_' + i,
+        title: titles[idx],
+        angleType: types[idx],
+        targetCustomer: targetAud || '有' + pain + '需求的客户',
+        customerPain: pain,
+        coreConflict: topicPairs[idx].conflict,
+        whyItWorks: topicPairs[idx].why,
+        recommendedAccount: accName,
+        riskLevel: riskLevels[idx] as '低' | '中',
+        score: 75 + Math.floor(Math.random() * 15),
+      });
+    }
     return { angles, method: 'mock' };
   }
 
@@ -334,25 +387,50 @@ class MockLLMAdapter implements LLMProviderAdapter {
     const pain = input.customerPain || input.angle?.customerPain || input.productOrProcess || '热转印';
     const mat = input.material || '';
     const accTarget = input.account?.target_audience || '';
-    const hookTexts = [
-      { txt: mat ? mat + '能不能做热转印？先别急着回答。' : pain.slice(0,10) + '先别急着回答。', type: 'direct_question', tension: 'can_or_cannot', why: '客户自己也在问' + pain.slice(0,12) + '的问题' },
-      { txt: '客户问' + pain.slice(0,14) + '，怎么回？', type: 'direct_question', tension: 'fear_of_failure', why: '直接回答客户最关心的问题' },
-      { txt: mat ? mat + '不是不能印，是不能直接承诺。' : pain.slice(0,10) + '不是不能做，是不能直接承诺。', type: 'material_risk', tension: 'can_or_cannot', why: '帮客户理解风险边界' },
-      { txt: '只看图片就报价的，建议你不要信。', type: 'warning', tension: 'cost_waste', why: '客户怕踩坑，预警天然吸引关注' },
-      { txt: '"按上次一样做就行"——这话不能直接听。', type: 'customer_quote', tension: 'quality_risk', why: '这句话客户太熟悉了，想知道正确的做法' },
-      { txt: mat ? mat + '的价格不是一张图能报的。' : pain.slice(0,8) + '的价格不是一句话能说清的。', type: 'cost_conflict', tension: 'price', why: '跟价格有关客户都在意' },
-      { txt: '不打样就直接做大货，十个有八个翻车。', type: 'warning', tension: 'fear_of_failure', why: '怕翻车是客户最大的顾虑' },
-      { txt: '客户只发一张图，我必须问三个问题。', type: 'direct_question', tension: 'price', why: '帮客户理解报价需要什么信息' },
-      { txt: '同样的' + (mat || '产品') + '，不一样的工艺，效果差一倍。', type: 'comparison', tension: 'wrong_assumption', why: '纠正客户的错误认知' },
-      { txt: '做了20年印刷，最大的坑是沟通问题。', type: 'boss_experience', tension: 'fear_of_failure', why: '老板身份自带权威感' },
-      { txt: '刚入行的时候，看材质我也分不清。', type: 'nini_perspective', tension: 'wrong_assumption', why: '新手视角更容易代入' },
-      { txt: '客户说之前做的掉了，原因可能不是附着力。', type: 'test_risk', tension: 'fear_of_failure', why: '怕翻车是客户最大的顾虑' },
-    ].sort(() => Math.random() - 0.5).slice(0, 5);
-    const hooks: HookCandidate[] = hookTexts.map((h, i) => ({
-      id: 'mh_' + i, hookText: h.txt, hookType: h.type, tensionType: h.tension,
-      targetCustomer: accTarget, whyItWorks: h.why, riskNotes: '',
-    }));
-    return { hooks, method: 'mock' };
+    const product = input.productOrProcess || '';
+    // Build hooks dynamically from input, ensuring variety
+    const hooks: HookCandidate[] = [];
+    const types = ['direct_question', 'warning', 'customer_quote', 'cost_conflict', 'material_risk', 'test_risk', 'comparison', 'boss_experience'];
+    const tensions = ['can_or_cannot', 'fear_of_failure', 'cost_waste', 'quality_risk', 'price', 'wrong_assumption'];
+    const now = Date.now();
+    for (let i = 0; i < 12; i++) {
+      const t = types[Math.abs((now * (i+1)) % types.length)];
+      const tn = tensions[Math.abs((now * (i+3)) % tensions.length)];
+      let hookText = '';
+      if (t === 'direct_question') {
+        const qs = [pain.slice(0,12) + '怎么判断？', mat + '能不能做' + product + '？', '客户问' + pain.slice(0,10) + '，怎么回？'];
+        hookText = qs[i % qs.length];
+      } else if (t === 'warning') {
+        const ws = ['直接回答' + pain.slice(0,8) + '，小心踩坑。', '不看' + mat + '就报价？风险很大。', '不打样直接做，十个有八个翻车。'];
+        hookText = ws[i % ws.length];
+      } else if (t === 'customer_quote') {
+        const qs = ['"别人能做你们为什么不能"——这话怎么回？', '"按上次一样做"——这句话最危险。', '"价格高了"——不一定，可能是工艺不同。'];
+        hookText = qs[i % qs.length];
+      } else if (t === 'cost_conflict') {
+        const cs = [(mat || product || pain.slice(0,6)) + '的价格不是一张图能报的。', '报价低不代表总成本低。', mat + '和PP价格差一倍，你知道吗？'];
+        hookText = cs[i % cs.length];
+      } else if (t === 'material_risk') {
+        const rs = [(mat || '材质') + '看着能印，附着力不一定行。', (mat || '材质') + '和' + (product || '工艺') + '要匹配。', '同样的' + (mat || '材质') + '，不同批次效果不同。'];
+        hookText = rs[i % rs.length];
+      } else if (t === 'test_risk') {
+        const ts = [(pain.includes('测试') ? '' : '客户没提测试要求？') + '附着力测试不做，后面麻烦。', '你以为' + (mat || '产品') + '印上去就行？先测一下。'];
+        hookText = ts[i % ts.length];
+      } else if (t === 'comparison') {
+        const cs = [mat + '和PP做热转印，区别不只是价格。', product + '跟丝印比哪个好？看你什么材质。'];
+        hookText = cs[i % cs.length];
+      } else {
+        const bs = ['做了这么多年' + (mat || '印刷') + '，最大的坑是没问清楚。', '很多工厂不接的' + (mat || '工艺') + '，我为什么敢接？'];
+        hookText = bs[i % bs.length];
+      }
+      if (hookText.length > 28) hookText = hookText.slice(0, 27) + '？';
+      hooks.push({
+        id: 'mh_' + i, hookText, hookType: t, tensionType: tn,
+        targetCustomer: accTarget || '有' + pain + '需求的客户',
+        whyItWorks: [pain, product, mat].filter(Boolean).join('、') + '场景下的针对性开头',
+        riskNotes: '',
+      });
+    }
+    return { hooks: hooks.slice(0, 8), method: 'mock' };
   }
 
   async generateDraft(input: any): Promise<AiDraft> {

@@ -121,15 +121,23 @@ export async function runCanonicalPipeline(req: ScriptPipelineRequest): Promise<
       wordCount = aiDraft.wordCount || countChars(script);
       subtitles = aiDraft.subtitlePoints || [];
     } else {
-      // Local rule fallback
-      const chunkType = getChunkType(input);
-      const result = buildScriptByDuration(strategy, d, chunkType, input);
-      // Remove template hook line from body - rewriteToSpokenScript prepends it
-      const resultLines = result.script.split('\n');
-      script = resultLines.slice(1).join('\n');
-      hook = result.hook;
-      wordCount = result.wordCount;
-      subtitles = result.subtitles;
+      // AI failed even after retry — don't use fixed templates
+      // Generate a simple input-aware message instead
+      const pain = input.customerPain || input.productOrProcess || '热转印';
+      const mat = input.material || '';
+      const lines = [selectedHook];
+      if (mat && pain) {
+        lines.push(mat + '的' + pain.slice(0,12) + '需要看具体情况。');
+        lines.push('材质、数量、测试要求不一样，方案也不一样。');
+      } else if (pain) {
+        lines.push(pain.slice(0,20) + '？这个问题的答案不是固定的。');
+        lines.push('因为每个人的产品和要求都不一样。');
+      } else {
+        lines.push('热转印的方案取决于你的产品和具体要求。');
+      }
+      lines.push('你把产品图和材质发我，我帮你判断最合适的方案。');
+      script = lines.join('\n');
+      wordCount = countChars(script);
     }
 
     // ALWAYS apply local rules: rewrite to spoken script, score
@@ -665,10 +673,13 @@ function getChunkType(input: any): string {
   if (cardConclusion.includes('防背粘') || cardTitle.includes('防背粘') || product.includes('防背粘')) return 'anti_back';
   if (cardConclusion.includes('结构') || cardTitle.includes('花膜') || product.includes('花膜')) return 'process';
   if (cardConclusion.includes('价格') || cardConclusion.includes('成本')) return 'cost_explanation';
-  if (pain.includes('价格') || pain.includes('多少钱') || pain.includes('报价') || pain.includes('成本')) return 'pre_quote';
+
+  // === 优先级：材质/测试/比较 > 价格 ===
   if (pain.includes('材质') || pain.includes('材料') || pain.includes('PE') || pain.includes('PP') || pain.includes('ABS') ||
-      product.includes('PE') || product.includes('PP') || product.includes('ABS') || product.includes('材质') || product.includes('材料')) return 'material';
-  if (pain.includes('测试') || pain.includes('附着力') || pain.includes('掉') || pain.includes('酒精') || pain.includes('耐磨')) return 'test';
+      product.includes('PE') || product.includes('PP') || product.includes('ABS') || product.includes('材质') || product.includes('材料') ||
+      product.includes('玻璃') || pain.includes('玻璃')) return 'material';
+  if (pain.includes('测试') || pain.includes('附着力') || pain.includes('掉') || pain.includes('脱落') || pain.includes('酒精') || pain.includes('耐磨') ||
+      product.includes('测试') || product.includes('附着力') || product.includes('掉')) return 'test';
   if (pain.includes('颜色') || pain.includes('色差') || pain.includes('图片') || pain.includes('潘通')) return 'color';
   if (pain.includes('打样') || pain.includes('样品') || pain.includes('确认样') || pain.includes('小样')) return 'sample';
   if (pain.includes('小批量') || pain.includes('少量') || pain.includes('试产')) return 'small_batch';
@@ -679,13 +690,16 @@ function getChunkType(input: any): string {
   if (pain.includes('FAQ') || pain.includes('常见问题') || pain.includes('答疑') || pain.includes('怎么')) return 'comment_qna';
   if (pain.includes('经验') || pain.includes('坑') || pain.includes('教训')) return 'boss_experience';
   if (pain.includes('车间') || pain.includes('实拍') || pain.includes('带你') || pain.includes('看')) return 'factory_shot';
+  // 账号人设
   const name = input.account?.name?.toLowerCase() || '';
   const persona = input.account?.persona?.toLowerCase() || '';
   if (name.includes('老板') || persona.includes('老板') || persona.includes('厂长')) return 'boss_experience';
-  if (persona.includes('顾问') || persona.includes('业务')) return 'pre_quote';
   if (persona.includes('工艺') || persona.includes('技术')) return 'process';
   if (cardTitle) return 'comment_qna';
-  // If product or pain mentions processes, return comparison
+  // 价格相关（优先级较低）
+  if (pain.includes('价格') || pain.includes('多少钱') || pain.includes('报价') || pain.includes('成本') ||
+      persona.includes('顾问') || persona.includes('业务')) return 'pre_quote';
+  // 默认：只要有内容就返回比较模板
   if (product || pain) return 'comparison';
   return 'pre_quote';
 }

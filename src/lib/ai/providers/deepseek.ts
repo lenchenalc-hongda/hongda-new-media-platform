@@ -66,13 +66,9 @@ export class DeepSeekProvider implements AIProvider {
         content, parsed, provider: 'deepseek', mock: false,
         usage: { promptTokens: completion.usage?.prompt_tokens || 0, completionTokens: completion.usage?.completion_tokens || 0, totalTokens: completion.usage?.total_tokens || 0 },
       };
-    } catch (err: any) {
-      if (process.env.AI_FALLBACK_TO_MOCK !== 'false') {
-        console.warn('[DeepSeek] API error, falling back to mock:', err.message);
-        return this.fallback(request);
-      }
-      throw err;
-    }
+   } catch (err: any) {
+     throw err;
+   }
   }
 
   async generateText(request: ProviderRequest): Promise<ProviderResponse> {
@@ -80,8 +76,8 @@ export class DeepSeekProvider implements AIProvider {
     return { ...result, parsed: undefined };
   }
 
-  private async fallback(request: ProviderRequest): Promise<ProviderResponse> {
-    const { MockProvider } = await import('./mock');
-    return new MockProvider().generateStructured(request);
-  }
+ private async fallback(request: ProviderRequest): Promise<ProviderResponse> {
+   const { MockProvider } = await import('./mock');
+   return new MockProvider().generateStructured(request);
+ }
 }
