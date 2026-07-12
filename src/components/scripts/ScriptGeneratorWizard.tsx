@@ -23,12 +23,27 @@ function simpleGenerateHook(input: any): string {
   return input.topic || input.customerPain || '';
 }
 function simpleRunPipeline(input: any): any {
-  return {
-    strategy: simpleScriptStrategy(input),
-    hook: simpleGenerateHook(input),
-    variants: [],
-    score: { totalScore: 60, grade: 'C' }
-  };
+  const strategy = simpleScriptStrategy(input);
+  const hook = simpleGenerateHook(input);
+  const pain = input.customerPain || input.productOrProcess || '';
+  const mat = input.material || '';
+  const lines: string[] = [hook || pain || ''];
+  if (mat) {
+    lines.push(mat + '的工艺方案需要看具体要求。');
+  } else if (pain) {
+    lines.push(pain.slice(0, 20) + '？这需要看具体产品和测试要求。');
+  } else {
+    lines.push('热转印的方案取决于你的产品和具体要求。');
+  }
+  lines.push('你把产品图和材质发我，我帮你判断最合适的方案。');
+  const script = lines.join('\n');
+  const variants = ['15', '30', '60'].map(d => ({
+    duration: d, hook, script,
+    wordCount: script.length, estimatedSeconds: parseInt(d),
+    score: { totalScore: 60, grade: 'C' as const, riskLevel: '低' as const,
+      weaknesses: [], strengths: [], rewriteSuggestions: [] },
+  }));
+  return { strategy, hook, variants, score: { totalScore: 60, grade: 'C' } };
 }
 
 
@@ -310,6 +325,7 @@ export default function ScriptGeneratorWizard({ open, onClose, onGenerate }: Scr
           selectedHookId: selectedHookId || null,
           selectedHookText: selectedHookText || null,
           knowledgeMode: form.knowledgeMode,
+          forceSync: true,
           pipelineConfig: { useAI: true, aiProvider: 'deepseek' },
         }),
         signal: controller.signal,
