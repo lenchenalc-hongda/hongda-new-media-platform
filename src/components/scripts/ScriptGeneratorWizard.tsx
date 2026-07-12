@@ -74,23 +74,54 @@ export default function ScriptGeneratorWizard({ open, onClose, onGenerate }: Scr
                       const angleTitle = selectedAngle?.title || pain;
                       
                       // Generate hooks dynamically based on input
-                      const hookTexts = [
-                        { text: mat ? mat + '能不能做热转印？先别急着回答。' : pain.slice(0,12) + '？先别急着回答。', type: 'direct_question', tension: 'can_or_cannot', why: '客户自己也在问' + pain.slice(0,12) + '的问题' },
-                        { text: accName ? '客户问' + accName + '，' + (mat || pain.slice(0,8)) + '能不能做？' : '客户问' + pain.slice(0,14) + '，怎么回？', type: 'direct_question', tension: 'fear_of_failure', why: '直接回答客户最关心的问题' },
-                        { text: mat ? mat + '不是不能印，是不能直接承诺。' : pain.slice(0,10) + '不是不能做，是不能直接承诺。', type: 'material_risk', tension: 'can_or_cannot', why: '帮客户理解风险边界' },
-                        { text: '只看图片就报价的，建议你不要信。', type: 'warning', tension: 'cost_waste', why: '客户怕踩坑，预警天然吸引关注' },
-                        { text: '"按上次一样做就行"——这话不能直接听。', type: 'customer_quote', tension: 'quality_risk', why: '这句话客户太熟悉了，想知道正确的做法' },
-                        { text: mat ? mat + '的价格，不是一张图能报的。' : pain.slice(0,8) + '的价格，不是一句话能说清的。', type: 'cost_conflict', tension: 'price', why: '跟价格有关客户都在意' },
-                        { text: '不打样就直接做大货，十个有八个翻车。', type: 'warning', tension: 'fear_of_failure', why: '怕翻车是客户最大的顾虑' },
-                        { text: '客户只发一张图，我必须问三个问题。', type: 'direct_question', tension: 'price', why: '帮客户理解报价需要什么信息' },
-                        { text: '同样的' + (mat || '产品') + '，不一样的工艺，效果差一倍。', type: 'comparison', tension: 'wrong_assumption', why: '纠正客户的错误认知' },
-                        { text: '做了20年印刷，最大的坑是沟通问题。', type: 'boss_experience', tension: 'fear_of_failure', why: '老板身份自带权威感' },
-                        { text: '刚入行的时候，看材质我也分不清。', type: 'nini_perspective', tension: 'wrong_assumption', why: '新手视角更容易代入' },
-                        { text: '客户说之前做的掉了，原因可能不是附着力。', type: 'test_risk', tension: 'fear_of_failure', why: '怕翻车是客户最大的顾虑' },
-                        { text: '免费打样，反而让我更谨慎了。', type: 'counterintuitive', tension: 'price', why: '反常识让人想了解原因' },
-                        { text: '报价不是越便宜越好，是越准越好。', type: 'counterintuitive', tension: 'price', why: '反常识让人想了解原因' },
-                        { text: '评论区最热门问题：' + (pain.slice(0,14) || '热转印') + '怎么选？', type: 'comment_reply', tension: 'wrong_assumption', why: '真实问题引起共鸣' },
-                      ];
+                      const hookTexts = [];
+                      const keywords = (pain + ' ' + mat).toLowerCase();
+                      
+                      if (keywords.includes('多少钱') || keywords.includes('价格') || keywords.includes('报价') || keywords.includes('成本')) {
+                        hookTexts.push(
+                          { text: '客户只说报个价，我一般会先发三个问题过去。', type: 'direct_question', tension: 'price', why: '帮客户理解报价需要哪些信息' },
+                          { text: '一张图就想拿到最低价，我给不出也建议你不要信。', type: 'warning', tension: 'cost_waste', why: '客户怕买贵了' },
+                          { text: mat ? mat + '的价格不是一张图能报的。' : '价格跟材质数量工艺要求有关。', type: 'cost_conflict', tension: 'price', why: '跟钱有关客户都在意' }
+                        );
+                      }
+                      if (keywords.includes('pe') || keywords.includes('pp') || keywords.includes('abs') || keywords.includes('材质') || keywords.includes('材料') || keywords.includes('塑料')) {
+                        hookTexts.push(
+                          { text: mat ? mat + '能不能做热转印？先别急着回答。' : 'PE瓶不是不能印，是不能直接承诺。', type: 'material_risk', tension: 'can_or_cannot', why: '帮客户理解材质判断逻辑' },
+                          { text: '同样的瓶子，不一样的材质，结果是两个方案。', type: 'comparison', tension: 'wrong_assumption', why: '纠正客户的材质认知误区' }
+                        );
+                      }
+                      if (keywords.includes('会不会掉') || keywords.includes('附着力') || keywords.includes('测试')) {
+                        hookTexts.push(
+                          { text: '你问我会不会掉，我最怕直接回答不会。', type: 'test_risk', tension: 'fear_of_failure', why: '怕翻车是客户最大的顾虑' },
+                          { text: '客户的测试要求不一样，回答也不一样。', type: 'test_risk', tension: 'quality_risk', why: '客户担心质量不过关' }
+                        );
+                      }
+                      if (keywords.includes('颜色') || keywords.includes('色差')) {
+                        hookTexts.push(
+                          { text: '客户说颜色按图片做，这个风险很大。', type: 'warning', tension: 'quality_risk', why: '手机看到的颜色不等于印出来的颜色' },
+                          { text: '同样的潘通号，不同材质印出来颜色也不一样。', type: 'counterintuitive', tension: 'quality_risk', why: '色差问题客户最头疼' }
+                        );
+                      }
+                      if (keywords.includes('打样') || keywords.includes('样品')) {
+                        hookTexts.push(
+                          { text: '打样和大货做到一模一样，真的那么简单吗？', type: 'direct_question', tension: 'quality_risk', why: '客户想知道打样和大货的区别' }
+                        );
+                      }
+                      if (accName === '小林' || accName === '小陈') {
+                        hookTexts.push(
+                          { text: '刚入行的时候，看材质我也分不清。', type: 'nini_perspective', tension: 'wrong_assumption', why: '新手视角更容易代入' }
+                        );
+                      } else if (accName === '老板' || accName === '许总') {
+                        hookTexts.push(
+                          { text: '做了20年印刷，我告诉你最大的坑是什么。', type: 'boss_experience', tension: 'fear_of_failure', why: '老板身份自带权威感' }
+                        );
+                      }
+                      hookTexts.push(
+                        { text: '客户只发一张图，我怎么判断能不能做？', type: 'direct_question', tension: 'can_or_cannot', why: '帮客户理解判断需要哪些信息' },
+                        { text: '不看材质就承诺能做的，风险很大。', type: 'warning', tension: 'fear_of_failure', why: '怕踩坑的内容天然吸引关注' },
+                        { text: '不打样就直接做大货，十个有八个翻车。', type: 'warning', tension: 'fear_of_failure', why: '客户怕翻车' },
+                        { text: '按上次一样做就行，这话不能直接听。', type: 'customer_quote', tension: 'quality_risk', why: '客户原话更容易产生共鸣' }
+                      );
                       
                       // Shuffle and pick top 5
                       const shuffled = [...hookTexts].sort(() => Math.random() - 0.5);
