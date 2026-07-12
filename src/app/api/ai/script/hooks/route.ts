@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { generateHookCandidates } from '@/lib/ai/hook-generator';
 import { scoreAndRankHooks } from '@/lib/ai/hook-scoring';
+export const maxDuration = 60;
 
 export async function POST(req: NextRequest) {
   try {

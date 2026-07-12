@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { generateAngles } from '@/lib/ai/angle-generator';
+export const maxDuration = 60;
 
 export async function POST(req: NextRequest) {
   try {
