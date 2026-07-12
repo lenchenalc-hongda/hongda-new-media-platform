@@ -626,6 +626,13 @@ const CHUNK_TEMPLATES: Record<string, {
     action: ['你把这个瓶子寄过来，我免费帮你测。','不寄样就判断，那不是专业做法。'],
     cta: ['发产品图片和材质，我帮你判断能不能做。'],
   },
+  comparison: {
+    hook: ['热转印和丝印区别在哪？要看产品来选。','数码热转印和传统热转印，别搞混了。'],
+    reason: ['丝印是油墨直接印，热转印通过花膜转印上去。','热转印适合多色图案，丝印适合单色大批量。','数码热转印不用制版，凹印需制版但单价更低。'],
+    scene: ['客户问丝印和热转印哪个好，其实要看材质和数量。','小批量多图案选数码热转印，大批量单色选丝印或凹印。'],
+    action: ['你把产品图、材质和数量发我，我帮你判断哪个工艺最合适。'],
+    cta: ['发产品图和数量，免费帮您对比工艺方案。'],
+  },
   customer_pitfall: {
     hook: ['客户只发图片，为什么判断不了能不能做热转印？','"之前的厂家能做，你们为什么不能"，这话怎么回？','客户说"按上次一样"，我们为什么还要找确认样？'],
     reason: ['图片看不出材质，也看不出表面有没有处理过。','上次的产品和这次看起来一样，但批次不同效果也可能不同。'],
@@ -665,7 +672,11 @@ function getChunkType(input: any): string {
   if (pain.includes('颜色') || pain.includes('色差') || pain.includes('图片') || pain.includes('潘通')) return 'color';
   if (pain.includes('打样') || pain.includes('样品') || pain.includes('确认样') || pain.includes('小样')) return 'sample';
   if (pain.includes('小批量') || pain.includes('少量') || pain.includes('试产')) return 'small_batch';
-  if (pain.includes('误区') || pain.includes('注意') || pain.includes('常见') || pain.includes('区别')) return 'customer_pitfall';
+  if (pain.includes('误区') || pain.includes('注意') || pain.includes('常见')) return 'customer_pitfall';
+  if (pain.includes('区别') || pain.includes('比较') || pain.includes('差异') || pain.includes('对比') ||
+      product.includes('区别') || product.includes('比较') || product.includes('差异') || product.includes('对比') ||
+      product.includes('丝印') || product.includes('水转印') || product.includes('数码')) return 'comparison';
+  if (pain.includes('FAQ') || pain.includes('常见问题') || pain.includes('答疑') || pain.includes('怎么')) return 'comment_qna';
   if (pain.includes('经验') || pain.includes('坑') || pain.includes('教训')) return 'boss_experience';
   if (pain.includes('车间') || pain.includes('实拍') || pain.includes('带你') || pain.includes('看')) return 'factory_shot';
   const name = input.account?.name?.toLowerCase() || '';
@@ -674,6 +685,8 @@ function getChunkType(input: any): string {
   if (persona.includes('顾问') || persona.includes('业务')) return 'pre_quote';
   if (persona.includes('工艺') || persona.includes('技术')) return 'process';
   if (cardTitle) return 'comment_qna';
+  // If product or pain mentions processes, return comparison
+  if (product || pain) return 'comparison';
   return 'pre_quote';
 }
 
