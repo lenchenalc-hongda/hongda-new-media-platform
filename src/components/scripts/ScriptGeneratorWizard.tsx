@@ -396,7 +396,7 @@ export default function ScriptGeneratorWizard({ open, onClose, onGenerate }: Scr
                       setAnglesLoading(true);
                       try {
                         const actrl = new AbortController();
-                        const ato = setTimeout(() => actrl.abort(), 20000);
+                        const ato = setTimeout(() => actrl.abort(), 35000);
                         const res = await fetch('/api/ai/script/angles', {
                           method: 'POST', headers: {'Content-Type':'application/json'}, signal: actrl.signal,
                           body: JSON.stringify({ customerPain: form.customer_pain, productOrProcess: form.product_or_process, material: form.material, account: selectedAccount || {} }),
