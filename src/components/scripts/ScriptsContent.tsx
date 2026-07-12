@@ -304,6 +304,7 @@ export default function ScriptsContent() {
     setAiResult({ message: 'AI正在深度优化...' });
     try {
       const sd = selected.score_detail;
+      const account = MOCK_ACCOUNTS.find(a => a.id === selected.account_id);
       const res = await fetch('/api/ai/script/optimize', {
         method: 'POST', headers: {'Content-Type':'application/json'},
         body: JSON.stringify({
@@ -313,24 +314,44 @@ export default function ScriptsContent() {
           totalScore: sd?.totalScore,
           weaknesses: sd?.weaknesses,
           rewriteSuggestions: sd?.rewriteSuggestions,
+          account: account || {},
+          knowledgeCards: selected.knowledge_refs
+            ? MOCK_KNOWLEDGE_NEW.filter(k => selected.knowledge_refs.includes(k.id))
+            : [],
         }),
       });
       const data = await res.json();
       if (data.optimizedScript) {
-        const newScore = scoreScript(data.optimizedScript, '30');
-        setScripts(prev => prev.map(s =>
-          s.id === selectedId ? {
-            ...s, main_script: data.optimizedScript,
-            quality_score: newScore.totalScore,
-            score_detail: newScore,
-            risk_level: newScore.riskLevel,
-          } : s
-        ));
-        setAiResult({ message: '深度优化完成 ✅' });
+        // Use AI score if available, fallback to local score
+        const aiScore = data.aiScore;
+        const newScore = aiScore?.totalScore ? {
+          totalScore: aiScore.totalScore || 60,
+          grade: aiScore.grade || 'C',
+          weaknesses: aiScore.weaknesses || [],
+          strengths: aiScore.strengths || [],
+          riskLevel: aiScore.riskLevel || '低',
+          rewriteSuggestions: aiScore.rewriteSuggestions || [],
+          hookScore: aiScore.hookScore || 0,
+          spokenScore: aiScore.spokenScore || 0,
+          painScore: aiScore.painScore || 0,
+          ctaScore: aiScore.ctaScore || 0,
+        } : scoreScript(data.optimizedScript, '30');
+        
+        setAiResult({
+          message: '深度优化完成 ✅',
+          data: {
+            before: data.before,
+            after: data.after,
+            changes: data.changes,
+            oldScore: sd,
+            newScore,
+          }
+        });
+        // Show comparison for 15 seconds instead of 3
+        setTimeout(() => setAiResult(null), 15000);
       }
     } catch { setAiResult({ message: '优化失败' }); }
     setScoringAction(null);
-    setTimeout(() => setAiResult(null), 3000);
   };
 
   // === Multiselect & Bulk ===
