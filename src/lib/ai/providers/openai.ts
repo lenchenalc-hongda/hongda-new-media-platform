@@ -14,6 +14,8 @@ export class OpenAIProvider implements AIProvider {
       this.client = new OpenAI({
         apiKey: config.openaiApiKey,
         baseURL: config.openaiBaseUrl || undefined,
+        timeout: 15000,
+        maxRetries: 1,
       });
     }
   }

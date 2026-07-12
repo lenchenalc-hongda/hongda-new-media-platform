@@ -43,7 +43,7 @@ export default function ScriptGeneratorWizard({ open, onClose, onGenerate }: Scr
     setHooksLoading(true);
     try {
       const controller = new AbortController();
-      const ftimeout = setTimeout(() => controller.abort(), 8000);
+      const ftimeout = setTimeout(() => controller.abort(), 20000);
       const res = await fetch("/api/ai/script/hooks", {
         method: "POST", headers: { "Content-Type": "application/json" },
         signal: controller.signal,

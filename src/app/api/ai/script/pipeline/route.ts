@@ -7,6 +7,8 @@ import { runCanonicalPipeline, CanonicalPipelineRequestSchema } from '@/lib/ai/s
 import { createJob, processJob } from '@/lib/ai/jobs';
 import { getCurrentProviderName } from '@/lib/ai/providers';
 
+export const maxDuration = 30;
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
