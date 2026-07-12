@@ -67,6 +67,8 @@ export default function ScriptGeneratorWizard({ open, onClose, onGenerate }: Scr
   const [painSuggestions, setPainSuggestions] = useState<string[]>([]);
   const [suggestLoading, setSuggestLoading] = useState<string | null>(null);
   // Pipeline preview state
+  const [generating, setGenerating] = useState(false);
+  const [rewriteLoading, setRewriteLoading] = useState(false);
   const [pipelineResult, setPipelineResult] = useState<any>(null);
   const [angles, setAngles] = useState<any[]>([]);
   const [selectedAngle, setSelectedAngle] = useState<any>(null);
@@ -308,6 +310,7 @@ export default function ScriptGeneratorWizard({ open, onClose, onGenerate }: Scr
       ? MOCK_KNOWLEDGE_NEW.filter(k => form.knowledge_refs.includes(k.id))
       : [];
     let result = null;
+    setGenerating(true);
     // Try DeepSeek API first
     try {
       const controller = new AbortController();
@@ -335,7 +338,7 @@ export default function ScriptGeneratorWizard({ open, onClose, onGenerate }: Scr
       const data = await res.json(); 
       if (data && data.variants && data.variants.length > 0) { result = data; }
       else if (data && data.error) { console.warn('[Wizard] API error:', data.error); }
-    } catch (e) { console.warn('[Wizard] AI API failed, using rule engine:', e); }
+    } catch (e) { console.warn('[Wizard] AI API failed, using rule engine:', e); setGenerating(false); }
     // Fall back to rule engine
     if (!result) {
       result = simpleRunPipeline({
@@ -459,6 +462,7 @@ export default function ScriptGeneratorWizard({ open, onClose, onGenerate }: Scr
   };
 
   const handleRewriteWithFeedback = async () => {
+    setRewriteLoading(true);
     if (!pipelineResult || !rewriteFeedback.trim()) return;
     const bestScript = pipelineResult.bestVariant?.script || '';
     const bestHook = pipelineResult.bestVariant?.hook || '';
