@@ -53,7 +53,6 @@ export default function ScriptGeneratorWizard({ open, onClose, onGenerate }: Scr
           material: form.material,
           account: selectedAccount || {},
           angle: selectedAngle || undefined,
-          knowledgeCards: form.knowledge_refs.length > 0 ? MOCK_KNOWLEDGE_NEW.filter(k => form.knowledge_refs.includes(k.id)) : [],
         }),
       });
       clearTimeout(ftimeout);
@@ -400,7 +399,7 @@ export default function ScriptGeneratorWizard({ open, onClose, onGenerate }: Scr
                         const ato = setTimeout(() => actrl.abort(), 35000);
                         const res = await fetch('/api/ai/script/angles', {
                           method: 'POST', headers: {'Content-Type':'application/json'}, signal: actrl.signal,
-                          body: JSON.stringify({ customerPain: form.customer_pain, productOrProcess: form.product_or_process, material: form.material, account: selectedAccount || {}, knowledgeCards: form.knowledge_refs.length > 0 ? MOCK_KNOWLEDGE_NEW.filter(k => form.knowledge_refs.includes(k.id)) : [] }),
+                          body: JSON.stringify({ customerPain: form.customer_pain, productOrProcess: form.product_or_process, material: form.material, account: selectedAccount || {} }),
                         });
                         clearTimeout(ato);
                         if (res.ok) {
@@ -499,65 +498,7 @@ export default function ScriptGeneratorWizard({ open, onClose, onGenerate }: Scr
             </div>
           )}
 
-          
-              {/* Knowledge Cards */}
-              <div className="border-t border-gray-100 pt-3 mt-3">
-                <h4 className="text-xs font-medium text-gray-600 mb-2">参考知识卡（选填 — 让AI基于已有知识生成更精准的脚本）</h4>
-                {(() => {
-                  const filtered = MOCK_KNOWLEDGE_NEW.filter(k =>
-                    k.applicable_accounts.includes(form.account_id) &&
-                    k.knowledge_status === '已确认'
-                  );
-                  const groups: Record<string, any[]> = {};
-                  filtered.forEach(k => {
-                    if (!groups[k.category]) groups[k.category] = [];
-                    groups[k.category].push(k);
-                  });
-                  return (
-                    <>
-                      {Object.keys(groups).length === 0 && (
-                        <p className="text-xs text-gray-400 py-2">暂无匹配的知识卡</p>
-                      )}
-                      {Object.entries(groups).map(([cat, cards]) => (
-                        <div key={cat}>
-                          <h4 className="text-xs font-medium text-gray-500 mb-1 mt-1">
-                            {cat}（{cards.length}）
-                          </h4>
-                          <div className="space-y-1 max-h-36 overflow-y-auto">
-                            {cards.map(k => (
-                              <label key={k.id}
-                                className="flex items-start gap-2 p-1.5 hover:bg-blue-50 rounded cursor-pointer">
-                                <input type="checkbox" className="mt-0.5 w-3 h-3"
-                                  checked={form.knowledge_refs.includes(k.id)}
-                                  onChange={e => update('knowledge_refs',
-                                    e.target.checked
-                                      ? [...form.knowledge_refs, k.id]
-                                      : form.knowledge_refs.filter(r => r !== k.id)
-                                  )} />
-                                <div className="flex-1 min-w-0">
-                                  <p className="text-xs text-gray-700">{k.title}</p>
-                                  <p className="text-[10px] text-gray-400 truncate">
-                                    {k.core_conclusion?.slice(0, 50)}
-                                  </p>
-                                </div>
-                                <span className={`text-[10px] px-1 py-0.5 rounded ${
-                                  k.content_scope === '可对外'
-                                    ? 'bg-green-100 text-green-700'
-                                    : 'bg-gray-100 text-gray-500'
-                                }`}>
-                                  {k.content_scope}
-                                </span>
-                              </label>
-                            ))}
-                          </div>
-                        </div>
-                      ))}
-                    </>
-                  );
-                })()}
-              </div>
-
-          {/* Step 3: Hook Selection */}
+                    {/* Step 3: Hook Selection */}
           {step === 3 && (
             <div className="space-y-4">
               <h3 className="font-medium text-gray-700">选择开头钩子</h3>
