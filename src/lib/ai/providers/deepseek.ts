@@ -17,7 +17,7 @@ export class DeepSeekProvider implements AIProvider {
       this.client = new OpenAI({
         apiKey: config.deepseekApiKey,
         baseURL: this.baseUrl,
-        timeout: 30000,
+        timeout: 45000,
         maxRetries: 0,
       });
     }

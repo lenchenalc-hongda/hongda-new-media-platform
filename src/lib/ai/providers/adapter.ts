@@ -180,7 +180,7 @@ class DeepSeekLLMAdapter implements LLMProviderAdapter {
   }
 
   private async call(prompt: string, systemPrompt?: string): Promise<any> {
-    const timeout = new Promise<null>((resolve) => setTimeout(() => resolve(null), 30000));
+    const timeout = new Promise<null>((resolve) => setTimeout(() => resolve(null), 45000));
     const response = await Promise.race([
       this.provider.generateStructured({
         systemPrompt: systemPrompt || '你是宏达印业的新媒体策划顾问。输出JSON，不要markdown包裹。',
@@ -190,7 +190,10 @@ class DeepSeekLLMAdapter implements LLMProviderAdapter {
       }),
       timeout,
     ]);
-    if (!response) throw new Error('AI provider timeout (12s)');
+    if (!response) {
+      console.warn('[Adapter] AI provider timeout after 45s');
+      throw new Error('AI provider timeout (45s)');
+    }
     return response.parsed || {};
   }
 
@@ -215,6 +218,8 @@ class DeepSeekLLMAdapter implements LLMProviderAdapter {
   }
 
   async generateDraft(input: any): Promise<AiDraft> {
+    const startTime = Date.now();
+    console.log('[Adapter] generateDraft starting for hook:', (input.hook || '').slice(0, 30));
     const kcInfo = (input.knowledgeCards || []).slice(0, 3).map((k: any) =>
       k.title + '：' + (k.core_conclusion || '').slice(0, 100)
     ).join('\n');
@@ -250,6 +255,9 @@ ${kcInfo ? '\n## 参考知识\n' + kcInfo : ''}
 
     const parsed = await this.call(prompt);
     const validated = DraftSchema.safeParse(parsed);
+    if (!validated.success) {
+      console.warn('[Adapter] DraftSchema validation failed, using fallback');
+    }
     return validated.success ? validated.data : { hook: input.hook, body: parsed.body || parsed.script || '', wordCount: 0 };
   }
 

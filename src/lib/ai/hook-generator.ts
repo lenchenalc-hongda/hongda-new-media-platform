@@ -238,7 +238,7 @@ ${cardInfo ? '参考知识：\n' + cardInfo : ''}
         outputFormat: 'json',
         temperature: 0.9,
       }),
-      new Promise<null>((resolve) => setTimeout(() => resolve(null), 30000)),
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), 45000)),
     ]);
     if (!dsResponse) throw new Error('DeepSeek timeout');
     const response = dsResponse;
