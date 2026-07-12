@@ -22,6 +22,7 @@ export default function ScriptGeneratorWizard({ open, onClose, onGenerate }: Scr
   });
   const [productSuggestions, setProductSuggestions] = useState<string[]>([]);
   const [painSuggestions, setPainSuggestions] = useState<string[]>([]);
+  const [suggestLoading, setSuggestLoading] = useState<string | null>(null);
   // Pipeline preview state
   const [pipelineResult, setPipelineResult] = useState<any>(null);
   const [angles, setAngles] = useState<any[]>([]);
@@ -178,6 +179,8 @@ export default function ScriptGeneratorWizard({ open, onClose, onGenerate }: Scr
   };
 
   const handleSuggestProducts = async () => {
+    setSuggestLoading('products');
+    setProductSuggestions([]);
     try {
       const res = await fetch('/api/ai/script/suggest-products', {
         method: 'POST', headers: {'Content-Type':'application/json'},
@@ -188,9 +191,12 @@ export default function ScriptGeneratorWizard({ open, onClose, onGenerate }: Scr
         setProductSuggestions(data.suggestions.map((s: any) => s.title));
       }
     } catch {}
+    setSuggestLoading(null);
   };
 
   const handleSuggestPains = async () => {
+    setSuggestLoading('pains');
+    setPainSuggestions([]);
     try {
       const res = await fetch('/api/ai/script/suggest-pains', {
         method: 'POST', headers: {'Content-Type':'application/json'},
@@ -201,6 +207,7 @@ export default function ScriptGeneratorWizard({ open, onClose, onGenerate }: Scr
         setPainSuggestions(data.suggestions.map((s: any) => s.pain));
       }
     } catch {}
+    setSuggestLoading(null);
   };
 
   const handleSelectHook = (hook: any) => {
@@ -541,9 +548,20 @@ export default function ScriptGeneratorWizard({ open, onClose, onGenerate }: Scr
                         onClick={() => update('product_or_process', tag)}>{tag}</button>
                     ))}
                   </div>
-                  <button className="btn-secondary text-[10px] px-2 py-1 mt-1" onClick={handleSuggestProducts}>
-                    帮我推荐产品/工艺方向
+                  <button className="btn-secondary text-[10px] px-2 py-1 mt-1" onClick={handleSuggestProducts} disabled={suggestLoading === 'products'}>
+                    {suggestLoading === 'products' ? 'AI推荐中...' : '帮我推荐产品/工艺方向'}
                   </button>
+                  {productSuggestions.length > 0 && (
+                    <div className="mt-2 p-2 bg-blue-50 border border-blue-100 rounded-lg">
+                      <p className="text-[10px] font-medium text-blue-600 mb-1">AI推荐的产品/工艺方向（点击选择）：</p>
+                      <div className="flex flex-wrap gap-1">
+                        {productSuggestions.map((s, i) => (
+                          <button key={i} className="text-[10px] bg-white hover:bg-blue-100 px-2 py-0.5 rounded border border-blue-200"
+                            onClick={() => { update('product_or_process', s); setProductSuggestions([]); }}>{s}</button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
                 <div className="col-span-2">
                   <label className="block text-xs text-gray-500 mb-1">
@@ -569,9 +587,20 @@ export default function ScriptGeneratorWizard({ open, onClose, onGenerate }: Scr
                         onClick={() => update('customer_pain', tag)}>{tag}</button>
                     ))}
                   </div>
-                  <button className="btn-secondary text-[10px] px-2 py-1 mt-1" onClick={handleSuggestPains}>
-                    帮我推荐客户痛点
+                  <button className="btn-secondary text-[10px] px-2 py-1 mt-1" onClick={handleSuggestPains} disabled={suggestLoading === 'pains'}>
+                    {suggestLoading === 'pains' ? 'AI推荐中...' : '帮我推荐客户痛点'}
                   </button>
+                  {painSuggestions.length > 0 && (
+                    <div className="mt-2 p-2 bg-blue-50 border border-blue-100 rounded-lg">
+                      <p className="text-[10px] font-medium text-blue-600 mb-1">AI推荐的客户痛点（点击选择）：</p>
+                      <div className="flex flex-wrap gap-1">
+                        {painSuggestions.map((s, i) => (
+                          <button key={i} className="text-[10px] bg-white hover:bg-blue-100 px-2 py-0.5 rounded border border-blue-200"
+                            onClick={() => { update('customer_pain', s); setPainSuggestions([]); }}>{s}</button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
                 <div>
                   <label className="block text-xs text-gray-500 mb-1">材质（可选）</label>
