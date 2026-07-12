@@ -15,6 +15,9 @@ interface ScriptAIPaneProps {
   onPushToTopics: () => void;
   onDelete: () => void;
   onStartEdit: () => void;
+  onRescore?: () => void;
+  onDuplicateRewrite?: () => void;
+  onDeepOptimize?: () => void;
 }
 
 const AI_ACTIONS = [
@@ -36,6 +39,7 @@ export default function ScriptAIPane({
   selectedId, selectedStatus, scoreResult, pushedToTopics,
   getAccountName, onAiAction, onSaveDraft, onSavePendingReview,
   onPushToTopics, onDelete, onStartEdit,
+  onRescore, onDuplicateRewrite, onDeepOptimize,
 }: ScriptAIPaneProps) {
   if (!selectedId) {
     return (
@@ -58,6 +62,11 @@ export default function ScriptAIPane({
           )}
           <button className="btn-secondary btn-sm text-[10px] flex-1" onClick={onStartEdit}>编辑</button>
           <button className="btn-danger btn-sm text-[10px] flex-1" onClick={onDelete}>删除</button>
+        </div>
+        <div className="flex gap-1 mt-1">
+          <button className="btn-secondary btn-sm text-[10px] flex-1" onClick={onRescore}>重新评分</button>
+          <button className="btn-secondary btn-sm text-[10px] flex-1" onClick={onDuplicateRewrite}>复制重写</button>
+          <button className="btn-secondary btn-sm text-[10px] flex-1" onClick={onDeepOptimize}>深度优化</button>
         </div>
       </div>
 
