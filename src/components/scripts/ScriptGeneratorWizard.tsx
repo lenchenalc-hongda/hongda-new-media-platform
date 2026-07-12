@@ -360,8 +360,24 @@ export default function ScriptGeneratorWizard({ open, onClose, onGenerate }: Scr
   const handleOptimizeConfirm = () => {
     if (!optimizedResult) return;
     const nr = { ...pipelineResult };
-    nr.variants = pipelineResult.variants.map((v: any) => ({ ...v, script: optimizedResult.optimizedScript }));
-    nr.bestVariant = { ...nr.bestVariant, script: optimizedResult.optimizedScript };
+    const optScript = optimizedResult.optimizedScript;
+    // Recalculate scores for all variants using local scoring engine
+    nr.variants = pipelineResult.variants.map((v: any) => {
+      const newScore = scoreScript(optScript, v.duration);
+      return { ...v, script: optScript, score: newScore };
+    });
+    // Update best variant with new score
+    const scored = [...nr.variants].sort((a: any, b: any) => (b.score?.totalScore||0) - (a.score?.totalScore||0));
+    nr.bestVariant = scored[0] || { ...nr.bestVariant, script: optScript };
+    const bs = nr.bestVariant.score;
+    nr.recommendedStatus = 'draft';
+    if (bs) {
+      if (bs.totalScore >= 85 && bs.riskLevel !== '高') nr.recommendedStatus = 'pending_review';
+      else if (bs.totalScore >= 70) nr.recommendedStatus = 'draft';
+      else if (bs.totalScore >= 60) nr.recommendedStatus = 'needs_rewrite';
+      else nr.recommendedStatus = 'discard';
+    }
+    nr.risk = { riskLevel: bs?.riskLevel || '低', riskPoints: bs?.riskPoints || [], allowSave: bs?.riskLevel !== '高' };
     setPipelineResult(nr);
     setShowOptimizeCompare(false);
   };
