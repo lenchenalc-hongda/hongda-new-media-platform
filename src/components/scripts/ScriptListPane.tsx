@@ -1,14 +1,15 @@
 'use client';
-import { MOCK_ACCOUNTS } from '@/lib/constants/mock-data';
+// INLINE ACCOUNTS - avoids potential client-side import issues with shared chunks
+const ACCOUNTS = [
+  { id: 'a1', name: '小陈-热转印前端顾问', platform: 'weixin' as const },
+  { id: 'a2', name: '小林-热转印厂三代', platform: 'weixin' as const },
+  { id: 'a3', name: '沐森兄-热转印一线师傅', platform: 'weixin' as const },
+  { id: 'a4', name: '许总-UV机器与品牌背书', platform: 'weixin' as const },
+  { id: 'a5', name: '宏达印业妮妮', platform: 'weixin' as const },
+];
 
 // Client-side safety: fallback if module chunk fails to load
-const FALLBACK_ACCOUNTS = [
-  { id: 'a1', name: '小陈-热转印前端顾问' },
-  { id: 'a2', name: '小林-热转印厂三代' },
-  { id: 'a3', name: '沐森兄-热转印一线师傅' },
-  { id: 'a4', name: '许总-UV机器与品牌背书' },
-  { id: 'a5', name: '宏达印业妮妮' },
-];
+
 import { truncate, formatDateTime } from '@/lib/utils';
 import { PLATFORMS } from '@/lib/constants';
 import type { Script } from '@/lib/constants/types';
@@ -54,7 +55,7 @@ export default function ScriptListPane({
           <select className="select-field text-xs flex-1" value={filters.account || ''}
             onChange={e => onFilterChange({ ...filters, account: e.target.value })}>
             <option value="">全部账号</option>
-            {(MOCK_ACCOUNTS || FALLBACK_ACCOUNTS).map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+            {ACCOUNTS.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
 
           </select>
           <select className="select-field text-xs flex-1" value={filters.platform || ''}
@@ -77,7 +78,7 @@ export default function ScriptListPane({
       {/* Script list */}
       <div className="flex-1 overflow-y-auto space-y-1.5">
         {scripts.map(s => {
-          const account = MOCK_ACCOUNTS.find(a => a.id === s.account_id);
+          const account = ACCOUNTS.find(a => a.id === s.account_id);
           const sr = getScoreResult(s);
           const isSelected = selectedIds.has(s.id);
           const isActive = selectedId === s.id;

@@ -13,6 +13,7 @@ import { usePersistentState, STORAGE_KEYS } from '@/lib/storage';
 
 export default function AccountsPage() {
   const [accounts, setAccounts] = usePersistentState<AccountWithStats>(STORAGE_KEYS.ACCOUNTS, MOCK_ACCOUNTS);
+console.log('[Debug] MOCK_ACCOUNTS from import:', MOCK_ACCOUNTS?.length, 'items');
   const [filterPlatform, setFilterPlatform] = useState('');
   const [search, setSearch] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
