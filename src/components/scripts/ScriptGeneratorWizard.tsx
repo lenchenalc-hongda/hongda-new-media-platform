@@ -179,8 +179,11 @@ export default function ScriptGeneratorWizard({ open, onClose, onGenerate }: Scr
   };
 
   const handleSuggestProducts = async () => {
-    setSuggestLoading('products');
-    setProductSuggestions([]);
+    // Immediate feedback: show local suggestions right away
+    const fb = ['热转印工艺讲解','PE瓶材质判断','小批量热转印方案','丝印和热转印对比','附着力测试教程','打样流程','防背粘工艺','颜色还原技巧'];
+    setProductSuggestions(fb);
+    setSuggestLoading(null);
+    // Async API upgrade: try to get better suggestions from AI
     try {
       const res = await fetch('/api/ai/script/suggest-products', {
         method: 'POST', headers: {'Content-Type':'application/json'},
@@ -191,12 +194,14 @@ export default function ScriptGeneratorWizard({ open, onClose, onGenerate }: Scr
         setProductSuggestions(data.suggestions.map((s: any) => s.title));
       }
     } catch {}
-    setSuggestLoading(null);
   };
 
   const handleSuggestPains = async () => {
-    setSuggestLoading('pains');
-    setPainSuggestions([]);
+    // Immediate feedback: show local suggestions right away
+    const fb = ['客户问多少钱','PE能不能做热转印','附着力测试','颜色按图片做','打样和大货不一样','小批量能不能做','材质不确定','客户只发图片'];
+    setPainSuggestions(fb);
+    setSuggestLoading(null);
+    // Async API upgrade: try to get better suggestions from AI
     try {
       const res = await fetch('/api/ai/script/suggest-pains', {
         method: 'POST', headers: {'Content-Type':'application/json'},
@@ -207,7 +212,6 @@ export default function ScriptGeneratorWizard({ open, onClose, onGenerate }: Scr
         setPainSuggestions(data.suggestions.map((s: any) => s.pain));
       }
     } catch {}
-    setSuggestLoading(null);
   };
 
   const handleSelectHook = (hook: any) => {
