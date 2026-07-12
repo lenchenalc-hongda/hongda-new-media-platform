@@ -227,7 +227,7 @@ export default function ScriptGeneratorWizard({ open, onClose, onGenerate }: Scr
     // Immediate feedback: show local suggestions right away
     const fb = ['热转印工艺讲解','PE瓶材质判断','小批量热转印方案','丝印和热转印对比','附着力测试教程','打样流程','防背粘工艺','颜色还原技巧'];
     setProductSuggestions(fb);
-    setSuggestLoading(null);
+    setSuggestLoading('products');
     // Async API upgrade: try to get better suggestions from AI
     try {
       const res = await fetch('/api/ai/script/suggest-products', {
@@ -238,14 +238,14 @@ export default function ScriptGeneratorWizard({ open, onClose, onGenerate }: Scr
       if (data.suggestions && data.suggestions.length > 0) {
         setProductSuggestions(data.suggestions.map((s: any) => s.title));
       }
-    } catch {}
+    } catch {} finally { setSuggestLoading(null); }
   };
 
   const handleSuggestPains = async () => {
     // Immediate feedback: show local suggestions right away
     const fb = ['客户问多少钱','PE能不能做热转印','附着力测试','颜色按图片做','打样和大货不一样','小批量能不能做','材质不确定','客户只发图片'];
     setPainSuggestions(fb);
-    setSuggestLoading(null);
+    setSuggestLoading('pains');
     // Async API upgrade: try to get better suggestions from AI
     try {
       const res = await fetch('/api/ai/script/suggest-pains', {
@@ -256,7 +256,7 @@ export default function ScriptGeneratorWizard({ open, onClose, onGenerate }: Scr
       if (data.suggestions && data.suggestions.length > 0) {
         setPainSuggestions(data.suggestions.map((s: any) => s.pain));
       }
-    } catch {}
+    } catch {} finally { setSuggestLoading(null); }
   };
 
   const handleSelectHook = (hook: any) => {
@@ -697,7 +697,7 @@ export default function ScriptGeneratorWizard({ open, onClose, onGenerate }: Scr
                       setAngleCounter(c => c + 1);
                       setAnglesLoading(false);
                     }}>
-                    {angles.length > 0 ? '重新生成' : '生成角度建议'}
+                    {hooksLoading ? 'AI生成中...' : angles.length > 0 ? '重新生成' : '生成角度建议'}
                   </button>
                 </div>
 
@@ -860,10 +860,10 @@ export default function ScriptGeneratorWizard({ open, onClose, onGenerate }: Scr
               })()}
               {hookResults.length > 0 && (
                 <div className="flex flex-wrap gap-1 mt-2">
-                  <button className="btn-secondary text-[10px] px-2 py-1" onClick={() => fetchHooks()}>重新生成</button>
-                  <button className="btn-secondary text-[10px] px-2 py-1" onClick={() => fetchHooks('conflict')}>更冲突</button>
-                  <button className="btn-secondary text-[10px] px-2 py-1" onClick={() => fetchHooks('spoken')}>更口语</button>
-                  <button className="btn-secondary text-[10px] px-2 py-1" onClick={() => fetchHooks('account')}>更适合当前账号</button>
+                  <button className="btn-secondary text-[10px] px-2 py-1" onClick={() => fetchHooks()} disabled={hooksLoading}>{hooksLoading ? 'AI生成中...' : '重新生成'}</button>
+                  <button className="btn-secondary text-[10px] px-2 py-1" onClick={() => fetchHooks('conflict')} disabled={hooksLoading}>{hooksLoading ? 'AI生成中...' : '更冲突'}</button>
+                  <button className="btn-secondary text-[10px] px-2 py-1" onClick={() => fetchHooks('spoken')} disabled={hooksLoading}>{hooksLoading ? 'AI生成中...' : '更口语'}</button>
+                  <button className="btn-secondary text-[10px] px-2 py-1" onClick={() => fetchHooks('account')} disabled={hooksLoading}>{hooksLoading ? 'AI生成中...' : '更适合当前账号'}</button>
                 </div>
               )}
             </div>
