@@ -101,6 +101,8 @@ export async function runCanonicalPipeline(req: ScriptPipelineRequest): Promise<
       targetCustomer: strategy.targetCustomer,
       customerPain: input.customerPain || strategy.customerPain,
       productOrProcess: input.productOrProcess,
+      material: input.material,
+      account: input.account,
       knowledgeCards: input.knowledgeCards,
     });
   } catch {}
@@ -657,7 +659,8 @@ function getChunkType(input: any): string {
   if (cardConclusion.includes('结构') || cardTitle.includes('花膜') || product.includes('花膜')) return 'process';
   if (cardConclusion.includes('价格') || cardConclusion.includes('成本')) return 'cost_explanation';
   if (pain.includes('价格') || pain.includes('多少钱') || pain.includes('报价') || pain.includes('成本')) return 'pre_quote';
-  if (pain.includes('材质') || pain.includes('PE') || pain.includes('PP') || pain.includes('ABS') || pain.includes('材料')) return 'material';
+  if (pain.includes('材质') || pain.includes('材料') || pain.includes('PE') || pain.includes('PP') || pain.includes('ABS') ||
+      product.includes('PE') || product.includes('PP') || product.includes('ABS') || product.includes('材质') || product.includes('材料')) return 'material';
   if (pain.includes('测试') || pain.includes('附着力') || pain.includes('掉') || pain.includes('酒精') || pain.includes('耐磨')) return 'test';
   if (pain.includes('颜色') || pain.includes('色差') || pain.includes('图片') || pain.includes('潘通')) return 'color';
   if (pain.includes('打样') || pain.includes('样品') || pain.includes('确认样') || pain.includes('小样')) return 'sample';

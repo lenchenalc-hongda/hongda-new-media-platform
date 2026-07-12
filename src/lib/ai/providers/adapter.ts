@@ -94,6 +94,8 @@ export interface LLMProviderAdapter {
     targetCustomer: string;
     customerPain: string;
     productOrProcess?: string;
+    material?: string;
+    account?: any;
     knowledgeCards?: any[];
   }): Promise<AiDraft>;
 
@@ -213,13 +215,75 @@ class DeepSeekLLMAdapter implements LLMProviderAdapter {
   }
 
   async generateDraft(input: any): Promise<AiDraft> {
-    const parsed = await this.call(`请生成一条短视频口播脚本。钩子：${input.hook} 角度：${input.angle?.title || ''} 目标客户：${input.targetCustomer || ''} 客户痛点：${input.customerPain || ''} 产品/工艺：${input.productOrProcess || ''}。要求：开头具体问题，每句话≤30字，不用首先/其次/很多客户问我。输出JSON：{"hook":"开头钩子","body":"口播稿每行一句","wordCount":数字}`);
+    const kcInfo = (input.knowledgeCards || []).slice(0, 3).map((k: any) =>
+      k.title + '：' + (k.core_conclusion || '').slice(0, 100)
+    ).join('\n');
+    const prompt = `你是宏达印业（专业热转印工厂）的新媒体文案顾问。
+
+请根据以下信息生成一条短视频口播脚本。脚本必须自然流畅，从选择的钩子开始，围绕一个核心判断展开，结尾自然引导下一步。
+
+## 输入信息
+选择钩子：${input.hook || ''}
+内容角度：${input.angle?.title || ''}（${input.angle?.coreConflict || ''}）
+目标客户：${input.targetCustomer || ''}
+客户痛点：${input.customerPain || ''}
+产品/工艺：${input.productOrProcess || ''}
+材质：${input.material || ''}
+${kcInfo ? '\n## 参考知识\n' + kcInfo : ''}
+
+## 品牌要求
+1. 语气：专业、可信、不过度营销
+2. 句式：每句话不超过30个字
+3. 语言像工厂老板/业务员在跟客户说话，不要像文章
+4. 结尾自然引导：发产品图/发材质/发数量/发测试要求/寄样
+
+## 禁止表达
+绝对不做、很多客户问我这个问题、今天统一回答一下、今天给大家讲一下、首先、其次、最后、综上所述
+
+## 输出要求
+输出JSON格式（不要任何额外文字）：
+{
+  "hook": "开头钩子（直接用选择钩子）",
+  "body": "完整口播稿\n每行一句\n自然流畅\n从钩子开始",
+  "wordCount": 中文字数
+}`;
+
+    const parsed = await this.call(prompt);
     const validated = DraftSchema.safeParse(parsed);
     return validated.success ? validated.data : { hook: input.hook, body: parsed.body || parsed.script || '', wordCount: 0 };
   }
 
   async rewriteScript(input: any): Promise<RewriteResult> {
-    const parsed = await this.call(`请重写以下脚本。原脚本：${input.script}。反馈：${input.feedback}。要求保持核心信息不变，只改进表达方式。输出JSON：{"hook":"...","body":"...","wordCount":数字,"changes":["..." ]}`);
+    const prompt = `你是宏达印业（专业热转印工厂）的新媒体文案顾问。
+
+请根据反馈意见重写以下短视频口播脚本。
+
+## 原脚本
+${input.script}
+
+## 反馈意见
+${input.feedback}
+
+## 品牌要求
+1. 语气：专业、可信、不过度营销
+2. 句式：短段落，每句话不超过30字
+3. 语言像工厂老板/业务员说话，不是文章
+4. 第一句话直接点出客户具体问题
+5. 结尾自然引导下一步动作
+
+## 禁止表达
+大量绝对不做、很多客户问我这个问题、今天统一回答一下、首先、其次、最后、综上所述
+
+## 输出要求
+保持核心信息不变，只改进表达方式。输出JSON：
+{
+  "hook": "开头钩子",
+  "body": "完整口播稿\n每行一句",
+  "wordCount": 数字,
+  "changes": ["改进了什么"]
+}`;
+
+    const parsed = await this.call(prompt);
     return RewriteResultSchema.safeParse(parsed).success
       ? parsed as RewriteResult
       : { hook: input.hook || '', body: parsed.body || input.script, wordCount: 0 };
