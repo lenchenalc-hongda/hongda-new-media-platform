@@ -392,24 +392,40 @@ export default function ScriptGeneratorWizard({ open, onClose, onGenerate }: Scr
                 <div className="flex items-center justify-between mb-2">
                   <h4 className="text-xs font-medium text-gray-600">内容角度建议</h4>
                   <button className="btn-secondary text-[10px] px-2 py-1"
-                    onClick={() => {
+                    onClick={async () => {
+                      setAnglesLoading(true);
+                      try {
+                        const actrl = new AbortController();
+                        const ato = setTimeout(() => actrl.abort(), 20000);
+                        const res = await fetch('/api/ai/script/angles', {
+                          method: 'POST', headers: {'Content-Type':'application/json'}, signal: actrl.signal,
+                          body: JSON.stringify({ customerPain: form.customer_pain, productOrProcess: form.product_or_process, material: form.material, account: selectedAccount || {} }),
+                        });
+                        clearTimeout(ato);
+                        if (res.ok) {
+                          const data = await res.json();
+                          if (data.angles && data.angles.length > 0) { setAngles(data.angles); setAnglesLoading(false); return; }
+                        }
+                      } catch {}
+                      // Local fallback
                       const pain = form.customer_pain || form.product_or_process || '热转印';
                       const mat = form.material || '';
                       const accName = selectedAccount?.name?.split('-')[0] || '';
                       const targetAud = selectedAccount?.target_audience || '';
-                      const localAngles = [
-                        { id: 'la_' + angleCounter + '_1', title: '客户对' + pain.slice(0,10) + '最常犯的错', angleType: 'customer_misunderstanding', targetCustomer: targetAud, customerPain: pain, coreConflict: '客户以为很简单，实际很多细节要注意', whyItWorks: '客户想知道自己是不是做错了', recommendedAccount: accName, recommendedPlatform: '视频号', riskLevel: '低', score: Math.round(75 + Math.random() * 20), similarity: 0 },
-                        { id: 'la_' + angleCounter + '_2', title: (mat || pain) + '能不能做热转印？判断逻辑', angleType: 'material_risk', targetCustomer: targetAud, customerPain: pain, coreConflict: mat ? mat + '看着能印，但附着力不一定过关' : '不先确认就看图报价风险很大', whyItWorks: '客户怕做错了浪费钱', recommendedAccount: accName, recommendedPlatform: '视频号', riskLevel: '中', score: Math.round(75 + Math.random() * 20), similarity: 0 },
-                        { id: 'la_' + angleCounter + '_3', title: (mat || pain) + '的报价逻辑，一次说清楚', angleType: 'cost_logic', targetCustomer: '正在询价的客户', customerPain: pain, coreConflict: '只看图片报的价格不靠谱，需要知道材质和数量', whyItWorks: '客户想知道价格但不知道怎么问', recommendedAccount: accName, recommendedPlatform: '视频号', riskLevel: '低', score: Math.round(75 + Math.random() * 20), similarity: 0 },
-                        { id: 'la_' + angleCounter + '_4', title: '做过20年印刷的老师傅说' + (mat || pain.slice(0,6)), angleType: 'factory_experience', targetCustomer: '关心工艺细节的客户', customerPain: pain, coreConflict: '看起来一样的工艺，细节差很多', whyItWorks: '老师傅经验值得信', recommendedAccount: accName, recommendedPlatform: '视频号', riskLevel: '低', score: Math.round(75 + Math.random() * 20), similarity: 0 },
-                        { id: 'la_' + angleCounter + '_5', title: '一个做' + (pain.slice(0,8) || mat || '热转印') + '客户的真实经历', angleType: 'case_story', targetCustomer: '有类似需求的客户', customerPain: pain, coreConflict: '客户之前踩过坑，换对方法才做对', whyItWorks: '真实案例有说服力', recommendedAccount: accName, recommendedPlatform: '视频号', riskLevel: '低', score: Math.round(75 + Math.random() * 20), similarity: 0 },
-                        { id: 'la_' + angleCounter + '_6', title: (mat || pain) + '要不要先测试？', angleType: 'test_requirement', targetCustomer: '有测试要求的客户', customerPain: pain, coreConflict: '不打样测试直接大货，翻车是迟早的事', whyItWorks: '客户怕测试太麻烦，但更怕出问题', recommendedAccount: accName, recommendedPlatform: '视频号', riskLevel: '低', score: Math.round(75 + Math.random() * 20), similarity: 0 },
-                        { id: 'la_' + angleCounter + '_7', title: '回答一下关于' + (pain.slice(0,8) || mat || '热转印') + '的高赞评论', angleType: 'comment_reply', targetCustomer: '正搜索相关问题的客户', customerPain: pain, coreConflict: '很多人问但答案没那么简单', whyItWorks: '真实问题引起共鸣', recommendedAccount: accName, recommendedPlatform: '视频号', riskLevel: '低', score: Math.round(75 + Math.random() * 20), similarity: 0 },
-                        { id: 'la_' + angleCounter + '_8', title: (mat || '价格') + '相关的3个最坑误区', angleType: 'customer_misunderstanding', targetCustomer: targetAud, customerPain: pain, coreConflict: '客户以为知道，其实搞反了', whyItWorks: '纠正认知有传播力', recommendedAccount: accName, recommendedPlatform: '视频号', riskLevel: '低', score: Math.round(75 + Math.random() * 20), similarity: 0 },
+                      const fbAngles = [
+                        { id: 'fa_' + angleCounter + '_1', title: '客户对' + pain.slice(0,10) + '最常犯的错', angleType: 'customer_misunderstanding', targetCustomer: targetAud, customerPain: pain, coreConflict: '客户以为很简单，实际很多细节要注意', whyItWorks: '客户想知道自己是不是做错了', recommendedAccount: accName, recommendedPlatform: '视频号', riskLevel: '低', score: Math.round(75 + Math.random() * 20), similarity: 0 },
+                        { id: 'fa_' + angleCounter + '_2', title: (mat || pain) + '能不能做热转印？判断逻辑', angleType: 'material_risk', targetCustomer: targetAud, customerPain: pain, coreConflict: mat ? mat + '看着能印，但附着力不一定过关' : '不先确认就看图报价风险很大', whyItWorks: '客户怕做错了浪费钱', recommendedAccount: accName, recommendedPlatform: '视频号', riskLevel: '中', score: Math.round(75 + Math.random() * 20), similarity: 0 },
+                        { id: 'fa_' + angleCounter + '_3', title: (mat || pain) + '的报价逻辑，一次说清楚', angleType: 'cost_logic', targetCustomer: '正在询价的客户', customerPain: pain, coreConflict: '只看图片报的价格不靠谱，需要知道材质和数量', whyItWorks: '客户想知道价格但不知道怎么问', recommendedAccount: accName, recommendedPlatform: '视频号', riskLevel: '低', score: Math.round(75 + Math.random() * 20), similarity: 0 },
+                        { id: 'fa_' + angleCounter + '_4', title: '做过20年印刷的老师傅说' + (mat || pain.slice(0,6)), angleType: 'factory_experience', targetCustomer: '关心工艺细节的客户', customerPain: pain, coreConflict: '看起来一样的工艺，细节差很多', whyItWorks: '老师傅经验值得信', recommendedAccount: accName, recommendedPlatform: '视频号', riskLevel: '低', score: Math.round(75 + Math.random() * 20), similarity: 0 },
+                        { id: 'fa_' + angleCounter + '_5', title: '一个做' + (pain.slice(0,8) || mat || '热转印') + '客户的真实经历', angleType: 'case_story', targetCustomer: '有类似需求的客户', customerPain: pain, coreConflict: '客户之前踩过坑，换对方法才做对', whyItWorks: '真实案例有说服力', recommendedAccount: accName, recommendedPlatform: '视频号', riskLevel: '低', score: Math.round(75 + Math.random() * 20), similarity: 0 },
+                        { id: 'fa_' + angleCounter + '_6', title: (mat || pain) + '要不要先测试？', angleType: 'test_requirement', targetCustomer: '有测试要求的客户', customerPain: pain, coreConflict: '不打样测试直接大货，翻车是迟早的事', whyItWorks: '客户怕测试太麻烦，但更怕出问题', recommendedAccount: accName, recommendedPlatform: '视频号', riskLevel: '低', score: Math.round(75 + Math.random() * 20), similarity: 0 },
+                        { id: 'fa_' + angleCounter + '_7', title: '回答一下关于' + (pain.slice(0,8) || mat || '热转印') + '的高赞评论', angleType: 'comment_reply', targetCustomer: '正搜索相关问题的客户', customerPain: pain, coreConflict: '很多人问但答案没那么简单', whyItWorks: '真实问题引起共鸣', recommendedAccount: accName, recommendedPlatform: '视频号', riskLevel: '低', score: Math.round(75 + Math.random() * 20), similarity: 0 },
+                        { id: 'fa_' + angleCounter + '_8', title: (mat || '价格') + '相关的3个最坑误区', angleType: 'customer_misunderstanding', targetCustomer: targetAud, customerPain: pain, coreConflict: '客户以为知道，其实搞反了', whyItWorks: '纠正认知有传播力', recommendedAccount: accName, recommendedPlatform: '视频号', riskLevel: '低', score: Math.round(75 + Math.random() * 20), similarity: 0 },
                       ].sort(() => Math.random() - 0.5);
-                      setAngles(localAngles);
+                      setAngles(fbAngles);
                       setSelectedAngle(null);
                       setAngleCounter(c => c + 1);
+                      setAnglesLoading(false);
                     }}>
                     {angles.length > 0 ? '重新生成' : '生成角度建议'}
                   </button>
