@@ -18,7 +18,10 @@ export default function ScriptGeneratorWizard({ open, onClose, onGenerate }: Scr
     product_or_process: '', customer_pain: '', material: '',
     structure: '', video_length: '30', acting_style: '', tone_style: '',
     knowledge_refs: [] as string[],
+    knowledgeMode: 'none' as 'none' | 'auto' | 'manual',
   });
+  const [productSuggestions, setProductSuggestions] = useState<string[]>([]);
+  const [painSuggestions, setPainSuggestions] = useState<string[]>([]);
   // Pipeline preview state
   const [pipelineResult, setPipelineResult] = useState<any>(null);
   const [angles, setAngles] = useState<any[]>([]);
@@ -199,7 +202,6 @@ export default function ScriptGeneratorWizard({ open, onClose, onGenerate }: Scr
     if (step === 2) return true;
     if (step === 3) return !!selectedHookText;
     if (step === 4) return true;
-    if (step === 5) return true;
     return true;
   };
 
@@ -224,6 +226,8 @@ export default function ScriptGeneratorWizard({ open, onClose, onGenerate }: Scr
           video_length: form.video_length,
           selectedAngleId: selectedAngle?.id || null,
           selectedHookId: selectedHookId || null,
+          selectedHookText: selectedHookText || null,
+          knowledgeMode: form.knowledgeMode,
           pipelineConfig: { useAI: true, aiProvider: 'deepseek' },
         }),
         signal: controller.signal,
@@ -245,9 +249,30 @@ export default function ScriptGeneratorWizard({ open, onClose, onGenerate }: Scr
         video_length: form.video_length,
       });
     }
+    // Force selected hook as first sentence in all variants
+    if (result && selectedHookText && result.variants) {
+      result.variants.forEach((v: any) => {
+        const lines = v.script.split('\n').filter((l: string) => l.trim());
+        if (lines.length > 0 && selectedHookText) {
+          // Replace first line with selectedHook
+          lines[0] = selectedHookText;
+          v.script = lines.join('\n');
+          v.hook = selectedHookText;
+        }
+      });
+      if (result.bestVariant) {
+        const lines = result.bestVariant.script.split('\n').filter((l: string) => l.trim());
+        if (lines.length > 0 && selectedHookText) {
+          lines[0] = selectedHookText;
+          result.bestVariant.script = lines.join('\n');
+          result.bestVariant.hook = selectedHookText;
+        }
+      }
+      if (result.strategy) result.strategy.hook = selectedHookText;
+    }
     setPipelineResult(result);
     setSelectedDuration((form.video_length || '30') as '15' | '30' | '60');
-    setStep(6);
+    setStep(5);
   };
 
   const handleConfirmGenerate = () => {
@@ -276,17 +301,17 @@ export default function ScriptGeneratorWizard({ open, onClose, onGenerate }: Scr
           <div>
             <h2 className="text-lg font-bold text-gray-800">短视频脚本流水线</h2>
             <p className="text-xs text-gray-400 mt-1">
-              {step <= 5 ? `第${step}步 / 共5步` : '生成结果'}
+              {step <= 4 ? `第${step}步 / 共4步` : '生成结果'}
             </p>
           </div>
           <button onClick={handleClose} className="text-gray-400 hover:text-gray-600 text-xl">✕</button>
         </div>
 
         {/* Progress bar (only for steps 1-4) */}
-        {step <= 5 && (
+        {step <= 4 && (
           <>
             <div className="flex px-5 pt-4 gap-1">
-              {[1, 2, 3, 4, 5].map(s => (
+              {[1, 2, 3, 4].map(s => (
                 <div key={s} className={`flex-1 h-1.5 rounded ${s <= step ? 'bg-blue-600' : 'bg-gray-200'}`} />
               ))}
             </div>
@@ -295,7 +320,6 @@ export default function ScriptGeneratorWizard({ open, onClose, onGenerate }: Scr
               <span>内容定位</span>
               <span>钩子选择</span>
               <span>脚本参数</span>
-              <span>参考知识</span>
             </div>
           </>
         )}
@@ -638,72 +662,8 @@ export default function ScriptGeneratorWizard({ open, onClose, onGenerate }: Scr
                 </div>
               </div>
             </div>
-          )}
-
-                    {/* Step 5: Knowledge References */}
-          {step === 5 && (
-            <div className="space-y-4">
-              <h3 className="font-medium text-gray-700">选择参考知识卡</h3>
-              <p className="text-xs text-gray-400">
-                知识卡提供判断依据，不会直接搬进脚本。
-              </p>
-              {(() => {
-                const filtered = MOCK_KNOWLEDGE_NEW.filter(k =>
-                  k.applicable_accounts.includes(form.account_id) &&
-                  k.knowledge_status === '已确认'
-                );
-                const groups: Record<string, any[]> = {};
-                filtered.forEach(k => {
-                  if (!groups[k.category]) groups[k.category] = [];
-                  groups[k.category].push(k);
-                });
-                return (
-                  <>
-                    {Object.keys(groups).length === 0 && (
-                      <p className="text-sm text-gray-400 py-4 text-center">暂无匹配的知识卡</p>
-                    )}
-                    {Object.entries(groups).map(([cat, cards]) => (
-                      <div key={cat}>
-                        <h4 className="text-xs font-medium text-gray-500 mb-1 mt-2">
-                          {cat}（{cards.length}）
-                        </h4>
-                        <div className="space-y-1 max-h-40 overflow-y-auto">
-                          {cards.map(k => (
-                            <label key={k.id}
-                              className="flex items-start gap-2 p-2 hover:bg-blue-50 rounded cursor-pointer">
-                              <input type="checkbox" className="mt-0.5 w-3.5 h-3.5"
-                                checked={form.knowledge_refs.includes(k.id)}
-                                onChange={e => update('knowledge_refs',
-                                  e.target.checked
-                                    ? [...form.knowledge_refs, k.id]
-                                    : form.knowledge_refs.filter(r => r !== k.id)
-                                )} />
-                              <div className="flex-1 min-w-0">
-                                <p className="text-sm text-gray-700">{k.title}</p>
-                                <p className="text-xs text-gray-400 truncate">
-                                  {k.core_conclusion?.slice(0, 60)}
-                                </p>
-                              </div>
-                              <span className={`text-xs px-1.5 py-0.5 rounded ${
-                                k.content_scope === '可对外'
-                                  ? 'bg-green-100 text-green-700'
-                                  : 'bg-gray-100 text-gray-500'
-                              }`}>
-                                {k.content_scope}
-                              </span>
-                            </label>
-                          ))}
-                        </div>
-                      </div>
-                    ))}
-                  </>
-                );
-              })()}
-            </div>
-          )}
-
-{/* Step 6: Preview Results */}
-          {step === 6 && pipelineResult && (
+          )}{/* Step 4: Generate Result */}
+          {step === 5 && pipelineResult && (
             <div className="space-y-4">
               {/* Strategy Summary */}
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
@@ -850,18 +810,18 @@ export default function ScriptGeneratorWizard({ open, onClose, onGenerate }: Scr
           </div>
           <div className="flex gap-2">
             <button className="btn-secondary text-sm" onClick={handleClose}>取消</button>
-            {step < 5 && (
+            {step < 4 && (
               <button className="btn-primary text-sm" disabled={!canNext()}
                 onClick={() => setStep(step + 1)}>
                 下一步
               </button>
             )}
-            {step === 5 && (
+            {step === 4 && (
               <button className="btn-primary text-sm" onClick={handleGenerate}>
                 生成脚本
               </button>
             )}
-            {step === 6 && (
+            {step === 5 && (
               <button className="btn-primary text-sm" onClick={handleConfirmGenerate}>
                 确认并添加到工作台
               </button>
