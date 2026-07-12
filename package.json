@@ -5,10 +5,11 @@
   "type": "module",
   "scripts": {
     "dev": "node node_modules/next/dist/bin/next dev",
-    "build": "node node_modules/next/dist/bin/next build",
+    "build": "pnpm build:meta && node node_modules/next/dist/bin/next build",
     "start": "node node_modules/next/dist/bin/next start",
     "lint": "node node_modules/next/dist/bin/next lint",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "build:meta": "node scripts/build-meta.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.49.1",

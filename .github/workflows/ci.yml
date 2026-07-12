@@ -31,6 +31,9 @@ jobs:
       - name: Check server-only imports
         run: bash scripts/check-server-imports.sh
 
+      - name: Build metadata
+        run: node scripts/build-meta.mjs
+
       - name: Build
         run: pnpm next build
         env:
