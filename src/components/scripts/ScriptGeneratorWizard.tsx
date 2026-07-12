@@ -41,9 +41,10 @@ function simpleRunPipeline(input: any): any {
     duration: d, hook, script,
     wordCount: script.length, estimatedSeconds: parseInt(d),
     score: { totalScore: 60, grade: 'C' as const, riskLevel: '低' as const,
-      weaknesses: [], strengths: [], rewriteSuggestions: [] },
+      weaknesses: [], strengths: [], rewriteSuggestions: [], hookScore: 15, spokenScore: 15, painScore: 15, ctaScore: 10 },
   }));
-  return { strategy, hook, variants, score: { totalScore: 60, grade: 'C' } };
+  const bestVariant = variants[0];
+  return { strategy, hook, variants, bestVariant, score: { totalScore: 60, grade: 'C', hookScore: 15, spokenScore: 15, painScore: 15, ctaScore: 10 } };
 }
 
 
@@ -310,7 +311,7 @@ export default function ScriptGeneratorWizard({ open, onClose, onGenerate }: Scr
     // Try DeepSeek API first
     try {
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 15000);
+      const timeout = setTimeout(() => controller.abort(), 55000);
       const res = await fetch('/api/ai/script/pipeline', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
