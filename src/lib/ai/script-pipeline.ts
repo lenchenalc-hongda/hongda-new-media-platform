@@ -7,6 +7,8 @@ import { scoreScript, ScriptScoreResult } from './script-scoring';
 import { getLLMAdapter } from './providers/adapter';
 import { z } from 'zod';
 import { rewriteToSpokenScript } from './rewrite-to-spoken-script';
+import { computeSimilarity, computeSimilarityPenalty } from './similarity-check';
+import { accountMemory } from './account-memory';
 
 // ===== Canonical Pipeline =====
 // runCanonicalPipeline() is THE ONLY path that produces script results.
@@ -150,7 +152,23 @@ export async function runCanonicalPipeline(req: ScriptPipelineRequest): Promise<
     else recommendedStatus = 'discard';
   }
 
-  // 11. If score < 80 AND no matching hook selected, try rewrite via adapter
+  // 11. Similarity check + account memory
+  if (input.account?.id || input.account?.name) {
+    const accountId = input.account.id || input.account.name || 'unknown';
+    const recentScripts = accountMemory.getRecentScripts(accountId);
+    let similarityPenalty = { deduction: 0, reason: '' };
+    if (recentScripts.length > 0 && bestVariant) {
+      similarityPenalty = computeSimilarityPenalty(bestVariant.script || '', recentScripts);
+      if (similarityPenalty.deduction < 0 && bestScore) {
+        bestScore.totalScore = Math.max(0, bestScore.totalScore + similarityPenalty.deduction);
+        bestScore.weaknesses.push(similarityPenalty.reason);
+      }
+    }
+    // Record this generation
+    accountMemory.recordGeneration(accountId, bestVariant?.script || '', selectedHook, bestScore?.totalScore || 0, input.topic);
+  }
+
+  // 12. If score < 80 AND no matching hook selected, try rewrite via adapter
   if (bestScore && bestScore.totalScore < 80 && !input.selectedHookId) {
     try {
       const rewriteResult = await adapter.rewriteScript({

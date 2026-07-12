@@ -23,6 +23,8 @@ export interface ScriptScoreResult {
   riskLevel: '低' | '中' | '高';
   riskPoints: string[];
   saferExpressions: string[];
+  similarityScore: number;
+  similarityRisk: 'low' | 'medium' | 'high';
   wordCount: number;
   duration: string;
 }
@@ -291,6 +293,7 @@ export function scoreScript(script: string, duration: string = '30'): ScriptScor
     rewriteSuggestions: [...new Set(rewriteSuggestions)].slice(0, 5),
     recommendedStatus, riskLevel: riskScan.level,
     riskPoints: riskScan.risks, saferExpressions,
+    similarityScore: 0, similarityRisk: 'low' as const,
     wordCount, duration,
   };
 }

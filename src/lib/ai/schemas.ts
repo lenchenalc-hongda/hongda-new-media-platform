@@ -24,6 +24,8 @@ export const ScriptScoreOutputSchema = z.object({
   riskLevel: z.enum(['低', '中', '高']),
   riskPoints: z.array(z.string()),
   saferExpressions: z.array(z.string()),
+  similarityScore: z.number().default(0),
+  similarityRisk: z.enum(['low', 'medium', 'high']).default('low'),
   wordCount: z.number(),
   duration: z.string(),
 });
