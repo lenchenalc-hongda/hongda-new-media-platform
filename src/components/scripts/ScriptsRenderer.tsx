@@ -18,6 +18,7 @@ interface ScriptsRendererProps {
   showAiMenu: boolean;
   showWizard: boolean;
   aiResult: any;
+  scoringAction: string | null;
   activeAiAction: string | null;
   scoreResult: ScriptScoreResult | null;
   pushedToTopics: Set<string>;

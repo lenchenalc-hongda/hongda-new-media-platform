@@ -15,6 +15,7 @@ export default function ScriptsContent() {
   const [showAiMenu, setShowAiMenu] = useState(false);
   const [activeAiAction, setActiveAiAction] = useState<string | null>(null);
   const [aiResult, setAiResult] = useState<any>(null);
+  const [scoringAction, setScoringAction] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [filters, setFilters] = useState<Record<string, string>>({});
   const [pushedToTopics, setPushedToTopics] = useState<Set<string>>(new Set());
@@ -236,16 +237,24 @@ export default function ScriptsContent() {
     setTimeout(() => setAiResult(null), 3000);
   };
 
-  const handleRescore = () => {
+  const handleRescore = async () => {
     if (!selected) return;
+    setScoringAction('rescore');
+    setAiResult({ message: '正在重新评分...' });
+    await new Promise(r => setTimeout(r, 100));
     const result = scoreScript(selected.main_script || selected.hook || '', '30');
     setScripts(prev => prev.map(s =>
       s.id === selectedId ? { ...s, quality_score: result.totalScore, score_detail: result, risk_level: result.riskLevel } : s
     ));
+    setScoringAction(null);
+    setAiResult({ message: '重新评分完成 ✅' });
+    setTimeout(() => setAiResult(null), 3000);
   };
 
   const handleDuplicateRewrite = async () => {
     if (!selected) return;
+    setScoringAction('duplicate');
+    setAiResult({ message: 'AI正在生成3个变体...' });
     try {
       const res = await fetch('/api/ai/script/duplicate-rewrite', {
         method: 'POST', headers: {'Content-Type':'application/json'},
@@ -270,12 +279,17 @@ export default function ScriptsContent() {
           };
         });
         setScripts(prev => [...newScripts, ...prev]);
+        setAiResult({ message: '已生成 ' + newScripts.length + ' 个变体 ✅' });
       }
-    } catch {}
+    } catch { setAiResult({ message: '复制重写失败' }); }
+    setScoringAction(null);
+    setTimeout(() => setAiResult(null), 3000);
   };
 
   const handleDeepOptimize = async () => {
     if (!selected) return;
+    setScoringAction('optimize');
+    setAiResult({ message: 'AI正在深度优化...' });
     try {
       const sd = selected.score_detail;
       const res = await fetch('/api/ai/script/optimize', {
@@ -300,8 +314,11 @@ export default function ScriptsContent() {
             risk_level: newScore.riskLevel,
           } : s
         ));
+        setAiResult({ message: '深度优化完成 ✅' });
       }
-    } catch {}
+    } catch { setAiResult({ message: '优化失败' }); }
+    setScoringAction(null);
+    setTimeout(() => setAiResult(null), 3000);
   };
 
   // === Multiselect & Bulk ===
@@ -369,6 +386,7 @@ export default function ScriptsContent() {
     handleSaveEdit={handleSaveEdit}
     handleCancelEdit={handleCancelEdit}
     handleDeleteScript={handleDeleteScript}
+    scoringAction={scoringAction}
     onRescore={handleRescore}
     onDuplicateRewrite={handleDuplicateRewrite}
     onDeepOptimize={handleDeepOptimize}

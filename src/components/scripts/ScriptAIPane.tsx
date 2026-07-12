@@ -18,6 +18,7 @@ interface ScriptAIPaneProps {
   onRescore?: () => void;
   onDuplicateRewrite?: () => void;
   onDeepOptimize?: () => void;
+  scoringAction?: string | null;
 }
 
 const AI_ACTIONS = [
@@ -40,6 +41,7 @@ export default function ScriptAIPane({
   getAccountName, onAiAction, onSaveDraft, onSavePendingReview,
   onPushToTopics, onDelete, onStartEdit,
   onRescore, onDuplicateRewrite, onDeepOptimize,
+  scoringAction,
 }: ScriptAIPaneProps) {
   if (!selectedId) {
     return (
@@ -64,9 +66,15 @@ export default function ScriptAIPane({
           <button className="btn-danger btn-sm text-[10px] flex-1" onClick={onDelete}>删除</button>
         </div>
         <div className="flex gap-1 mt-1">
-          <button className="btn-secondary btn-sm text-[10px] flex-1" onClick={onRescore}>重新评分</button>
-          <button className="btn-secondary btn-sm text-[10px] flex-1" onClick={onDuplicateRewrite}>复制重写</button>
-          <button className="btn-secondary btn-sm text-[10px] flex-1" onClick={onDeepOptimize}>深度优化</button>
+          <button className="btn-secondary btn-sm text-[10px] flex-1" onClick={onRescore} disabled={scoringAction === 'rescore'}>
+            {scoringAction === 'rescore' ? '评分中...' : '重新评分'}
+          </button>
+          <button className="btn-secondary btn-sm text-[10px] flex-1" onClick={onDuplicateRewrite} disabled={!!scoringAction}>
+            {scoringAction === 'duplicate' ? '生成中...' : '复制重写'}
+          </button>
+          <button className="btn-secondary btn-sm text-[10px] flex-1" onClick={onDeepOptimize} disabled={!!scoringAction}>
+            {scoringAction === 'optimize' ? '优化中...' : '深度优化'}
+          </button>
         </div>
       </div>
 
