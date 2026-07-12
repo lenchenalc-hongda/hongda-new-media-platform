@@ -104,6 +104,7 @@ export async function runCanonicalPipeline(req: ScriptPipelineRequest): Promise<
       material: input.material,
       account: input.account,
       knowledgeCards: input.knowledgeCards,
+      duration: duration,
     });
   } catch {}
 

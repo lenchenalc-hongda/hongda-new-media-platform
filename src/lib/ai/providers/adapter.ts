@@ -72,6 +72,7 @@ export interface LLMProviderAdapter {
     productOrProcess?: string;
     customerPain?: string;
     material?: string;
+    duration?: string;
     platform?: string;
     knowledgeCards?: any[];
   }): Promise<{ angles: AngleCandidate[]; method: string }>;
@@ -82,6 +83,7 @@ export interface LLMProviderAdapter {
     productOrProcess?: string;
     customerPain?: string;
     material?: string;
+    duration?: string;
     angle?: any;
     knowledgeCards?: any[];
     recentScripts?: any[];
@@ -95,6 +97,7 @@ export interface LLMProviderAdapter {
     customerPain: string;
     productOrProcess?: string;
     material?: string;
+    duration?: string;
     account?: any;
     knowledgeCards?: any[];
   }): Promise<AiDraft>;
@@ -247,10 +250,13 @@ ${input.account?.donts ? '❌ 不应该做的：' + input.account.donts : ''}
 请根据以下信息生成一条短视频口播脚本。脚本必须自然流畅，从选择的钩子开始，围绕一个核心判断展开，结尾自然引导下一步。
 
 ## 输入信息
+### ⚠️ 核心问题（必须优先回答）
+客户痛点：${input.customerPain || '（无具体痛点，生成通用内容）'}
+
+### 其他参考信息
 选择钩子：${input.hook || ''}
 内容角度：${input.angle?.title || ''}（${input.angle?.coreConflict || ''}）
 目标客户：${input.targetCustomer || ''}
-客户痛点：${input.customerPain || ''}
 产品/工艺：${input.productOrProcess || ''}
 材质：${input.material || ''}
 ${input.account ? `
@@ -274,11 +280,13 @@ ${kcInfo ? '\n## 参考知识\n' + kcInfo : ''}
 绝对不做、很多客户问我这个问题、今天统一回答一下、今天给大家讲一下、首先、其次、最后、综上所述
 
 ## 输出要求
+生成一个较完整的内容（目标60秒版本，约300-400字），15秒和30秒版本会自动截取。
+内容需要包含：核心问题分析 → 判断逻辑 → 自然引导，三个环节。
 输出JSON格式（不要任何额外文字）：
 {
   "hook": "开头钩子（直接用选择钩子）",
-  "body": "完整口播稿\n每行一句\n自然流畅\n从钩子开始",
-  "wordCount": 中文字数
+  "body": "完整口播稿\n每行一句\n自然流畅\n从核心问题开始\n包含判断逻辑\n结尾引导下一步",
+  "wordCount": 中文字数（应大于200字）
 }`;
 
     try {

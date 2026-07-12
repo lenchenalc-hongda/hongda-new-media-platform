@@ -75,19 +75,31 @@ function splitIntoSpokenLines(text: string): string[] {
   return lines.filter((l, i) => i === 0 || l !== lines[i-1]);
 }
 
+const SPOKEN_FILLER = ['我跟你说', '讲真', '说白了', '其实', '你看', '就是'];
+
 function applyPersonaTone(lines: string[], persona?: string): string[] {
   if (!persona || persona === '老板') return lines;
-  const conn: Record<string, string[]> = {
-    '小林': ['我跟你说', '其实', '就是', '我自己刚入行的时候'],
-    '小陈': ['讲真', '这个我研究过', '我跟你讲', '你看'],
-  };
-  const c = conn[persona] || ['我跟你说', '说白了', '就是'];
-  return lines.map((line, i) => {
-    if (i > 0 && i % 2 === 0 && !line.startsWith('你') && !line.startsWith('把')) {
-      return c[i % c.length] + '，' + line;
+  // Remove existing filler words first
+  let result = lines.map(line => {
+    let l = line;
+    for (const f of SPOKEN_FILLER) {
+      l = l.split(f + '，').join('').split(f).join('');
     }
-    return line;
+    return l;
   });
+  // Only add a single natural opener near the middle if the script feels stiff
+  const hasOpener = result.some(l => SPOKEN_FILLER.some(f => l.includes(f)));
+  if (!hasOpener && result.length >= 4) {
+    const midIdx = Math.floor(result.length / 2);
+    const personaPhrases: Record<string, string> = {
+      '小林': '我跟你说，',
+      '小陈': '讲真，',
+      '沐森兄': '你看，',
+    };
+    const phrase = personaPhrases[persona] || '说白了，';
+    result[midIdx] = phrase + result[midIdx];
+  }
+  return result;
 }
 
 function enforceDurationLimit(lines: string[], duration: '15' | '30' | '60'): { lines: string[]; wordCount: number } {
