@@ -122,7 +122,12 @@ export async function runCanonicalPipeline(req: ScriptPipelineRequest): Promise<
       // Local rule fallback
       const chunkType = getChunkType(input);
       const result = buildScriptByDuration(strategy, d, chunkType, input);
-      script = result.script; hook = result.hook; wordCount = result.wordCount; subtitles = result.subtitles;
+      // Remove template hook line from body - rewriteToSpokenScript prepends it
+      const resultLines = result.script.split('\n');
+      script = resultLines.slice(1).join('\n');
+      hook = result.hook;
+      wordCount = result.wordCount;
+      subtitles = result.subtitles;
     }
 
     // ALWAYS apply local rules: rewrite to spoken script, score

@@ -33,6 +33,8 @@ export default function ScriptGeneratorWizard({ open, onClose, onGenerate }: Scr
   const [hooksLoading, setHooksLoading] = useState(false);
   const [selectedHookId, setSelectedHookId] = useState<string | null>(null);
   const [selectedHookText, setSelectedHookText] = useState<string>('');
+  const [rewriteFeedback, setRewriteFeedback] = useState<string>('');
+  const [showRewriteInput, setShowRewriteInput] = useState(false);
 
   const update = (key: string, value: any) => setForm({ ...form, [key]: value });
 
@@ -288,22 +290,24 @@ export default function ScriptGeneratorWizard({ open, onClose, onGenerate }: Scr
         video_length: form.video_length,
       });
     }
-    // Force selected hook as first sentence in all variants
+    // Force selected hook as first sentence (smart: skip if already matching)
     if (result && selectedHookText && result.variants) {
       result.variants.forEach((v: any) => {
         const lines = v.script.split('\n').filter((l: string) => l.trim());
         if (lines.length > 0 && selectedHookText) {
-          // Replace first line with selectedHook
-          lines[0] = selectedHookText;
-          v.script = lines.join('\n');
+          if (lines[0].trim() !== selectedHookText.trim()) {
+            // Script doesn't start with selected hook - prepend it
+            v.script = selectedHookText + '\n' + lines.slice(1).join('\n');
+          }
           v.hook = selectedHookText;
         }
       });
       if (result.bestVariant) {
         const lines = result.bestVariant.script.split('\n').filter((l: string) => l.trim());
         if (lines.length > 0 && selectedHookText) {
-          lines[0] = selectedHookText;
-          result.bestVariant.script = lines.join('\n');
+          if (lines[0].trim() !== selectedHookText.trim()) {
+            result.bestVariant.script = selectedHookText + '\n' + lines.slice(1).join('\n');
+          }
           result.bestVariant.hook = selectedHookText;
         }
       }
@@ -328,6 +332,50 @@ export default function ScriptGeneratorWizard({ open, onClose, onGenerate }: Scr
     onClose();
     setStep(1);
     setPipelineResult(null);
+  };
+
+  const handleRewrite = async () => {
+    if (!pipelineResult) return;
+    const bestScript = pipelineResult.bestVariant?.script || '';
+    const bestHook = pipelineResult.bestVariant?.hook || '';
+    try {
+      const res = await fetch('/api/ai/rewrite-script', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ script: bestScript, hook: bestHook, feedback: '请用更口语化、更短句、更像工厂老板在说话的方式重写' }),
+      });
+      const data = await res.json();
+      if (data.script) {
+        const newResult = { ...pipelineResult };
+        newResult.variants = pipelineResult.variants.map((v: any) => ({
+          ...v, script: data.script, hook: data.hook || v.hook,
+        }));
+        newResult.bestVariant = { ...newResult.bestVariant, script: data.script, hook: data.hook || newResult.bestVariant?.hook };
+        setPipelineResult(newResult);
+      }
+    } catch {}
+  };
+
+  const handleRewriteWithFeedback = async () => {
+    if (!pipelineResult || !rewriteFeedback.trim()) return;
+    const bestScript = pipelineResult.bestVariant?.script || '';
+    const bestHook = pipelineResult.bestVariant?.hook || '';
+    try {
+      const res = await fetch('/api/ai/rewrite-script', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ script: bestScript, hook: bestHook, feedback: rewriteFeedback }),
+      });
+      const data = await res.json();
+      if (data.script) {
+        const newResult = { ...pipelineResult };
+        newResult.variants = pipelineResult.variants.map((v: any) => ({
+          ...v, script: data.script, hook: data.hook || v.hook,
+        }));
+        newResult.bestVariant = { ...newResult.bestVariant, script: data.script, hook: data.hook || newResult.bestVariant?.hook };
+        setPipelineResult(newResult);
+        setShowRewriteInput(false);
+        setRewriteFeedback('');
+      }
+    } catch {}
   };
 
   if (!open) return null;
@@ -868,6 +916,23 @@ export default function ScriptGeneratorWizard({ open, onClose, onGenerate }: Scr
               })()}
 
               {/* Recommended status */}
+              <div className="flex gap-2 mt-3">
+                <button className="btn-secondary text-xs px-3 py-1.5" onClick={handleRewrite}>
+                  ✏ AI重写
+                </button>
+                <button className="btn-secondary text-xs px-3 py-1.5" onClick={() => setShowRewriteInput(!showRewriteInput)}>
+                  💬 修改意见重写
+                </button>
+              </div>
+              {showRewriteInput && (
+                <div className="mt-2 flex gap-2">
+                  <input className="input-field text-xs flex-1" placeholder="输入修改意见，如：更短一点、更像老板说话、去掉空话..."
+                    value={rewriteFeedback} onChange={e => setRewriteFeedback(e.target.value)} />
+                  <button className="btn-primary text-xs px-3 py-1.5" disabled={!rewriteFeedback.trim()} onClick={handleRewriteWithFeedback}>
+                    重写
+                  </button>
+                </div>
+              )}
               {form.knowledgeMode !== 'none' && form.knowledge_refs.length > 0 && (
                 <div className="bg-purple-50 border border-purple-200 rounded p-2 text-xs text-purple-600 mt-2">
                   <strong>知识来源：</strong>已引用 {form.knowledge_refs.length} 张知识卡（{form.knowledgeMode === 'auto' ? '自动推荐' : '手动选择'}）
