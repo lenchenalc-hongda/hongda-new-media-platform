@@ -546,12 +546,7 @@ export default function ScriptGeneratorWizard({ open, onClose, onGenerate }: Scr
                     placeholder="如：PE材质热转印、花膜结构、防背粘工艺"
                     value={form.product_or_process}
                     onChange={e => update('product_or_process', e.target.value)} />
-                  <div className="flex flex-wrap gap-1 mt-1">
-                    {['热转印','PE瓶','PP杯','ABS产品','小批量多图案','颜色还原','打样和大货','附着力测试','花膜结构','防背粘','局部胶水'].map(tag => (
-                      <button key={tag} className="text-[10px] bg-gray-100 hover:bg-blue-100 px-1.5 py-0.5 rounded"
-                        onClick={() => update('product_or_process', tag)}>{tag}</button>
-                    ))}
-                  </div>
+
                   <button className="btn-secondary text-[10px] px-2 py-1 mt-1" onClick={handleSuggestProducts} disabled={suggestLoading === 'products'}>
                     {suggestLoading === 'products' ? 'AI推荐中...' : '帮我推荐产品/工艺方向'}
                   </button>
@@ -585,12 +580,7 @@ export default function ScriptGeneratorWizard({ open, onClose, onGenerate }: Scr
                       ))}
                     </div>
                   )}
-                  <div className="flex flex-wrap gap-1 mt-1">
-                    {['问多少钱','能不能做','会不会掉','小批量','打样和大货不一样','颜色能不能一致','材质不确定','客户只发图片','嫌贵','附着力测试'].map(tag => (
-                      <button key={tag} className="text-[10px] bg-gray-100 hover:bg-blue-100 px-1.5 py-0.5 rounded"
-                        onClick={() => update('customer_pain', tag)}>{tag}</button>
-                    ))}
-                  </div>
+
                   <button className="btn-secondary text-[10px] px-2 py-1 mt-1" onClick={handleSuggestPains} disabled={suggestLoading === 'pains'}>
                     {suggestLoading === 'pains' ? 'AI推荐中...' : '帮我推荐客户痛点'}
                   </button>
