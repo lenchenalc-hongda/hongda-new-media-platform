@@ -138,6 +138,10 @@ export function ScriptsRenderer(p: ScriptsRendererProps) {
           onPushToTopics={() => { if (p.selectedId) p.handlePushToTopics(p.selectedId); }}
           onDelete={() => { if (p.selectedId) p.handleDeleteScript(p.selectedId); }}
           onStartEdit={() => { if (p.selectedId) p.handleStartEdit(p.selectedId); }}
+          scoringAction={p.scoringAction}
+          onRescore={p.onRescore}
+          onDuplicateRewrite={p.onDuplicateRewrite}
+          onDeepOptimize={p.onDeepOptimize}
         />
       </div>
 
