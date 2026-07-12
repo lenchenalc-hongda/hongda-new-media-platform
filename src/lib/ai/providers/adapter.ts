@@ -218,7 +218,17 @@ class DeepSeekLLMAdapter implements LLMProviderAdapter {
 
   async generateHooks(input: any): Promise<{ hooks: HookCandidate[]; method: string }> {
     try {
-      const parsed = await this.call(`请生成12-20个不同角度的开头钩子。角度：${input.angle?.title || ''} 冲突：${input.angle?.coreConflict || ''} 客户痛点：${input.customerPain || ''} 产品/工艺：${input.productOrProcess || ''} 材质：${input.material || ''}。要求每个钩子不超过28字，类型包含直接提问、客户原话、风险警告、反常识、价格冲突、材质风险、测试风险。输出JSON格式：{"hooks":[{"id":"...","hookText":"...不超过28字","hookType":"direct_question/...","tensionType":"price/...","targetCustomer":"...","whyItWorks":"..."}]}`);
+      const parsed = await this.call(`请生成12-20个不同角度的开头钩子。角度：${input.angle?.title || ''} 冲突：${input.angle?.coreConflict || ''} 客户痛点：${input.customerPain || ''} 产品/工艺：${input.productOrProcess || ''} 材质：${input.material || ''}
+${input.account ? `
+## 账号信息
+账号名称：${input.account?.name || ''}
+人设：${input.account?.persona || ''}
+目标受众：${input.account?.target_audience || ''}
+内容风格：${input.account?.content_style || ''}
+${input.account?.dos ? '✅ 应该做的：' + input.account.dos : ''}
+${input.account?.donts ? '❌ 不应该做的：' + input.account.donts : ''}
+` : ''}
+。要求每个钩子不超过28字，类型包含直接提问、客户原话、风险警告、反常识、价格冲突、材质风险、测试风险。输出JSON格式：{"hooks":[{"id":"...","hookText":"...不超过28字","hookType":"direct_question/...","tensionType":"price/...","targetCustomer":"...","whyItWorks":"..."}]}`);
       if (Array.isArray(parsed.hooks)) {
         return { hooks: parsed.hooks.slice(0, 20), method: 'ai' };
       }
@@ -243,6 +253,15 @@ class DeepSeekLLMAdapter implements LLMProviderAdapter {
 客户痛点：${input.customerPain || ''}
 产品/工艺：${input.productOrProcess || ''}
 材质：${input.material || ''}
+${input.account ? `
+## 账号信息
+账号名称：${input.account?.name || ''}
+人设：${input.account?.persona || ''}
+目标受众：${input.account?.target_audience || ''}
+内容风格：${input.account?.content_style || ''}
+${input.account?.dos ? '✅ 应该做的：' + input.account.dos : ''}
+${input.account?.donts ? '❌ 不应该做的：' + input.account.donts : ''}
+` : ''}
 ${kcInfo ? '\n## 参考知识\n' + kcInfo : ''}
 
 ## 品牌要求
@@ -273,7 +292,7 @@ ${kcInfo ? '\n## 参考知识\n' + kcInfo : ''}
     } catch (err: any) {
       console.warn(`[Adapter] generateDraft failed: ${err.message}, retrying with simpler prompt`);
       // Retry with simpler prompt
-      const simplePrompt = `口播脚本。钩子：${input.hook || ''}。角度：${input.angle?.title || ''}。客户：${input.customerPain || ''}。工艺：${input.productOrProcess || ''}。材质：${input.material || ''}。${kcInfo ? '参考知识：' + kcInfo.slice(0, 200) : ''}。每句话不超过30字，总共5-8句，从钩子开始，结尾引导下一步。输出JSON格式：{"hook":"${input.hook || ''}","body":"完整口播稿，每行一句","wordCount":数字}`;
+      const simplePrompt = `口播脚本。账号：${input.account?.name || ''}。人设：${input.account?.persona || ''}。目标受众：${input.account?.target_audience || ''}。钩子：${input.hook || ''}。角度：${input.angle?.title || ''}。客户：${input.customerPain || ''}。工艺：${input.productOrProcess || ''}。材质：${input.material || ''}。${kcInfo ? '参考知识：' + kcInfo.slice(0, 200) : ''}。每句话不超过30字，总共5-8句，从钩子开始，结尾引导下一步。输出JSON格式：{"hook":"${input.hook || ''}","body":"完整口播稿，每行一句","wordCount":数字}`;
       try {
         const sResult = await this.call(simplePrompt, '输出JSON，不要markdown包裹。', 1);
         const sValidated = DraftSchema.safeParse(sResult);
