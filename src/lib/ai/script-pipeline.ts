@@ -6,6 +6,7 @@
 import { scoreScript, ScriptScoreResult } from './script-scoring';
 import { getLLMAdapter } from './providers/adapter';
 import { z } from 'zod';
+import { rewriteToSpokenScript } from './rewrite-to-spoken-script';
 
 // ===== Canonical Pipeline =====
 // runCanonicalPipeline() is THE ONLY path that produces script results.
@@ -122,10 +123,10 @@ export async function runCanonicalPipeline(req: ScriptPipelineRequest): Promise<
       script = result.script; hook = result.hook; wordCount = result.wordCount; subtitles = result.subtitles;
     }
 
-    // ALWAYS apply local rules: remove AI tone, compress, score
-    script = removeAiTone(script);
-    const compressed = compressScriptByDuration(script, d);
-    script = compressed.compressed; wordCount = compressed.wordCount;
+    // ALWAYS apply local rules: rewrite to spoken script, score
+    const spoken = rewriteToSpokenScript({ script, hook: hook || '', duration: d, accountPersona: input.account?.name?.split('-')[0] });
+    script = spoken.script;
+    wordCount = spoken.wordCount;
 
     // Score — local rules ALWAYS, provider never owns scoring
     const score = scoreScript(script, d);
@@ -160,12 +161,11 @@ export async function runCanonicalPipeline(req: ScriptPipelineRequest): Promise<
       });
       if (rewriteResult && rewriteResult.body) {
         // Apply local rules after rewrite too
-        let rewritten = removeAiTone(rewriteResult.body);
-        const cr = compressScriptByDuration(rewritten, duration as '15' | '30' | '60');
-        rewritten = cr.compressed;
+        const spoken = rewriteToSpokenScript({ script: rewriteResult.body, hook: selectedHook, duration: duration as '15' | '30' | '60', accountPersona: input.account?.name?.split('-')[0] });
+        let rewritten = spoken.script;
         // Update best variant with rewrite
         bestVariant.script = rewritten;
-        bestVariant.wordCount = cr.wordCount;
+        bestVariant.wordCount = spoken.wordCount;
         bestVariant.score = scoreScript(rewritten, duration as string);
       }
     } catch {}
