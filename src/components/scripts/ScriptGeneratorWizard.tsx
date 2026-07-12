@@ -42,7 +42,20 @@ export default function ScriptGeneratorWizard({ open, onClose, onGenerate }: Scr
     }
   }, [selectedAngle?.id]);
 
-  const fetchHooks = async () => {
+  useEffect(() => {
+    if (form.knowledgeMode === 'auto' && (form.customer_pain || form.product_or_process || form.account_id)) {
+      fetch('/api/ai/script/recommend-knowledge', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ account: selectedAccount, platform: form.platform, productOrProcess: form.product_or_process, customerPain: form.customer_pain, material: form.material }),
+      }).then(res => res.json()).then(data => {
+        if (data.cards && data.cards.length > 0) {
+          setProductSuggestions(data.cards.map((c: any) => c.title));
+        }
+      }).catch(() => {});
+    }
+  }, [form.knowledgeMode]);
+
+  const fetchHooks = async (style?: string) => {
     setHooksLoading(true);
     try {
       const controller = new AbortController();
@@ -157,6 +170,32 @@ export default function ScriptGeneratorWizard({ open, onClose, onGenerate }: Scr
       }
     }
     setHooksLoading(false);
+  };
+
+  const handleSuggestProducts = async () => {
+    try {
+      const res = await fetch('/api/ai/script/suggest-products', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ account: selectedAccount, platform: form.platform, knowledgeMode: form.knowledgeMode, material: form.material }),
+      });
+      const data = await res.json();
+      if (data.suggestions && data.suggestions.length > 0) {
+        setProductSuggestions(data.suggestions.map((s: any) => s.title));
+      }
+    } catch {}
+  };
+
+  const handleSuggestPains = async () => {
+    try {
+      const res = await fetch('/api/ai/script/suggest-pains', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ account: selectedAccount, platform: form.platform, productOrProcess: form.product_or_process, material: form.material }),
+      });
+      const data = await res.json();
+      if (data.suggestions && data.suggestions.length > 0) {
+        setPainSuggestions(data.suggestions.map((s: any) => s.pain));
+      }
+    } catch {}
   };
 
   const handleSelectHook = (hook: any) => {
@@ -370,6 +409,27 @@ export default function ScriptGeneratorWizard({ open, onClose, onGenerate }: Scr
                 明确你想讲什么。如果主题太宽泛，系统会自动拆分成具体子选题。
               </p>
 
+              {/* 知识库参考模式 */}
+              <div>
+                <h4 className="text-xs font-medium text-gray-600 mb-2">参考知识库</h4>
+                <div className="grid grid-cols-3 gap-2 mb-3">
+                  <button onClick={() => update('knowledgeMode', 'none')}
+                    className={`p-2.5 rounded-lg border text-xs text-center transition-all ${form.knowledgeMode === 'none' ? 'border-blue-500 bg-blue-50 ring-2 ring-blue-200' : 'border-gray-200 bg-white hover:border-gray-300'}`}>
+                    <div className="font-medium text-gray-700 text-[11px]">不使用知识库</div>
+                    <div className="text-[9px] text-gray-400 mt-0.5">轻量问答｜评论答疑</div>
+                  </button>
+                  <button onClick={() => update('knowledgeMode', 'auto')}
+                    className={`p-2.5 rounded-lg border text-xs text-center transition-all ${form.knowledgeMode === 'auto' ? 'border-blue-500 bg-blue-50 ring-2 ring-blue-200' : 'border-gray-200 bg-white hover:border-gray-300'}`}>
+                    <div className="font-medium text-gray-700 text-[11px]">自动推荐知识卡</div>
+                    <div className="text-[9px] text-gray-400 mt-0.5">系统自动匹配</div>
+                  </button>
+                  <button onClick={() => update('knowledgeMode', 'manual')}
+                    className={`p-2.5 rounded-lg border text-xs text-center transition-all ${form.knowledgeMode === 'manual' ? 'border-blue-500 bg-blue-50 ring-2 ring-blue-200' : 'border-gray-200 bg-white hover:border-gray-300'}`}>
+                    <div className="font-medium text-gray-700 text-[11px]">手动选择知识卡</div>
+                    <div className="text-[9px] text-gray-400 mt-0.5">自选工艺/材料FAQ</div>
+                  </button>
+                </div>
+              </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="col-span-2">
                   <label className="block text-xs text-gray-500 mb-1">
@@ -379,6 +439,15 @@ export default function ScriptGeneratorWizard({ open, onClose, onGenerate }: Scr
                     placeholder="如：PE材质热转印、花膜结构、防背粘工艺"
                     value={form.product_or_process}
                     onChange={e => update('product_or_process', e.target.value)} />
+                  <div className="flex flex-wrap gap-1 mt-1">
+                    {['热转印','PE瓶','PP杯','ABS产品','小批量多图案','颜色还原','打样和大货','附着力测试','花膜结构','防背粘','局部胶水'].map(tag => (
+                      <button key={tag} className="text-[10px] bg-gray-100 hover:bg-blue-100 px-1.5 py-0.5 rounded"
+                        onClick={() => update('product_or_process', tag)}>{tag}</button>
+                    ))}
+                  </div>
+                  <button className="btn-secondary text-[10px] px-2 py-1 mt-1" onClick={handleSuggestProducts}>
+                    帮我推荐产品/工艺方向
+                  </button>
                 </div>
                 <div className="col-span-2">
                   <label className="block text-xs text-gray-500 mb-1">
@@ -398,12 +467,22 @@ export default function ScriptGeneratorWizard({ open, onClose, onGenerate }: Scr
                       ))}
                     </div>
                   )}
+                  <div className="flex flex-wrap gap-1 mt-1">
+                    {['问多少钱','能不能做','会不会掉','小批量','打样和大货不一样','颜色能不能一致','材质不确定','客户只发图片','嫌贵','附着力测试'].map(tag => (
+                      <button key={tag} className="text-[10px] bg-gray-100 hover:bg-blue-100 px-1.5 py-0.5 rounded"
+                        onClick={() => update('customer_pain', tag)}>{tag}</button>
+                    ))}
+                  </div>
+                  <button className="btn-secondary text-[10px] px-2 py-1 mt-1" onClick={handleSuggestPains}>
+                    帮我推荐客户痛点
+                  </button>
                 </div>
                 <div>
                   <label className="block text-xs text-gray-500 mb-1">材质（可选）</label>
                   <select className="select-field" value={form.material}
                     onChange={e => update('material', e.target.value)}>
                     <option value="">不限</option>
+                    <option value="不确定">不确定</option>
                     {suggestions.materials.map(m => (
                       <option key={m} value={m}>{m}</option>
                     ))}
@@ -536,7 +615,7 @@ export default function ScriptGeneratorWizard({ open, onClose, onGenerate }: Scr
               )}
               {selectedAngle && hookResults.length === 0 && !hooksLoading && (
                 <div className="text-center py-8 text-gray-400 text-sm">
-                  <button className="btn-secondary text-xs px-3 py-1.5" onClick={fetchHooks}>
+                  <button className="btn-secondary text-xs px-3 py-1.5" onClick={() => fetchHooks()}>
                     生成钩子候选
                   </button>
                 </div>
@@ -612,6 +691,14 @@ export default function ScriptGeneratorWizard({ open, onClose, onGenerate }: Scr
                   </div>
                 );
               })()}
+              {hookResults.length > 0 && (
+                <div className="flex flex-wrap gap-1 mt-2">
+                  <button className="btn-secondary text-[10px] px-2 py-1" onClick={() => fetchHooks()}>重新生成</button>
+                  <button className="btn-secondary text-[10px] px-2 py-1" onClick={() => fetchHooks('conflict')}>更冲突</button>
+                  <button className="btn-secondary text-[10px] px-2 py-1" onClick={() => fetchHooks('spoken')}>更口语</button>
+                  <button className="btn-secondary text-[10px] px-2 py-1" onClick={() => fetchHooks('account')}>更适合当前账号</button>
+                </div>
+              )}
             </div>
           )}{/* Step 4: Script Parameters */}
           {step === 4 && (
@@ -781,6 +868,11 @@ export default function ScriptGeneratorWizard({ open, onClose, onGenerate }: Scr
               })()}
 
               {/* Recommended status */}
+              {form.knowledgeMode !== 'none' && form.knowledge_refs.length > 0 && (
+                <div className="bg-purple-50 border border-purple-200 rounded p-2 text-xs text-purple-600 mt-2">
+                  <strong>知识来源：</strong>已引用 {form.knowledge_refs.length} 张知识卡（{form.knowledgeMode === 'auto' ? '自动推荐' : '手动选择'}）
+                </div>
+              )}
               <div className={`text-center p-3 rounded-lg text-sm font-medium ${
                 pipelineResult.recommendedStatus === 'pending_review'
                   ? 'bg-green-50 text-green-700 border border-green-200'
