@@ -342,7 +342,7 @@ ${cardInfo || '无'}
         outputFormat: 'json',
         temperature: 0.8,
       }),
-      new Promise<null>((resolve) => setTimeout(() => resolve(null), 15000)),
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), 30000)),
     ]);
     if (!angleResponse) throw new Error('Angle generation timeout');
     const response = angleResponse;

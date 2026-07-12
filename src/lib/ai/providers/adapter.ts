@@ -178,7 +178,7 @@ class DeepSeekLLMAdapter implements LLMProviderAdapter {
   }
 
   private async call(prompt: string, systemPrompt?: string): Promise<any> {
-    const timeout = new Promise<null>((resolve) => setTimeout(() => resolve(null), 12000));
+    const timeout = new Promise<null>((resolve) => setTimeout(() => resolve(null), 30000));
     const response = await Promise.race([
       this.provider.generateStructured({
         systemPrompt: systemPrompt || '你是宏达印业的新媒体策划顾问。输出JSON，不要markdown包裹。',
