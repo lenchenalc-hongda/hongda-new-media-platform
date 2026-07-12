@@ -236,6 +236,74 @@ export default function ScriptsContent() {
     setTimeout(() => setAiResult(null), 3000);
   };
 
+  const handleRescore = () => {
+    if (!selected) return;
+    const result = scoreScript(selected.main_script || selected.hook || '', '30');
+    setScripts(prev => prev.map(s =>
+      s.id === selectedId ? { ...s, quality_score: result.totalScore, score_detail: result, risk_level: result.riskLevel } : s
+    ));
+  };
+
+  const handleDuplicateRewrite = async () => {
+    if (!selected) return;
+    try {
+      const res = await fetch('/api/ai/script/duplicate-rewrite', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ script: selected.main_script, hook: selected.hook }),
+      });
+      const data = await res.json();
+      if (data.variants) {
+        const newScripts = data.variants.map((v: any, i: number) => {
+          const vs = scoreScript(v.script, '30');
+          return {
+            id: 'dup_' + Date.now() + '_' + i,
+            title: selected.title + '（' + v.tone + '）',
+            hook: v.hook || selected.hook,
+            main_script: v.script,
+            account_id: selected.account_id,
+            platform: selected.platform,
+            status: 'draft',
+            created_at: new Date().toISOString(),
+            quality_score: vs.totalScore,
+            score_detail: vs,
+            risk_level: vs.riskLevel,
+          };
+        });
+        setScripts(prev => [...newScripts, ...prev]);
+      }
+    } catch {}
+  };
+
+  const handleDeepOptimize = async () => {
+    if (!selected) return;
+    try {
+      const sd = selected.score_detail;
+      const res = await fetch('/api/ai/script/optimize', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({
+          script: selected.main_script,
+          hook: selected.hook,
+          duration: selected.video_length || '30',
+          totalScore: sd?.totalScore,
+          weaknesses: sd?.weaknesses,
+          rewriteSuggestions: sd?.rewriteSuggestions,
+        }),
+      });
+      const data = await res.json();
+      if (data.optimizedScript) {
+        const newScore = scoreScript(data.optimizedScript, '30');
+        setScripts(prev => prev.map(s =>
+          s.id === selectedId ? {
+            ...s, main_script: data.optimizedScript,
+            quality_score: newScore.totalScore,
+            score_detail: newScore,
+            risk_level: newScore.riskLevel,
+          } : s
+        ));
+      }
+    } catch {}
+  };
+
   // === Multiselect & Bulk ===
   const handleToggleSelect = (id: string) => {
     setSelectedIds(prev => {
@@ -301,6 +369,9 @@ export default function ScriptsContent() {
     handleSaveEdit={handleSaveEdit}
     handleCancelEdit={handleCancelEdit}
     handleDeleteScript={handleDeleteScript}
+    onRescore={handleRescore}
+    onDuplicateRewrite={handleDuplicateRewrite}
+    onDeepOptimize={handleDeepOptimize}
     handlePushToTopics={handlePushToTopics}
     onBulkSaveDraft={handleBulkSaveDraft}
     onBulkSavePendingReview={handleBulkSavePendingReview}

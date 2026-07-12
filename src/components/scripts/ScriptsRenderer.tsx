@@ -34,6 +34,9 @@ interface ScriptsRendererProps {
   handleCancelEdit: () => void;
   handleDeleteScript: (id: string) => void;
   handlePushToTopics: (id: string) => void;
+  onRescore?: () => void;
+  onDuplicateRewrite?: () => void;
+  onDeepOptimize?: () => void;
   onBulkSaveDraft: () => void;
   onBulkSavePendingReview: () => void;
   onBulkPolish: () => void;
