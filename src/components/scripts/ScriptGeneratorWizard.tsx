@@ -374,6 +374,7 @@ export default function ScriptGeneratorWizard({ open, onClose, onGenerate }: Scr
       }
       if (result.strategy) result.strategy.hook = selectedHookText;
     }
+    setGenerating(false);
     setPipelineResult(result);
     setSelectedDuration((form.video_length || '30') as '15' | '30' | '60');
     setStep(5);
@@ -1127,8 +1128,8 @@ export default function ScriptGeneratorWizard({ open, onClose, onGenerate }: Scr
               </button>
             )}
             {step === 4 && (
-              <button className="btn-primary text-sm" onClick={handleGenerate}>
-                生成脚本
+              <button className="btn-primary text-sm" disabled={!canNext() || generating} onClick={handleGenerate}>
+                {generating ? 'AI生成中...' : '生成脚本'}
               </button>
             )}
             {step === 5 && (
