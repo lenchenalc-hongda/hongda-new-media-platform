@@ -1,51 +1,25 @@
 // POST /api/ai/generate-script-draft
-// 根据策略生成具体脚本草稿
+// [DEPRECATED] Use POST /api/ai/script/pipeline instead.
 
 import { NextRequest, NextResponse } from 'next/server';
-import { callAI } from '@/lib/ai/service';
-import { GENERATE_DRAFT_PROMPT } from '@/lib/ai/prompts';
-import { generateShortVideoScript, generateScriptStrategy } from '@/lib/ai/script-pipeline';
-import { scoreScript } from '@/lib/ai/script-scoring';
+import { runCanonicalPipeline } from '@/lib/ai/script-pipeline';
 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { strategy, account, duration, template, knowledgeCards, useAI } = body;
-
-    if (useAI) {
-      // Use OpenAI for draft generation
-      const result = await callAI(GENERATE_DRAFT_PROMPT(
-        strategy,
-        account || {},
-        template || '标准口播',
-      ));
-      return NextResponse.json({ ...result, mock: false });
-    }
-
-    // Use rule-based draft generation
-    const durationStr = duration || '30';
-    const scriptStrategy = strategy || generateScriptStrategy({
-      account,
-      topic: body.topic,
-      customerPain: body.customer_pain,
-      productOrProcess: body.product_or_process,
+    const strategy = body.strategy || {};
+    const result = await runCanonicalPipeline({
+      account: body.account || strategy.account || {},
+      topic: strategy.topic || body.topic || '',
+      customerPain: strategy.customerPain || body.customerPain || '',
+      productOrProcess: body.productOrProcess || '',
+      material: body.material || '',
+      knowledgeCards: body.knowledgeCards || [],
+      durationSeconds: (body.duration || body.video_length || '30') as '15' | '30' | '60',
+      video_length: body.duration || body.video_length || '30',
     });
-
-    const result = generateShortVideoScript({
-      account,
-      strategy: scriptStrategy,
-      video_length: durationStr,
-    });
-
-    const scoreResult = scoreScript(result.script, durationStr);
-
-    return NextResponse.json({
-      ...result,
-      score: scoreResult,
-      mock: true,
-    });
+    return NextResponse.json(result, { headers: { 'x-api-deprecated': 'true', 'x-api-deprecated-reason': 'Use POST /api/ai/script/pipeline instead' } });
   } catch (err: any) {
-    console.error('[generate-script-draft] Error:', err.message);
-    return NextResponse.json({ error: 'Failed to generate draft' }, { status: 500 });
+    return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }

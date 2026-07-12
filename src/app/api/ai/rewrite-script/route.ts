@@ -1,11 +1,28 @@
+// POST /api/ai/rewrite-script
+// [DEPRECATED] Use rewriteToSpokenScript via the canonical pipeline.
+
 import { NextRequest, NextResponse } from 'next/server';
-import { callAI } from '@/lib/ai/service';
-import { REWRITE_SCRIPT_PROMPT } from '@/lib/ai/prompts';
+import { rewriteToSpokenScript } from '@/lib/ai/rewrite-to-spoken-script';
 
 export async function POST(req: NextRequest) {
-  const body = await req.json();
-  const { script, rewrite_style } = body;
-  if (!script) return NextResponse.json({ error: 'Missing script' }, { status: 400 });
-  const result = await callAI(REWRITE_SCRIPT_PROMPT(script, rewrite_style || '更口语'));
-  return NextResponse.json(result);
+  try {
+    const body = await req.json();
+    const { script, hook, duration } = body;
+    if (!script) return NextResponse.json({ error: 'Missing script' }, { status: 400 });
+
+    const result = rewriteToSpokenScript({
+      script,
+      hook: hook || '',
+      duration: duration || '30',
+    });
+
+    return NextResponse.json({
+      script: result.script,
+      hook: result.hook,
+      wordCount: result.wordCount,
+      changes: result.changes,
+    }, { headers: { 'x-api-deprecated': 'true', 'x-api-deprecated-reason': 'Use POST /api/ai/script/pipeline instead' } });
+  } catch (err: any) {
+    return NextResponse.json({ error: err.message }, { status: 500 });
+  }
 }

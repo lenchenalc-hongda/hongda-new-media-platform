@@ -1,43 +1,23 @@
 // POST /api/ai/generate-script-strategy
-// 生成脚本策略卡（策略先行）
+// [DEPRECATED] Strategy is now generated inside the canonical pipeline.
+// This wrapper returns the strategy from the canonical pipeline result.
 
 import { NextRequest, NextResponse } from 'next/server';
-import { callAI } from '@/lib/ai/service';
-import { GENERATE_STRATEGY_PROMPT } from '@/lib/ai/prompts';
 import { generateScriptStrategy } from '@/lib/ai/script-pipeline';
 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { account, topic, customerPain, productOrProcess, material, knowledgeCards, useAI } = body;
-
-    if (useAI) {
-      // Use OpenAI for strategy generation
-      const result = await callAI(GENERATE_STRATEGY_PROMPT({
-        account: account || {},
-        product_or_process: productOrProcess,
-        customer_pain: customerPain,
-        material,
-        target_audience: account?.target_audience,
-        conversion_goal: account?.conversion_goal,
-        knowledgeCards: knowledgeCards || [],
-      }));
-      return NextResponse.json({ ...result, mock: false });
-    }
-
-    // Use rule-based strategy generation (no API key needed)
     const strategy = generateScriptStrategy({
-      account,
-      topic: topic || customerPain,
-      customerPain,
-      productOrProcess,
-      material,
-      knowledgeCards,
+      account: body.account || {},
+      topic: body.topic || body.customerPain || '',
+      customerPain: body.customerPain || '',
+      productOrProcess: body.productOrProcess || body.product_or_process || '',
+      material: body.material || '',
+      knowledgeCards: body.knowledgeCards || body.knowledge_cards || [],
     });
-
-    return NextResponse.json({ ...strategy, mock: true });
+    return NextResponse.json({ strategy }, { headers: { 'x-api-deprecated': 'true', 'x-api-deprecated-reason': 'Use POST /api/ai/script/pipeline instead' } });
   } catch (err: any) {
-    console.error('[generate-script-strategy] Error:', err.message);
-    return NextResponse.json({ error: 'Failed to generate strategy' }, { status: 500 });
+    return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }
