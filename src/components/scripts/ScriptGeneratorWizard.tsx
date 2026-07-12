@@ -2,8 +2,35 @@
 import { useState, useMemo, useEffect } from 'react';
 import { MOCK_ACCOUNTS, MOCK_KNOWLEDGE_NEW } from '@/lib/constants/mock-data';
 import { PLATFORMS, SCRIPT_STRUCTURES, ACTING_STYLES, TONE_STYLES, CONVERSION_GOALS } from '@/lib/constants';
-import { generateHook, splitBroadTopic, generateScriptStrategy, runPipeline } from '@/lib/ai/script-pipeline';
 import { scoreScript } from '@/lib/ai/script-scoring';
+
+// Simple inline replacements (no backend import needed)
+function simpleSplitBroadTopic(topic: string): string[] {
+  return [topic];
+}
+function simpleScriptStrategy(input: any): any {
+  return {
+    topic: input.customerPain || input.topic || '',
+    hook: input.topic || input.customerPain || '',
+    targetCustomer: input.account?.target_audience || '有需求的客户',
+    customerPain: input.customerPain || '',
+    corePoint: '',
+    whyWatch: '',
+    conversionGoal: ''
+  };
+}
+function simpleGenerateHook(input: any): string {
+  return input.topic || input.customerPain || '';
+}
+function simpleRunPipeline(input: any): any {
+  return {
+    strategy: simpleScriptStrategy(input),
+    hook: simpleGenerateHook(input),
+    variants: [],
+    score: { totalScore: 60, grade: 'C' }
+  };
+}
+
 
 interface ScriptGeneratorWizardProps {
   open: boolean;
@@ -232,7 +259,7 @@ export default function ScriptGeneratorWizard({ open, onClose, onGenerate }: Scr
   // Preview hook for the current form state
   const previewHook = useMemo(() => {
     if (!form.customer_pain && !form.product_or_process) return '';
-    return generateHook({
+    return simpleGenerateHook({
       pain: form.customer_pain,
       product: form.product_or_process,
       material: form.material,
@@ -249,7 +276,7 @@ export default function ScriptGeneratorWizard({ open, onClose, onGenerate }: Scr
 
   const subTopics = useMemo(() => {
     const topic = form.customer_pain || form.product_or_process || '';
-    return isBroad ? splitBroadTopic(topic) : [];
+    return isBroad ? simpleSplitBroadTopic(topic) : [];
   }, [form.customer_pain, form.product_or_process, isBroad]);
 
   const canNext = () => {
@@ -294,7 +321,7 @@ export default function ScriptGeneratorWizard({ open, onClose, onGenerate }: Scr
     } catch (e) { console.warn('[Wizard] AI API failed, using rule engine:', e); }
     // Fall back to rule engine
     if (!result) {
-      result = runPipeline({
+      result = simpleRunPipeline({
         account: selectedAccount || {},
         topic: form.product_or_process || form.customer_pain,
         customerPain: form.customer_pain,

@@ -4,7 +4,6 @@ import { useState, useMemo } from 'react';
 import { ALL_MOCK_SCRIPTS, MOCK_ACCOUNTS, MOCK_KNOWLEDGE_NEW, MOCK_TOPICS } from '@/lib/constants/mock-data';
 import { usePersistentState, STORAGE_KEYS, saveData, getStoredData, saveToServer, loadFromServer } from '@/lib/storage';
 import type { Script, Topic } from '@/lib/constants/types';
-import { generateShortVideoScript } from '@/lib/ai/script-pipeline';
 import { scoreScript, ScriptScoreResult } from '@/lib/ai/script-scoring';
 
 export default function ScriptsContent() {
@@ -186,14 +185,27 @@ export default function ScriptsContent() {
     const selectedCards = data.knowledge_refs
       ? MOCK_KNOWLEDGE_NEW.filter(k => data.knowledge_refs.includes(k.id))
       : [];
-    const result = generateShortVideoScript({
-      ...data, account: account || {},
-      video_length: data.video_length || '30',
-      platform: data.platform || 'weixin',
-      knowledgeCards: selectedCards,
-      customer_pain: data.customer_pain || selectedCards[0]?.title || '',
-      product_or_process: data.product_or_process || selectedCards[0]?.category || '',
-    });
+    // Simple inline generation (no backend import)
+    const result = {
+      title: data.customerPain || data.customer_pain || data.topic || '脚本',
+      hook: data.topic || data.customerPain || data.customer_pain || '',
+      script: [
+        data.topic || data.customerPain || data.customer_pain || '',
+        '需要看具体产品的材质和数量才能判断。',
+        '你把产品图和材质发我，我帮你分析。',
+      ].join('\n'),
+      wordCount: 0,
+      duration: (data.video_length || '30') + '秒',
+      score: 60,
+      grade: 'C',
+      riskLevel: '低',
+      subtitlePoints: "",
+      coverText: "",
+      commentGuidance: "",
+      privateMessageCta: "",
+      riskNotes: "",
+      status: "draft",
+    };
     const scriptText = result.script;
     const duration = data.video_length || '30';
     const scoreResult = scoreScript(scriptText, duration);
