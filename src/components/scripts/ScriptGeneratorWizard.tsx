@@ -35,6 +35,9 @@ export default function ScriptGeneratorWizard({ open, onClose, onGenerate }: Scr
   const [selectedHookText, setSelectedHookText] = useState<string>('');
   const [rewriteFeedback, setRewriteFeedback] = useState<string>('');
   const [showRewriteInput, setShowRewriteInput] = useState(false);
+  const [optimizedResult, setOptimizedResult] = useState<any>(null);
+  const [showOptimizeCompare, setShowOptimizeCompare] = useState(false);
+  const [optimizeLoading, setOptimizeLoading] = useState(false);
 
   const update = (key: string, value: any) => setForm({ ...form, [key]: value });
 
@@ -332,6 +335,35 @@ export default function ScriptGeneratorWizard({ open, onClose, onGenerate }: Scr
     onClose();
     setStep(1);
     setPipelineResult(null);
+  };
+
+  const handleOptimize = async () => {
+    if (!pipelineResult?.bestVariant) return;
+    setOptimizeLoading(true);
+    try {
+      const v = pipelineResult.bestVariant;
+      const res = await fetch('/api/ai/script/optimize', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({
+          script: v.script, hook: v.hook, duration: selectedDuration,
+          totalScore: v.score?.totalScore,
+          weaknesses: v.score?.weaknesses,
+          rewriteSuggestions: v.score?.rewriteSuggestions,
+        }),
+      });
+      const data = await res.json();
+      if (data.optimizedScript) { setOptimizedResult(data); setShowOptimizeCompare(true); }
+    } catch {}
+    setOptimizeLoading(false);
+  };
+
+  const handleOptimizeConfirm = () => {
+    if (!optimizedResult) return;
+    const nr = { ...pipelineResult };
+    nr.variants = pipelineResult.variants.map((v: any) => ({ ...v, script: optimizedResult.optimizedScript }));
+    nr.bestVariant = { ...nr.bestVariant, script: optimizedResult.optimizedScript };
+    setPipelineResult(nr);
+    setShowOptimizeCompare(false);
   };
 
   const handleRewrite = async () => {
@@ -916,6 +948,40 @@ export default function ScriptGeneratorWizard({ open, onClose, onGenerate }: Scr
               })()}
 
               {/* Recommended status */}
+              <div className="flex gap-2 mt-2">
+                <button className="btn-primary text-xs px-3 py-1.5" onClick={handleOptimize} disabled={optimizeLoading}>
+                  {optimizeLoading ? 'AI优化中...' : 'AI 深度优化'}
+                </button>
+              </div>
+
+              {showOptimizeCompare && optimizedResult && (
+                <div className="border border-blue-200 rounded-lg p-3 mt-2 bg-blue-50/30">
+                  <h4 className="text-xs font-medium text-blue-700 mb-2">🎯 AI优化对比</h4>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="border border-gray-200 rounded p-2 bg-white">
+                      <p className="text-[10px] font-medium text-gray-500 mb-1">优化前</p>
+                      <p className="text-xs text-gray-700 whitespace-pre-line leading-relaxed">{optimizedResult.before}</p>
+                    </div>
+                    <div className="border border-green-200 rounded p-2 bg-green-50">
+                      <p className="text-[10px] font-medium text-green-600 mb-1">优化后 ✓</p>
+                      <p className="text-xs text-gray-700 whitespace-pre-line leading-relaxed">{optimizedResult.after}</p>
+                    </div>
+                  </div>
+                  {optimizedResult.changes?.length > 0 && (
+                    <div className="mt-2">
+                      <p className="text-[10px] font-medium text-blue-600 mb-1">改进项：</p>
+                      {optimizedResult.changes.map((ch: string, i: number) => (
+                        <p key={i} className="text-[10px] text-blue-600">✓ {ch}</p>
+                      ))}
+                    </div>
+                  )}
+                  <div className="flex gap-2 mt-2">
+                    <button className="btn-secondary text-xs px-2 py-1" onClick={() => setShowOptimizeCompare(false)}>保留原版</button>
+                    <button className="btn-primary text-xs px-2 py-1" onClick={handleOptimizeConfirm}>使用优化版</button>
+                  </div>
+                </div>
+              )}
+
               <div className="flex gap-2 mt-3">
                 <button className="btn-secondary text-xs px-3 py-1.5" onClick={handleRewrite}>
                   ✏ AI重写
