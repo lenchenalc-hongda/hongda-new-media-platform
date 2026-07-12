@@ -162,13 +162,14 @@ export function usePersistentState<T>(storageKey: string, fallback: T[]) {
     const init = async () => {
       const result = await loadFromServer<T>(storageKey);
 
-      if (result.data) {
+      if (result.data && result.data.length > 0) {
         // 服务器有最新数据 → 使用服务器数据
         lastUpdatedAtRef.current = result.updatedAt;
         setData(result.data);
         saveData(storageKey, result.data);
         setLastSyncTime(result.updatedAt);
       } else {
+        // 服务器无数据或返回空数组 → 不要覆盖本地数据
         // 服务器无数据 → 从 localStorage 恢复
         const local = loadData(storageKey, fallback);
         if (local && local.length > 0) {
