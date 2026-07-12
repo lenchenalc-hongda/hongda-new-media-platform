@@ -1,5 +1,14 @@
 'use client';
 import { MOCK_ACCOUNTS } from '@/lib/constants/mock-data';
+
+// Client-side safety: fallback if module chunk fails to load
+const FALLBACK_ACCOUNTS = [
+  { id: 'a1', name: '小陈-热转印前端顾问' },
+  { id: 'a2', name: '小林-热转印厂三代' },
+  { id: 'a3', name: '沐森兄-热转印一线师傅' },
+  { id: 'a4', name: '许总-UV机器与品牌背书' },
+  { id: 'a5', name: '宏达印业妮妮' },
+];
 import { truncate, formatDateTime } from '@/lib/utils';
 import { PLATFORMS } from '@/lib/constants';
 import type { Script } from '@/lib/constants/types';
@@ -45,7 +54,8 @@ export default function ScriptListPane({
           <select className="select-field text-xs flex-1" value={filters.account || ''}
             onChange={e => onFilterChange({ ...filters, account: e.target.value })}>
             <option value="">全部账号</option>
-            {MOCK_ACCOUNTS.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+            {(MOCK_ACCOUNTS || FALLBACK_ACCOUNTS).map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+
           </select>
           <select className="select-field text-xs flex-1" value={filters.platform || ''}
             onChange={e => onFilterChange({ ...filters, platform: e.target.value })}>

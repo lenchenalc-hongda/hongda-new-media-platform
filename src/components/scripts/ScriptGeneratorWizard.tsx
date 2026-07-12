@@ -508,7 +508,7 @@ export default function ScriptGeneratorWizard({ open, onClose, onGenerate }: Scr
                 <select className="select-field" value={form.account_id}
                   onChange={e => update('account_id', e.target.value)}>
                   <option value="">请选择账号</option>
-                  {MOCK_ACCOUNTS.map(a => (
+                  {(MOCK_ACCOUNTS || []).map(a => (
                     <option key={a.id} value={a.id}>
                       {a.name.split('-')[0]}（{a.platform === 'weixin' ? '视频号' : '抖音'}）
                     </option>
