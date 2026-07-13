@@ -9,6 +9,11 @@ import type { AIProvider, ProviderRequest } from './types';
 
 // ===== Zod Schemas for Adapter Inputs/Outputs =====
 
+// ===== Helper =====
+function countChars(text: string): number {
+  return (text.match(/[一-鿿]/g) || []).length;
+}
+
 export const AngleCandidateSchema = z.object({
   id: z.string(),
   title: z.string().max(30),
@@ -304,7 +309,15 @@ ${kcInfo ? '\n## 参考知识\n' + kcInfo : ''}
       try {
         const sResult = await this.call(simplePrompt, '输出JSON，不要markdown包裹。', 1);
         const sValidated = DraftSchema.safeParse(sResult);
-        if (sValidated.success) return sValidated.data;
+        if (sValidated.success) {
+          if (countChars(sValidated.data.body) >= 200) return sValidated.data;
+          const pain = input.customerPain || '';
+          const lines = sValidated.data.body.split('\n');
+          lines.push(pain ? pain + '，具体要看你的产品来定。' : '具体要看产品的材质和测试要求。');
+          lines.push('你把产品图和材质发我，我帮你判断最合适的方案。');
+          const newBody = lines.join('\n');
+          return { ...sValidated.data, body: newBody, wordCount: countChars(newBody) };
+        }
         return { hook: input.hook || '', body: sResult.body || sResult.script || input.hook || '', wordCount: 0 };
       } catch (retryErr: any) {
         console.warn(`[Adapter] generateDraft retry also failed: ${retryErr.message}`);
