@@ -1,4 +1,5 @@
 'use client';
+import { APP_VERSION } from "@/lib/version";
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState } from 'react';
@@ -92,7 +93,7 @@ export default function Sidebar() {
       </nav>
 
       <div className="px-4 py-2 border-t border-gray-200 text-[10px] text-gray-400 flex items-center justify-between">
-        <span>v0.2 IA</span>
+        <span>{APP_VERSION}</span>
         <Link href="/workspace-home" className="hover:text-blue-600 no-underline text-gray-400">首页</Link>
       </div>
     </aside>
