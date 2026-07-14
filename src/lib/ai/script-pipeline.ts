@@ -151,6 +151,16 @@ export async function runCanonicalPipeline(req: ScriptPipelineRequest): Promise<
     return { duration: d, hook, script, wordCount, estimatedSeconds: parseInt(d), score, subtitlePoints: subtitles };
   });
 
+  // 8.5 Ensure 30s and 60s differ (even when AI draft is short)
+  const v30 = variants.find(v => v.duration === '30');
+  const v60 = variants.find(v => v.duration === '60');
+  if (v30 && v60 && v30.script === v60.script && v30.script.length > 0) {
+    const pain = input.customerPain || input.productOrProcess || '';
+    const extraLine = pain ? pain.slice(0, 20) + '，具体要看你的产品来定。' : '具体情况要看你产品的材质和数量。';
+    v60.script = v60.script + '\n' + extraLine;
+    v60.wordCount = countChars(v60.script);
+  }
+
   // 9. Pick best variant
   const scored = variants.filter(v => v.score !== null);
   scored.sort((a, b) => (b.score?.totalScore || 0) - (a.score?.totalScore || 0));

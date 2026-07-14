@@ -21,7 +21,7 @@ export interface SpeakRewriteResult {
   enforcements: string[];
 }
 
-const WORD_LIMITS: Record<string, number> = { '15': 120, '30': 220, '60': 420 };
+const WORD_LIMITS: Record<string, number> = { '15': 100, '30': 150, '60': 420 };
 
 const FORBIDDEN_FILLER = [
   '很多客户问我这个问题', '今天统一回答一下', '今天给大家讲一下',
