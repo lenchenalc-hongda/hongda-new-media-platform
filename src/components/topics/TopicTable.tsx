@@ -1,7 +1,7 @@
 'use client';
 import StatusBadge from '@/components/ui/StatusBadge';
 import { MOCK_ACCOUNTS } from '@/lib/constants/mock-data';
-import { truncate } from '@/lib/utils';
+import { truncate, formatDateTime } from '@/lib/utils';
 import type { Topic } from '@/lib/constants/types';
 
 interface TopicTableProps {
@@ -73,6 +73,7 @@ export default function TopicTable({
             <th className="px-2 py-2 text-left text-gray-500 font-medium text-xs">优先级</th>
             <th className="px-2 py-2 text-left text-gray-500 font-medium text-xs">状态</th>
             <th className="px-2 py-2 text-left text-gray-500 font-medium text-xs">脚本</th>
+            <th className="px-2 py-2 text-left text-gray-500 font-medium text-xs">添加时间</th>
             <th className="px-2 py-2 text-left text-gray-500 font-medium text-xs">最后动作</th>
           </tr>
         </thead>
@@ -137,6 +138,9 @@ export default function TopicTable({
                   </span>
                 </td>
                 <td className="px-2 py-2">
+                  <span className="text-[10px] text-gray-400 whitespace-nowrap">{t.created_at ? formatDateTime(t.created_at) : '-'}</span>
+                </td>
+                <td className="px-2 py-2">
                   <span className="text-[10px] text-gray-400">{t.last_action || '-'}</span>
                 </td>
               </tr>
@@ -144,7 +148,7 @@ export default function TopicTable({
           })}
           {topics.length === 0 && (
             <tr>
-              <td colSpan={12} className="text-center py-12 text-gray-400 text-sm">
+              <td colSpan={13} className="text-center py-12 text-gray-400 text-sm">
                 没有找到匹配的选题
               </td>
             </tr>
