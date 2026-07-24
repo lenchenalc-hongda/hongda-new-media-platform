@@ -5,7 +5,9 @@ import PageHeader from '@/components/layout/PageHeader';
 import { OA_SOURCE_CARDS, getOASourceCardsByIds } from '@/lib/constants/oa-source-cards';
 import { ARTICLE_TEMPLATES, getTemplatesForArticleType } from '@/lib/oa/article-templates';
 import { runArticlePipeline, renderOAArticleHtml } from '@/lib/oa/article-pipeline';
-import type { OASourceCard, OAArticleType, OAArticleDraft, GenerateArticleOutput } from '@/lib/oa/types';
+import type { OAArticleType, OAArticleDraft, GenerateArticleOutput } from '@/lib/oa/types';
+import { OA_STORAGE_KEYS, loadOAData, saveOAData } from '@/lib/oa/oa-storage';
+import { saveToServer } from '@/lib/storage';
 
 export default function ArticleFactoryPage() {
   const [step, setStep] = useState(1);
@@ -60,15 +62,18 @@ export default function ArticleFactoryPage() {
     setStep(5);
   };
 
-  const handleSaveDraft = () => {
+  const [syncStatus, setSyncStatus] = useState('本地');
+  const handleSaveDraft = async () => {
     if (!draft) return;
     try {
-      const stored = JSON.parse(localStorage.getItem('oa_drafts') || '[]');
-      stored.unshift(draft);
-      localStorage.setItem('oa_drafts', JSON.stringify(stored));
-      setMsg({ t: '草稿已保存到本地', s: 'ok' });
+      const stored = loadOAData(OA_STORAGE_KEYS.ARTICLE_DRAFTS, []);
+      const updated = [draft, ...stored.filter((d: any) => d.id !== draft.id)];
+      saveOAData(OA_STORAGE_KEYS.ARTICLE_DRAFTS, updated);
+      await saveToServer(OA_STORAGE_KEYS.ARTICLE_DRAFTS, updated);
+      setSyncStatus('已同步');
+      setMsg({ t: '草稿已保存（已同步到服务器）', s: 'ok' });
       setTimeout(() => setMsg(null), 3000);
-    } catch { setMsg({ t: '保存失败', s: 'err' }); }
+    } catch { setMsg({ t: '保存失败（已保持本地）', s: 'err' }); }
   };
 
   const copyToClipboard = async (text: string, label: string) => {

@@ -1,8 +1,10 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import AppLayout from '@/components/layout/AppLayout';
 import PageHeader from '@/components/layout/PageHeader';
 import { formatDateTime } from '@/lib/utils';
+import { useOAStorage, OA_STORAGE_KEYS } from '@/lib/oa/oa-storage';
+import { saveToServer } from '@/lib/storage';
 import type { OAArticleDraft } from '@/lib/oa/types';
 
 const ARTICLE_TYPE_LABELS: Record<string, string> = {
@@ -12,21 +14,16 @@ const ARTICLE_TYPE_LABELS: Record<string, string> = {
 };
 
 export default function ArticlesPage() {
-  const [drafts, setDrafts] = useState<OAArticleDraft[]>([]);
+  const [drafts, setDrafts, syncStatus] = useOAStorage<OAArticleDraft>(OA_STORAGE_KEYS.ARTICLE_DRAFTS, []);
   const [selected, setSelected] = useState<OAArticleDraft | null>(null);
   const [actionMsg, setActionMsg] = useState<string | null>(null);
-
-  useEffect(() => {
-    try {
-      const stored = JSON.parse(localStorage.getItem('oa_drafts') || '[]');
-      setDrafts(stored);
-    } catch {}
-  }, []);
+  const handleSelect = setSelected;  // alias
 
   const handleDelete = (id: string) => {
-    const updated = drafts.filter(d => d.id !== id);
-    setDrafts(updated);
-    localStorage.setItem('oa_drafts', JSON.stringify(updated));
+    setDrafts(prev => {
+      const updated = prev.filter((d: any) => d.id !== id);
+      return updated;
+    });
     if (selected?.id === id) setSelected(null);
     setActionMsg('已删除');
     setTimeout(() => setActionMsg(null), 2000);
@@ -43,7 +40,7 @@ export default function ArticlesPage() {
 
   return (
     <AppLayout>
-      <PageHeader title="文章列表" description={`共 ${drafts.length} 篇草稿`} />
+      <PageHeader title="文章列表" description={`共 ${drafts.length} 篇草稿 · ${syncStatus.source === 'synced' ? '☁️ 已同步' : syncStatus.source === 'remote' ? '🔄 远程' : '💻 本地模式'}`} />
       {actionMsg && <div className="mb-3 px-3 py-2 rounded text-xs bg-green-50 text-green-700 border border-green-200">{actionMsg}</div>}
 
       <div className="flex gap-3 h-[calc(100vh-240px)]">
