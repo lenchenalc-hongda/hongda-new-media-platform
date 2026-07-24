@@ -4,10 +4,10 @@ import AppLayout from '@/components/layout/AppLayout';
 import PageHeader from '@/components/layout/PageHeader';
 import { formatDateTime } from '@/lib/utils';
 import { useOAStorage, OA_STORAGE_KEYS } from '@/lib/oa/oa-storage';
-import { renderOAArticleHtml, scoreOAArticle } from '@/lib/oa/article-pipeline';
+import { renderOAArticleHtml, scoreOAArticle, generateSalesForwardDraft, generateSeoMeta, generateTrainingDraft } from '@/lib/oa/article-pipeline';
 import { getArticleTemplateById } from '@/lib/oa/article-templates';
 import { OA_SOURCE_CARDS } from '@/lib/constants/oa-source-cards';
-import type { OAArticleDraft, OAArticleReview, OABodyBlock, OABodyBlockType } from '@/lib/oa/types';
+import type { OAArticleDraft, OAArticleReview, OABodyBlock, OABodyBlockType, OASourceCard } from '@/lib/oa/types';
 
 const ARTICLE_TYPE_LABELS: Record<string, string> = {
   technical_guide: '技术指南', faq_answer: 'FAQ解答', machine_selection: '设备选型',
@@ -359,6 +359,29 @@ export default function ArticlesPage() {
                 <button className="btn-secondary w-full text-[10px] py-1" onClick={rescore}>🔄 重新评分</button>
                 <button className="btn-secondary w-full text-[10px] py-1" onClick={riskCheck}>⚠️ 风险检查</button>
                 <button className="btn-secondary w-full text-[10px] py-1" onClick={handleRenderPreview}>🎨 {showPreview ? '关闭预览' : '套模板预览'}</button>
+                <div className="border-t pt-1 mt-1">
+                  <button className="btn-secondary w-full text-[10px] py-1" onClick={() => {
+                    if (!editForm) return;
+                    const sources = OA_SOURCE_CARDS.filter((c:any) => editForm.sourceCardIds?.includes(c.id));
+                    const sf = generateSalesForwardDraft(editForm, sources);
+                    setDrafts(prev => [sf, ...prev]);
+                    setSelectedId(sf.id);
+                    showMsg('销售转发版已生成', 'ok');
+                  }}>📤 生成销售转发版</button>
+                  <button className="btn-secondary w-full text-[10px] py-1" onClick={() => {
+                    if (!editForm) return;
+                    const meta = generateSeoMeta(editForm);
+                    showMsg('SEO: ' + meta.seoTitle.slice(0, 40) + '... | ' + meta.keywords.join(', '), 'info');
+                  }}>🔍 生成官网SEO版</button>
+                  <button className="btn-secondary w-full text-[10px] py-1" onClick={() => {
+                    if (!editForm) return;
+                    const sources = OA_SOURCE_CARDS.filter((c:any) => editForm.sourceCardIds?.includes(c.id));
+                    const td = generateTrainingDraft(editForm, sources);
+                    setDrafts(prev => [td, ...prev]);
+                    setSelectedId(td.id);
+                    showMsg('内部培训版已生成', 'ok');
+                  }}>📚 生成内部培训版</button>
+                </div>
 
                 <h4 className="text-xs font-medium text-gray-700 mt-3">复制操作</h4>
                 <button className="btn-secondary w-full text-[10px] py-1" onClick={copyHtml}>📋 复制HTML</button>

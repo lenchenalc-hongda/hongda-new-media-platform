@@ -251,13 +251,82 @@ export function renderOAArticleHtml(draft: OAArticleDraft, template?: OAArticleT
     }
   }).join('\n');
 
+  const usage = draft.usage || 'wechat_publish';
+  const footerParts: Record<string, string> = {
+    wechat_publish: '<p>宏达印业 · 热转印方案专家</p><p style="margin-top:4px;font-size:11px;color:#ccc;">本文由宏达新媒体作战中台生成 · 参考自知识库</p>',
+    sales_forward: '<p style="font-weight:600;">宏达印业 · 为客户提供热转印整体方案</p><p style="margin-top:4px;font-size:11px;color:#ccc;">如需进一步了解，请联系宏达印业销售团队</p>',
+    website_article: '<p>宏达印业 · 热转印方案专家</p><p style="margin-top:4px;font-size:11px;color:#999;">原文链接：https://www.hongdaprinting.tech</p>',
+    internal_training: '<div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;padding:12px;font-size:12px;color:#991b1b;text-align:left;"><strong>内部培训资料</strong><p style="margin:4px 0 0;">此内容仅限内部培训使用，不得对外转发或公开发布。</p></div>',
+    video_script_expand: '',
+  };
+
   return `<section style="max-width:680px;margin:0 auto;font-family:-apple-system,'Noto Sans SC','PingFang SC',sans-serif;padding:20px;line-height:1.8;color:#333;">
     ${blocksHtml}
     <div style="margin-top:30px;padding-top:16px;border-top:1px solid #eee;font-size:12px;color:#aaa;text-align:center;">
-      <p>宏达印业 · 热转印方案专家</p>
-      <p style="margin-top:4px;font-size:11px;color:#ccc;">本文由宏达新媒体作战中台生成 · 参考自知识库</p>
+      ${footerParts[usage] || footerParts.wechat_publish}
     </div>
   </section>`;
+}
+
+// ===== Usage-based generation =====
+
+export function generateSalesForwardDraft(draft: OAArticleDraft, cards?: OASourceCard[]): OAArticleDraft {
+  // Generate a shorter sales-forward version (500-800 chars)
+  const blocks = draft.bodyBlocks.filter(b => b.type !== 'warning' && b.type !== 'tip');
+  const riskBlocks = draft.bodyBlocks.filter(b => b.type === 'warning');
+  const intro: OABodyBlock = { id: 'sf_intro', type: 'lead', content: '以下内容可转发给客户，帮助客户快速理解核心结论。' };
+  const cta: OABodyBlock = { id: 'sf_cta', type: 'cta', content: '如需进一步了解，联系宏达印业销售团队获取详细方案。' };
+  const riskNote: OABodyBlock = riskBlocks.length > 0
+    ? { id: 'sf_risk', type: 'warning', content: '⚠️ 提示：' + riskBlocks.map(b => b.content).join('；') }
+    : { id: 'sf_risk', type: 'warning', content: '⚠️ 本内容仅供参考，具体方案需结合实际产品测试确认。' };
+
+  const newBlocks = [intro, ...blocks.slice(0, 5), riskNote, cta];
+  const newMarkdown = newBlocks.map(b => b.content).join('\n\n');
+
+  return {
+    ...draft,
+    id: 'draft_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+    title: '【销售转发】' + draft.title,
+    coverTitle: draft.coverTitle,
+    summary: '销售转发版 · 约' + newMarkdown.length + '字',
+    bodyBlocks: newBlocks,
+    bodyMarkdown: newMarkdown,
+    usage: 'sales_forward',
+    score: 75, riskLevel: 'low', status: 'draft', updatedAt: now(), createdAt: now(),
+  };
+}
+
+export function generateSeoMeta(draft: OAArticleDraft): { seoTitle: string; seoDescription: string; keywords: string[] } {
+  const pain = draft.bodyBlocks.find(b => b.type === 'lead')?.content || '';
+  const points = draft.bodyBlocks.filter(b => b.type === 'heading').map(b => b.content);
+  return {
+    seoTitle: draft.title.slice(0, 50) + ' | 宏达印业',
+    seoDescription: (draft.summary || pain).slice(0, 150),
+    keywords: ['热转印', ...points.slice(0, 3), draft.usage || '公众号文章'],
+  };
+}
+
+export function generateTrainingDraft(draft: OAArticleDraft, cards?: OASourceCard[]): OAArticleDraft {
+  const warningBlock: OABodyBlock = {
+    id: 'tr_warn', type: 'warning',
+    content: '⚠️ 此内容为内部培训材料，严禁对外转发或公开发布。员工不得向客户承诺具体效果，所有结论需通过实际测试确认。',
+  };
+  const notes = cards?.flatMap(c => c.riskNotes).filter(Boolean) || [];
+  const riskBlocks = notes.map((n, i) => ({
+    id: 'tr_note_' + i, type: 'tip' as const, content: '📌 ' + n, items: undefined as string[] | undefined,
+  }));
+  const blocks = [warningBlock, ...draft.bodyBlocks, ...riskBlocks];
+
+  return {
+    ...draft,
+    id: 'draft_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+    title: '【内部培训】' + draft.title,
+    coverTitle: draft.coverTitle,
+    summary: '内部培训版 · 包含风险提醒和注意事项',
+    bodyBlocks: blocks,
+    usage: 'internal_training',
+    score: 75, riskLevel: 'low', status: 'draft', updatedAt: now(), createdAt: now(),
+  };
 }
 
 // ===== Full pipeline =====
