@@ -1,176 +1,214 @@
 'use client';
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import AppLayout from '@/components/layout/AppLayout';
 import PageHeader from '@/components/layout/PageHeader';
-import { MOCK_OA_TEMPLATES } from '@/lib/constants/oa-mock-data';
-import { MOCK_KNOWLEDGE_NEW } from '@/lib/constants/mock-data';
-import type { ArticleBodyBlock } from '@/lib/constants/types';
+import { OA_SOURCE_CARDS, getOASourceCardsByIds } from '@/lib/constants/oa-source-cards';
+import { ARTICLE_TEMPLATES, getTemplatesForArticleType } from '@/lib/oa/article-templates';
+import { runArticlePipeline, renderOAArticleHtml } from '@/lib/oa/article-pipeline';
+import type { OASourceCard, OAArticleType, OAArticleDraft, GenerateArticleOutput } from '@/lib/oa/types';
 
 export default function ArticleFactoryPage() {
   const [step, setStep] = useState(1);
-  const [form, setForm] = useState<Record<string, any>>({
-    article_type: '知识解释类',
-    selectedCards: [] as string[],
-    template_id: 'tpl_001',
-  });
-  const [result, setResult] = useState<any>(null);
-  const [showPreview, setShowPreview] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [articleType, setArticleType] = useState<OAArticleType | ''>('');
+  const [busFilter, setBusFilter] = useState<string>('all');
+  const [typeFilter, setTypeFilter] = useState<string>('all');
+  const [result, setResult] = useState<GenerateArticleOutput | null>(null);
+  const [draft, setDraft] = useState<OAArticleDraft | null>(null);
+  const [previewHtml, setPreviewHtml] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [msg, setMsg] = useState<{ t: string; s: 'ok' | 'err' } | null>(null);
+  const [editBlocks, setEditBlocks] = useState(false);
 
-  const filteredCards = MOCK_KNOWLEDGE_NEW.filter(c => c.knowledge_status === '已确认');
+  const filteredCards = useMemo(() => {
+    let cards = OA_SOURCE_CARDS.filter(c => c.outboundAllowed);
+    if (busFilter !== 'all') cards = cards.filter(c => c.businessLine === busFilter);
+    if (typeFilter !== 'all') cards = cards.filter(c => c.type === typeFilter);
+    return cards;
+  }, [busFilter, typeFilter]);
 
-  const handleGenerate = async () => {
-    const res = await fetch('/api/oa/generate-article', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        article_type: form.article_type,
-        knowledge_card_ids: form.selectedCards,
-        holiday_context: form.holiday_context || '',
-        tone_style: form.tone_style || '标准',
-      }),
-    });
-    const data = await res.json();
-    setResult(data);
-    setStep(3);
+  const toggleCard = (id: string) =>
+    setSelectedIds(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
+
+  const handleGenerateStrategy = () => {
+    if (selectedIds.length === 0) return;
+    setLoading(true);
+    try {
+      const r = runArticlePipeline({ sourceCardIds: selectedIds, articleType: articleType || undefined });
+      setResult(r); setDraft(r.draft); setStep(4);
+    } catch (e: any) {
+      setMsg({ t: e.message, s: 'err' });
+      setTimeout(() => setMsg(null), 5000);
+    }
+    setLoading(false);
   };
 
-  const handleRenderPreview = async () => {
-    if (!result) return;
-    const res = await fetch('/api/oa/render-template', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        template_id: form.template_id,
-        body_blocks: result.body_blocks || [],
-      }),
-    });
-    const data = await res.json();
-    setResult((prev: any) => ({ ...prev, _html: data.html }));
-    setShowPreview(true);
+  const handleReGenerate = () => {
+    if (selectedIds.length === 0) return;
+    const shuffled = [...selectedIds].sort(() => Math.random() - 0.5);
+    try {
+      const r = runArticlePipeline({ sourceCardIds: shuffled, articleType: articleType || undefined });
+      setResult(r); setDraft(r.draft);
+      setMsg({ t: '已重新生成', s: 'ok' });
+      setTimeout(() => setMsg(null), 3000);
+    } catch (e: any) { setMsg({ t: e.message, s: 'err' }); }
   };
 
-  const handleMockPublish = async () => {
-    const res = await fetch('/api/oa/mock-publish', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ article_id: 'new_' + Date.now() }),
-    });
-    const data = await res.json();
-    setResult((prev: any) => ({ ...prev, _publish: data }));
+  const handleRenderPreview = () => {
+    if (!draft) return;
+    setPreviewHtml(renderOAArticleHtml(draft));
+    setStep(5);
+  };
+
+  const handleSaveDraft = () => {
+    if (!draft) return;
+    try {
+      const stored = JSON.parse(localStorage.getItem('oa_drafts') || '[]');
+      stored.unshift(draft);
+      localStorage.setItem('oa_drafts', JSON.stringify(stored));
+      setMsg({ t: '草稿已保存到本地', s: 'ok' });
+      setTimeout(() => setMsg(null), 3000);
+    } catch { setMsg({ t: '保存失败', s: 'err' }); }
+  };
+
+  const copyToClipboard = async (text: string, label: string) => {
+    try { await navigator.clipboard.writeText(text); setMsg({ t: label + ' 已复制', s: 'ok' }); }
+    catch { setMsg({ t: '复制失败', s: 'err' }); }
+    setTimeout(() => setMsg(null), 3000);
   };
 
   return (
     <AppLayout>
-      <PageHeader title="公众号文章工厂" description="知识库驱动·AI生成·模板渲染·排期发布" />
-      <div className="flex gap-1 mb-4">
-        {[1,2,3].map(s => (
-          <div key={s} className={'flex-1 h-2 rounded-full ' + (s === step ? 'bg-emerald-500' : s < step ? 'bg-emerald-300' : 'bg-gray-200')} />
-        ))}
-      </div>
-
-      <div className="flex gap-4">
-        {/* Left: Knowledge card selection */}
-        <div className="w-72 flex-shrink-0 space-y-2">
-          <p className="text-xs font-medium text-gray-600 mb-2">选择知识卡作为文章依据</p>
-          <div className="space-y-1.5 max-h-[60vh] overflow-y-auto">
-            {filteredCards.map(card => (
-              <label key={card.id} className={'flex items-start gap-2 p-2 rounded-lg border cursor-pointer text-xs ' +
-                (form.selectedCards.includes(card.id) ? 'border-emerald-400 bg-emerald-50' : 'border-gray-200 hover:border-gray-300')}>
-                <input type="checkbox" checked={form.selectedCards.includes(card.id)}
-                  onChange={() => setForm((prev: any) => ({
-                    ...prev,
-                    selectedCards: prev.selectedCards.includes(card.id)
-                      ? prev.selectedCards.filter((id: string) => id !== card.id)
-                      : [...prev.selectedCards, card.id],
-                  }))} className="w-3.5 h-3.5 mt-0.5" />
-                <div>
-                  <p className="font-medium text-gray-700">{card.title}</p>
-                  <p className="text-[10px] text-gray-400">{card.category} · {card.card_type}</p>
-                </div>
-              </label>
-            ))}
-          </div>
-          <div className="space-y-2 pt-2">
-            <p className="text-xs font-medium text-gray-600">文章类型</p>
-            <select className="select-field text-xs" value={form.article_type}
-              onChange={e => setForm({...form, article_type: e.target.value})}>
-              <option value="知识解释类">知识解释类</option>
-              <option value="宣传信任类">宣传信任类</option>
-              <option value="节日/节气类">节日/节气类</option>
-            </select>
-            {form.article_type === '节日/节气类' && (
-              <input className="input-field text-xs" placeholder="节气/节日名称"
-                value={form.holiday_context || ''}
-                onChange={e => setForm({...form, holiday_context: e.target.value})} />
-            )}
-          </div>
+      <div className="max-w-4xl">
+        <div className="flex items-center justify-between">
+          <PageHeader title="文章工厂" description="公众号文章生成流水线 · 草稿模式" />
+          <span className="text-[10px] bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded h-fit">🔒 草稿模式</span>
         </div>
 
-        {/* Middle: Generate & Edit */}
-        <div className="flex-1 border border-gray-200 rounded-lg p-4 bg-white min-h-[400px]">
-          {step === 1 && (
-            <div className="flex flex-col items-center justify-center h-full py-12">
-              <p className="text-4xl mb-3">📝</p>
-              <h3 className="text-sm font-bold text-gray-700">选择知识卡</h3>
-              <p className="text-xs text-gray-400 mt-1">从左栏选择1-3张确认状态的知识卡</p>
-              <div className="flex gap-2 mt-4">
-                <select className="select-field text-xs w-auto" value={form.template_id}
-                  onChange={e => setForm({...form, template_id: e.target.value})}>
-                  {MOCK_OA_TEMPLATES.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-                </select>
-                <button className="btn-primary btn-sm text-xs" disabled={form.selectedCards.length === 0}
-                  onClick={handleGenerate}>开始生成</button>
+        {msg && (
+          <div className={'mb-3 px-3 py-2 rounded text-xs ' + (msg.s === 'ok' ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-red-50 text-red-700 border border-red-200')}>
+            {msg.t}
+          </div>
+        )}
+
+        <div className="flex gap-1 mb-4 text-xs">
+          {['选来源卡', '选文章类型', '生成策略', '生成草稿', '预览'].map((s, i) => (
+            <div key={i} className={'flex-1 text-center py-1.5 rounded ' + (step === i + 1 ? 'bg-blue-600 text-white font-medium' : step > i + 1 ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-400')}>
+              {i + 1}. {s}
+            </div>
+          ))}
+        </div>
+
+        {step === 1 && (
+          <div className="space-y-3">
+            <div className="flex gap-2 items-center">
+              <select className="select-field w-40 text-xs" value={busFilter} onChange={e => setBusFilter(e.target.value)}>
+                <option value="all">全部方向</option>
+                <option value="heat_transfer">热转印</option>
+                <option value="digital_heat_transfer">数码热转印</option>
+                <option value="uv_machine">UV机器</option>
+                <option value="brand">品牌</option>
+              </select>
+              <select className="select-field w-28 text-xs" value={typeFilter} onChange={e => setTypeFilter(e.target.value)}>
+                <option value="all">全部类型</option>
+                <option value="knowledge">知识卡</option><option value="faq">FAQ</option>
+                <option value="case">案例</option><option value="equipment">设备</option><option value="brand">品牌</option>
+              </select>
+              <span className="text-xs text-gray-400">已选 {selectedIds.length} 条</span>
+            </div>
+            <div className="grid grid-cols-2 gap-2 max-h-[400px] overflow-y-auto">
+              {filteredCards.map(card => (
+                <div key={card.id} className={'p-3 rounded-lg border cursor-pointer text-xs transition-colors ' + (selectedIds.includes(card.id) ? 'border-blue-500 bg-blue-50 ring-1' : 'border-gray-200 hover:border-gray-300')} onClick={() => toggleCard(card.id)}>
+                  <div className="flex justify-between"><span className="font-medium text-gray-800">{card.title}</span><span className="text-[9px] px-1 bg-gray-100 rounded">{card.type}</span></div>
+                  <p className="text-[10px] text-gray-500 mt-1">{card.targetAudience}</p>
+                  <p className="text-[10px] text-gray-400 mt-0.5">{card.coreConclusion.slice(0, 50)}...</p>
+                </div>
+              ))}
+            </div>
+            <div className="flex justify-end">
+              <button className="btn-primary text-xs px-4 py-1.5" disabled={selectedIds.length === 0} onClick={() => setStep(2)}>下一步 →</button>
+            </div>
+          </div>
+        )}
+
+        {step === 2 && (
+          <div>
+            <p className="text-xs text-gray-500 mb-3">已选 {selectedIds.length} 条来源卡：{getOASourceCardsByIds(selectedIds).map(c => c.title).join('、')}</p>
+            <div className="grid grid-cols-2 gap-2">
+              {ARTICLE_TEMPLATES.map(t => (
+                <div key={t.id} className={'p-3 rounded-lg border cursor-pointer text-xs transition-colors ' + (articleType && t.suitableArticleTypes.includes(articleType as any) ? 'border-green-400 bg-green-50' : 'border-gray-200 hover:border-gray-300')} onClick={() => setArticleType(t.suitableArticleTypes[0])}>
+                  <span className="font-medium text-gray-800">{t.styleTokens?.introEmoji || '📄'} {t.name}</span>
+                  <p className="text-[10px] text-gray-500">{t.description}</p>
+                  <div className="flex flex-wrap gap-1 mt-1">{t.suitableArticleTypes.map(at => <span key={at} className="text-[8px] bg-gray-100 text-gray-500 px-1 rounded">{at}</span>)}</div>
+                </div>
+              ))}
+            </div>
+            <div className="flex justify-between mt-3">
+              <button className="btn-secondary text-xs px-3 py-1.5" onClick={() => setStep(1)}>← 上一步</button>
+              <button className="btn-primary text-xs px-4 py-1.5" disabled={loading || !articleType} onClick={handleGenerateStrategy}>{loading ? '生成中...' : '生成文章 →'}</button>
+            </div>
+          </div>
+        )}
+
+        {step === 4 && draft && (
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <div><span className="text-sm font-bold text-gray-800">{draft.title}</span><span className="ml-2 text-xs text-gray-400">{draft.score}/100 · 风险: {draft.riskLevel}</span></div>
+              <div className="flex gap-1">
+                <button className="btn-secondary text-[10px] px-2 py-1" onClick={handleReGenerate}>重新生成</button>
+                <button className="btn-secondary text-[10px] px-2 py-1" onClick={() => setEditBlocks(!editBlocks)}>{editBlocks ? '完成编辑' : '编辑'}</button>
               </div>
             </div>
-          )}
-          {step === 3 && result && (
-            <div className="space-y-3">
-              <input className="input-field w-full text-sm font-semibold" value={result.title || ''}
-                onChange={e => setResult({...result, title: e.target.value})} />
-              <div className="flex gap-3 text-xs text-gray-500">
-                <span>字数：{result.word_count}字</span>
-                <span>阅读：{result.estimated_read_time}分钟</span>
-                <span>来源：{(result.source_knowledge_card_ids || []).length}张知识卡</span>
-              </div>
-              <div className="space-y-2 max-h-[400px] overflow-y-auto">
-                {(result.body_blocks || []).map((block: ArticleBodyBlock, i: number) => (
-                  <div key={i}>
-                    {block.type === 'title' && <h3 className="text-base font-bold text-gray-800 mt-3">{block.content}</h3>}
-                    {block.type === 'paragraph' && <p className="text-sm text-gray-700 leading-relaxed">{block.content}</p>}
-                    {block.type === 'quote' && <div className="border-l-4 border-emerald-500 bg-emerald-50 p-3 rounded text-sm text-emerald-800">{block.content}</div>}
-                    {block.type === 'tip' && <div className="bg-yellow-50 border border-yellow-200 rounded p-2 text-xs text-yellow-700">{block.content}</div>}
-                    {block.type === 'cta' && <div className="bg-emerald-600 text-white rounded-lg p-3 text-sm text-center font-medium">{block.content}</div>}
-                  </div>
-                ))}
+            <div className="border rounded-lg p-3 bg-white max-h-[400px] overflow-y-auto">
+              {draft.bodyBlocks.map(block => (
+                <div key={block.id} className="mb-2">
+                  {editBlocks ? (
+                    <textarea className="input-field w-full text-xs p-1" rows={2} value={block.content} onChange={e => {
+                      setDraft({ ...draft, bodyBlocks: draft.bodyBlocks.map(b => b.id === block.id ? { ...b, content: e.target.value } : b) });
+                    }} />
+                  ) : (
+                    <>
+                      {block.type === 'title' && <h1 className="text-base font-bold">{block.content}</h1>}
+                      {block.type === 'lead' && <p className="text-xs text-gray-500 italic">{block.content}</p>}
+                      {block.type === 'heading' && <h2 className="text-sm font-semibold text-gray-700 mt-3">{block.content}</h2>}
+                      {block.type === 'paragraph' && <p className="text-xs text-gray-600 mt-1">{block.content}</p>}
+                      {block.type === 'quote' && <blockquote className="text-xs text-blue-700 bg-blue-50 border-l-4 border-blue-500 p-2 mt-1">{block.content}</blockquote>}
+                      {block.type === 'tip' && <div className="text-xs text-green-700 bg-green-50 p-2 mt-1 rounded">{block.content}{block.items?.map(i => <div key={i} className="ml-2">• {i}</div>)}</div>}
+                      {block.type === 'warning' && <div className="text-xs text-red-600 bg-red-50 p-2 mt-1 rounded">{block.content}</div>}
+                      {block.type === 'cta' && <div className="text-xs text-white bg-blue-600 text-center p-2 mt-2 rounded">{block.content}</div>}
+                    </>
+                  )}
+                  <span className="text-[8px] text-gray-300 ml-1">{block.type}</span>
+                </div>
+              ))}
+            </div>
+            <div className="flex justify-between mt-3">
+              <button className="btn-secondary text-xs px-3 py-1.5" onClick={() => setStep(2)}>← 上一步</button>
+              <div className="flex gap-1">
+                <button className="btn-secondary text-xs px-3 py-1.5" onClick={handleSaveDraft}>💾 保存草稿</button>
+                <button className="btn-primary text-xs px-4 py-1.5" onClick={handleRenderPreview}>预览 →</button>
               </div>
             </div>
-          )}
-        </div>
+          </div>
+        )}
 
-        {/* Right: Actions */}
-        <div className="w-64 flex-shrink-0 space-y-3">
-          {step === 3 && result && (
-            <>
-              <button className="btn-primary btn-sm w-full text-xs" onClick={handleRenderPreview}>预览渲染</button>
-              <button className="btn-secondary btn-sm w-full text-xs" onClick={handleMockPublish}>Mock 发布</button>
-              {result._html && showPreview && (
-                <div className="border border-gray-200 rounded-lg p-3 bg-white max-h-60 overflow-y-auto">
-                  <p className="text-xs font-medium text-gray-600 mb-2">HTML 预览</p>
-                  <div className="text-xs text-gray-700" dangerouslySetInnerHTML={{ __html: result._html }} />
-                </div>
-              )}
-              {result._publish && (
-                <div className="bg-green-50 border border-green-200 rounded-lg p-3">
-                  <p className="text-xs font-medium text-green-700">已发布 (Mock)</p>
-                  <p className="text-[10px] text-green-600 mt-1">ID: {result._publish.mock_publish_id}</p>
-                </div>
-              )}
-              <div className="border border-gray-200 rounded-lg p-2">
-                <p className="text-[10px] text-gray-400 font-medium mb-1">风险提醒</p>
-                {(result.risk_notes || []).map((r: string, i: number) => (
-                  <p key={i} className="text-[10px] text-orange-600">{r}</p>
-                ))}
-              </div>
-            </>
-          )}
-        </div>
+        {step === 5 && previewHtml && (
+          <div>
+            <div className="flex gap-1 mb-2">
+              <button className="btn-secondary text-[10px] px-2 py-1" onClick={() => copyToClipboard(previewHtml, 'HTML')}>📋 复制HTML</button>
+              <button className="btn-secondary text-[10px] px-2 py-1" onClick={() => draft && copyToClipboard(draft.bodyMarkdown + '\n\n---\n*草稿模式，未接入真实发布*', 'Markdown')}>📝 复制MD</button>
+              <button className="btn-secondary text-[10px] px-2 py-1" onClick={handleSaveDraft}>💾 保存</button>
+              <span className="ml-auto text-[10px] text-yellow-600 self-center">🔒 草稿模式</span>
+            </div>
+            <div className="border rounded-lg bg-white max-h-[600px] overflow-auto">
+              <iframe srcDoc={previewHtml} title="预览" className="w-full" style={{ minHeight: '500px', border: 'none' }} />
+            </div>
+            <div className="flex justify-between mt-2">
+              <button className="btn-secondary text-xs px-3 py-1.5" onClick={() => setStep(4)}>← 返回</button>
+              <button className="btn-primary text-xs px-3 py-1.5" onClick={() => copyToClipboard(previewHtml, 'HTML')}>复制HTML到公众号</button>
+            </div>
+          </div>
+        )}
       </div>
     </AppLayout>
   );

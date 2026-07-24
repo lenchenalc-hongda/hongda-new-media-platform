@@ -118,13 +118,13 @@ export default function ScriptEditorPane({
           </>
         ) : (
           <>
-            {selected.hook && <Field label="前3秒钩子" value={selected.hook} />}
-            {selected.main_script && <Field label="完整口播" value={selected.main_script} />}
-            {selected.subtitle_points && <Field label="字幕重点" value={selected.subtitle_points} />}
-            {selected.cover_text && <Field label="封面标题" value={selected.cover_text} />}
-            {selected.comment_reply && <Field label="评论区引导" value={selected.comment_reply} />}
-            {selected.private_message_cta && <Field label="私信承接话术" value={selected.private_message_cta} />}
-            {selected.risk_notes && <Field label="风险提醒" value={selected.risk_notes} />}
+            {selected.hook != null && <Field label="前3秒钩子" value={selected.hook || '(无内容)'} />}
+            {selected.main_script != null && <Field label="完整口播" value={selected.main_script || '(无内容)'} />}
+            {selected.subtitle_points != null && <Field label="字幕重点" value={selected.subtitle_points || '(无内容)'} />}
+            {selected.cover_text != null && <Field label="封面标题" value={selected.cover_text || '(无内容)'} />}
+            {selected.comment_reply != null && <Field label="评论区引导" value={selected.comment_reply || '(无内容)'} />}
+            {selected.private_message_cta != null && <Field label="私信承接话术" value={selected.private_message_cta || '(无内容)'} />}
+            {selected.risk_notes != null && <Field label="风险提醒" value={selected.risk_notes || '(无内容)'} />}
           </>
         )}
       </div>

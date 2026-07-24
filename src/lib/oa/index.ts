@@ -10,3 +10,9 @@ export { MockPublishAdapter, WeChatMpPublishAdapter, getPublishAdapter } from '.
 export type { PublishRequest, PublishResult, IPublishAdapter } from './publish-adapter';
 export { createPublishJob, executePublishJob, retryPublishJob, getAllPublishJobs, getPublishLogs, checkPublishGate } from './publish-queue';
 export type { PublishJob, PublishLog, PublishGateCheck } from './publish-queue';
+// === Phase 1 new exports ===
+export { runArticlePipeline, generateArticleStrategy, generateArticleDraft, scoreOAArticle, renderOAArticleHtml } from './article-pipeline';
+export type { GenerateArticleInput, GenerateArticleOutput } from './types';
+export type { OASourceCard, OAArticleStrategy, OAArticleDraft, OABodyBlock, OAArticleType, OAArticleTemplate } from './types';
+export { ARTICLE_TEMPLATES, getArticleTemplateById, getTemplatesForArticleType } from './article-templates';
+export { OA_SOURCE_CARDS, getOASourceCardsByIds, getOASourceCardsByBusinessLine, getOASourceCardsByType } from '@/lib/constants/oa-source-cards';
