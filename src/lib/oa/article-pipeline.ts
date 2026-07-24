@@ -1,6 +1,7 @@
 // ===== 文章生成流水线 =====
 
 import { OA_SOURCE_CARDS, getOASourceCardsByIds } from '@/lib/constants/oa-source-cards';
+import { OA_THEMES, OATheme } from './oa-themes';
 import { getKnowledgeSourceCards, getSourceCardsByIds as getCardsByIds } from '@/lib/oa/oa-knowledge-bridge';
 import {
   OASourceCard, OAArticleStrategy, OAArticleDraft, OABodyBlock,
@@ -348,4 +349,93 @@ export function runArticlePipeline(input: GenerateArticleInput): GenerateArticle
   const score = scoreOAArticle(draft);
 
   return { strategy, draft, score };
+}
+
+// ===== Visual HTML Rendering with Themes =====
+
+function themeStyle(theme: OATheme): string {
+  return `
+    --primary:${theme.primaryColor};--secondary:${theme.secondaryColor};
+    --accent:${theme.accentColor};--text:${theme.textColor};
+    --muted:${theme.mutedTextColor};--bg:${theme.backgroundColor};
+    --radius:${theme.borderRadius};--spacing:${theme.spacingScale * 4}px;
+  `;
+}
+
+export function renderVisualArticleHtml(
+  draft: { bodyBlocks: OABodyBlock[]; title?: string },
+  themeId: string = 'hongda_blue',
+): string {
+  const theme = OA_THEMES.find(t => t.id === themeId) || OA_THEMES[0];
+  const blocks = draft.bodyBlocks || [];
+
+  const blockHtml = blocks.map(b => {
+    switch (b.type) {
+      case 'title':
+        return `<div style="background:${theme.primaryColor};color:white;border-radius:${theme.borderRadius};padding:20px 16px;margin-bottom:16px;">
+          <h1 style="font-size:20px;font-weight:700;margin:0;line-height:1.5;">${b.content}</h1>
+        </div>`;
+      case 'lead':
+        return `<div style="background:${theme.accentColor};border-radius:${theme.borderRadius};padding:14px 16px;margin:12px 0;font-size:14px;color:${theme.textColor};line-height:1.8;border-left:4px solid ${theme.primaryColor};">${b.content}</div>`;
+      case 'heading':
+        return `<div style="margin:20px 0 10px;display:flex;align-items:center;gap:8px;">
+          <span style="display:inline-block;width:4px;height:20px;background:${theme.primaryColor};border-radius:2px;"></span>
+          <h2 style="font-size:17px;font-weight:600;margin:0;color:${theme.textColor};line-height:1.5;">${b.content}</h2>
+        </div>`;
+      case 'paragraph':
+        return `<p style="font-size:15px;margin:10px 0;line-height:1.8;color:${theme.textColor};">${b.content}</p>`;
+      case 'quote':
+        return `<div style="background:${theme.accentColor};border-radius:${theme.borderRadius};padding:14px 16px;margin:14px 0;border-left:4px solid ${theme.primaryColor};">
+          <p style="font-size:15px;margin:0;line-height:1.8;color:${theme.textColor};">${b.content}</p>
+        </div>`;
+      case 'tip':
+        return `<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:${theme.borderRadius};padding:14px 16px;margin:14px 0;">
+          <p style="font-size:13px;font-weight:600;color:#166534;margin:0 0 4px;">💡 小提示</p>
+          <p style="font-size:14px;margin:4px 0;line-height:1.7;color:#166534;">${b.content}</p>
+          ${b.items ? `<ul style="margin:8px 0 0 16px;padding:0;font-size:13px;color:#166534;">${b.items.map(i => `<li style="margin:4px 0;">${i}</li>`).join('')}</ul>` : ''}
+        </div>`;
+      case 'warning':
+        return `<div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:${theme.borderRadius};padding:14px 16px;margin:14px 0;">
+          <p style="font-size:13px;font-weight:600;color:#991b1b;margin:0 0 4px;">⚠️ 注意</p>
+          <p style="font-size:14px;margin:0;line-height:1.7;color:#991b1b;">${b.content}</p>
+        </div>`;
+      case 'checklist':
+        return `<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:${theme.borderRadius};padding:14px 16px;margin:14px 0;">
+          <p style="font-size:14px;font-weight:600;color:${theme.textColor};margin:0 0 8px;">${b.content}</p>
+          ${b.items ? `<ul style="margin:0 0 0 16px;padding:0;">${b.items.map(i => `<li style="margin:6px 0;font-size:14px;list-style:none;color:${theme.textColor};">☐ ${i}</li>`).join('')}</ul>` : ''}
+        </div>`;
+      case 'case':
+        return `<div style="background:${theme.accentColor};border-radius:${theme.borderRadius};padding:16px;margin:14px 0;">
+          <p style="font-size:13px;font-weight:600;color:${theme.primaryColor};margin:0 0 8px;">📌 客户案例</p>
+          <p style="font-size:15px;margin:0;line-height:1.8;color:${theme.textColor};">${b.content}</p>
+        </div>`;
+      case 'cta':
+        return `<div style="background:${theme.primaryColor};color:white;border-radius:${theme.borderRadius};padding:20px;margin:20px 0;text-align:center;">
+          <p style="font-size:16px;font-weight:600;margin:0 0 8px;line-height:1.6;">${b.content}</p>
+          <div style="display:inline-block;background:rgba(255,255,255,0.2);border-radius:20px;padding:8px 24px;margin-top:8px;font-size:14px;">立即咨询 →</div>
+        </div>`;
+      case 'image':
+        return `<div style="background:#f3f4f6;border-radius:${theme.borderRadius};margin:14px 0;text-align:center;padding:30px 16px;color:#9ca3af;font-size:13px;">
+          ${b.imageUrl ? `<img src="${b.imageUrl}" alt="${b.alt || ''}" style="max-width:100%;border-radius:${theme.borderRadius};" />` : `📷 ${b.alt || '图片占位'}`}
+        </div>`;
+      default:
+        return `<p style="font-size:15px;margin:8px 0;line-height:1.8;color:${theme.textColor};">${b.content}</p>`;
+    }
+  }).join('\n');
+
+  const headerPattern = theme.headerBg
+    ? `<div style="height:6px;background:${theme.headerBg};border-radius:${theme.borderRadius} ${theme.borderRadius} 0 0;"></div>`
+    : '';
+
+  return `<div style="max-width:375px;margin:0 auto;font-family:-apple-system,'Noto Sans SC','PingFang SC',sans-serif;background:${theme.backgroundColor};border-radius:${theme.borderRadius};overflow:hidden;${themeStyle(theme)}">
+    ${headerPattern}
+    <div style="padding:16px 20px;">
+      ${blockHtml}
+    </div>
+    <div style="background:${theme.primaryColor};padding:16px 20px;text-align:center;">
+      <p style="font-size:13px;font-weight:600;color:white;margin:0 0 4px;">宏达印业</p>
+      <p style="font-size:11px;color:rgba(255,255,255,0.7);margin:0;">热转印方案专家</p>
+      <p style="font-size:10px;color:rgba(255,255,255,0.4);margin:8px 0 0;">本文由宏达新媒体作战中台生成</p>
+    </div>
+  </div>`;
 }
