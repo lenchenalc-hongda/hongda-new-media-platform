@@ -46,6 +46,10 @@ export interface OASourceCard {
   /** 关联材质 */
   relatedMaterial?: string;
   /** 关联工艺 */
+  /** 复盘表现记录 */
+  performanceNotes?: string;
+  /** 推荐复用等级：高/中/低/不再使用 */
+  recommendedReuseLevel?: 'high' | 'medium' | 'low' | 'stop';
   relatedProcess?: string;
 }
 
@@ -135,6 +139,44 @@ export interface OAArticleReview {
   score?: number;
   riskLevel?: 'low' | 'medium' | 'high';
   createdAt: string;
+}
+
+export interface OAArticleMetrics {
+  id: string;
+  articleId: string;
+  articleTitle: string;
+  articleType: string;
+  publishedAt: string;
+  articleUrl?: string;
+  views: number;
+  likes: number;
+  shares: number;
+  favorites: number;
+  newFollowers: number;
+  inquiries: number;
+  salesForwardCount: number;
+  sampleRequests: number;
+  quoteRequests: number;
+  customerQuestions: number;
+  notes: string;
+  sourceCardIds: string[];
+  usage: string;
+  updatedAt: string;
+}
+
+export function createEmptyMetrics(article: any, publishedAt?: string): OAArticleMetrics {
+  return {
+    id: 'met_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8),
+    articleId: article.id || '',
+    articleTitle: article.title || '',
+    articleType: article.articleType || article.strategyId || '',
+    publishedAt: publishedAt || new Date().toISOString().slice(0, 10),
+    views: 0, likes: 0, shares: 0, favorites: 0,
+    newFollowers: 0, inquiries: 0, salesForwardCount: 0,
+    sampleRequests: 0, quoteRequests: 0, customerQuestions: 0,
+    notes: '', sourceCardIds: article.sourceCardIds || [], usage: article.usage || 'wechat_publish',
+    updatedAt: new Date().toISOString(),
+  };
 }
 
 export interface OAArticleTemplate {

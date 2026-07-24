@@ -9,6 +9,7 @@ export const OA_STORAGE_KEYS = {
   ARTICLE_DRAFTS: 'hongda_oa_article_drafts',
   ARTICLE_STRATEGIES: 'hongda_oa_article_strategies',
   TEMPLATES: 'hongda_oa_templates',
+  ARTICLE_METRICS: 'hongda_oa_article_metrics',
   ARTICLE_REVIEWS: 'hongda_oa_article_reviews',
 };
 
