@@ -3,6 +3,7 @@ import { useState, useMemo, useEffect } from 'react';
 import AppLayout from '@/components/layout/AppLayout';
 import PageHeader from '@/components/layout/PageHeader';
 import { OA_SOURCE_CARDS } from '@/lib/constants/oa-source-cards';
+import { getKnowledgeSourceCards, getAllSourceCards, getSourceCardsByIds } from '@/lib/oa/oa-knowledge-bridge';
 import { OA_STORAGE_KEYS, loadOAData, saveOAData } from '@/lib/oa/oa-storage';
 import { saveToServer } from '@/lib/storage';
 import { ARTICLE_TEMPLATES, getTemplatesForArticleType } from '@/lib/oa/article-templates';
@@ -50,7 +51,10 @@ export default function SourceCardsPage() {
   // Load cards from storage, seed with OA_SOURCE_CARDS mock if empty
   const [cards, setCards] = useState<OASourceCard[]>(() => {
     const stored = loadOAData(OA_STORAGE_KEYS.SOURCE_CARDS, []);
-    return stored.length > 0 ? stored : OA_SOURCE_CARDS;
+    const oaCards = stored.length > 0 ? stored : OA_SOURCE_CARDS;
+    const knowledgeCards = getKnowledgeSourceCards();
+    const oaIds = new Set(oaCards.map(c => c.id));
+    return [...oaCards, ...knowledgeCards.filter(kc => !oaIds.has(kc.id))];
   });
   const [syncMsg, setSyncMsg] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -60,8 +64,9 @@ export default function SourceCardsPage() {
 
   // Sync to storage on any cards change
   useEffect(() => {
-    saveOAData(OA_STORAGE_KEYS.SOURCE_CARDS, cards);
-    saveToServer(OA_STORAGE_KEYS.SOURCE_CARDS, cards).catch(() => {});
+    const oaOnly = cards.filter(c => !c.id.startsWith('kb_'));
+    saveOAData(OA_STORAGE_KEYS.SOURCE_CARDS, oaOnly);
+    saveToServer(OA_STORAGE_KEYS.SOURCE_CARDS, oaOnly).catch(() => {});
   }, [cards]);
 
   const filtered = useMemo(() => {
@@ -92,15 +97,20 @@ export default function SourceCardsPage() {
   };
 
   const saveCard = () => {
-    if (!edit) return;
+    if (!edit || edit.id.startsWith('kb_')) { setSyncMsg('知识库卡片不可编辑'); setTimeout(() => setSyncMsg(''), 2000); return; }
     const updated = { ...edit, updatedAt: new Date().toISOString() };
     setCards(prev => prev.map(c => c.id === updated.id ? updated : c));
     setEdit(updated);
+    // Only save OA cards to storage (filter out knowledge cards)
+    const oaOnly = cards.filter(c => !c.id.startsWith('kb_'));
+    saveOAData(OA_STORAGE_KEYS.SOURCE_CARDS, oaOnly.map(c => c.id === updated.id ? updated : c));
+    saveToServer(OA_STORAGE_KEYS.SOURCE_CARDS, oaOnly.map(c => c.id === updated.id ? updated : c)).catch(() => {});
     setSyncMsg('已保存');
     setTimeout(() => setSyncMsg(''), 2000);
   };
 
   const deleteCard = (id: string) => {
+    if (id.startsWith('kb_')) { setSyncMsg('知识库卡片不可删除'); setTimeout(() => setSyncMsg(''), 2000); return; }
     if (!confirm('确定删除这条来源卡？')) return;
     setCards(prev => prev.filter(c => c.id !== id));
     if (selectedId === id) { setSelectedId(null); setEdit(null); }
@@ -178,6 +188,7 @@ export default function SourceCardsPage() {
                   <span className={'text-[9px] px-1 rounded ' + (!card.outboundAllowed ? 'bg-red-100 text-red-600' : 'bg-gray-100 text-gray-500')}>
                     {TYPE_LABELS[card.type] || card.type}
                   </span>
+                  {card.id.startsWith('kb_') && <span className="ml-1 text-[9px] bg-blue-100 text-blue-600 px-1 rounded">📚</span>}
                 </div>
                 <p className="text-[10px] text-gray-400 mt-0.5">{BIZ_LABELS[card.businessLine] || card.businessLine} · {(card.sourceQuality && QUAL_LABELS[card.sourceQuality]) || '-'}</p>
               </div>

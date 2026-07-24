@@ -3,6 +3,7 @@ import { useState, useMemo } from 'react';
 import AppLayout from '@/components/layout/AppLayout';
 import PageHeader from '@/components/layout/PageHeader';
 import { OA_SOURCE_CARDS } from '@/lib/constants/oa-source-cards';
+import { getKnowledgeSourceCards } from '@/lib/oa/oa-knowledge-bridge';
 import { ARTICLE_TEMPLATES, getTemplatesForArticleType } from '@/lib/oa/article-templates';
 import { runArticlePipeline, renderOAArticleHtml } from '@/lib/oa/article-pipeline';
 import type { OAArticleType, OAArticleDraft, GenerateArticleOutput } from '@/lib/oa/types';

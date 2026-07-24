@@ -7,6 +7,7 @@ import { useOAStorage, OA_STORAGE_KEYS } from '@/lib/oa/oa-storage';
 import { renderOAArticleHtml, scoreOAArticle, generateSalesForwardDraft, generateSeoMeta, generateTrainingDraft } from '@/lib/oa/article-pipeline';
 import { getArticleTemplateById } from '@/lib/oa/article-templates';
 import { OA_SOURCE_CARDS } from '@/lib/constants/oa-source-cards';
+import { getKnowledgeSourceCards, getAllSourceCards, getSourceCardsByIds } from '@/lib/oa/oa-knowledge-bridge';
 import type { OAArticleDraft, OAArticleReview, OABodyBlock, OABodyBlockType, OASourceCard } from '@/lib/oa/types';
 
 const ARTICLE_TYPE_LABELS: Record<string, string> = {
@@ -206,7 +207,7 @@ export default function ArticlesPage() {
   // ===== Source cards for selected draft =====
   const sourceCards = useMemo(() => {
     if (!selected) return [];
-    return OA_SOURCE_CARDS.filter(c => selected.sourceCardIds?.includes(c.id));
+    return getSourceCardsByIds(selected.sourceCardIds || []);
   }, [selected]);
 
   return (
@@ -362,7 +363,7 @@ export default function ArticlesPage() {
                 <div className="border-t pt-1 mt-1">
                   <button className="btn-secondary w-full text-[10px] py-1" onClick={() => {
                     if (!editForm) return;
-                    const sources = OA_SOURCE_CARDS.filter((c:any) => editForm.sourceCardIds?.includes(c.id));
+                    const sources = getSourceCardsByIds(editForm.sourceCardIds || []);
                     const sf = generateSalesForwardDraft(editForm, sources);
                     setDrafts(prev => [sf, ...prev]);
                     setSelectedId(sf.id);
@@ -375,7 +376,7 @@ export default function ArticlesPage() {
                   }}>🔍 生成官网SEO版</button>
                   <button className="btn-secondary w-full text-[10px] py-1" onClick={() => {
                     if (!editForm) return;
-                    const sources = OA_SOURCE_CARDS.filter((c:any) => editForm.sourceCardIds?.includes(c.id));
+                    const sources = getSourceCardsByIds(editForm.sourceCardIds || []);
                     const td = generateTrainingDraft(editForm, sources);
                     setDrafts(prev => [td, ...prev]);
                     setSelectedId(td.id);

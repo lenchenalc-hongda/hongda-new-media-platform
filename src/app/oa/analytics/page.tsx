@@ -4,6 +4,7 @@ import AppLayout from '@/components/layout/AppLayout';
 import PageHeader from '@/components/layout/PageHeader';
 import { useOAStorage, OA_STORAGE_KEYS } from '@/lib/oa/oa-storage';
 import { OA_SOURCE_CARDS } from '@/lib/constants/oa-source-cards';
+import { getKnowledgeSourceCards, getAllSourceCards } from '@/lib/oa/oa-knowledge-bridge';
 import type { OAArticleDraft, OAArticleMetrics } from '@/lib/oa/types';
 
 const USAGE_LABELS: Record<string, string> = {
@@ -21,12 +22,11 @@ export default function AnalyticsPage() {
   const [drafts] = useOAStorage<OAArticleDraft>(OA_STORAGE_KEYS.ARTICLE_DRAFTS, []);
   const [metrics, setMetrics] = useOAStorage<OAArticleMetrics>(OA_STORAGE_KEYS.ARTICLE_METRICS, []);
   const [sourceCards, setSourceCards] = useState<any[]>(() => {
-    // Load from storage or use OA_SOURCE_CARDS
-    if (typeof window === 'undefined') return OA_SOURCE_CARDS;
+    if (typeof window === 'undefined') return getAllSourceCards();
     try {
       const stored = JSON.parse(localStorage.getItem(OA_STORAGE_KEYS.SOURCE_CARDS) || '[]');
-      return stored.length > 0 ? stored : OA_SOURCE_CARDS;
-    } catch { return OA_SOURCE_CARDS; }
+      return getAllSourceCards(stored.length > 0 ? stored : undefined);
+    } catch { return getAllSourceCards(); }
   });
   const [editMetricsId, setEditMetricsId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<OAArticleMetrics | null>(null);

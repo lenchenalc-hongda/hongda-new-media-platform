@@ -1,6 +1,7 @@
 // ===== 文章生成流水线 =====
 
 import { OA_SOURCE_CARDS, getOASourceCardsByIds } from '@/lib/constants/oa-source-cards';
+import { getKnowledgeSourceCards, getSourceCardsByIds as getCardsByIds } from '@/lib/oa/oa-knowledge-bridge';
 import {
   OASourceCard, OAArticleStrategy, OAArticleDraft, OABodyBlock,
   OAArticleType, OAArticleTemplate, GenerateArticleInput, GenerateArticleOutput,
@@ -25,7 +26,7 @@ const ARTICLE_TYPE_MAP: Record<string, OAArticleType> = {
 };
 
 export function generateArticleStrategy(input: GenerateArticleInput): OAArticleStrategy {
-  const cards = getOASourceCardsByIds(input.sourceCardIds);
+  const cards = getCardsByIds(input.sourceCardIds);
   if (cards.length === 0) throw new Error('sourceCardIds 未找到对应卡片');
 
   const first = cards[0];
@@ -332,7 +333,7 @@ export function generateTrainingDraft(draft: OAArticleDraft, cards?: OASourceCar
 // ===== Full pipeline =====
 
 export function runArticlePipeline(input: GenerateArticleInput): GenerateArticleOutput {
-  const cards = getOASourceCardsByIds(input.sourceCardIds);
+  const cards = getCardsByIds(input.sourceCardIds);
   if (cards.length === 0) throw new Error('请至少选择一条内容来源卡');
 
   // Check outbound restriction

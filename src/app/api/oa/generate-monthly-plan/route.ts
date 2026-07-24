@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { generateMonthlyPlan } from '@/lib/oa/monthly-planner';
 import { OA_SOURCE_CARDS } from '@/lib/constants/oa-source-cards';
+import { getKnowledgeSourceCards, getAllSourceCards } from '@/lib/oa/oa-knowledge-bridge';
 
 export async function POST(req: NextRequest) {
   try {
@@ -14,7 +15,7 @@ export async function POST(req: NextRequest) {
       month: currentMonth,
       year: currentYear,
       targetCount: targetCount || 6,
-      sourceCards: OA_SOURCE_CARDS.filter(c => c.outboundAllowed),
+      sourceCards: getAllSourceCards(OA_SOURCE_CARDS).filter(c => c.outboundAllowed),
       businessGoal: businessGoal || 'customer_education',
       monthlyFocus,
       targetAudience,
