@@ -1,13 +1,11 @@
-// POST /api/oa/generate-monthly-plan
-// Auto-generates a monthly article plan using the monthly planner engine
-
 import { NextRequest, NextResponse } from 'next/server';
 import { generateMonthlyPlan } from '@/lib/oa/monthly-planner';
+import { OA_SOURCE_CARDS } from '@/lib/constants/oa-source-cards';
 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { month, year, targetCount, brandFocus, knowledgeCards } = body;
+    const { month, year, targetCount, businessGoal, monthlyFocus, targetAudience, requiredArticleMix } = body;
 
     const currentMonth = month || new Date().getMonth() + 1;
     const currentYear = year || new Date().getFullYear();
@@ -16,8 +14,11 @@ export async function POST(req: NextRequest) {
       month: currentMonth,
       year: currentYear,
       targetCount: targetCount || 6,
-      brandFocus: brandFocus || [],
-      knowledgeCards: knowledgeCards || [],
+      sourceCards: OA_SOURCE_CARDS.filter(c => c.outboundAllowed),
+      businessGoal: businessGoal || 'customer_education',
+      monthlyFocus,
+      targetAudience,
+      requiredArticleMix,
     });
 
     return NextResponse.json({
