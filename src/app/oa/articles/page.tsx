@@ -7,7 +7,7 @@ import { useOAStorage, OA_STORAGE_KEYS } from '@/lib/oa/oa-storage';
 import { renderOAArticleHtml, scoreOAArticle } from '@/lib/oa/article-pipeline';
 import { getArticleTemplateById } from '@/lib/oa/article-templates';
 import { OA_SOURCE_CARDS } from '@/lib/constants/oa-source-cards';
-import type { OAArticleDraft, OABodyBlock, OABodyBlockType } from '@/lib/oa/types';
+import type { OAArticleDraft, OAArticleReview, OABodyBlock, OABodyBlockType } from '@/lib/oa/types';
 
 const ARTICLE_TYPE_LABELS: Record<string, string> = {
   technical_guide: '技术指南', faq_answer: 'FAQ解答', machine_selection: '设备选型',
@@ -31,6 +31,8 @@ const initialStatus = 'draft';
 
 export default function ArticlesPage() {
   const [drafts, setDrafts, syncStatus] = useOAStorage<OAArticleDraft>(OA_STORAGE_KEYS.ARTICLE_DRAFTS, []);
+  const [reviews, setReviews] = useOAStorage<OAArticleReview>(OA_STORAGE_KEYS.ARTICLE_REVIEWS, []);
+  const [reviewComment, setReviewComment] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [msg, setMsg] = useState<{ t: string; s: 'ok' | 'err' | 'info' } | null>(null);
   const [filters, setFilters] = useState({ status: '', type: '', risk: '', usage: '' });
@@ -86,6 +88,17 @@ export default function ArticlesPage() {
   };
 
   // ===== Status transitions =====
+  const addReview = (action: string, comment: string, prevStatus: string, newStatus: string) => {
+    const rev: OAArticleReview = {
+      id: 'rev_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+      articleId: editForm?.id || '',
+      action: action as any, comment, previousStatus: prevStatus, newStatus,
+      score: editForm?.score, riskLevel: editForm?.riskLevel,
+      createdAt: new Date().toISOString(),
+    };
+    setReviews(prev => [...prev, rev]);
+  };
+
   const submitReview = () => {
     if (!editForm) return;
     const risk = editForm.riskLevel || 'low';
@@ -93,16 +106,25 @@ export default function ArticlesPage() {
     const updated = { ...editForm, status: 'pending_review' as const, updatedAt: new Date().toISOString() };
     setEditForm(updated);
     setDrafts(prev => prev.map(d => d.id === updated.id ? updated : d));
+    addReview('submit', reviewComment || '提交审核', 'draft', 'pending_review');
+    setReviewComment('');
     showMsg('已提交审核', 'ok');
   };
 
   const approve = () => {
     if (!editForm) return;
-    if (editForm.riskLevel === 'high') { showMsg('高风险文章不能批准，请退回修改', 'err'); return; }
+    const errors: string[] = [];
+    if ((editForm.score ?? 0) < 70) errors.push('评分 ' + editForm.score + ' 低于70分');
+    if (editForm.riskLevel === 'high') errors.push('风险等级为高');
+    if (!editForm.bodyHtml && !renderOAArticleHtml(editForm)) errors.push('缺少正文HTML');
+    if (!editForm.sourceCardIds?.length) errors.push('未引用任何来源卡');
+    if (errors.length > 0) { showMsg('❌ ' + errors.join('；'), 'err'); return; }
     const updated = { ...editForm, status: 'approved' as const, updatedAt: new Date().toISOString() };
     setEditForm(updated);
     setDrafts(prev => prev.map(d => d.id === updated.id ? updated : d));
-    showMsg('已批准', 'ok');
+    addReview('approve', reviewComment || '审核通过', 'pending_review', 'approved');
+    setReviewComment('');
+    showMsg('已批准 ✅', 'ok');
   };
 
   const reject = () => {
@@ -110,6 +132,8 @@ export default function ArticlesPage() {
     const updated = { ...editForm, status: 'draft' as const, updatedAt: new Date().toISOString() };
     setEditForm(updated);
     setDrafts(prev => prev.map(d => d.id === updated.id ? updated : d));
+    addReview('reject', reviewComment || '退回修改', 'pending_review', 'draft');
+    setReviewComment('');
     showMsg('已退回修改', 'ok');
   };
 
@@ -230,6 +254,7 @@ export default function ArticlesPage() {
                   {d.score != null && <span className="mr-1">{d.score}分</span>}
                   {d.riskLevel && <span className={'mr-1 ' + (d.riskLevel === 'high' ? 'text-red-500' : d.riskLevel === 'medium' ? 'text-yellow-500' : '')}>{d.riskLevel === 'high' ? '⚠️高' : d.riskLevel === 'medium' ? '中' : '低'}风险</span>}
                   <span>{d.updatedAt?.slice(0, 10)}</span>
+                  {(() => { const lr = reviews.filter(r => r.articleId === d.id).pop(); return lr ? <span className={'ml-1 ' + (lr.action === 'approve' ? 'text-green-500' : lr.action === 'reject' ? 'text-red-500' : 'text-gray-400')}>{lr.action === 'approve' ? '✅' : lr.action === 'reject' ? '❌' : lr.action === 'submit' ? '📤' : ''}</span> : null; })()}
                 </div>
               </div>
             ))}

@@ -124,6 +124,19 @@ export interface OAArticleDraft {
 }
 
 /** 文章模板 */
+export interface OAArticleReview {
+  id: string;
+  articleId: string;
+  action: 'submit' | 'approve' | 'reject' | 'comment' | 'rescore' | 'risk_check';
+  reviewer?: string;
+  comment: string;
+  previousStatus: string;
+  newStatus: string;
+  score?: number;
+  riskLevel?: 'low' | 'medium' | 'high';
+  createdAt: string;
+}
+
 export interface OAArticleTemplate {
   id: string;
   name: string;
