@@ -37,6 +37,16 @@ export interface OASourceCard {
   outboundAllowed: boolean;
   owner?: string;
   updatedAt: string;
+  /** 来源质量评估 */
+  sourceQuality?: 'high' | 'medium' | 'low';
+  /** 可见性：公开展示 / 内部参考 / 仅团队 */
+  visibility?: 'public' | 'internal' | 'team';
+  /** 关联产品 */
+  relatedProduct?: string;
+  /** 关联材质 */
+  relatedMaterial?: string;
+  /** 关联工艺 */
+  relatedProcess?: string;
 }
 
 /** 文章类型 */

@@ -2,7 +2,7 @@
 import { useState, useMemo } from 'react';
 import AppLayout from '@/components/layout/AppLayout';
 import PageHeader from '@/components/layout/PageHeader';
-import { OA_SOURCE_CARDS, getOASourceCardsByIds } from '@/lib/constants/oa-source-cards';
+import { OA_SOURCE_CARDS } from '@/lib/constants/oa-source-cards';
 import { ARTICLE_TEMPLATES, getTemplatesForArticleType } from '@/lib/oa/article-templates';
 import { runArticlePipeline, renderOAArticleHtml } from '@/lib/oa/article-pipeline';
 import type { OAArticleType, OAArticleDraft, GenerateArticleOutput } from '@/lib/oa/types';
@@ -22,8 +22,12 @@ export default function ArticleFactoryPage() {
   const [msg, setMsg] = useState<{ t: string; s: 'ok' | 'err' } | null>(null);
   const [editBlocks, setEditBlocks] = useState(false);
 
+  const liveCards = useMemo(() => {
+    const stored = loadOAData(OA_STORAGE_KEYS.SOURCE_CARDS, OA_SOURCE_CARDS);
+    return stored.length > 0 ? stored : OA_SOURCE_CARDS;
+  }, []);
   const filteredCards = useMemo(() => {
-    let cards = OA_SOURCE_CARDS.filter(c => c.outboundAllowed);
+    let cards = liveCards;  // show all cards (internal ones get warning badge)
     if (busFilter !== 'all') cards = cards.filter(c => c.businessLine === busFilter);
     if (typeFilter !== 'all') cards = cards.filter(c => c.type === typeFilter);
     return cards;
@@ -138,7 +142,7 @@ export default function ArticleFactoryPage() {
 
         {step === 2 && (
           <div>
-            <p className="text-xs text-gray-500 mb-3">已选 {selectedIds.length} 条来源卡：{getOASourceCardsByIds(selectedIds).map(c => c.title).join('、')}</p>
+            <p className="text-xs text-gray-500 mb-3">已选 {selectedIds.length} 条来源卡：{loadOAData(OA_STORAGE_KEYS.SOURCE_CARDS, OA_SOURCE_CARDS).filter((c: any) => selectedIds.includes(c.id)).map((c: any) => c.title).join('、')}</p>
             <div className="grid grid-cols-2 gap-2">
               {ARTICLE_TEMPLATES.map(t => (
                 <div key={t.id} className={'p-3 rounded-lg border cursor-pointer text-xs transition-colors ' + (articleType && t.suitableArticleTypes.includes(articleType as any) ? 'border-green-400 bg-green-50' : 'border-gray-200 hover:border-gray-300')} onClick={() => setArticleType(t.suitableArticleTypes[0])}>
