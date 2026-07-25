@@ -164,6 +164,65 @@ export interface OAArticleMetrics {
   updatedAt: string;
 }
 
+// ===== Layout Engine Types =====
+
+export type OALayoutSectionType =
+  | 'hero_title' | 'intro_lead' | 'core_conclusion' | 'numbered_chapter'
+  | 'text_paragraph' | 'material_matrix' | 'comparison_grid' | 'process_timeline'
+  | 'checklist_panel' | 'risk_matrix' | 'tech_tip' | 'warning_note'
+  | 'case_snapshot' | 'quote_highlight' | 'image_placeholder'
+  | 'cta_checklist' | 'brand_transition';
+
+export interface OALayoutSection {
+  id: string;
+  type: OALayoutSectionType;
+  title?: string;
+  subtitle?: string;
+  content?: string;
+  items?: string[];
+  data?: Record<string, any>;
+  sourceBlockIds?: string[];
+  visualVariant?: string;
+  order: number;
+  editable: boolean;
+}
+
+export interface OAImageSuggestion {
+  id: string;
+  sectionId: string;
+  imageType: 'product_photo' | 'factory_photo' | 'machine_photo' | 'process_diagram' | 'before_after' | 'material_comparison' | 'case_photo' | 'qr_code' | 'brand_asset';
+  description: string;
+  recommendedRatio: '16:9' | '4:3' | '1:1' | '3:4';
+  required: boolean;
+}
+
+export interface OALayoutQualityCheck {
+  hasClearAudience: boolean;
+  hasIntroLead: boolean;
+  hasCoreConclusion: boolean;
+  hasStructuredSections: boolean;
+  hasVisualModule: boolean;
+  hasRiskReminder: boolean;
+  hasCaseOrExample: boolean;
+  hasActionChecklist: boolean;
+  hasBrandClose: boolean;
+  notes: string[];
+  publishReady: boolean;
+}
+
+export interface OALayoutPlan {
+  id: string;
+  draftId: string;
+  articleType: OAArticleType;
+  templateId: string;
+  themeId: string;
+  sections: OALayoutSection[];
+  imageSuggestions: OAImageSuggestion[];
+  qualityCheck: OALayoutQualityCheck;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export function createEmptyMetrics(article: any, publishedAt?: string): OAArticleMetrics {
   return {
     id: 'met_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8),
