@@ -369,6 +369,13 @@ export function renderVisualArticleHtml(
   const theme = OA_THEMES.find(t => t.id === themeId) || OA_THEMES[0];
   const blocks = draft.bodyBlocks || [];
 
+  // Fixed header image (brand banner)
+  const headerHtml = theme.headerImage
+    ? `<div style="margin-bottom:16px;text-align:center;">
+        <img src="${theme.headerImage}" alt="宏达印业" style="max-width:100%;border-radius:${theme.borderRadius};display:block;" />
+       </div>`
+    : '';
+
   const blockHtml = blocks.map(b => {
     switch (b.type) {
       case 'title':
@@ -432,10 +439,13 @@ export function renderVisualArticleHtml(
     <div style="padding:16px 20px;">
       ${blockHtml}
     </div>
-    <div style="background:${theme.primaryColor};padding:16px 20px;text-align:center;">
-      <p style="font-size:13px;font-weight:600;color:white;margin:0 0 4px;">宏达印业</p>
-      <p style="font-size:11px;color:rgba(255,255,255,0.7);margin:0;">热转印方案专家</p>
-      <p style="font-size:10px;color:rgba(255,255,255,0.4);margin:8px 0 0;">本文由宏达新媒体作战中台生成</p>
+    <div style="text-align:center;padding:16px 20px;">
+      ${theme.qrCode ? `<img src="${theme.qrCode}" alt="宏达印业公众号" style="width:120px;height:auto;margin:0 auto 12px;display:block;border-radius:8px;" />` : ''}
+      <div style="border-top:1px solid #e5e7eb;padding-top:12px;margin-top:12px;">
+        <p style="font-size:12px;color:#888;margin:4px 0;">广东宏达印业有限公司</p>
+        <p style="font-size:11px;color:#aaa;margin:4px 0;">热转印 · UV打印 · 整体方案</p>
+        <p style="font-size:10px;color:#ccc;margin:8px 0 0;">长按识别二维码 · 关注宏达印业公众号</p>
+      </div>
     </div>
   </div>`;
 }
