@@ -436,6 +436,7 @@ export function renderVisualArticleHtml(
 
   return `<div style="max-width:375px;margin:0 auto;font-family:-apple-system,'Noto Sans SC','PingFang SC',sans-serif;background:${theme.backgroundColor};border-radius:${theme.borderRadius};overflow:hidden;${themeStyle(theme)}">
     ${headerPattern}
+    ${headerHtml}
     <div style="padding:16px 20px;">
       ${blockHtml}
     </div>
