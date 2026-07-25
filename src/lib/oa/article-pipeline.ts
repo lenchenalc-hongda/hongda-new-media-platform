@@ -139,97 +139,101 @@ function generateBlocks(strategy: OAArticleStrategy, cards: OASourceCard[], temp
 function renderMarkdown(blocks: OABodyBlock[]): string {
   return blocks.map(b => {
     switch (b.type) {
-      case 'title': return `# ${b.content}\n`;
-      case 'lead': return `> ${b.content}\n`;
-      case 'heading': return `## ${b.content}\n`;
-      case 'paragraph': return `${b.content}\n`;
-      case 'quote': return `> ${b.content}\n`;
-      case 'warning': return `> ⚠️ ${b.content}\n`;
-      case 'tip': return `${b.content}\n${b.items?.map(i => `- ${i}`).join('\n') || ''}\n`;
-      case 'checklist': return `${b.content}\n${b.items?.map(i => `- [ ] ${i}`).join('\n') || ''}\n`;
-      case 'case': return `**案例：** ${b.content}\n`;
-      case 'cta': return `---\n> ${b.content}\n`;
-      default: return `${b.content}\n`;
-    }
-  }).join('\n');
-}
-
-export function generateArticleDraft(
-  strategy: OAArticleStrategy,
-  cards: OASourceCard[],
-  template?: OAArticleTemplate,
-): OAArticleDraft {
-  const tmpl = template || getArticleTemplateById(strategy.recommendedTemplateId) || getArticleTemplateById('technical_checklist')!;
-  const outline = generateArticleOutline(strategy, cards);
-  const blocks = generateBlocks(strategy, cards, tmpl);
-  const bodyMarkdown = renderMarkdown(blocks);
-
-  return {
-    id: 'draft_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
-    strategyId: strategy.id,
-    title: strategy.coverTitle + '：' + strategy.summary.slice(0, 25),
-    coverTitle: strategy.coverTitle,
-    summary: strategy.summary,
-    outline,
-    bodyBlocks: blocks,
-    bodyMarkdown,
-    templateId: tmpl.id,
-    sourceCardIds: strategy.sourceCardIds,
-    score: 70,
-    riskLevel: 'low',
-    status: 'draft',
-    usage: 'wechat_publish',
-    createdAt: now(),
-    updatedAt: now(),
-  };
-}
-
-// ===== Scoring =====
-
-const FORBIDDEN_WORDS = ['全国最好', '绝对不掉', '完全一致', '闭眼选', '永不褪色', '行业第一', '最专业', '最便宜', '保证不掉', '保证能做', '零风险', '100%'];
-
-export function scoreOAArticle(draft: OAArticleDraft): { score: number; riskLevel: 'low' | 'medium' | 'high'; notes: string[] } {
-  const notes: string[] = [];
-  let score = 80;
-
-  // Check for forbidden words
-  const violations = FORBIDDEN_WORDS.filter(w => draft.bodyMarkdown.includes(w));
-  if (violations.length > 0) { score -= violations.length * 10; notes.push('发现禁止词：' + violations.join('、')); }
-
-  // Check structure
-  const hasHeading = draft.bodyBlocks.some(b => b.type === 'heading');
-  const hasCTA = draft.bodyBlocks.some(b => b.type === 'cta');
-  const hasLead = draft.bodyBlocks.some(b => b.type === 'lead');
-
-  if (!hasHeading) { score -= 10; notes.push('缺少小标题'); }
-  if (!hasCTA) { score -= 10; notes.push('缺少CTA引导'); }
-  if (!hasLead) { score -= 5; notes.push('缺少导语段落'); }
-
-  // Check content depth
-  if (draft.bodyBlocks.length < 5) { score -= 10; notes.push('内容块偏少'); }
-  if (draft.bodyMarkdown.length < 300) { score -= 5; notes.push('正文内容较短'); }
-
-  // Check source card coverage
-  const cardReferences = draft.sourceCardIds.length;
-  if (cardReferences === 0) { score -= 10; notes.push('未引用任何来源卡'); }
-
-  const riskLevel = score >= 70 ? 'low' : score >= 50 ? 'medium' : 'high';
-  return { score: Math.max(0, Math.min(100, score)), riskLevel, notes };
-}
-
-// ===== HTML Rendering =====
-
-export function renderOAArticleHtml(draft: OAArticleDraft, template?: OAArticleTemplate): string {
-  const tmpl = template || getArticleTemplateById(draft.templateId || '');
-  const mainColor = tmpl?.styleTokens?.mainColor || '#1e40af';
-  const accentColor = tmpl?.styleTokens?.accentColor || '#dbeafe';
-
-  const blocksHtml = draft.bodyBlocks.map(b => {
-    switch (b.type) {
-      case 'title':
-        return `<h1 style="font-size:22px;font-weight:700;margin:20px 0 10px;line-height:1.5;color:#1a1a1a;">${b.content}</h1>`;
+case 'title':
+        return `<div style="border-top:3px solid #D71920;padding-top:14px;margin-bottom:24px;">
+          <h1 style="font-size:24px;font-weight:700;color:#1F2937;margin:0;line-height:1.5;letter-spacing:0.5px;">${b.content}</h1>
+        </div>`;
       case 'lead':
-        return `<p style="font-size:15px;color:#555;margin:12px 0;padding:12px 16px;background:#f9f9f9;border-radius:8px;line-height:1.8;">${b.content}</p>`;
+      case 'conclusion': {
+        var pts = b.items && b.items.length > 0 ? b.items : (b.content ? [b.content] : []);
+        var tag = b.type === 'conclusion' ? (b.alt || '工艺判断') : '导读';
+        return `<div style="background:#FFFFFF;border:1px solid #E5E7EB;border-radius:12px;padding:20px;margin:22px 0;">
+          <span style="display:inline-block;background:#D71920;color:white;font-size:11px;font-weight:600;padding:2px 10px;border-radius:4px;margin-bottom:10px;">${tag}</span>
+          ${pts.length > 0 ? `<ul style="margin:8px 0 0;padding:0;list-style:none;">${pts.map((p:string) => `<li style="font-size:15px;color:#374151;line-height:1.7;margin:6px 0;padding-left:16px;position:relative;">&bull; ${p}</li>`).join('')}</ul>` : ''}
+        </div>`;
+      }
+      case 'heading': {
+        var txt = b.content || '';
+        var numMatch = txt.match(/^(\d{1,2})[.、\s]?\s*(.*)/);
+        var stepMatch = txt.match(/^第[一二三四五六七八九十步流程]*[步流程]*\s*(.*)/);
+        if (numMatch || stepMatch) {
+          var num = numMatch ? numMatch[1].padStart(2, '0') : String(Math.floor(Math.random() * 8) + 1).padStart(2, '0');
+          var title = numMatch ? (numMatch[2] || txt) : (stepMatch ? stepMatch[1] || txt : txt);
+          return `<div style="margin:28px 0 16px;">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px;">
+              <span style="font-size:22px;font-weight:800;color:#D71920;line-height:1;">${num}</span>
+              <h2 style="font-size:20px;font-weight:700;color:#1F2937;margin:0;line-height:1.4;">${title}</h2>
+            </div>
+            <div style="width:40px;height:3px;background:#D71920;border-radius:2px;margin-top:6px;"></div>
+          </div>`;
+        }
+        return `<div style="margin:24px 0 12px;">
+          <h2 style="font-size:18px;font-weight:700;color:#1F2937;margin:0;line-height:1.5;padding-left:12px;border-left:3px solid #D71920;">${b.content}</h2>
+        </div>`;
+      }
+      case 'paragraph':
+        return `<p style="font-size:16px;margin:14px 0;line-height:1.85;color:#1F2937;">${b.content}</p>`;
+      case 'quote':
+        return `<div style="background:#F8FAFC;border-left:3px solid #D9E3EA;border-radius:0 10px 10px 0;padding:14px 18px;margin:22px 0;">
+          <p style="font-size:15px;margin:0;line-height:1.8;color:#374151;font-style:italic;">${b.content}</p>
+        </div>`;
+      case 'tip':
+        return `<div style="background:#F3F7FA;border:1px solid #D9E3EA;border-radius:12px;padding:18px;margin:22px 0;">
+          <p style="font-size:13px;font-weight:600;color:#1E40AF;margin:0 0 8px;">💡 技术提示</p>
+          <p style="font-size:15px;margin:0;line-height:1.75;color:#374151;">${b.content}</p>
+          ${b.items ? `<div style="margin-top:10px;border-top:1px solid #E5E7EB;padding-top:10px;">${b.items.map((i:string) => `<div style="font-size:14px;color:#4B5563;margin:4px 0;padding-left:12px;position:relative;">&rarr; ${i}</div>`).join('')}</div>` : ''}
+        </div>`;
+      case 'warning':
+        return `<div style="background:#FFF4F4;border:1px solid #FECACA;border-radius:12px;padding:18px;margin:22px 0;">
+          <p style="font-size:13px;font-weight:600;color:#DC2626;margin:0 0 6px;">⚠️ 风险提示</p>
+          <p style="font-size:15px;margin:0;line-height:1.75;color:#374151;">${b.content}</p>
+        </div>`;
+      case 'checklist':
+        return `<div style="background:#FFFFFF;border:1px solid #E5E7EB;border-radius:12px;padding:18px;margin:22px 0;">
+          <p style="font-size:15px;font-weight:600;color:#1F2937;margin:0 0 10px;">${b.content}</p>
+          ${b.items ? `<div style="margin:0;">${b.items.map((i:string) => `<div style="font-size:14px;color:#374151;margin:6px 0;display:flex;align-items:flex-start;gap:8px;"><span style="color:#D71920;font-size:13px;">☐</span><span>${i}</span></div>`).join('')}</div>` : ''}
+        </div>`;
+      case 'case': {
+        var lines = (b.content || '').split('\n').filter((l:string) => l.trim());
+        var vals = lines.length >= 4 ? lines : [lines[0] || '', lines[1] || '', lines[2] || '', lines[3] || ''];
+        return `<div style="background:#FFFFFF;border:1px solid #E5E7EB;border-radius:12px;padding:20px;margin:22px 0;">
+          <span style="display:inline-block;background:#D71920;color:white;font-size:11px;font-weight:600;padding:2px 10px;border-radius:4px;margin-bottom:12px;">📌 客户案例</span>
+          <div>${['产品','问题','处理','结果'].map((f, fi) => vals[fi] ? `<div style="margin:6px 0;font-size:14px;color:#374151;"><span style="font-weight:600;">${f}：</span>${vals[fi]}</div>` : '').join('')}</div>
+        </div>`;
+      }
+      case 'cta':
+      case 'action_checklist':
+        return `<div style="background:#FFFFFF;border:1px solid #E5E7EB;border-radius:12px;padding:20px;margin:24px 0;">
+          <p style="font-size:16px;font-weight:600;color:#1F2937;margin:0 0 8px;line-height:1.5;">想判断你的${b.alt || '产品'}适不适合？</p>
+          <p style="font-size:13px;color:#6B7280;margin-bottom:12px;">请准备好以下信息，发送给宏达技术顾问</p>
+          <div style="margin:12px 0;">${['产品图片','产品材质','图案效果','数量范围','测试要求'].map((i:string) => `<div style="font-size:14px;color:#4B5563;margin:5px 0;display:flex;align-items:center;gap:6px;"><span style="color:#D71920;">✔</span>${i}</div>`).join('')}</div>
+          <div style="text-align:center;margin-top:14px;">
+            <span style="display:inline-block;background:#D71920;color:white;font-size:14px;font-weight:500;padding:8px 24px;border-radius:8px;">联系顾问 →</span>
+          </div>
+        </div>`;
+      case 'comparison': {
+        var items = b.items && b.items.length > 0 ? b.items : [b.content, b.alt || ''].filter(Boolean);
+        return `<div style="background:#FFFFFF;border:1px solid #E5E7EB;border-radius:12px;padding:20px;margin:22px 0;">
+          <p style="font-size:14px;font-weight:600;color:#1F2937;margin:0 0 10px;">${b.content || '对比分析'}</p>
+          ${items.map((item:string, idx:number) => { var parts = item.split('|'); return `<div style="${idx > 0 ? 'border-top:1px solid #F3F4F6;padding-top:10px;margin-top:10px;' : ''}font-size:14px;color:#374151;">${parts[0] ? `<span style="font-weight:600;">${parts[0]}</span>` : ''}${parts.length > 1 ? `<span style="color:#6B7280;margin-left:4px;">${parts.slice(1).join(' · ')}</span>` : ''}</div>`; }).join('')}
+        </div>`;
+      }
+      case 'process': {
+        var steps = b.items && b.items.length > 0 ? b.items : [b.content].filter(Boolean);
+        return `<div style="margin:22px 0;">
+          <p style="font-size:15px;font-weight:600;color:#1F2937;margin:0 0 14px;">${b.content || '操作流程'}</p>
+          ${steps.map((step:string, idx:number) => `<div style="display:flex;gap:12px;margin-bottom:${idx < steps.length - 1 ? '0' : '0'};">
+            <div style="display:flex;flex-direction:column;align-items:center;"><div style="width:28px;height:28px;border-radius:50%;background:#D71920;color:white;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;flex-shrink:0;">${idx + 1}</div>${idx < steps.length - 1 ? `<div style="width:2px;flex:1;background:#E5E7EB;margin:4px auto;"></div>` : ''}</div>
+            <div style="font-size:15px;color:#374151;line-height:1.6;padding-bottom:${idx < steps.length - 1 ? '20px' : '0'};padding-top:4px;">${step}</div>
+          </div>`).join('')}
+        </div>`;
+      }
+      case 'image':
+        return `<div style="background:#F7F8FA;border:1px solid #E5E7EB;border-radius:12px;margin:22px 0;text-align:center;overflow:hidden;">
+          ${b.imageUrl ? `<img src="${b.imageUrl}" alt="${b.alt || ''}" style="width:100%;display:block;" />` : `<div style="padding:40px 16px;color:#9CA3AF;font-size:13px;">📷 ${b.alt || '图片占位'}</div>`}
+        </div>`;
+      default:
+        return `<p style="font-size:15px;margin:10px 0;line-height:1.8;color:#1F2937;">${b.content}</p>`;dding:12px 16px;background:#f9f9f9;border-radius:8px;line-height:1.8;">${b.content}</p>`;
       case 'heading':
         return `<h2 style="font-size:17px;font-weight:600;margin:24px 0 12px;padding-left:12px;border-left:4px solid ${mainColor};color:#1a1a1a;">${b.content}</h2>`;
       case 'paragraph':
