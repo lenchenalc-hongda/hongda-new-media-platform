@@ -202,31 +202,50 @@ case 'title':
         </div>`;
       }
       case 'cta':
-      case 'action_checklist':
-        return `<div style="background:#FFFFFF;border:1px solid #E5E7EB;border-radius:12px;padding:20px;margin:24px 0;">
+      case 'action_checklist': {
+        var html = `<div style="background:#FFFFFF;border:1px solid #E5E7EB;border-radius:12px;padding:20px;margin:24px 0;">
           <p style="font-size:16px;font-weight:600;color:#1F2937;margin:0 0 8px;line-height:1.5;">想判断你的${b.alt || '产品'}适不适合？</p>
           <p style="font-size:13px;color:#6B7280;margin-bottom:12px;">请准备好以下信息，发送给宏达技术顾问</p>
-          <div style="margin:12px 0;">${['产品图片','产品材质','图案效果','数量范围','测试要求'].map((i:string) => `<div style="font-size:14px;color:#4B5563;margin:5px 0;display:flex;align-items:center;gap:6px;"><span style="color:#D71920;">✔</span>${i}</div>`).join('')}</div>
+          <div style="margin:12px 0;">`;
+        ['产品图片','产品材质','图案效果','数量范围','测试要求'].forEach(function(i) {
+          html += `<div style="font-size:14px;color:#4B5563;margin:5px 0;display:flex;align-items:center;gap:6px;"><span style="color:#D71920;">✔</span>${i}</div>`;
+        });
+        html += `</div>
           <div style="text-align:center;margin-top:14px;">
             <span style="display:inline-block;background:#D71920;color:white;font-size:14px;font-weight:500;padding:8px 24px;border-radius:8px;">联系顾问 →</span>
           </div>
         </div>`;
+        return html;
+      }
       case 'comparison': {
         var items = b.items && b.items.length > 0 ? b.items : [b.content, b.alt || ''].filter(Boolean);
-        return `<div style="background:#FFFFFF;border:1px solid #E5E7EB;border-radius:12px;padding:20px;margin:22px 0;">
-          <p style="font-size:14px;font-weight:600;color:#1F2937;margin:0 0 10px;">${b.content || '对比分析'}</p>
-          ${items.map((item:string, idx:number) => { var parts = item.split('|'); return `<div style="${idx > 0 ? 'border-top:1px solid #F3F4F6;padding-top:10px;margin-top:10px;' : ''}font-size:14px;color:#374151;">${parts[0] ? `<span style="font-weight:600;">${parts[0]}</span>` : ''}${parts.length > 1 ? `<span style="color:#6B7280;margin-left:4px;">${parts.slice(1).join(' · ')}</span>` : ''}</div>`; }).join('')}
-        </div>`;
+        var html = `<div style="background:#FFFFFF;border:1px solid #E5E7EB;border-radius:12px;padding:20px;margin:22px 0;">
+          <p style="font-size:14px;font-weight:600;color:#1F2937;margin:0 0 10px;">${b.content || '对比分析'}</p>`;
+        items.forEach(function(item, idx) {
+          var parts = item.split('|');
+          html += `<div style="${idx > 0 ? 'border-top:1px solid #F3F4F6;padding-top:10px;margin-top:10px;' : ''}font-size:14px;color:#374151;">`;
+          if (parts[0]) html += `<span style="font-weight:600;color:#1F2937;">${parts[0]}</span>`;
+          if (parts.length > 1) html += `<span style="color:#6B7280;margin-left:4px;">${parts.slice(1).join(' · ')}</span>`;
+          html += `</div>`;
+        });
+        html += `</div>`;
+        return html;
       }
       case 'process': {
         var steps = b.items && b.items.length > 0 ? b.items : [b.content].filter(Boolean);
-        return `<div style="margin:22px 0;">
-          <p style="font-size:15px;font-weight:600;color:#1F2937;margin:0 0 14px;">${b.content || '操作流程'}</p>
-          ${steps.map((step:string, idx:number) => `<div style="display:flex;gap:12px;margin-bottom:${idx < steps.length - 1 ? '0' : '0'};">
-            <div style="display:flex;flex-direction:column;align-items:center;"><div style="width:28px;height:28px;border-radius:50%;background:#D71920;color:white;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;flex-shrink:0;">${idx + 1}</div>${idx < steps.length - 1 ? `<div style="width:2px;flex:1;background:#E5E7EB;margin:4px auto;"></div>` : ''}</div>
+        var html = `<div style="margin:22px 0;">
+          <p style="font-size:15px;font-weight:600;color:#1F2937;margin:0 0 14px;">${b.content || '操作流程'}</p>`;
+        steps.forEach(function(step, idx) {
+          html += `<div style="display:flex;gap:12px;">
+            <div style="display:flex;flex-direction:column;align-items:center;">
+              <div style="width:28px;height:28px;border-radius:50%;background:#D71920;color:white;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;flex-shrink:0;">${idx + 1}</div>
+              ${idx < steps.length - 1 ? '<div style="width:2px;flex:1;background:#E5E7EB;margin:4px auto;"></div>' : ''}
+            </div>
             <div style="font-size:15px;color:#374151;line-height:1.6;padding-bottom:${idx < steps.length - 1 ? '20px' : '0'};padding-top:4px;">${step}</div>
-          </div>`).join('')}
-        </div>`;
+          </div>`;
+        });
+        html += `</div>`;
+        return html;
       }
       case 'image':
         return `<div style="background:#F7F8FA;border:1px solid #E5E7EB;border-radius:12px;margin:22px 0;text-align:center;overflow:hidden;">
