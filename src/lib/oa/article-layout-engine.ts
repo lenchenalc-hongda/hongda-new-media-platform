@@ -3,6 +3,7 @@
 import { OAArticleDraft, OAArticleStrategy, OAArticleTemplate, OAArticleType,
   OALayoutPlan, OALayoutSection, OALayoutSectionType, OAImageSuggestion, OALayoutQualityCheck } from './types';
 
+import { OA_THEMES } from './oa-themes';
 function now(): string { return new Date().toISOString(); }
 function uid(): string { return Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
 
@@ -354,8 +355,8 @@ function renderImagePlaceholder(s: OALayoutSection): string {
 
 // ===== Render layout plan to HTML =====
 
-export function renderLayoutHtml(plan: OALayoutPlan, draft: OAArticleDraft): string {
-  var theme = { id: 'hongda_blue', headerImage: '/oa/header.png', qrCode: '/oa/header-qr.png' };
+export function renderLayoutHtml(plan: OALayoutPlan, draft: OAArticleDraft, themeId?: string): string {
+  var theme = OA_THEMES.find(function(t) { return t.id === (themeId || plan.themeId); }) || OA_THEMES[0];
   var headerHtml = theme.headerImage
     ? '<div style="margin-bottom:16px;text-align:center;"><img src="' + theme.headerImage + '" alt="宏达印业" style="max-width:100%;border-radius:12px;display:block;" /></div>'
     : '';

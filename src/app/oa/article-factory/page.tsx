@@ -1,14 +1,38 @@
 'use client';
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import AppLayout from '@/components/layout/AppLayout';
 import PageHeader from '@/components/layout/PageHeader';
 import { OA_SOURCE_CARDS } from '@/lib/constants/oa-source-cards';
-import { getKnowledgeSourceCards } from '@/lib/oa/oa-knowledge-bridge';
-import { ARTICLE_TEMPLATES, getTemplatesForArticleType } from '@/lib/oa/article-templates';
-import { runArticlePipeline, renderOAArticleHtml } from '@/lib/oa/article-pipeline';
-import type { OAArticleType, OAArticleDraft, GenerateArticleOutput } from '@/lib/oa/types';
+import { ARTICLE_TEMPLATES } from '@/lib/oa/article-templates';
+import { runArticlePipeline, renderOAArticleHtml, renderVisualArticleHtml } from '@/lib/oa/article-pipeline';
+import { generateLayoutPlan, renderLayoutHtml, checkLayoutQuality } from '@/lib/oa/article-layout-engine';
+import type { OAArticleType, OAArticleDraft, GenerateArticleOutput, OALayoutPlan, OALayoutSectionType } from '@/lib/oa/types';
 import { OA_STORAGE_KEYS, loadOAData, saveOAData } from '@/lib/oa/oa-storage';
 import { saveToServer } from '@/lib/storage';
+
+const ALL_SECTION_TYPES: { value: string; label: string }[] = [
+  { value: 'hero_title', label: '标题区' },
+  { value: 'intro_lead', label: '导读区' },
+  { value: 'core_conclusion', label: '核心结论' },
+  { value: 'numbered_chapter', label: '编号章节' },
+  { value: 'text_paragraph', label: '正文段落' },
+  { value: 'tech_tip', label: '技术提示' },
+  { value: 'warning_note', label: '风险提示' },
+  { value: 'case_snapshot', label: '案例拆解' },
+  { value: 'quote_highlight', label: '引用高亮' },
+  { value: 'cta_checklist', label: '行动引导' },
+  { value: 'process_timeline', label: '流程步骤' },
+  { value: 'checklist_panel', label: '检查清单' },
+  { value: 'comparison_grid', label: '对比分析' },
+  { value: 'risk_matrix', label: '风险矩阵' },
+  { value: 'brand_transition', label: '品牌过渡' },
+  { value: 'material_matrix', label: '材质矩阵' },
+  { value: 'image_placeholder', label: '图片占位' },
+];
+
+function uid(): string {
+  return Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+}
 
 export default function ArticleFactoryPage() {
   const [step, setStep] = useState(1);
@@ -23,14 +47,24 @@ export default function ArticleFactoryPage() {
   const [msg, setMsg] = useState<{ t: string; s: 'ok' | 'err' } | null>(null);
   const [editBlocks, setEditBlocks] = useState(false);
 
+  // Layout engine state
+  const [layoutPlan, setLayoutPlan] = useState<OALayoutPlan | null>(null);
+  const [selectedSectionId, setSelectedSectionId] = useState<string | null>(null);
+  const [previewThemeId, setPreviewThemeId] = useState<string>('hongda_blue');
+  const [editTitle, setEditTitle] = useState('');
+  const [editSubtitle, setEditSubtitle] = useState('');
+  const [editContent, setEditContent] = useState('');
+  const [editItems, setEditItems] = useState('');
+  const [editVariant, setEditVariant] = useState('');
+
   const liveCards = useMemo(() => {
     const stored = loadOAData(OA_STORAGE_KEYS.SOURCE_CARDS, OA_SOURCE_CARDS);
     return stored.length > 0 ? stored : OA_SOURCE_CARDS;
   }, []);
   const filteredCards = useMemo(() => {
-    let cards = liveCards;  // show all cards (internal ones get warning badge)
-    if (busFilter !== 'all') cards = cards.filter(c => c.businessLine === busFilter);
-    if (typeFilter !== 'all') cards = cards.filter(c => c.type === typeFilter);
+    let cards = liveCards;
+    if (busFilter !== 'all') cards = cards.filter((c: any) => c.businessLine === busFilter);
+    if (typeFilter !== 'all') cards = cards.filter((c: any) => c.type === typeFilter);
     return cards;
   }, [busFilter, typeFilter]);
 
@@ -63,7 +97,17 @@ export default function ArticleFactoryPage() {
 
   const handleRenderPreview = () => {
     if (!draft) return;
-    setPreviewHtml(renderOAArticleHtml(draft));
+    // Generate layout plan using the layout engine
+    const plan = generateLayoutPlan(draft, result?.strategy || {
+      id: '', topic: '', articleType: (articleType || 'technical_guide') as OAArticleType,
+      targetAudience: '', customerPain: '', corePoint: '', sourceCardIds: selectedIds,
+      articleAngle: '', recommendedTemplateId: '', riskToAvoid: [], ctaType: 'save_article',
+      coverTitle: '', summary: '',
+    });
+    setLayoutPlan(plan);
+    setSelectedSectionId(null);
+    setPreviewHtml(renderLayoutHtml(plan, draft, previewThemeId));
+    // Also set the old preview for compatibility
     setStep(5);
   };
 
@@ -87,9 +131,93 @@ export default function ArticleFactoryPage() {
     setTimeout(() => setMsg(null), 3000);
   };
 
+  // ===== Layout plan editing functions =====
+
+  const selectSection = (id: string) => {
+    setSelectedSectionId(id);
+    var section = layoutPlan?.sections.find(function(s) { return s.id === id; });
+    if (section) {
+      setEditTitle(section.title || '');
+      setEditSubtitle(section.subtitle || '');
+      setEditContent(section.content || '');
+      setEditItems((section.items || []).join('\n'));
+      setEditVariant(section.visualVariant || '');
+    }
+  };
+
+  const updateLayout = function(updatedSections: any) {
+    if (!layoutPlan || !draft) return;
+    var newPlan = {
+      ...layoutPlan,
+      sections: updatedSections,
+      updatedAt: new Date().toISOString(),
+    };
+    newPlan.qualityCheck = checkLayoutQuality(newPlan);
+    setLayoutPlan(newPlan);
+    setPreviewHtml(renderLayoutHtml(newPlan, draft, previewThemeId));
+  };
+
+  const moveSection = function(idx: number, dir: number) {
+    if (!layoutPlan) return;
+    var sections = [...layoutPlan.sections];
+    var target = idx + dir;
+    if (target < 0 || target >= sections.length) return;
+    var temp = sections[idx];
+    sections[idx] = sections[target];
+    sections[target] = temp;
+    sections = sections.map(function(s, i) { return { ...s, order: i }; });
+    updateLayout(sections);
+  };
+
+  const removeSection = function(idx: number) {
+    if (!layoutPlan) return;
+    var sections = layoutPlan.sections.filter(function(_, i) { return i !== idx; });
+    sections = sections.map(function(s, i) { return { ...s, order: i }; });
+    if (selectedSectionId === sections[idx]?.id) setSelectedSectionId(null);
+    updateLayout(sections);
+  };
+
+  const addSection = function(e: React.ChangeEvent<HTMLSelectElement>) {
+    var type = e.target.value;
+    e.target.value = '';
+    if (!type || !layoutPlan) return;
+    var newSection = {
+      id: 'sec_' + uid(),
+      type: type as OALayoutSectionType,
+      title: '',
+      subtitle: '',
+      content: '',
+      items: undefined as string[] | undefined,
+      data: {} as Record<string, any>,
+      sourceBlockIds: [],
+      order: layoutPlan.sections.length,
+      editable: true,
+    };
+    updateLayout([...layoutPlan.sections, newSection]);
+  };
+
+  const applyEdit = function() {
+    if (!layoutPlan || !selectedSectionId) return;
+    var items = editItems.split('\n').map(function(s) { return s.trim(); }).filter(Boolean);
+    var sections = layoutPlan.sections.map(function(s) {
+      if (s.id !== selectedSectionId) return s;
+      return {
+        ...s,
+        title: editTitle,
+        subtitle: editSubtitle,
+        content: editContent,
+        items: items.length > 0 ? items : undefined,
+        visualVariant: editVariant || undefined,
+      };
+    });
+    updateLayout(sections);
+    setMsg({ t: '已应用修改', s: 'ok' });
+    setTimeout(function() { setMsg(null); }, 2000);
+  };
+
   return (
     <AppLayout>
-      <div className="max-w-4xl">
+      <div className="max-w-[1400px] mx-auto">
         <div className="flex items-center justify-between">
           <PageHeader title="文章工厂" description="公众号文章生成流水线 · 草稿模式" />
           <span className="text-[10px] bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded h-fit">🔒 草稿模式</span>
@@ -102,11 +230,14 @@ export default function ArticleFactoryPage() {
         )}
 
         <div className="flex gap-1 mb-4 text-xs">
-          {['选来源卡', '选文章类型', '生成策略', '生成草稿', '预览'].map((s, i) => (
-            <div key={i} className={'flex-1 text-center py-1.5 rounded ' + (step === i + 1 ? 'bg-blue-600 text-white font-medium' : step > i + 1 ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-400')}>
-              {i + 1}. {s}
-            </div>
-          ))}
+          {['选来源卡', '选文章类型', '生成草稿', '版式编辑'].map(function(s, i) {
+            var stepNum = i < 2 ? i + 1 : i + 3; // step 1,2 -> step 1,2; step 3 (index 2) -> step 4; step 4 (index 3) -> step 5
+            return (
+              <div key={i} className={'flex-1 text-center py-1.5 rounded ' + (step === stepNum ? 'bg-blue-600 text-white font-medium' : step > stepNum ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-400')}>
+                {stepNum}. {s}
+              </div>
+            );
+          })}
         </div>
 
         {step === 1 && (
@@ -127,11 +258,11 @@ export default function ArticleFactoryPage() {
               <span className="text-xs text-gray-400">已选 {selectedIds.length} 条</span>
             </div>
             <div className="grid grid-cols-2 gap-2 max-h-[400px] overflow-y-auto">
-              {filteredCards.map(card => (
+              {filteredCards.map((card: any) => (
                 <div key={card.id} className={'p-3 rounded-lg border cursor-pointer text-xs transition-colors ' + (selectedIds.includes(card.id) ? 'border-blue-500 bg-blue-50 ring-1' : 'border-gray-200 hover:border-gray-300')} onClick={() => toggleCard(card.id)}>
                   <div className="flex justify-between"><span className="font-medium text-gray-800">{card.title}</span><span className="text-[9px] px-1 bg-gray-100 rounded">{card.type}</span></div>
                   <p className="text-[10px] text-gray-500 mt-1">{card.targetAudience}</p>
-                  <p className="text-[10px] text-gray-400 mt-0.5">{card.coreConclusion.slice(0, 50)}...</p>
+                  <p className="text-[10px] text-gray-400 mt-0.5">{card.coreConclusion?.slice(0, 50)}...</p>
                 </div>
               ))}
             </div>
@@ -196,25 +327,162 @@ export default function ArticleFactoryPage() {
               <button className="btn-secondary text-xs px-3 py-1.5" onClick={() => setStep(2)}>← 上一步</button>
               <div className="flex gap-1">
                 <button className="btn-secondary text-xs px-3 py-1.5" onClick={handleSaveDraft}>💾 保存草稿</button>
-                <button className="btn-primary text-xs px-4 py-1.5" onClick={handleRenderPreview}>预览 →</button>
+                <button className="btn-primary text-xs px-4 py-1.5" onClick={handleRenderPreview}>版式编辑 →</button>
               </div>
             </div>
           </div>
         )}
 
-        {step === 5 && previewHtml && (
+        {step === 5 && draft && layoutPlan && (
           <div>
-            <div className="flex gap-1 mb-2">
-              <button className="btn-secondary text-[10px] px-2 py-1" onClick={() => copyToClipboard(previewHtml, 'HTML')}>📋 复制HTML</button>
-              <button className="btn-secondary text-[10px] px-2 py-1" onClick={() => draft && copyToClipboard(draft.bodyMarkdown + '\n\n---\n*草稿模式，未接入真实发布*', 'Markdown')}>📝 复制MD</button>
-              <button className="btn-secondary text-[10px] px-2 py-1" onClick={handleSaveDraft}>💾 保存</button>
-              <span className="ml-auto text-[10px] text-yellow-600 self-center">🔒 草稿模式</span>
+            {/* Toolbar */}
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-gray-500">
+                  版式 · {layoutPlan.sections.length} 个模块 · {layoutPlan.qualityCheck.publishReady ? '✅ 发布达标' : '⚠️ 待优化'}
+                </span>
+                <select className="input-field text-[10px] p-0.5 w-24" value={previewThemeId} onChange={e => {
+                  setPreviewThemeId(e.target.value);
+                  setPreviewHtml(renderLayoutHtml(layoutPlan, draft, e.target.value));
+                }}>
+                  <option value="hongda_blue">宏达工业蓝</option>
+                  <option value="uv_tech">UV科技风</option>
+                  <option value="case_study">案例复盘</option>
+                  <option value="brand_story">品牌故事</option>
+                  <option value="sales_forward">销售简洁</option>
+                  <option value="festival_light">节日轻品牌</option>
+                </select>
+              </div>
+              <div className="flex gap-1">
+                <button className="btn-secondary text-[10px] px-2 py-1" onClick={() => copyToClipboard(previewHtml, 'HTML')}>📋 复制HTML</button>
+                <button className="btn-secondary text-[10px] px-2 py-1" onClick={() => draft && copyToClipboard(draft.bodyMarkdown + '\n\n---\n*草稿模式*', 'Markdown')}>📝 复制MD</button>
+                <button className="btn-secondary text-[10px] px-2 py-1" onClick={handleSaveDraft}>💾 保存</button>
+                <span className="ml-2 text-[10px] text-yellow-600 self-center">🔒 草稿模式</span>
+              </div>
             </div>
-            <div className="border rounded-lg bg-white max-h-[600px] overflow-auto">
-              <iframe srcDoc={previewHtml} title="预览" className="w-full" style={{ minHeight: '500px', border: 'none' }} />
+
+            {/* Quality check banner */}
+            {!layoutPlan.qualityCheck.publishReady && (
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-2 mb-2 text-xs text-yellow-700">
+                <strong>版式未达发布标准：</strong>
+                {layoutPlan.qualityCheck.notes.map(function(n) {
+                  return <div key={n} className="ml-2">• {n}</div>;
+                })}
+              </div>
+            )}
+
+            {/* Three-column layout */}
+            <div className="flex gap-2" style={{ height: 'calc(100vh - 280px)' }}>
+              {/* Left: Section tree */}
+              <div className="w-56 flex-shrink-0 flex flex-col border rounded-lg bg-white p-2">
+                <div className="text-xs font-medium text-gray-600 mb-2">版式结构</div>
+                <div className="flex-1 overflow-y-auto space-y-0.5">
+                  {layoutPlan.sections.map(function(s, i) {
+                    return (
+                      <div key={s.id}
+                        className={'p-1.5 rounded border text-xs cursor-pointer transition-colors ' + (selectedSectionId === s.id ? 'border-blue-500 bg-blue-50 ring-1 ring-blue-200' : 'border-gray-100 hover:border-gray-200')}
+                        onClick={function() { selectSection(s.id); }}>
+                        <div className="flex items-center justify-between">
+                          <span className="font-medium text-gray-800 truncate">{s.type.replace(/_/g, ' ')}</span>
+                          <div className="flex gap-0.5 flex-shrink-0">
+                            <button className="text-[9px] px-1 py-0.5 rounded bg-gray-100 hover:bg-gray-200 text-gray-500"
+                              onClick={function(e) { e.stopPropagation(); moveSection(i, -1); }} disabled={i === 0}>↑</button>
+                            <button className="text-[9px] px-1 py-0.5 rounded bg-gray-100 hover:bg-gray-200 text-gray-500"
+                              onClick={function(e) { e.stopPropagation(); moveSection(i, 1); }} disabled={i === layoutPlan.sections.length - 1}>↓</button>
+                            <button className="text-[9px] px-1 py-0.5 rounded bg-red-50 hover:bg-red-100 text-red-500"
+                              onClick={function(e) { e.stopPropagation(); removeSection(i); }}>×</button>
+                          </div>
+                        </div>
+                        <p className="text-[9px] text-gray-400 truncate mt-0.5">{s.title || s.content || '(空)'}</p>
+                      </div>
+                    );
+                  })}
+                </div>
+                {/* Add section dropdown */}
+                <div className="pt-2 border-t mt-2">
+                  <select className="input-field w-full text-[10px] p-1" value="" onChange={addSection}>
+                    <option value="">+ 新增版式模块</option>
+                    {ALL_SECTION_TYPES.map(function(st) {
+                      return <option key={st.value} value={st.value}>{st.label}</option>;
+                    })}
+                  </select>
+                </div>
+              </div>
+
+              {/* Center: Phone preview */}
+              <div className="flex-1 flex flex-col items-center">
+                <div className="bg-gray-100 rounded-lg overflow-auto flex items-start justify-center p-2"
+                  style={{ width: '100%', maxHeight: '100%' }}>
+                  <div className="bg-white shadow-lg rounded-lg overflow-hidden" style={{ width: '360px' }}>
+                    <iframe srcDoc={previewHtml} title="手机预览"
+                      style={{ width: '100%', border: 'none', minHeight: '600px' }} />
+                  </div>
+                </div>
+              </div>
+
+              {/* Right: Section editor */}
+              <div className="w-72 flex-shrink-0 flex flex-col border rounded-lg bg-white p-2">
+                <div className="text-xs font-medium text-gray-600 mb-2">组件编辑</div>
+                {selectedSectionId ? (function() {
+                  var section = layoutPlan.sections.find(function(s) { return s.id === selectedSectionId; });
+                  if (!section) return <div className="text-xs text-gray-400">未找到模块</div>;
+                  return (
+                    <div className="flex-1 overflow-y-auto space-y-2">
+                      <div>
+                        <label className="text-[10px] text-gray-400">类型</label>
+                        <input className="input-field w-full text-xs p-1 bg-gray-50" value={section.type} readOnly />
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-gray-400">标题</label>
+                        <input className="input-field w-full text-xs p-1" value={editTitle} onChange={function(e) { setEditTitle(e.target.value); }} />
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-gray-400">副标题</label>
+                        <input className="input-field w-full text-xs p-1" value={editSubtitle} onChange={function(e) { setEditSubtitle(e.target.value); }} />
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-gray-400">内容</label>
+                        <textarea className="input-field w-full text-xs p-1" rows={3} value={editContent} onChange={function(e) { setEditContent(e.target.value); }} />
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-gray-400">列表项（每行一个）</label>
+                        <textarea className="input-field w-full text-xs p-1" rows={3} value={editItems} onChange={function(e) { setEditItems(e.target.value); }} />
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-gray-400">视觉变体</label>
+                        <select className="input-field w-full text-xs p-1" value={editVariant} onChange={function(e) { setEditVariant(e.target.value); }}>
+                          <option value="">默认</option>
+                          <option value="compact">紧凑</option>
+                          <option value="expanded">展开</option>
+                        </select>
+                      </div>
+                      <button className="btn-primary text-xs w-full py-1" onClick={applyEdit}>应用修改</button>
+                    </div>
+                  );
+                })() : (
+                  <div className="flex items-center justify-center h-full text-gray-400 text-xs">选择左侧模块进行编辑</div>
+                )}
+
+                {/* Image suggestions */}
+                {layoutPlan.imageSuggestions.length > 0 && (
+                  <div className="border-t pt-2 mt-2">
+                    <div className="text-[10px] font-medium text-gray-500 mb-1">📷 图片建议</div>
+                    {layoutPlan.imageSuggestions.map(function(img) {
+                      return (
+                        <div key={img.id} className="text-[9px] text-gray-400 mb-1 p-1 bg-gray-50 rounded">
+                          <span className="font-medium">{img.imageType.replace(/_/g, ' ')}</span>
+                          <span className="ml-1">({img.recommendedRatio})</span>
+                          <p>{img.description}</p>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             </div>
+
             <div className="flex justify-between mt-2">
-              <button className="btn-secondary text-xs px-3 py-1.5" onClick={() => setStep(4)}>← 返回</button>
+              <button className="btn-secondary text-xs px-3 py-1.5" onClick={() => setStep(4)}>← 返回草稿</button>
               <button className="btn-primary text-xs px-3 py-1.5" onClick={() => copyToClipboard(previewHtml, 'HTML')}>复制HTML到公众号</button>
             </div>
           </div>
