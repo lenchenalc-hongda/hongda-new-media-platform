@@ -97,7 +97,7 @@ export default function ScriptGeneratorWizard({ open, onClose, onGenerate }: Scr
     if (form.knowledgeMode === 'auto' && (form.customer_pain || form.product_or_process || form.account_id)) {
       fetch('/api/ai/script/recommend-knowledge', {
         method: 'POST', headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ account: selectedAccount, platform: form.platform, productOrProcess: form.product_or_process, customerPain: form.customer_pain, material: form.material }),
+        body: JSON.stringify({ account_id: selectedAccount?.id || '', account_version: (selectedAccount as any)?.persona_version || 'legacy', platform: form.platform, productOrProcess: form.product_or_process, customerPain: form.customer_pain, material: form.material }),
       }).then(res => res.json()).then(data => {
         if (data.cards && data.cards.length > 0) {
           setProductSuggestions(data.cards.map((c: any) => c.title));
@@ -118,7 +118,7 @@ export default function ScriptGeneratorWizard({ open, onClose, onGenerate }: Scr
           customerPain: form.customer_pain,
           productOrProcess: form.product_or_process,
           material: form.material,
-          account: selectedAccount || {},
+          account_id: selectedAccount?.id || '', account_version: (selectedAccount as any)?.persona_version || 'legacy',
           angle: selectedAngle || undefined,
         }),
       });
@@ -232,7 +232,7 @@ export default function ScriptGeneratorWizard({ open, onClose, onGenerate }: Scr
     try {
       const res = await fetch('/api/ai/script/suggest-products', {
         method: 'POST', headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ account: selectedAccount, platform: form.platform, knowledgeMode: form.knowledgeMode, material: form.material }),
+        body: JSON.stringify({ account_id: selectedAccount?.id || '', account_version: (selectedAccount as any)?.persona_version || 'legacy', platform: form.platform, knowledgeMode: form.knowledgeMode, material: form.material }),
       });
       const data = await res.json();
       if (data.suggestions && data.suggestions.length > 0) {
@@ -250,7 +250,7 @@ export default function ScriptGeneratorWizard({ open, onClose, onGenerate }: Scr
     try {
       const res = await fetch('/api/ai/script/suggest-pains', {
         method: 'POST', headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ account: selectedAccount, platform: form.platform, productOrProcess: form.product_or_process, material: form.material }),
+        body: JSON.stringify({ account_id: selectedAccount?.id || '', account_version: (selectedAccount as any)?.persona_version || 'legacy', platform: form.platform, productOrProcess: form.product_or_process, material: form.material }),
       });
       const data = await res.json();
       if (data.suggestions && data.suggestions.length > 0) {
@@ -318,7 +318,7 @@ export default function ScriptGeneratorWizard({ open, onClose, onGenerate }: Scr
       const res = await fetch('/api/ai/script/pipeline', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          account: selectedAccount || {},
+          account_id: selectedAccount?.id || '', account_version: (selectedAccount as any)?.persona_version || 'legacy',
           topic: form.product_or_process || form.customer_pain,
           customerPain: form.customer_pain,
           productOrProcess: form.product_or_process,
@@ -342,7 +342,7 @@ export default function ScriptGeneratorWizard({ open, onClose, onGenerate }: Scr
     // Fall back to rule engine
     if (!result) {
       result = simpleRunPipeline({
-        account: selectedAccount || {},
+        account_id: selectedAccount?.id || '', account_version: (selectedAccount as any)?.persona_version || 'legacy',
         topic: form.product_or_process || form.customer_pain,
         customerPain: form.customer_pain,
         productOrProcess: form.product_or_process,
@@ -670,7 +670,7 @@ export default function ScriptGeneratorWizard({ open, onClose, onGenerate }: Scr
                         const ato = setTimeout(() => actrl.abort(), 35000);
                         const res = await fetch('/api/ai/script/angles', {
                           method: 'POST', headers: {'Content-Type':'application/json'}, signal: actrl.signal,
-                          body: JSON.stringify({ customerPain: form.customer_pain, productOrProcess: form.product_or_process, material: form.material, account: selectedAccount || {} }),
+                          body: JSON.stringify({ customerPain: form.customer_pain, productOrProcess: form.product_or_process, material: form.material, account_id: selectedAccount?.id || '', account_version: (selectedAccount as any)?.persona_version || 'legacy' }),
                         });
                         clearTimeout(ato);
                         if (res.ok) {
