@@ -6,6 +6,7 @@
 import { z } from 'zod';
 import { getProvider, getCurrentProviderName, isMockMode } from './factory';
 import type { AIProvider, ProviderRequest } from './types';
+import type { CompiledPersonaContext } from '@/lib/accounts/types';
 
 // ===== Zod Schemas for Adapter Inputs/Outputs =====
 
@@ -80,6 +81,7 @@ export interface LLMProviderAdapter {
     duration?: string;
     platform?: string;
     knowledgeCards?: any[];
+    personaContext?: CompiledPersonaContext;
   }): Promise<{ angles: AngleCandidate[]; method: string }>;
 
   /** Generate 12-20 hook candidates */
@@ -92,6 +94,7 @@ export interface LLMProviderAdapter {
     angle?: any;
     knowledgeCards?: any[];
     recentScripts?: any[];
+    personaContext?: CompiledPersonaContext;
   }): Promise<{ hooks: HookCandidate[]; method: string }>;
 
   /** Generate draft from input + selected angle + selected hook */
@@ -105,6 +108,7 @@ export interface LLMProviderAdapter {
     duration?: string;
     account?: any;
     knowledgeCards?: any[];
+    personaContext?: CompiledPersonaContext;
   }): Promise<AiDraft>;
 
   /** Rewrite script based on feedback */
@@ -113,12 +117,14 @@ export interface LLMProviderAdapter {
     hook: string;
     feedback: string;
     targetCustomer?: string;
+    personaContext?: CompiledPersonaContext;
   }): Promise<RewriteResult>;
 
   /** Judge script quality (for reference only — final score is local) */
   judgeScript(input: {
     script: string;
     duration: string;
+    personaContext?: CompiledPersonaContext;
   }): Promise<AIJudge>;
 }
 
@@ -187,7 +193,11 @@ class DeepSeekLLMAdapter implements LLMProviderAdapter {
     this.available = provider.available;
   }
 
-  private async call(prompt: string, systemPrompt?: string, retries = 1): Promise<any> {
+  private async call(prompt: string, systemPrompt?: string, retries = 1, personaContext?: CompiledPersonaContext): Promise<any> {
+    // If personaContext is provided, use it as the primary system prompt
+    if (personaContext && !systemPrompt) {
+      systemPrompt = personaContext.prompt_text;
+    }
     for (let attempt = 0; attempt <= retries; attempt++) {
       try {
         const timeout = new Promise<null>((resolve) => setTimeout(() => resolve(null), 60000));
@@ -216,31 +226,28 @@ class DeepSeekLLMAdapter implements LLMProviderAdapter {
 
   async generateAngles(input: any): Promise<{ angles: AngleCandidate[]; method: string }> {
     try {
-      const parsed = await this.call(`请生成8-12个短视频内容角度。客户痛点：${input.customerPain || ''} 产品/工艺：${input.productOrProcess || ''} 材质：${input.material || ''} 账号人设：${input.account?.persona || ''} 目标客户：${input.account?.target_audience || ''}。要求每个角度标题不超过20字，类型多样化，标注风险等级。输出JSON格式：{"angles":[{"id":"...","title":"...","angleType":"...","targetCustomer":"...","customerPain":"...","coreConflict":"...","whyItWorks":"...","riskLevel":"低/中/高"}]}`);
+      const userPrompt = `请生成8-12个短视频内容角度。客户痛点：${input.customerPain || ''} 产品/工艺：${input.productOrProcess || ''} 材质：${input.material || ''}。要求每个角度标题不超过20字，类型多样化，标注风险等级。输出JSON格式：{"angles":[{"id":"...","title":"...","angleType":"...","targetCustomer":"...","customerPain":"...","coreConflict":"...","whyItWorks":"...","riskLevel":"低/中/高"}]}`;
+      const parsed = await this.call(userPrompt, undefined, 1, input.personaContext);
       if (Array.isArray(parsed.angles)) {
         return { angles: parsed.angles.slice(0, 12), method: 'ai' };
       }
-    } catch {}
+    } catch (e: any) {
+      console.warn('[Adapter] generateAngles AI failed, method:', input.personaContext ? 'persona_v2' : 'legacy');
+    }
     return { angles: [], method: 'fallback' };
   }
 
   async generateHooks(input: any): Promise<{ hooks: HookCandidate[]; method: string }> {
     try {
-      const parsed = await this.call(`请生成12-20个不同角度的开头钩子。角度：${input.angle?.title || ''} 冲突：${input.angle?.coreConflict || ''} 客户痛点：${input.customerPain || ''} 产品/工艺：${input.productOrProcess || ''} 材质：${input.material || ''}
-${input.account ? `
-## 账号信息
-账号名称：${input.account?.name || ''}
-人设：${input.account?.persona || ''}
-目标受众：${input.account?.target_audience || ''}
-内容风格：${input.account?.content_style || ''}
-${input.account?.dos ? '✅ 应该做的：' + input.account.dos : ''}
-${input.account?.donts ? '❌ 不应该做的：' + input.account.donts : ''}
-` : ''}
-。要求每个钩子不超过28字，类型包含直接提问、客户原话、风险警告、反常识、价格冲突、材质风险、测试风险。输出JSON格式：{"hooks":[{"id":"...","hookText":"...不超过28字","hookType":"direct_question/...","tensionType":"price/...","targetCustomer":"...","whyItWorks":"..."}]}`);
+      const userPrompt = `请生成12-20个不同角度的开头钩子。角度：${input.angle?.title || ''} 冲突：${input.angle?.coreConflict || ''} 客户痛点：${input.customerPain || ''} 产品/工艺：${input.productOrProcess || ''} 材质：${input.material || ''}
+。要求每个钩子不超过28字，类型包含直接提问、客户原话、风险警告、反常识、价格冲突、材质风险、测试风险。输出JSON格式：{"hooks":[{"id":"...","hookText":"...不超过28字","hookType":"direct_question/...","tensionType":"price/...","targetCustomer":"...","whyItWorks":"..."}]}`;
+      const parsed = await this.call(userPrompt, undefined, 1, input.personaContext);
       if (Array.isArray(parsed.hooks)) {
         return { hooks: parsed.hooks.slice(0, 20), method: 'ai' };
       }
-    } catch {}
+    } catch (e: any) {
+      console.warn('[Adapter] generateHooks AI failed, method:', input.personaContext ? 'persona_v2' : 'legacy');
+    }
     return { hooks: [], method: 'fallback' };
   }
 
@@ -295,7 +302,7 @@ ${kcInfo ? '\n## 参考知识\n' + kcInfo : ''}
 }`;
 
     try {
-      const parsed = await this.call(prompt, undefined, 1);
+      const parsed = await this.call(prompt, undefined, 1, input.personaContext);
       const validated = DraftSchema.safeParse(parsed);
       if (validated.success) {
         console.log(`[Adapter] generateDraft succeeded in ${Date.now() - startTime}ms`);
@@ -307,7 +314,7 @@ ${kcInfo ? '\n## 参考知识\n' + kcInfo : ''}
       // Retry with simpler prompt
       const simplePrompt = `口播脚本。账号：${input.account?.name || ''}。人设：${input.account?.persona || ''}。目标受众：${input.account?.target_audience || ''}。钩子：${input.hook || ''}。角度：${input.angle?.title || ''}。客户：${input.customerPain || ''}。工艺：${input.productOrProcess || ''}。材质：${input.material || ''}。${kcInfo ? '参考知识：' + kcInfo.slice(0, 200) : ''}。每句话不超过30字，总共5-8句，从钩子开始，结尾引导下一步。输出JSON格式：{"hook":"${input.hook || ''}","body":"完整口播稿，每行一句","wordCount":数字}`;
       try {
-        const sResult = await this.call(simplePrompt, '输出JSON，不要markdown包裹。', 1);
+        const sResult = await this.call(simplePrompt, undefined, 1, input.personaContext);
         const sValidated = DraftSchema.safeParse(sResult);
         if (sValidated.success) {
           if (countChars(sValidated.data.body) >= 200) return sValidated.data;
@@ -356,14 +363,14 @@ ${input.feedback}
   "changes": ["改进了什么"]
 }`;
 
-    const parsed = await this.call(prompt);
+    const parsed = await this.call(prompt, undefined, 1, input.personaContext);
     return RewriteResultSchema.safeParse(parsed).success
       ? parsed as RewriteResult
       : { hook: input.hook || '', body: parsed.body || input.script, wordCount: 0 };
   }
 
   async judgeScript(input: any): Promise<AIJudge> {
-    const parsed = await this.call(`请评分以下脚本：${input.script}（目标${input.duration}秒）。评分维度：structureScore(0-25)、spokenScore(0-25)、painScore(0-25)、ctaScore(0-25)。输出JSON`);
+    const parsed = await this.call(`请评分以下脚本：${input.script}（目标${input.duration}秒）。评分维度：structureScore(0-25)、spokenScore(0-25)、painScore(0-25)、ctaScore(0-25)。输出JSON`, undefined, 1, input.personaContext);
     const validated = AIJudgeSchema.safeParse(parsed);
     return validated.success ? validated.data : { structureScore: 15, spokenScore: 15, painScore: 15, ctaScore: 10, suggestions: [] };
   }

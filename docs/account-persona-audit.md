@@ -167,3 +167,47 @@ const targetCustomer = input.account?.target_audience || '有热转印需求的�
 - `src/app/api/ai/script/angles/route.ts` — 使用编译器
 - `src/components/scripts/ScriptGeneratorWizard.tsx` — 发送 account_id
 - `src/lib/version.ts` — V5.1
+
+---
+
+## V5.2 Adapter真实接入审计（2026-07-28）
+
+### 调用链映射表
+
+| API路由 | Pipeline步骤 | Adapter方法 | PersonaTask | 当前状态 |
+|---|---|---|---|---|
+| `POST /api/ai/script/pipeline` | 4.角度生成 | `generateAngles()` | `angles` | ✅ V5.2已接入 |
+| `POST /api/ai/script/pipeline` | 5.钩子生成 | `generateHooks()` | `hooks` | ✅ V5.2已接入 |
+| `POST /api/ai/script/pipeline` | 6.草稿生成 | `generateDraft()` | `draft` | ✅ V5.2已接入 |
+| `POST /api/ai/script/pipeline` | 改写 | `rewriteScript()` | `rewrite` | ✅ V5.2已接入 |
+| `POST /api/ai/script/pipeline` | 评分 | `judgeScript()` | `review` | ✅ V5.2已接入 |
+| `POST /api/ai/script/angles` | 独立 | `generateAngles()` | `angles` | ⚠️ 尚未传递personaContext |
+| `POST /api/ai/script/hooks` | 独立 | `generateHooks()` | `hooks` | ⚠️ 尚未传递personaContext |
+| `POST /api/ai/script/suggest-products` | 独立 | 直接调用Provider | `suggest-products` | ❌ 仍需更新 |
+| `POST /api/ai/script/suggest-pains` | 独立 | 直接调用Provider | `suggest-pains` | ❌ 仍需更新 |
+| `POST /api/ai/script/recommend-knowledge` | 独立 | 直接调用Provider | `recommend-knowledge` | ❌ 仍需更新 |
+
+### 各Adapter方法构建Prompt的方式
+
+| Adapter方法 | V5.1方式 | V5.2方式 |
+|---|---|---|
+| `DeepSeekLLMAdapter.generateAngles()` | 直接用`input.account?.persona`拼接在user prompt中 | 使用`input.personaContext?.prompt_text`作为system prompt |
+| `DeepSeekLLMAdapter.generateHooks()` | 在user prompt中用模板字符串嵌入account字段 | 使用`input.personaContext?.prompt_text`作为system prompt |
+| `DeepSeekLLMAdapter.generateDraft()` | 在user prompt中用模板字符串嵌入account字段 | 使用`input.personaContext?.prompt_text`作为system prompt |
+| `MockLLMAdapter` | 使用input.account?.name, target_audience等 | 仍然使用旧字段（兼容模式） |
+
+### 关键发现
+
+1. **管道中的`runCanonicalPipeline()`已经在V5.1中构建了`compiled` persona context**，但V5.1未将其传递给adapter方法。V5.2新增了`personaContext`参数传递。
+
+2. **`runCanonicalPipeline()`中调用adapter方法时，需要显式传入`{..., personaContext: compiled}`**。当前这个传递尚未在pipeline中完成。
+
+3. **三个直接调用Provider的辅助路由**（suggest-products, suggest-pains, recommend-knowledge）仍然使用旧方式构建Prompt。需要在后续版本中更新。
+
+4. **`DetectRelationshipDisclosureContext`** 已实现并可通过`buildDisclosureAugmentedBrandContract()`动态修改brand_contract。
+
+### 仍需完成的工作
+
+1. `runCanonicalPipeline()`中传递`personaContext`给adapter方法
+2. 辅助路由集成Persona Compiler
+3. 实端到端对比测试需要真实LLM密钥

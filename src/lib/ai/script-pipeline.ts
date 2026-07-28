@@ -9,6 +9,9 @@ import { z } from 'zod';
 import { rewriteToSpokenScript } from './rewrite-to-spoken-script';
 import { computeSimilarity, computeSimilarityPenalty } from './similarity-check';
 import { accountMemory } from './account-memory';
+import { buildAccountPromptContext } from './persona-compiler';
+import { isPersonaV2Enabled } from './feature-flags';
+import type { CompiledPersonaContext } from '@/lib/accounts/types';
 
 // ===== Canonical Pipeline =====
 // runCanonicalPipeline() is THE ONLY path that produces script results.
@@ -37,6 +40,18 @@ export async function runCanonicalPipeline(req: ScriptPipelineRequest): Promise<
   const input = CanonicalPipelineRequestSchema.parse(req);
   const topic = input.customerPain || input.topic || '';
   const adapter = await getLLMAdapter();
+  const personaV2Enabled = isPersonaV2Enabled();
+  let personaContext: CompiledPersonaContext | undefined;
+  if (personaV2Enabled && input.account && input.account.schema_version === '2.0') {
+    try {
+      personaContext = buildAccountPromptContext(input.account, 'draft', {
+        platform: input.account.default_platform,
+      });
+      console.log('[Pipeline] Persona V2 enabled for account:', input.account.id);
+    } catch (e: any) {
+      console.warn('[Pipeline] Persona V2 build failed:', e.message);
+    }
+  }
   const duration = input.durationSeconds || input.video_length || '30';
 
   // 1. Check if broad topic → split
@@ -69,6 +84,7 @@ export async function runCanonicalPipeline(req: ScriptPipelineRequest): Promise<
       account: input.account, productOrProcess: input.productOrProcess,
       customerPain: input.customerPain, material: input.material,
       knowledgeCards: input.knowledgeCards,
+      personaContext: personaContext,
     });
     angleCandidates = angleResult.angles || [];
     aiUsed = angleResult.method === 'ai';
@@ -80,6 +96,7 @@ export async function runCanonicalPipeline(req: ScriptPipelineRequest): Promise<
       account: input.account, productOrProcess: input.productOrProcess,
       customerPain: input.customerPain, material: input.material,
       knowledgeCards: input.knowledgeCards,
+      personaContext: personaContext,
     });
     hookCandidates = hookResult.hooks || [];
   } catch {}
@@ -105,6 +122,7 @@ export async function runCanonicalPipeline(req: ScriptPipelineRequest): Promise<
       account: input.account,
       knowledgeCards: input.knowledgeCards,
       duration: duration,
+      personaContext: personaContext,
     });
   } catch {}
 
