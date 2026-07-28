@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getLLMAdapter, KnowledgeRecommendationResponseSchema } from '@/lib/ai/providers/adapter';
-import { resolveAccountGenerationContext, buildPersonaContextForTask } from '@/lib/ai/account-resolver';
+import { resolveAccountGenerationContext, buildPersonaContextForTask, buildPersonaResponseHeaders } from '@/lib/ai/account-resolver';
 export const maxDuration = 60;
 
 export async function POST(req: NextRequest) {
@@ -30,11 +30,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ recommendations: fallback.recommendations, total: 1, personaVersion: resolved.resolved_account_version });
     }
 
+    var personaHeaders = buildPersonaResponseHeaders(resolved);
     return NextResponse.json({
       recommendations: validated.data.recommendations,
       total: validated.data.recommendations.length,
       personaVersion: resolved.resolved_account_version,
-    });
+    }, { headers: personaHeaders });
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });
   }

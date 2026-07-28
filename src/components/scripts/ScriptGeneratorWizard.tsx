@@ -1,6 +1,8 @@
 'use client';
 import { useState, useMemo, useEffect } from 'react';
-import { MOCK_ACCOUNTS, MOCK_KNOWLEDGE_NEW } from '@/lib/constants/mock-data';
+import { MOCK_KNOWLEDGE_NEW } from '@/lib/constants/mock-data';
+import { MOCK_ACCOUNTS_V2 } from '@/lib/accounts/examples/xuzong.account';
+import type { AccountV2 } from '@/lib/accounts/types';
 import { PLATFORMS, SCRIPT_STRUCTURES, ACTING_STYLES, TONE_STYLES, CONVERSION_GOALS } from '@/lib/constants';
 import { scoreScript } from '@/lib/ai/script-scoring';
 
@@ -97,7 +99,7 @@ export default function ScriptGeneratorWizard({ open, onClose, onGenerate }: Scr
     if (form.knowledgeMode === 'auto' && (form.customer_pain || form.product_or_process || form.account_id)) {
       fetch('/api/ai/script/recommend-knowledge', {
         method: 'POST', headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ account_id: selectedAccount?.id || '', account_version: (selectedAccount as any)?.persona_version || 'legacy', platform: form.platform, productOrProcess: form.product_or_process, customerPain: form.customer_pain, material: form.material }),
+        body: JSON.stringify({ account_id: selectedAccount?.id || '', account_version: selectedAccount!.persona_version, platform: form.platform, productOrProcess: form.product_or_process, customerPain: form.customer_pain, material: form.material }),
       }).then(res => res.json()).then(data => {
         if (data.cards && data.cards.length > 0) {
           setProductSuggestions(data.cards.map((c: any) => c.title));
@@ -118,7 +120,7 @@ export default function ScriptGeneratorWizard({ open, onClose, onGenerate }: Scr
           customerPain: form.customer_pain,
           productOrProcess: form.product_or_process,
           material: form.material,
-          account_id: selectedAccount?.id || '', account_version: (selectedAccount as any)?.persona_version || 'legacy',
+          account_id: selectedAccount?.id || '', account_version: selectedAccount!.persona_version,
           angle: selectedAngle || undefined,
         }),
       });
@@ -232,7 +234,7 @@ export default function ScriptGeneratorWizard({ open, onClose, onGenerate }: Scr
     try {
       const res = await fetch('/api/ai/script/suggest-products', {
         method: 'POST', headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ account_id: selectedAccount?.id || '', account_version: (selectedAccount as any)?.persona_version || 'legacy', platform: form.platform, knowledgeMode: form.knowledgeMode, material: form.material }),
+        body: JSON.stringify({ account_id: selectedAccount?.id || '', account_version: selectedAccount!.persona_version, platform: form.platform, knowledgeMode: form.knowledgeMode, material: form.material }),
       });
       const data = await res.json();
       if (data.suggestions && data.suggestions.length > 0) {
@@ -250,7 +252,7 @@ export default function ScriptGeneratorWizard({ open, onClose, onGenerate }: Scr
     try {
       const res = await fetch('/api/ai/script/suggest-pains', {
         method: 'POST', headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ account_id: selectedAccount?.id || '', account_version: (selectedAccount as any)?.persona_version || 'legacy', platform: form.platform, productOrProcess: form.product_or_process, material: form.material }),
+        body: JSON.stringify({ account_id: selectedAccount?.id || '', account_version: selectedAccount!.persona_version, platform: form.platform, productOrProcess: form.product_or_process, material: form.material }),
       });
       const data = await res.json();
       if (data.suggestions && data.suggestions.length > 0) {
@@ -264,7 +266,7 @@ export default function ScriptGeneratorWizard({ open, onClose, onGenerate }: Scr
     setSelectedHookText(hook.hookText);
   };
 
-  const selectedAccount = MOCK_ACCOUNTS.find(a => a.id === form.account_id);
+  const selectedAccount: AccountV2 | undefined = MOCK_ACCOUNTS_V2.find(a => a.id === form.account_id);
 
   // Auto-suggest pain points and hooks based on selection
   const suggestions = useMemo(() => {
@@ -318,7 +320,7 @@ export default function ScriptGeneratorWizard({ open, onClose, onGenerate }: Scr
       const res = await fetch('/api/ai/script/pipeline', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          account_id: selectedAccount?.id || '', account_version: (selectedAccount as any)?.persona_version || 'legacy',
+          account_id: selectedAccount?.id || '', account_version: selectedAccount!.persona_version,
           topic: form.product_or_process || form.customer_pain,
           customerPain: form.customer_pain,
           productOrProcess: form.product_or_process,
@@ -342,7 +344,7 @@ export default function ScriptGeneratorWizard({ open, onClose, onGenerate }: Scr
     // Fall back to rule engine
     if (!result) {
       result = simpleRunPipeline({
-        account_id: selectedAccount?.id || '', account_version: (selectedAccount as any)?.persona_version || 'legacy',
+        account_id: selectedAccount?.id || '', account_version: selectedAccount!.persona_version,
         topic: form.product_or_process || form.customer_pain,
         customerPain: form.customer_pain,
         productOrProcess: form.product_or_process,
@@ -405,7 +407,7 @@ export default function ScriptGeneratorWizard({ open, onClose, onGenerate }: Scr
         method: 'POST', headers: {'Content-Type':'application/json'},
         body: JSON.stringify({
           account_id: selectedAccount?.id || '',
-          account_version: (selectedAccount as any)?.persona_version || 'legacy',
+          account_version: selectedAccount!.persona_version,
           script: v.script, hook: v.hook, duration: selectedDuration,
           totalScore: v.score?.totalScore,
           weaknesses: v.score?.weaknesses,
@@ -450,7 +452,7 @@ export default function ScriptGeneratorWizard({ open, onClose, onGenerate }: Scr
     try {
       const res = await fetch('/api/ai/rewrite-script', {
         method: 'POST', headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ account_id: selectedAccount?.id || '', account_version: (selectedAccount as any)?.persona_version || 'legacy', script: bestScript, hook: bestHook, feedback: '请用更口语化、更短句、更像工厂老板在说话的方式重写' }),
+        body: JSON.stringify({ account_id: selectedAccount?.id || '', account_version: selectedAccount!.persona_version, script: bestScript, hook: bestHook, feedback: '请用更口语化、更短句、更像工厂老板在说话的方式重写' }),
       });
       const data = await res.json();
       if (data.script) {
@@ -472,7 +474,7 @@ export default function ScriptGeneratorWizard({ open, onClose, onGenerate }: Scr
     try {
       const res = await fetch('/api/ai/rewrite-script', {
         method: 'POST', headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ account_id: selectedAccount?.id || '', account_version: (selectedAccount as any)?.persona_version || 'legacy', script: bestScript, hook: bestHook, feedback: rewriteFeedback }),
+        body: JSON.stringify({ account_id: selectedAccount?.id || '', account_version: selectedAccount!.persona_version, script: bestScript, hook: bestHook, feedback: rewriteFeedback }),
       });
       const data = await res.json();
       if (data.script) {
@@ -532,7 +534,7 @@ export default function ScriptGeneratorWizard({ open, onClose, onGenerate }: Scr
                 <select className="select-field" value={form.account_id}
                   onChange={e => update('account_id', e.target.value)}>
                   <option value="">请选择账号</option>
-                  {(MOCK_ACCOUNTS || []).map(a => (
+                  {(MOCK_ACCOUNTS_V2 || []).map(a => (
                     <option key={a.id} value={a.id}>
                       {a.name.split('-')[0]}（{a.platform === 'weixin' ? '视频号' : '抖音'}）
                     </option>
@@ -672,7 +674,7 @@ export default function ScriptGeneratorWizard({ open, onClose, onGenerate }: Scr
                         const ato = setTimeout(() => actrl.abort(), 35000);
                         const res = await fetch('/api/ai/script/angles', {
                           method: 'POST', headers: {'Content-Type':'application/json'}, signal: actrl.signal,
-                          body: JSON.stringify({ customerPain: form.customer_pain, productOrProcess: form.product_or_process, material: form.material, account_id: selectedAccount?.id || '', account_version: (selectedAccount as any)?.persona_version || 'legacy' }),
+                          body: JSON.stringify({ customerPain: form.customer_pain, productOrProcess: form.product_or_process, material: form.material, account_id: selectedAccount?.id || '', account_version: selectedAccount!.persona_version }),
                         });
                         clearTimeout(ato);
                         if (res.ok) {
