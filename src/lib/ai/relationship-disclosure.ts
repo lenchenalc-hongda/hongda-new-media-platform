@@ -17,6 +17,7 @@ export interface RelationshipDisclosureContext {
 
 var MANUFACTURING_SIGNALS = [
   '是不是你们自己生产的',
+  '是你们自己生产的吗',
   '机器是哪里生产的',
   '设备是谁生产的',
   '是你们自己制造的吗',
@@ -27,6 +28,17 @@ var MANUFACTURING_SIGNALS = [
   '有没有自己的工厂',
   '机器是自己研发的吗',
   '是不是宏达自己生产的',
+  '宏达自己生产的',
+  '自产的',
+  '自研的',
+  '自己做的',
+  '自己研发的',
+  '哪家出的',
+  '是不是贴牌',
+  '是不是代理',
+  '自己造',
+  '代工的',
+  '你们家自己做的机器',
 ];
 
 var BRAND_RELATIONSHIP_SIGNALS = [
@@ -36,6 +48,10 @@ var BRAND_RELATIONSHIP_SIGNALS = [
   '你们和厂家什么关系',
   '这是宏达的品牌吗',
   '宏达和点盛什么关系',
+  '和设备厂什么关系',
+  '只是代理还是自己生产',
+  '和设备厂商的关系',
+  '你们和设备厂家',
 ];
 
 var OWNERSHIP_SIGNALS = [
@@ -45,6 +61,10 @@ var OWNERSHIP_SIGNALS = [
   '有没有股权关系',
   '宏达是不是控股',
   '你们是不是收购了',
+  '有股份吗',
+  '有没有投资',
+  '入股了',
+  '有股权',
 ];
 
 // ===== Safe questions (should NOT trigger disclosure) =====
@@ -79,12 +99,21 @@ export function detectRelationshipDisclosure(input: {
   topic?: string;
   customerQuestion?: string;
 }): RelationshipDisclosureContext {
-  var text = [
+  var raw = [
     input.customerPain || '',
     input.productOrProcess || '',
     input.topic || '',
     input.customerQuestion || '',
   ].join(' ');
+  // Normalize: unify punctuation, replace common variants
+  var text = raw
+    .replace(/？/g, '?')
+    .replace(/[，,。.！!、；;：:]/g, ' ')
+    .replace(/你们家/g, '你们')
+    .replace(/宏达这边/g, '宏达')
+    .replace(/这个设备/g, '这个设备')
+    .replace(/这台机器/g, '这台机器')
+    .toLowerCase();
 
   var manufacturingSignals = MANUFACTURING_SIGNALS.filter(function(s) { return text.includes(s); });
   var brandSignals = BRAND_RELATIONSHIP_SIGNALS.filter(function(s) { return text.includes(s); });

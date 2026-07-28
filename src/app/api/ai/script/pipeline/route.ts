@@ -7,8 +7,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { runCanonicalPipeline, CanonicalPipelineRequestSchema } from '@/lib/ai/script-pipeline';
 import { createJob, processJob } from '@/lib/ai/jobs';
 import { getCurrentProviderName } from '@/lib/ai/providers';
-import { getAccountRepository } from '@/lib/accounts/mock-repository';
-import { buildAccountPromptContext } from '@/lib/ai/persona-compiler';
+import { resolveAccountGenerationContext, buildPersonaContextForTask } from '@/lib/ai/account-resolver';
 import { validateAccountConfig } from '@/lib/accounts/schema';
 
 export const maxDuration = 60;
@@ -23,39 +22,44 @@ export async function POST(req: NextRequest) {
     const effectiveMode = (mode === 'sync' && provider === 'deepseek' && body.forceSync !== true)
       ? 'async' : mode;
 
-    // ===== Resolve account server-side =====
-    // Priority: account_id (server) > legacy account (client)
+    // ===== Unified account resolution =====
     var resolvedAccount = null;
     var accountWarning = null;
     var accountPersonaContext = null;
 
-    if (body.account_id) {
-      var repo = getAccountRepository();
-      resolvedAccount = await repo.getActiveById(body.account_id);
-      if (!resolvedAccount) {
-        return NextResponse.json({
-          error: '账号 ' + body.account_id + ' 不存在或已停用',
-          code: 'ACCOUNT_NOT_FOUND',
-        }, { status: 404 });
-      }
-      // Check version
-      if (body.account_version && body.account_version !== resolvedAccount.persona_version) {
-        accountWarning = '客户端版本 ' + body.account_version + ' 与服务端 ' + resolvedAccount.persona_version + ' 不一致，使用服务端最新配置';
-      }
-      // Build persona context
-      accountPersonaContext = buildAccountPromptContext(resolvedAccount, 'draft', {
-        platform: resolvedAccount.default_platform,
+    try {
+      var resolved = resolveAccountGenerationContext({
+        account_id: body.account_id,
+        account_version: body.account_version,
+        legacy_account: body.account,
+        platform: body.platform,
+        product_or_process: body.productOrProcess,
+        customer_pain: body.customerPain,
       });
+      resolvedAccount = resolved.account;
+      accountWarning = resolved.warning || null;
+      if (resolved.version_mismatch) {
+        console.warn('[Pipeline] Version mismatch: client=' + body.account_version + ' server=' + resolved.resolved_account_version);
+      }
+      accountPersonaContext = buildPersonaContextForTask(resolved, 'draft');
       // Replace legacy body.account with resolved server account
-      body.account = resolvedAccount;
-    } else if (body.account) {
-      // Legacy mode: client sent full account — accept with warning
-      accountWarning = '已废弃的客户端传 account 模式，请改用 account_id';
+      body.account = resolved.account;
+    } catch (e: any) {
+      if (e.message.includes('不存在') || e.message.includes('停用') || e.message.includes('不可用')) {
+        return NextResponse.json({ error: e.message, code: 'ACCOUNT_NOT_FOUND' }, { status: 404 });
+      }
+      // Legacy fallback
+      if (body.account) {
+        accountWarning = '账号解析失败，使用客户端传递的 legacy account: ' + e.message;
+        resolvedAccount = body.account;
+      } else {
+        return NextResponse.json({ error: e.message }, { status: 400 });
+      }
     }
 
     // Validate account config if resolved
     if (resolvedAccount) {
-      var validation = validateAccountConfig(resolvedAccount);
+      var validation = validateAccountConfig ? validateAccountConfig(resolvedAccount) : {valid: true, errors: []};
       if (!validation.valid) {
         console.warn('[Account Config] Warning: ' + validation.errors.join(', '));
       }

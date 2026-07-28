@@ -1,35 +1,46 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getProvider } from '@/lib/ai/providers';
+import { getLLMAdapter } from '@/lib/ai/providers/adapter';
+import { resolveAccountGenerationContext, buildPersonaContextForTask } from '@/lib/ai/account-resolver';
 export const maxDuration = 60;
 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { account, platform, productOrProcess, customerPain, material } = body;
-    const provider = await getProvider();
+    const { platform } = body;
 
-    const prompt = `请为以下场景推荐3-5条热转印工厂的知识点。
-
-账号人设：${account?.name || ''}（${account?.persona || ''}）
-平台：${platform || '视频号'}
-${productOrProcess ? '产品/工艺：' + productOrProcess : ''}
-${customerPain ? '客户痛点：' + customerPain : ''}
-${material ? '材质：' + material : ''}
-
-要求：
-1. 每个知识点标题不超过20字
-2. 说明这个知识点的核心结论
-3. 说明是否可对外公开
-4. 标注适用于什么内容类型
-
-输出JSON格式：{"cards": [{"title":"...","coreConclusion":"...","contentScope":"public|internal","applicableTypes":"脚本/文章/答疑"}]}`;
-
-    const response = await provider.generateStructured({
-      systemPrompt: '你是宏达印业的知识库管理员。输出JSON。',
-      userPrompt: prompt, outputFormat: 'json', temperature: 0.7,
+    // Resolve account (required)
+    const resolved = resolveAccountGenerationContext({
+      account_id: body.account_id,
+      account_version: body.account_version,
+      legacy_account: body.account,
+      platform,
+      product_or_process: body.productOrProcess,
+      customer_pain: body.customerPain,
     });
-    const cards = ((response.parsed?.cards || []) as any[]).slice(0, 5);
-    return NextResponse.json({ cards, total: cards.length });
+    const personaCtx = buildPersonaContextForTask(resolved, 'recommend-knowledge');
+    const adapter = await getLLMAdapter();
+
+    // Use adapter angles method for knowledge recommendation
+    const result = await adapter.generateAngles({
+      account: resolved.account,
+      productOrProcess: body.productOrProcess,
+      customerPain: body.customerPain,
+      material: body.material,
+      personaContext: personaCtx,
+    });
+
+    const cards = (result.angles || []).slice(0, 5).map((a: any) => ({
+      title: a.title,
+      coreConclusion: a.coreConflict || a.customerPain || '',
+      contentScope: a.riskLevel === '高' ? 'internal' : 'public',
+      applicableTypes: '脚本/文章',
+    }));
+
+    return NextResponse.json({
+      cards,
+      total: cards.length,
+      personaVersion: resolved.resolved_account_version,
+    });
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });
   }

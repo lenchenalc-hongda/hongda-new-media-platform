@@ -41,16 +41,21 @@ export async function runCanonicalPipeline(req: ScriptPipelineRequest): Promise<
   const topic = input.customerPain || input.topic || '';
   const adapter = await getLLMAdapter();
   const personaV2Enabled = isPersonaV2Enabled();
-  let personaContext: CompiledPersonaContext | undefined;
-  if (personaV2Enabled && input.account && input.account.schema_version === '2.0') {
+  var commonPersonaOptions: any = {};
+  var accountForPersona = personaV2Enabled && input.account && (input.account as any).schema_version === '2.0' ? input.account : null;
+
+  function buildTaskContext(task: import('@/lib/accounts/types').PersonaTask): import('@/lib/accounts/types').CompiledPersonaContext | undefined {
+    if (!accountForPersona) return undefined;
     try {
-      personaContext = buildAccountPromptContext(input.account, 'draft', {
-        platform: input.account.default_platform,
-      });
-      console.log('[Pipeline] Persona V2 enabled for account:', input.account.id);
+      return buildAccountPromptContext(accountForPersona, task, commonPersonaOptions);
     } catch (e: any) {
-      console.warn('[Pipeline] Persona V2 build failed:', e.message);
+      console.warn('[Pipeline] Persona V2 build failed for task ' + task + ':', e.message);
+      return undefined;
     }
+  }
+
+  if (accountForPersona) {
+    console.log('[Pipeline] Persona V2 enabled for account:', input.account.id);
   }
   const duration = input.durationSeconds || input.video_length || '30';
 
@@ -84,7 +89,7 @@ export async function runCanonicalPipeline(req: ScriptPipelineRequest): Promise<
       account: input.account, productOrProcess: input.productOrProcess,
       customerPain: input.customerPain, material: input.material,
       knowledgeCards: input.knowledgeCards,
-      personaContext: personaContext,
+      personaContext: buildTaskContext('angles'),
     });
     angleCandidates = angleResult.angles || [];
     aiUsed = angleResult.method === 'ai';
@@ -96,7 +101,7 @@ export async function runCanonicalPipeline(req: ScriptPipelineRequest): Promise<
       account: input.account, productOrProcess: input.productOrProcess,
       customerPain: input.customerPain, material: input.material,
       knowledgeCards: input.knowledgeCards,
-      personaContext: personaContext,
+      personaContext: buildTaskContext('hooks'),
     });
     hookCandidates = hookResult.hooks || [];
   } catch {}
@@ -122,7 +127,7 @@ export async function runCanonicalPipeline(req: ScriptPipelineRequest): Promise<
       account: input.account,
       knowledgeCards: input.knowledgeCards,
       duration: duration,
-      personaContext: personaContext,
+      personaContext: buildTaskContext('draft'),
     });
   } catch {}
 
