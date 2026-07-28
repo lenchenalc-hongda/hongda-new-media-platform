@@ -10,8 +10,9 @@ import { rewriteToSpokenScript } from './rewrite-to-spoken-script';
 import { computeSimilarity, computeSimilarityPenalty } from './similarity-check';
 import { accountMemory } from './account-memory';
 import { buildAccountPromptContext } from './persona-compiler';
-import { isPersonaV2Enabled } from './feature-flags';
+import { isPersonaV2Enabled, isPersonaReviewEnabled, isAutoRepairEnabled } from './feature-flags';
 import type { CompiledPersonaContext } from '@/lib/accounts/types';
+import { reviewScriptAgainstAccount, autoRepairScript, checkHardViolations } from './script-persona-review';
 
 // ===== Canonical Pipeline =====
 // runCanonicalPipeline() is THE ONLY path that produces script results.

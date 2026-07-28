@@ -2,7 +2,18 @@
 // All script generator API calls go through this file.
 // Components never construct account payloads or manage error handling directly.
 
-import type { Platform, FunnelStage } from '@/lib/accounts/types';
+import type { Platform, FunnelStage, AccountV2 } from '@/lib/accounts/types';
+
+/** Throw if account is not selected or inactive */
+export function requireSelectedAccount(account: AccountV2 | undefined): AccountV2 {
+  if (!account) {
+    throw new Error('请先选择账号');
+  }
+  if (account.status !== 'active') {
+    throw new Error('当前账号 ' + account.name + ' 已停用，不可用');
+  }
+  return account;
+}
 
 export interface AccountRequestContext {
   account_id: string;

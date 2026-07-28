@@ -324,3 +324,47 @@ Persona Compiler（统一编译人设上下文）
 8. 是否有禁止表达？
 9. 是否填写版本号？
 ```
+
+---
+
+## 架构冻结与后续维护原则
+
+> 冻结时间：2026-07-28
+> 冻结版本：V5.6
+> 状态：Architecture Stable
+
+### 冻结范围
+
+自 V5.6 起，以下核心模块标记为 **Architecture Stable**，不进行底层改动：
+
+| 模块 | 冻结级别 | 说明 |
+|---|---|---|
+| Account 核心数据结构 (`AccountV2`) | 🧊 冻结 | 不新增字段 |
+| PersonaTask 枚举 | 🧊 冻结 | 不增减任务类型 |
+| Adapter 接口 (`LLMProviderAdapter`) | 🧊 冻结 | 不修改方法签名 |
+| Resolver 流程 (`resolveAccountGenerationContext`) | 🧊 冻结 | 不改解析流程 |
+| Pipeline 基本阶段 | 🧊 冻结 | 不改阶段顺序 |
+
+### 可调整范围
+
+以下内容可根据运营需求继续优化：
+
+1. **账号配置** — `persona_config`、`content_pillars`、`audience_segments`
+2. **Prompt 措辞** — Task Instructions 表述
+3. **Reference Scripts** — 参考脚本
+4. **内容支柱比例** — ContentPillar weight
+5. **运营学习数据** — 接入真实发布数据后微调
+
+### 版本管理
+
+- 账号配置修改：递增 `persona_version`（1.0.0 → 1.0.1）
+- 不改底层结构时：产品版本号不做大版本跳升
+- 确实需要修改核心数据结构时：需团队评审，触发 Account V3
+
+### 后续工作方向
+
+1. 使用真实选题和账号配置生成脚本
+2. 视频拍摄与发布
+3. 回收发布数据（完播率、转化率、评论情感）
+4. 按真实运营结果微调账号配置
+5. 优化 Persona Compiler 各任务区间的 Prompt 措辞
