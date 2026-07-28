@@ -83,6 +83,12 @@ export async function POST(req: NextRequest) {
 
     // Sync mode: run directly
     const result = await runCanonicalPipeline(parsed);
+    var personaHeaders: Record<string, string> = {};
+    if (resolvedAccount && resolvedAccount.persona_version) {
+      personaHeaders['X-Persona-Version'] = resolvedAccount.persona_version;
+    } else if (accountWarning) {
+      personaHeaders['X-Persona-Legacy-Fallback'] = 'true';
+    }
     return NextResponse.json({
       ...result,
       aiUsed: !result.mock,
@@ -93,7 +99,7 @@ export async function POST(req: NextRequest) {
       selectedAngle: result.selectedAngle || null,
       selectedHook: result.hookCandidates?.find((h: any) => h.id === parsed.selectedHookId)
         || (result.hookCandidates?.[0] || null),
-    });
+    }, { headers: personaHeaders });
   } catch (err: any) {
     console.error('[Pipeline] Error:', err.message);
     return NextResponse.json({ error: err.message }, { status: 500 });

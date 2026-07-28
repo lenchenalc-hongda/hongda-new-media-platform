@@ -66,11 +66,63 @@ export type AiDraft = z.infer<typeof DraftSchema>;
 export type RewriteResult = z.infer<typeof RewriteResultSchema>;
 export type AIJudge = z.infer<typeof AIJudgeSchema>;
 
+// ===== Structured Task Schemas (V5.4) =====
+
+export const ProductSuggestionSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  reason: z.string(),
+  suitable_for: z.string(),
+  caution: z.string().optional(),
+});
+
+export const PainSuggestionSchema = z.object({
+  id: z.string(),
+  pain: z.string(),
+  customer_expression: z.string(),
+  why_relevant: z.string(),
+});
+
+export const KnowledgeRecommendationSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  relevance: z.string(),
+  usage: z.string(),
+  requires_confirmation: z.boolean(),
+});
+
+export const ProductSuggestionResponseSchema = z.object({
+  suggestions: z.array(ProductSuggestionSchema),
+});
+
+export const PainSuggestionResponseSchema = z.object({
+  suggestions: z.array(PainSuggestionSchema),
+});
+
+export const KnowledgeRecommendationResponseSchema = z.object({
+  recommendations: z.array(KnowledgeRecommendationSchema),
+});
+
+export type ProductSuggestion = z.infer<typeof ProductSuggestionSchema>;
+export type PainSuggestion = z.infer<typeof PainSuggestionSchema>;
+export type KnowledgeRecommendation = z.infer<typeof KnowledgeRecommendationSchema>;
+
 // ===== Adapter Interface =====
 
 export interface LLMProviderAdapter {
   readonly name: 'deepseek' | 'openai' | 'mock';
   readonly available: boolean;
+
+  /** Generate structured task output for recommend endpoints */
+  generateStructuredTask<T = any>(input: {
+    task: 'suggest-products' | 'suggest-pains' | 'recommend-knowledge';
+    personaContext?: CompiledPersonaContext;
+    productOrProcess?: string;
+    customerPain?: string;
+    material?: string;
+    account?: any;
+    knowledgeCards?: any[];
+  }): Promise<T>;
 
   /** Generate 8-12 angle candidates from input */
   generateAngles(input: {
@@ -333,6 +385,33 @@ ${kcInfo ? '\n## 参考知识\n' + kcInfo : ''}
     }
   }
 
+  async generateStructuredTask<T = any>(input: any): Promise<T> {
+    try {
+      var taskLabel: Record<string, string> = {
+        'suggest-products': '推荐产品/工艺方向',
+        'suggest-pains': '推荐客户痛点',
+        'recommend-knowledge': '推荐知识点',
+      };
+      var schemas: Record<string, string> = {
+        'suggest-products': '{"suggestions":[{"id":"...","name":"...","reason":"...","suitable_for":"...","caution":"..."}]}',
+        'suggest-pains': '{"suggestions":[{"id":"...","pain":"...","customer_expression":"...","why_relevant":"..."}]}',
+        'recommend-knowledge': '{"recommendations":[{"id":"...","title":"...","relevance":"...","usage":"...","requires_confirmation":true/false}]}',
+      };
+      var userPrompt = '请为热转印工厂' + (taskLabel[input.task] || '生成推荐') + '。';
+      if (input.productOrProcess) userPrompt += '\n产品/工艺：' + input.productOrProcess;
+      if (input.customerPain) userPrompt += '\n客户痛点：' + input.customerPain;
+      if (input.material) userPrompt += '\n材质：' + input.material;
+      userPrompt += '\n输出JSON格式：' + (schemas[input.task] || '{}');
+      var parsed = await this.call(userPrompt, undefined, 1, input.personaContext);
+      return parsed as T;
+    } catch (e: any) {
+      console.warn('[Adapter] generateStructuredTask failed:', e.message);
+      if (input.task === 'suggest-products') return [{ suggestions: [] }] as any;
+      if (input.task === 'suggest-pains') return [{ suggestions: [] }] as any;
+      return [{ recommendations: [] }] as any;
+    }
+  }
+
   async rewriteScript(input: any): Promise<RewriteResult> {
     const prompt = `你是宏达印业（专业热转印工厂）的新媒体文案顾问。
 
@@ -483,6 +562,25 @@ class MockLLMAdapter implements LLMProviderAdapter {
   async generateDraft(input: any): Promise<AiDraft> {
     const body = `${input.hook}\n客户问这个问题，我不能直接回答。\n因为材质不一样，方案完全不一样。\n你把材质、数量和测试要求发我，我帮你判断。`;
     return { hook: input.hook, body, wordCount: body.replace(/[\u4e00-\u9fff]/g, '').length };
+  }
+
+  async generateStructuredTask<T = any>(input: any): Promise<T> {
+    if (input.task === 'suggest-products') {
+      var pain = input.customerPain || '热转印';
+      return { suggestions: [
+        { id: 'mp1', name: pain + '工艺分析', reason: '适合当前客户痛点', suitable_for: '有' + pain + '需求的客户', caution: '' },
+        { id: 'mp2', name: '材质与工艺匹配', reason: '帮助客户判断可行性', suitable_for: '不确定材质的客户', caution: '' },
+      ]} as any;
+    }
+    if (input.task === 'suggest-pains') {
+      return { suggestions: [
+        { id: 'mpp1', pain: '不确定工艺方案', customer_expression: '不知道能不能做', why_relevant: '客户最常见的初步咨询问题' },
+        { id: 'mpp2', pain: '担心质量不稳定', customer_expression: '怕做出来效果不好', why_relevant: '影响客户决策的核心顾虑' },
+      ]} as any;
+    }
+    return { recommendations: [
+      { id: 'mkr1', title: '热转印基础判断', relevance: '高', usage: '脚本/文章', requires_confirmation: false },
+    ]} as any;
   }
 
   async rewriteScript(input: any): Promise<RewriteResult> {

@@ -161,3 +161,14 @@ export function buildRouteAuditLog(resolved: ResolvedAccountContext, task: Perso
     disclosureRequired: resolved.disclosure_context.disclosure_required,
   };
 }
+
+/** Build response headers for persona tracking */
+export function buildPersonaResponseHeaders(resolved: ResolvedAccountContext): Record<string, string> {
+  var headers: Record<string, string> = {};
+  if (resolved.source === 'legacy') {
+    headers['X-Persona-Legacy-Fallback'] = 'true';
+  } else {
+    headers['X-Persona-Version'] = resolved.resolved_account_version;
+  }
+  return headers;
+}

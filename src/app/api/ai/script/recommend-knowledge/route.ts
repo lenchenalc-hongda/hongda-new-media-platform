@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getLLMAdapter } from '@/lib/ai/providers/adapter';
+import { getLLMAdapter, KnowledgeRecommendationResponseSchema } from '@/lib/ai/providers/adapter';
 import { resolveAccountGenerationContext, buildPersonaContextForTask } from '@/lib/ai/account-resolver';
 export const maxDuration = 60;
 
@@ -8,37 +8,31 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const { platform } = body;
 
-    // Resolve account (required)
     const resolved = resolveAccountGenerationContext({
-      account_id: body.account_id,
-      account_version: body.account_version,
-      legacy_account: body.account,
-      platform,
-      product_or_process: body.productOrProcess,
-      customer_pain: body.customerPain,
+      account_id: body.account_id, account_version: body.account_version, legacy_account: body.account,
+      platform, product_or_process: body.productOrProcess, customer_pain: body.customerPain,
     });
     const personaCtx = buildPersonaContextForTask(resolved, 'recommend-knowledge');
     const adapter = await getLLMAdapter();
 
-    // Use adapter angles method for knowledge recommendation
-    const result = await adapter.generateAngles({
+    var result = await adapter.generateStructuredTask({
+      task: 'recommend-knowledge',
+      personaContext: personaCtx,
       account: resolved.account,
       productOrProcess: body.productOrProcess,
       customerPain: body.customerPain,
       material: body.material,
-      personaContext: personaCtx,
     });
 
-    const cards = (result.angles || []).slice(0, 5).map((a: any) => ({
-      title: a.title,
-      coreConclusion: a.coreConflict || a.customerPain || '',
-      contentScope: a.riskLevel === '高' ? 'internal' : 'public',
-      applicableTypes: '脚本/文章',
-    }));
+    var validated = KnowledgeRecommendationResponseSchema.safeParse(result);
+    if (!validated.success) {
+      var fallback = { recommendations: [{ id: 'f1', title: '热转印基础判断逻辑', relevance: '高', usage: '脚本/文章', requires_confirmation: false }] };
+      return NextResponse.json({ recommendations: fallback.recommendations, total: 1, personaVersion: resolved.resolved_account_version });
+    }
 
     return NextResponse.json({
-      cards,
-      total: cards.length,
+      recommendations: validated.data.recommendations,
+      total: validated.data.recommendations.length,
       personaVersion: resolved.resolved_account_version,
     });
   } catch (err: any) {

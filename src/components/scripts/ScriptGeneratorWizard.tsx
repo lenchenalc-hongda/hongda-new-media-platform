@@ -404,6 +404,8 @@ export default function ScriptGeneratorWizard({ open, onClose, onGenerate }: Scr
       const res = await fetch('/api/ai/script/optimize', {
         method: 'POST', headers: {'Content-Type':'application/json'},
         body: JSON.stringify({
+          account_id: selectedAccount?.id || '',
+          account_version: (selectedAccount as any)?.persona_version || 'legacy',
           script: v.script, hook: v.hook, duration: selectedDuration,
           totalScore: v.score?.totalScore,
           weaknesses: v.score?.weaknesses,
@@ -448,7 +450,7 @@ export default function ScriptGeneratorWizard({ open, onClose, onGenerate }: Scr
     try {
       const res = await fetch('/api/ai/rewrite-script', {
         method: 'POST', headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ script: bestScript, hook: bestHook, feedback: '请用更口语化、更短句、更像工厂老板在说话的方式重写' }),
+        body: JSON.stringify({ account_id: selectedAccount?.id || '', account_version: (selectedAccount as any)?.persona_version || 'legacy', script: bestScript, hook: bestHook, feedback: '请用更口语化、更短句、更像工厂老板在说话的方式重写' }),
       });
       const data = await res.json();
       if (data.script) {
@@ -470,7 +472,7 @@ export default function ScriptGeneratorWizard({ open, onClose, onGenerate }: Scr
     try {
       const res = await fetch('/api/ai/rewrite-script', {
         method: 'POST', headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ script: bestScript, hook: bestHook, feedback: rewriteFeedback }),
+        body: JSON.stringify({ account_id: selectedAccount?.id || '', account_version: (selectedAccount as any)?.persona_version || 'legacy', script: bestScript, hook: bestHook, feedback: rewriteFeedback }),
       });
       const data = await res.json();
       if (data.script) {
