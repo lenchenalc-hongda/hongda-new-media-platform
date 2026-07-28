@@ -343,23 +343,32 @@ node data/content-calibration/batch-generate.mjs
 |---|---|
 | account_id | a4 |
 | persona_version | 1.0.0 |
-| provider | mock（当前环境无真实API Key） |
-| model | mock-fallback |
-| 脚本正文 | ⚠️ 需要Vercel Production环境使用真实DeepSeek/OpenAI密钥生成 |
+| provider | deepseek (production API) |
+| model | deepseek-chat |
+| 脚本正文 | ✅ 已从生产环境 DeepSeek API 生成 |
 | 架构版本 | persona-v2-stable (2af23ea) |
+| Legacy fallback | ❌ 未出现 |
+| 生成时间 | 2026-07-28 |
+| 生成状态 | 13/13 成功，0 失败 |
+| Review 通过 | 13/13 |
+| 硬性违规 | 0 |
+| 自动修复 | 0 |
+| 内容长度 | 150-304 字/条 |
+| 生成命令 | node data/content-calibration/batch-generate.mjs\` |
 
-### 生成真实脚本的命令
+**生成方式说明：** 通过批处理脚本调用生产环境 DeepSeek API（https://www.hongdaprinting.tech），以同步模式（forceSync=true）逐条生成，每条间隔5秒。
+
+### 重新生成脚本的命令
 
 ```bash
-# 安装依赖
-pnpm install
-
-# 设置环境变量
-export DEEPSEEK_API_KEY=sk-xxx
-export AI_PROVIDER=deepseek
-
-# 运行批量生成
+# 重新生成全部 13 条
 node data/content-calibration/batch-generate.mjs
+
+# 跳过已生成的，只生成失败的
+node data/content-calibration/batch-generate.mjs --resume
+
+# 只重新生成指定编号
+node data/content-calibration/batch-generate.mjs --force=07
 ```
 
 ---
