@@ -234,11 +234,11 @@ export default function ScriptGeneratorWizard({ open, onClose, onGenerate }: Scr
     try {
       const res = await fetch('/api/ai/script/suggest-products', {
         method: 'POST', headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ account_id: selectedAccount?.id || '', account_version: selectedAccount!.persona_version, platform: form.platform, knowledgeMode: form.knowledgeMode, material: form.material }),
+        body: JSON.stringify({ account_id: selectedAccount?.id || '', account_version: selectedAccount?.persona_version || '1.0.0', platform: form.platform, productOrProcess: form.product_or_process, customerPain: form.customer_pain, material: form.material }),
       });
       const data = await res.json();
       if (data.suggestions && data.suggestions.length > 0) {
-        setProductSuggestions(data.suggestions.map((s: any) => s.title));
+        setProductSuggestions(data.suggestions.map((s: any) => s.name).filter(Boolean));
       }
     } catch {} finally { setSuggestLoading(null); }
   };
