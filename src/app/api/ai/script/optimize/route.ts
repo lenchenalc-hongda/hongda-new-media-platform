@@ -1,20 +1,41 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getProvider } from '@/lib/ai/providers';
+import { resolveAccountGenerationContext, buildPersonaContextForTask, buildPersonaResponseHeaders } from '@/lib/ai/account-resolver';
 export const maxDuration = 60;
 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { script, weaknesses, rewriteSuggestions, totalScore, duration: bodyDuration, hook, account, knowledgeCards } = body;
+    const { script, weaknesses, rewriteSuggestions, totalScore, duration: bodyDuration, hook, knowledgeCards } = body;
     if (!script) return NextResponse.json({ error: 'Missing script' }, { status: 400 });
 
     const provider = await getProvider();
 
-    // Build persona context
-    const accountName = account?.name?.split('-')[0] || '';
-    const persona = account?.persona || '';
-    const dos = account?.dos || '';
-    const donts = account?.donts || '';
+    // Resolve account via V2 resolver
+    var personaHeaders: Record<string, string> = {};
+    var accountName = '';
+    var personaDescription = '';
+    var dos = '';
+    var donts = '';
+    try {
+      var resolved = resolveAccountGenerationContext({
+        account_id: body.account_id,
+        account_version: body.account_version,
+        legacy_account: body.account,
+      });
+      accountName = resolved.account.name?.split('-')[0] || '';
+      personaDescription = resolved.account.persona || resolved.account.persona_config?.on_camera_identity || '';
+      dos = resolved.account.dos || resolved.account.persona_config?.preferred_expressions?.join('、') || '';
+      donts = resolved.account.donts || resolved.account.persona_config?.avoid_expressions?.join('、') || '';
+      personaHeaders = buildPersonaResponseHeaders(resolved);
+    } catch (e: any) {
+      // Legacy fallback
+      accountName = body.account?.name?.split('-')[0] || '';
+      personaDescription = body.account?.persona || '';
+      dos = body.account?.dos || '';
+      donts = body.account?.donts || '';
+      console.warn('[optimize] No persona context:', e.message);
+    }
 
     // Build knowledge context
     let kcContext = '';
@@ -36,7 +57,7 @@ ${rewriteSuggestions?.length ? '\n修改建议：\n' + rewriteSuggestions.map((s
 
 ## 账号人设
 账号：${accountName}
-人设定位：${persona}
+人设定位：${personaDescription}
 ${dos ? '✅ 应该做的：' + dos : ''}
 ${donts ? '❌ 不应该做的：' + donts : ''}
 ${kcContext}
@@ -47,7 +68,7 @@ ${kcContext}
 3. 第一句话保持以下钩子不变：${hook || script.split('\n')[0] || ''}
 4. 保持核心观点和信息不变
 5. 优化后字数控制在${bodyDuration === '15' ? '80-120' : bodyDuration === '30' ? '150-220' : '280-420'}字
-6. 语言要按照人设来：${persona || '工厂老板/业务员'}的口吻说话
+6. 语言要按照人设来：${personaDescription || '工厂老板/业务员'}的口吻说话
 7. 优化后要保留针对弱点的具体改进
 
 输出JSON格式：
@@ -108,8 +129,8 @@ ${optimizedScript}
       targetedFixes: (parsed.targetedFixes as string[]) || [],
       before: script,
       after: optimizedScript || script,
-      aiScore, // AI评分的完整结果
-    });
+      aiScore,
+    }, { headers: personaHeaders });
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
