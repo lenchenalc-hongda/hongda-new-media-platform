@@ -99,7 +99,7 @@ export default function ScriptGeneratorWizard({ open, onClose, onGenerate }: Scr
     if (form.knowledgeMode === 'auto' && (form.customer_pain || form.product_or_process || form.account_id)) {
       fetch('/api/ai/script/recommend-knowledge', {
         method: 'POST', headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ account_id: selectedAccount?.id || '', account_version: selectedAccount!.persona_version, platform: form.platform, productOrProcess: form.product_or_process, customerPain: form.customer_pain, material: form.material }),
+        body: JSON.stringify({ account_id: selectedAccount?.id || '', account_version: selectedAccount?.persona_version || '1.0.0', platform: form.platform, productOrProcess: form.product_or_process, customerPain: form.customer_pain, material: form.material }),
       }).then(res => res.json()).then(data => {
         if (data.cards && data.cards.length > 0) {
           setProductSuggestions(data.cards.map((c: any) => c.title));
@@ -120,7 +120,7 @@ export default function ScriptGeneratorWizard({ open, onClose, onGenerate }: Scr
           customerPain: form.customer_pain,
           productOrProcess: form.product_or_process,
           material: form.material,
-          account_id: selectedAccount?.id || '', account_version: selectedAccount!.persona_version,
+          account_id: selectedAccount?.id || '', account_version: selectedAccount?.persona_version || '1.0.0',
           angle: selectedAngle || undefined,
         }),
       });
@@ -227,8 +227,8 @@ export default function ScriptGeneratorWizard({ open, onClose, onGenerate }: Scr
 
   const handleSuggestProducts = async () => {
     // Immediate feedback: show local suggestions right away
-    const fb = ['热转印工艺讲解','PE瓶材质判断','小批量热转印方案','丝印和热转印对比','附着力测试教程','打样流程','防背粘工艺','颜色还原技巧'];
-    setProductSuggestions(fb);
+    setProductSuggestions([]); // 清除上次结果，等待AI生成
+    
     setSuggestLoading('products');
     // Async API upgrade: try to get better suggestions from AI
     try {
@@ -245,14 +245,14 @@ export default function ScriptGeneratorWizard({ open, onClose, onGenerate }: Scr
 
   const handleSuggestPains = async () => {
     // Immediate feedback: show local suggestions right away
-    const fb = ['客户问多少钱','PE能不能做热转印','附着力测试','颜色按图片做','打样和大货不一样','小批量能不能做','材质不确定','客户只发图片'];
+    setProductSuggestions([]); // 清除上次结果，等待AI生成
     setPainSuggestions(fb);
     setSuggestLoading('pains');
     // Async API upgrade: try to get better suggestions from AI
     try {
       const res = await fetch('/api/ai/script/suggest-pains', {
         method: 'POST', headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ account_id: selectedAccount?.id || '', account_version: selectedAccount!.persona_version, platform: form.platform, productOrProcess: form.product_or_process, material: form.material }),
+        body: JSON.stringify({ account_id: selectedAccount?.id || '', account_version: selectedAccount?.persona_version || '1.0.0', platform: form.platform, productOrProcess: form.product_or_process, material: form.material }),
       });
       const data = await res.json();
       if (data.suggestions && data.suggestions.length > 0) {
@@ -320,7 +320,7 @@ export default function ScriptGeneratorWizard({ open, onClose, onGenerate }: Scr
       const res = await fetch('/api/ai/script/pipeline', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          account_id: selectedAccount?.id || '', account_version: selectedAccount!.persona_version,
+          account_id: selectedAccount?.id || '', account_version: selectedAccount?.persona_version || '1.0.0',
           topic: form.product_or_process || form.customer_pain,
           customerPain: form.customer_pain,
           productOrProcess: form.product_or_process,
@@ -344,7 +344,7 @@ export default function ScriptGeneratorWizard({ open, onClose, onGenerate }: Scr
     // Fall back to rule engine
     if (!result) {
       result = simpleRunPipeline({
-        account_id: selectedAccount?.id || '', account_version: selectedAccount!.persona_version,
+        account_id: selectedAccount?.id || '', account_version: selectedAccount?.persona_version || '1.0.0',
         topic: form.product_or_process || form.customer_pain,
         customerPain: form.customer_pain,
         productOrProcess: form.product_or_process,
@@ -407,7 +407,7 @@ export default function ScriptGeneratorWizard({ open, onClose, onGenerate }: Scr
         method: 'POST', headers: {'Content-Type':'application/json'},
         body: JSON.stringify({
           account_id: selectedAccount?.id || '',
-          account_version: selectedAccount!.persona_version,
+          account_version: selectedAccount?.persona_version || '1.0.0',
           script: v.script, hook: v.hook, duration: selectedDuration,
           totalScore: v.score?.totalScore,
           weaknesses: v.score?.weaknesses,
@@ -452,7 +452,7 @@ export default function ScriptGeneratorWizard({ open, onClose, onGenerate }: Scr
     try {
       const res = await fetch('/api/ai/rewrite-script', {
         method: 'POST', headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ account_id: selectedAccount?.id || '', account_version: selectedAccount!.persona_version, script: bestScript, hook: bestHook, feedback: '请用更口语化、更短句、更像工厂老板在说话的方式重写' }),
+        body: JSON.stringify({ account_id: selectedAccount?.id || '', account_version: selectedAccount?.persona_version || '1.0.0', script: bestScript, hook: bestHook, feedback: '请用更口语化、更短句、更像工厂老板在说话的方式重写' }),
       });
       const data = await res.json();
       if (data.script) {
@@ -474,7 +474,7 @@ export default function ScriptGeneratorWizard({ open, onClose, onGenerate }: Scr
     try {
       const res = await fetch('/api/ai/rewrite-script', {
         method: 'POST', headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ account_id: selectedAccount?.id || '', account_version: selectedAccount!.persona_version, script: bestScript, hook: bestHook, feedback: rewriteFeedback }),
+        body: JSON.stringify({ account_id: selectedAccount?.id || '', account_version: selectedAccount?.persona_version || '1.0.0', script: bestScript, hook: bestHook, feedback: rewriteFeedback }),
       });
       const data = await res.json();
       if (data.script) {
@@ -674,7 +674,7 @@ export default function ScriptGeneratorWizard({ open, onClose, onGenerate }: Scr
                         const ato = setTimeout(() => actrl.abort(), 35000);
                         const res = await fetch('/api/ai/script/angles', {
                           method: 'POST', headers: {'Content-Type':'application/json'}, signal: actrl.signal,
-                          body: JSON.stringify({ customerPain: form.customer_pain, productOrProcess: form.product_or_process, material: form.material, account_id: selectedAccount?.id || '', account_version: selectedAccount!.persona_version }),
+                          body: JSON.stringify({ customerPain: form.customer_pain, productOrProcess: form.product_or_process, material: form.material, account_id: selectedAccount?.id || '', account_version: selectedAccount?.persona_version || '1.0.0' }),
                         });
                         clearTimeout(ato);
                         if (res.ok) {

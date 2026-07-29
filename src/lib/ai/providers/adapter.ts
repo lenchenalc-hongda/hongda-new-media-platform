@@ -397,14 +397,21 @@ ${kcInfo ? '\n## 参考知识\n' + kcInfo : ''}
         'suggest-pains': '{"suggestions":[{"id":"...","pain":"...","customer_expression":"...","why_relevant":"..."}]}',
         'recommend-knowledge': '{"recommendations":[{"id":"...","title":"...","relevance":"...","usage":"...","requires_confirmation":true/false}]}',
       };
-      var businessScope = '宏达印业专注：塑料（PE/PP/ABS/PET/PC/PVC等）、金属、玻璃等硬质材料的表面印刷与UV打印。主要工艺包括热转印、UV打印机、数码热转印、丝印移印方案。应用领域：日用品包装、化妆品包材、玩具、文具、电子产品外壳、工业零部件等。';
+      var catalog = '推荐方向分类：\n【材质类】PE、PP、ABS、PET、PC、PVC、PS、PA、PMMA、金属、玻璃\n【工艺类】热转印、UV打印机、数码热转印、丝网印刷、移印、组合工艺\n【场景类】化妆品包材、日用品、玩具、文具、电子产品、工业零件、食品包装、医疗配件\n【品质测试类】附着力、耐磨、耐酒精、耐高温、UV测试、跌落测试\n【问题类】脱墨、色差、偏位、附着力不足、耐刮差、效率低、起订量高、交期不稳定\n【流程类】打样流程、小批量试产、大货生产、品质控制、工艺参数调整\n【方案类】防背粘工艺、局部胶水、颜色还原、多图案方案、小批量多图案方案';
+      var businessScope = '宏达印业专注：塑料（PE/PP/ABS/PET/PC/PVC/PS/PA/PMMA等）、金属、玻璃等硬质材料的表面印刷与UV打印。主要工艺包括热转印、UV打印机、数码热转印、丝网印刷、移印及组合工艺方案。应用领域：化妆品包材、日用品、玩具、文具、电子产品外壳、工业零件、食品包装、医疗配件。';
       var notInScope = '不涉及：纺织面料、服装鞋材、陶瓷、烫画刻字膜、服装印花、布料印花。';
 
       if (input.task === 'suggest-products') {
-        var userPrompt = '请为宏达印业推荐短视频内容方向（产品/工艺），推荐方向要反映宏达实际业务。\n';
+        var userPrompt = '请为宏达印业推荐短视频内容方向（产品/工艺），推荐方向必须基于宏达实际业务范围，不得超出宏达的能力边界。\n';
         userPrompt += '业务范围：' + businessScope + '\n';
         userPrompt += '排除范围：' + notInScope + '\n';
-        userPrompt += '推荐应多样化，覆盖不同材质、工艺、应用场景，避免全推同一个大类。\n';
+        userPrompt += '推荐方向目录（请从以下分类中选取，覆盖不同类别，避免重复）：\n' + catalog + '\n';
+        userPrompt += '\n要求：\n';
+        userPrompt += '1. 每个推荐方向要具体（如"PE瓶热转印附着力判断"），不要笼统（如"塑料印刷"）；\n';
+        userPrompt += '2. 8个方向覆盖不同分类，不要全选同一个大类；\n';
+        userPrompt += '3. 每个方向面向不同的产品、材质或场景；\n';
+        userPrompt += '4. 优先推荐客户常问、搜索量高的方向；\n';
+        userPrompt += '5. 确保推荐的方案宏达确实能提供。';
       } else if (input.task === 'suggest-pains') {
         var userPrompt = '请为宏达印业推荐客户常见痛点。\n';
         userPrompt += '业务范围：' + businessScope + '\n';
@@ -587,9 +594,17 @@ class MockLLMAdapter implements LLMProviderAdapter {
   async generateStructuredTask<T = any>(input: any): Promise<T> {
     if (input.task === 'suggest-products') {
       var pain = input.customerPain || '热转印';
+      var product = input.productOrProcess || '';
+      var mat = input.material || '';
       return { suggestions: [
-        { id: 'mp1', name: pain + '工艺分析', reason: '适合当前客户痛点', suitable_for: '有' + pain + '需求的客户', caution: '' },
-        { id: 'mp2', name: '材质与工艺匹配', reason: '帮助客户判断可行性', suitable_for: '不确定材质的客户', caution: '' },
+        { id: 'ms1', name: product ? product + '工艺判断' : 'PE瓶热转印工艺', reason: '客户常问的工艺可行性问题', suitable_for: '不确定材质的客户', caution: '' },
+        { id: 'ms2', name: mat ? mat + '表面印刷方案' : 'ABS塑料UV打印方案', reason: '不同材质需要不同表面处理', suitable_for: '有具体材质的客户', caution: '' },
+        { id: 'ms3', name: '化妆品包材热转印方案', reason: '化妆品行业对图案精度和颜色一致性要求高', suitable_for: '化妆品包材客户', caution: '' },
+        { id: 'ms4', name: '小批量多图案方案对比', reason: '数码热转印vs凹印成本分析，客户决策依据', suitable_for: '小批量多品种客户', caution: '需要确认具体数量和图案数' },
+        { id: 'ms5', name: '附着力测试与品质要求', reason: '不同材质和用途对附着力的要求不同', suitable_for: '有品质测试要求的客户', caution: '以实际打样测试为准' },
+        { id: 'ms6', name: '打样与大货一致性控制', reason: '客户最担心的批量生产问题', suitable_for: '准备量产的新客户', caution: '' },
+        { id: 'ms7', name: '金属与玻璃表面热转印', reason: '非塑料材质的热转印方案', suitable_for: '金属或玻璃材质客户', caution: '需确认表面处理工艺' },
+        { id: 'ms8', name: '丝印vs热转印vsUV方案选择', reason: '帮客户根据产品、数量和预算选最合适的工艺', suitable_for: '正在对比工艺的客户', caution: '' },
       ]} as any;
     }
     if (input.task === 'suggest-pains') {
