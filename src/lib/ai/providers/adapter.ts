@@ -397,10 +397,30 @@ ${kcInfo ? '\n## 参考知识\n' + kcInfo : ''}
         'suggest-pains': '{"suggestions":[{"id":"...","pain":"...","customer_expression":"...","why_relevant":"..."}]}',
         'recommend-knowledge': '{"recommendations":[{"id":"...","title":"...","relevance":"...","usage":"...","requires_confirmation":true/false}]}',
       };
-      var userPrompt = '请为热转印工厂' + (taskLabel[input.task] || '生成推荐') + '。';
+      var businessScope = '宏达印业专注：塑料（PE/PP/ABS/PET/PC/PVC等）、金属、玻璃等硬质材料的表面印刷与UV打印。主要工艺包括热转印、UV打印机、数码热转印、丝印移印方案。应用领域：日用品包装、化妆品包材、玩具、文具、电子产品外壳、工业零部件等。';
+      var notInScope = '不涉及：纺织面料、服装鞋材、陶瓷、烫画刻字膜、服装印花、布料印花。';
+
+      if (input.task === 'suggest-products') {
+        var userPrompt = '请为宏达印业推荐短视频内容方向（产品/工艺），推荐方向要反映宏达实际业务。\n';
+        userPrompt += '业务范围：' + businessScope + '\n';
+        userPrompt += '排除范围：' + notInScope + '\n';
+        userPrompt += '推荐应多样化，覆盖不同材质、工艺、应用场景，避免全推同一个大类。\n';
+      } else if (input.task === 'suggest-pains') {
+        var userPrompt = '请为宏达印业推荐客户常见痛点。\n';
+        userPrompt += '业务范围：' + businessScope + '\n';
+        userPrompt += '排除范围：' + notInScope + '\n';
+      } else if (input.task === 'recommend-knowledge') {
+        var userPrompt = '请为宏达印业推荐相关知识点。\n';
+        userPrompt += '业务范围：' + businessScope + '\n';
+      } else {
+        var userPrompt = '' + (taskLabel[input.task] || '生成推荐') + '。\n';
+      }
       if (input.productOrProcess) userPrompt += '\n产品/工艺：' + input.productOrProcess;
       if (input.customerPain) userPrompt += '\n客户痛点：' + input.customerPain;
       if (input.material) userPrompt += '\n材质：' + input.material;
+      if (input.task === 'suggest-products') {
+        userPrompt += '\n\n要求：每个推荐方向要具体（如PE瓶热转印附着力判断），不要笼统（如塑料印刷）。每个方向面向不同产品、材质或场景，避免重复方向。';
+      }
       userPrompt += '\n输出JSON格式：' + (schemas[input.task] || '{}');
       var parsed = await this.call(userPrompt, undefined, 1, input.personaContext);
       return parsed as T;
