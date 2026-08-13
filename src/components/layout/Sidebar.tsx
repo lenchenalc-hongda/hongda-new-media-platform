@@ -4,11 +4,15 @@ import { usePathname } from 'next/navigation';
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
 import { PORTAL_GROUPS, getPortalForPath } from '@/lib/constants/navigation';
+import { isFeatureEnabled, FEATURES } from '@/lib/features';
 
 export default function Sidebar() {
   const pathname = usePathname();
 
   // Determine which portal is active based on current path
+  const enabledGroups = PORTAL_GROUPS.filter(g =>
+    g.id !== 'review' || isFeatureEnabled(FEATURES.PROJECT_REVIEW_CENTER)
+  );
   const activePortal = getPortalForPath(pathname);
   const [expandedPortal, setExpandedPortal] = useState<string>(activePortal);
 
@@ -18,6 +22,7 @@ export default function Sidebar() {
     official: 'border-l-emerald-500 bg-emerald-50 text-emerald-700',
     knowledge: 'border-l-purple-500 bg-purple-50 text-purple-700',
     admin: 'border-l-gray-500 bg-gray-100 text-gray-700',
+    review: 'border-l-orange-500 bg-orange-50 text-orange-700',
   };
 
   return (
@@ -45,7 +50,7 @@ export default function Sidebar() {
 
         <div className="h-px bg-gray-100 mx-4 my-1" />
 
-        {PORTAL_GROUPS.map(portal => {
+        {enabledGroups.map(portal => {
           const isActiveGroup = activePortal === portal.id;
           const isExpanded = expandedPortal === portal.id;
 

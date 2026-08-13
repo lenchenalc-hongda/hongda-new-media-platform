@@ -5,6 +5,7 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { deserializeUser, AuthUser, getPageSlugFromRoute, canAccessPage } from '@/lib/auth/roles';
+import { isFeatureEnabled, FEATURES } from '@/lib/features';
 
 const PUBLIC_ROUTES = ['/login', '/_next', '/api/auth', '/favicon.ico', '/api/ai'];
 
@@ -14,6 +15,13 @@ export function middleware(request: NextRequest) {
   // Skip public routes
   if (PUBLIC_ROUTES.some(prefix => pathname.startsWith(prefix))) {
     return NextResponse.next();
+  }
+
+  // Feature flag: project review center must be explicitly enabled
+  if (pathname.startsWith('/review-center') && !isFeatureEnabled(FEATURES.PROJECT_REVIEW_CENTER)) {
+    const featureOffUrl = new URL('/dashboard', request.url);
+    featureOffUrl.searchParams.set('error', '项目复盘与改善中心尚未开放');
+    return NextResponse.redirect(featureOffUrl);
   }
 
   // Skip static assets and API routes that don't need auth

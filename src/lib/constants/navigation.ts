@@ -67,6 +67,25 @@ export const PORTAL_GROUPS: PortalGroup[] = [
     ],
   },
   {
+    id: 'review',
+    label: '项目复盘',
+    description: '项目异常记录与改善中心',
+    icon: '🔧',
+    color: 'orange',
+    items: [
+      { label: '复盘首页', path: '/review-center', icon: '🏠' },
+      { label: '新建复盘', path: '/review-center/new', icon: '➕' },
+      { label: '我的复盘', path: '/review-center/reviews/mine', icon: '📋' },
+      { label: '全部复盘', path: '/review-center/reviews', icon: '📚' },
+      { label: '待我审核', path: '/review-center/approvals', icon: '✅' },
+      { label: '改善任务', path: '/review-center/actions', icon: '🛠️' },
+      { label: '分析中心', path: '/review-center/analytics', icon: '📊' },
+      { label: '案例中心', path: '/review-center/cases', icon: '💡' },
+      { label: '下载中心', path: '/review-center/downloads', icon: '📥' },
+      { label: '系统设置', path: '/review-center/settings', icon: '⚙️' },
+    ],
+  },
+  {
     id: 'admin',
     label: '管理',
     description: '系统配置与用户管理',
@@ -93,5 +112,6 @@ export function getPortalForPath(path: string): string {
   if (path.startsWith('/oa')) return 'official';
   if (path.startsWith('/knowledge')) return 'knowledge';
   if (path.startsWith('/settings')) return 'admin';
+  if (path.startsWith('/review-center')) return 'review';
   return 'media';
 }
