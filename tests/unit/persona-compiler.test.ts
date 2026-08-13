@@ -7,6 +7,7 @@ import { reviewScriptAgainstAccount, checkHardViolations, autoRepairScript } fro
 import { detectRelationshipDisclosure, buildDisclosureAugmentedBrandContract } from '../../src/lib/ai/relationship-disclosure';
 import { validateAccountConfig } from '../../src/lib/accounts/schema';
 import { getAccountRepository } from '../../src/lib/accounts/mock-repository';
+import { isPersonaV2Enabled, isPersonaReviewEnabled, isAutoRepairEnabled } from '../../src/lib/ai/feature-flags';
 
 var passed = 0;
 var failed = 0;
@@ -29,7 +30,7 @@ console.log('\n========== V5.2 Persona Compiler Tests ==========');
 console.log('\n=== 1. Task-specific Contract tests ===');
 
 var hooksCtx = buildAccountPromptContext(XUZONG_ACCOUNT, 'hooks');
-assertIncludes(hooksCtx.prompt_text, 'hooks', 'hooks任务应包含指令关键词');
+assertIncludes(hooksCtx.prompt_text, '开头钩子', 'hooks任务应包含指令关键词');
 
 var draftCtx = buildAccountPromptContext(XUZONG_ACCOUNT, 'draft');
 assertIncludes(draftCtx.prompt_text, '脚本正文', 'draft任务应包含正文指令');
@@ -99,7 +100,7 @@ assert(askAboutManufacturing.matched_signals.length > 0, '应检测到制造信�
 
 // Positive: customer asking about brand relationship
 var askAboutBrand = detectRelationshipDisclosure({
-  customerPain: '宏达和厂家什么关系？',
+  customerPain: '宏达和设备厂什么关系？',
 });
 assert(askAboutBrand.disclosure_required === true, '询问品牌关系应触发披露');
 
@@ -124,7 +125,7 @@ var goodReview = reviewScriptAgainstAccount(goodScript, XUZONG_ACCOUNT);
 assert(goodReview.passed, '"宏达交付的设备"不应判违规');
 
 // Should flag "宏达自主研发"
-var badScript = '这是我们宏达自主研发的机器，质量有保证。';
+var badScript = '这是我们宏达自主研发该设备，质量有保证。';
 var badReview = reviewScriptAgainstAccount(badScript, XUZONG_ACCOUNT);
 assert(!badReview.passed, '"自主研发"应判违规');
 assert(badReview.hard_violations.length > 0, '应检测到硬性违规');
@@ -145,10 +146,9 @@ assert(!repaired.script.includes('自主研发'), '自动修复应替换forbidde
 
 // ===== 11. Feature flags =====
 console.log('\n=== 6. Feature flags ===');
-var flagsMod = require('../../src/lib/ai/feature-flags');
-assert(flagsMod.isPersonaV2Enabled() === true, 'PERSONA_V2_ENABLED 默认 true');
-assert(flagsMod.isPersonaReviewEnabled() === true, 'PERSONA_V2_REVIEW_ENABLED 默认 true');
-assert(flagsMod.isAutoRepairEnabled() === true, 'PERSONA_V2_AUTO_REPAIR_ENABLED 默认 true');
+assert(isPersonaV2Enabled() === true, 'PERSONA_V2_ENABLED 默认 true');
+assert(isPersonaReviewEnabled() === true, 'PERSONA_V2_REVIEW_ENABLED 默认 true');
+assert(isAutoRepairEnabled() === true, 'PERSONA_V2_AUTO_REPAIR_ENABLED 默认 true');
 
 // ===== Summary =====
 console.log('\n=== Results ===');

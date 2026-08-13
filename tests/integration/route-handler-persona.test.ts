@@ -4,6 +4,7 @@
 
 import { resolveAccountGenerationContext, buildPersonaContextForTask, buildPersonaResponseHeaders } from '../../src/lib/ai/account-resolver';
 import { getLLMAdapter, resetAdapter } from '../../src/lib/ai/providers/adapter';
+import { isPersonaV2Enabled, isPersonaReviewEnabled, isAutoRepairEnabled } from '../../src/lib/ai/feature-flags';
 
 var passed = 0;
 var failed = 0;
@@ -31,7 +32,7 @@ assertEqual(resolved.account.id, 'a4', '解析许总');
 
 var hooksCtx = buildPersonaContextForTask(resolved, 'hooks');
 assertEqual(hooksCtx.task, 'hooks', 'persona task = hooks');
-assertIncludes(hooksCtx.prompt_text, 'hooks', 'hooks prompt 含指令关键词');
+assertIncludes(hooksCtx.prompt_text, '开头钩子', 'hooks prompt 含开头钩子指令');
 
 var productsCtx = buildPersonaContextForTask(resolved, 'suggest-products');
 assertEqual(productsCtx.task, 'suggest-products', 'persona task = suggest-products');
@@ -71,7 +72,7 @@ async function testAdapterTasks() {
     productOrProcess: 'UV打印机',
   });
   assert(productsResult.suggestions && productsResult.suggestions.length > 0, 'suggest-products 返回结果');
-  assertEqual(productsResult.suggestions[0].name, 'UV打印机工艺分析', '产品推荐名称正确');
+  assertEqual(productsResult.suggestions[0].name, 'UV打印机工艺判断', '产品推荐名称正确');
 
   // suggest-pains
   var painsResult = await adapter.generateStructuredTask({
@@ -104,10 +105,9 @@ async function testAdapterTasks() {
 
 function testBuild() {
   console.log('\n=== 5. Feature Flag Defaults ===');
-  var ff = require('../../src/lib/ai/feature-flags');
-  assert(ff.isPersonaV2Enabled() === true, 'V2 enabled by default');
-  assert(ff.isPersonaReviewEnabled() === true, 'Review enabled by default');
-  assert(ff.isAutoRepairEnabled() === true, 'Auto repair enabled by default');
+  assert(isPersonaV2Enabled() === true, 'V2 enabled by default');
+  assert(isPersonaReviewEnabled() === true, 'Review enabled by default');
+  assert(isAutoRepairEnabled() === true, 'Auto repair enabled by default');
 
   console.log('\n=== 6. Recommend Routes NOT using generateAngles ===');
   // Verify by checking that the adapter has `generateStructuredTask` method

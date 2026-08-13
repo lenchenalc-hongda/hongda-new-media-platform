@@ -4,7 +4,8 @@
 
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import { deserializeUser, AuthUser, getPageSlugFromRoute, canAccessPage } from '@/lib/auth/roles';
+import { AuthUser, getPageSlugFromRoute, canAccessPage } from '@/lib/auth/roles';
+import { getCurrentUserFromRequest } from '@/lib/auth/current-user';
 import { isFeatureEnabled, FEATURES } from '@/lib/features';
 
 const PUBLIC_ROUTES = ['/login', '/_next', '/api/auth', '/favicon.ico', '/api/ai'];
@@ -29,12 +30,8 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // Read auth cookie
-  const userCookie = request.cookies.get('nmc_user')?.value;
-  let user: AuthUser | null = null;
-  if (userCookie) {
-    user = deserializeUser(userCookie);
-  }
+  // Read auth cookie through unified bridge
+  const user = getCurrentUserFromRequest(request);
 
   // Not authenticated → redirect to login
   if (!user) {
