@@ -98,7 +98,21 @@ export default function Sidebar() {
 
       <div className="px-4 py-2 border-t border-gray-200 text-[10px] text-gray-400 flex items-center justify-between">
         <span>宏达印业</span>
-        <Link href="/workspace-home" className="hover:text-blue-600 no-underline text-gray-400">首页</Link>
+        <div className="flex items-center gap-2">
+          <Link href="/workspace-home" className="hover:text-blue-600 no-underline text-gray-400">首页</Link>
+          <button
+            type="button"
+            onClick={async () => {
+              try {
+                await fetch('/api/auth/logout', { method: 'POST' });
+              } catch {}
+              window.location.href = '/login';
+            }}
+            className="hover:text-red-600 no-underline text-gray-400"
+          >
+            退出
+          </button>
+        </div>
       </div>
     </aside>
   );

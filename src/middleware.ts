@@ -4,13 +4,14 @@
 
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import { AuthUser, getPageSlugFromRoute, canAccessPage } from '@/lib/auth/roles';
-import { getCurrentUserFromRequest } from '@/lib/auth/current-user';
+import { getPageSlugFromRoute, canAccessPage } from '@/lib/auth/roles';
+import { getCurrentUserFromRequest, hasRole } from '@/lib/auth/current-user';
+import { AuthError } from '@/lib/auth/types';
 import { isFeatureEnabled, FEATURES } from '@/lib/features';
 
 const PUBLIC_ROUTES = ['/login', '/_next', '/api/auth', '/favicon.ico', '/api/ai'];
 
-export function middleware(request: NextRequest) {
+export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   // Skip public routes
@@ -30,8 +31,20 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // Read auth cookie through unified bridge
-  const user = getCurrentUserFromRequest(request);
+  // Resolve trusted user through unified bridge (mock or supabase)
+  let user = null;
+  try {
+    user = await getCurrentUserFromRequest(request);
+  } catch (err) {
+    if (err instanceof AuthError && err.code === 'AUTH_CONFIG_MISSING') {
+      const cfgUrl = new URL('/login', request.url);
+      cfgUrl.searchParams.set('error', 'auth_config_missing');
+      return NextResponse.redirect(cfgUrl);
+    }
+    const loginUrl = new URL('/login', request.url);
+    loginUrl.searchParams.set('redirect', pathname);
+    return NextResponse.redirect(loginUrl);
+  }
 
   // Not authenticated → redirect to login
   if (!user) {
@@ -40,9 +53,12 @@ export function middleware(request: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
-  // Check page-level role access
+  // Check page-level role access (map CurrentUser -> AuthUser shape)
   const pageSlug = getPageSlugFromRoute(pathname);
-  if (pageSlug && !canAccessPage(user, pageSlug)) {
+  const authUser = user ? {
+    id: user.id, full_name: user.name, email: user.email ?? '', role: user.role, org_id: '', department: user.department,
+  } : null;
+  if (pageSlug && authUser && !canAccessPage(authUser, pageSlug)) {
     // No access → redirect to dashboard with error message
     const dashboardUrl = new URL('/dashboard', request.url);
     dashboardUrl.searchParams.set('error', '您没有访问该页面的权限');
