@@ -245,7 +245,16 @@ export default function ScriptGeneratorWizard({ open, onClose, onGenerate }: Scr
 
   const handleSuggestPains = async () => {
     // Immediate feedback: show local suggestions right away
-    setProductSuggestions([]); // 清除上次结果，等待AI生成
+    const fb = [
+      '客户问多少钱',
+      'PE能不能做热转印',
+      '附着力测试',
+      '颜色按图片做',
+      '打样和大货不一样',
+      '小批量能不能做',
+      '材质不确定',
+      '客户只发图片'
+    ];
     setPainSuggestions(fb);
     setSuggestLoading('pains');
     // Async API upgrade: try to get better suggestions from AI
