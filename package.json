@@ -12,7 +12,8 @@
     "build:meta": "node scripts/build-meta.mjs",
     "test:review-center": "BASE_URL=http://localhost:3000 node node_modules/tsx/dist/cli.mjs tests/e2e/review-center.spec.ts",
     "test:auth": "node node_modules/tsx/dist/cli.mjs tests/unit/current-user.test.ts && node node_modules/tsx/dist/cli.mjs tests/unit/auth-service.test.ts",
-    "test:auth:live": "node node_modules/tsx/dist/cli.mjs tests/live/auth-live.spec.ts"
+    "test:auth:live": "node node_modules/tsx/dist/cli.mjs tests/live/auth-live.spec.ts",
+    "review-center:doctor": "node node_modules/tsx/dist/cli.mjs scripts/review-center-readiness.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.6.1",
