@@ -11,7 +11,7 @@
     "typecheck": "tsc --noEmit",
     "build:meta": "node scripts/build-meta.mjs",
     "test:review-center": "BASE_URL=http://localhost:3000 node node_modules/tsx/dist/cli.mjs tests/e2e/review-center.spec.ts",
-    "test:auth": "node node_modules/tsx/dist/cli.mjs tests/unit/current-user.test.ts && node node_modules/tsx/dist/cli.mjs tests/unit/auth-service.test.ts",
+    "test:auth": "node node_modules/tsx/dist/cli.mjs tests/unit/current-user.test.ts && node node_modules/tsx/dist/cli.mjs tests/unit/auth-service.test.ts && node node_modules/tsx/dist/cli.mjs tests/unit/live-auth-gate.test.ts",
     "test:auth:live": "node node_modules/tsx/dist/cli.mjs tests/live/auth-live.spec.ts",
     "review-center:doctor": "node node_modules/tsx/dist/cli.mjs scripts/review-center-readiness.ts"
   },
@@ -34,6 +34,7 @@
     "postcss": "^8.4.0",
     "tailwindcss": "^3.4.0",
     "tsx": "^4.23.12",
-    "typescript": "^5.7.0"
+    "typescript": "^5.7.0",
+    "@next/env": "14.2.35"
   }
 }

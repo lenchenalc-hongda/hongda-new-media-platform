@@ -12,28 +12,61 @@ ALTER TABLE leads ENABLE ROW LEVEL SECURITY;
 ALTER TABLE knowledge_cards ENABLE ROW LEVEL SECURITY;
 
 -- ===== Helper function: check if user has a role =====
+-- Role source: profiles.role (NOT app_metadata).
+-- SECURITY DEFINER + fixed search_path: reads profiles without depending on
+-- profiles RLS policies; returns boolean for current auth.uid() only.
+-- No recursion: auth_has_role() runs as table owner, bypassing RLS on profiles.
 CREATE OR REPLACE FUNCTION auth_has_role(required_role text)
-RETURNS boolean AS $$
-  SELECT COALESCE(
-    (auth.jwt() -> 'app_metadata' -> 'role')::text = ('"' || required_role || '"')::text,
-    false
+RETURNS boolean
+LANGUAGE sql STABLE SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM public.profiles
+    WHERE user_id = auth.uid()
+      AND is_active = true
+      AND role = required_role
   );
-$$ LANGUAGE sql STABLE;
+$$;
 
 -- ===== Helper function: user's org_id =====
+-- Organization source: profiles.org_id (NOT app_metadata).
+-- SECURITY DEFINER + fixed search_path for the same reason as auth_has_role.
 CREATE OR REPLACE FUNCTION auth_org_id()
-RETURNS text AS $$
+RETURNS text
+LANGUAGE sql STABLE SECURITY DEFINER
+SET search_path = public
+AS $$
   SELECT COALESCE(
-    (auth.jwt() -> 'app_metadata' -> 'org_id')::text,
+    (SELECT org_id::text FROM public.profiles
+      WHERE user_id = auth.uid() AND is_active = true
+      LIMIT 1),
     ''
   );
-$$ LANGUAGE sql STABLE;
+$$;
 
 -- ===== Helper function: user's user_id =====
 CREATE OR REPLACE FUNCTION auth_user_id()
 RETURNS uuid AS $$
   SELECT auth.uid();
 $$ LANGUAGE sql STABLE;
+
+-- ===== Helper function: user's internal profile id =====
+-- profiles.id is the application profile UUID referenced by created_by /
+-- assigned_to. It is NOT the same identity space as auth.users.id.
+-- SECURITY DEFINER + fixed search_path so this helper works inside RLS
+-- without depending on profiles RLS policies.
+CREATE OR REPLACE FUNCTION auth_profile_id()
+RETURNS uuid
+LANGUAGE sql STABLE SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT id
+  FROM public.profiles
+  WHERE user_id = auth.uid()
+    AND is_active = true
+  LIMIT 1;
+$$;
 
 -- ==================== PROFILES ====================
 CREATE POLICY "Admins can manage all profiles" ON profiles
@@ -73,7 +106,7 @@ CREATE POLICY "Write topics: admin/operator" ON topics
 CREATE POLICY "Update topics: admin/manager/operator" ON topics
   FOR UPDATE USING (
     auth_has_role('admin') OR auth_has_role('manager') OR
-    (auth_has_role('operator') AND owner_id = auth_user_id())
+    (auth_has_role('operator') AND created_by = auth_profile_id())
   );
 
 CREATE POLICY "Delete topics: admin only" ON topics
@@ -112,7 +145,7 @@ CREATE POLICY "Read leads: admin/manager" ON leads
 
 CREATE POLICY "Read own leads: sales" ON leads
   FOR SELECT USING (
-    auth_has_role('sales') AND assigned_to = auth_user_id()
+    auth_has_role('sales') AND assigned_to = auth_profile_id()
   );
 
 CREATE POLICY "Viewer cannot read leads" ON leads
@@ -130,7 +163,7 @@ CREATE POLICY "Update leads: admin/manager" ON leads
 
 CREATE POLICY "Update own assigned leads: sales" ON leads
   FOR UPDATE USING (
-    auth_has_role('sales') AND assigned_to = auth_user_id()
+    auth_has_role('sales') AND assigned_to = auth_profile_id()
   );
 
 CREATE POLICY "Delete leads: admin only" ON leads

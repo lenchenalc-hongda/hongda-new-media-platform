@@ -30,6 +30,9 @@ importers:
         specifier: ^3.24.1
         version: 3.25.76
     devDependencies:
+      '@next/env':
+        specifier: 14.2.35
+        version: 14.2.35
       '@types/node':
         specifier: ^20.17.0
         version: 20.19.43

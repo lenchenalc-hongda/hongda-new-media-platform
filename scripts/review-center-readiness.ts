@@ -3,6 +3,12 @@
 // Never prints secret values. Never modifies anything.
 // Run: pnpm review-center:doctor
 
+// @next/env is a CommonJS bundle; use createRequire for reliable ESM interop
+import { createRequire } from 'module';
+const require = createRequire(import.meta.url);
+const { loadEnvConfig } = require('@next/env');
+loadEnvConfig(process.cwd());
+
 function envPresent(name: string): boolean {
   const v = process.env[name];
   return !!v && v.trim().length > 0;
