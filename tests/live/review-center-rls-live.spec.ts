@@ -53,6 +53,28 @@ async function readRow(client: any, table: string, column: string, value: any): 
   }
 }
 
+const OPTIONAL_PHASE2_CLEANUP_TABLES = new Set([
+  'review_audit_logs',
+  'review_timeline_events',
+]);
+
+function isMissingRelationError(error: unknown, table: string): boolean {
+  if (!error || typeof error !== 'object') return false;
+  if (!OPTIONAL_PHASE2_CLEANUP_TABLES.has(table)) return false;
+  const candidate = error as { code?: unknown; message?: unknown; details?: unknown; hint?: unknown };
+  const code = typeof candidate.code === 'string' ? candidate.code : '';
+  const message = typeof candidate.message === 'string' ? candidate.message : '';
+  const details = typeof candidate.details === 'string' ? candidate.details : '';
+  const hint = typeof candidate.hint === 'string' ? candidate.hint : '';
+  const combined = `${message} ${details} ${hint}`;
+
+  if (code === '42P01') return true;
+  if (code === 'PGRST205') {
+    return combined.includes(table);
+  }
+  return false;
+}
+
 async function deleteWhereService(table: string, column: string, value: any): Promise<number> {
   try {
     const { data, error } = await serviceClient
@@ -60,10 +82,14 @@ async function deleteWhereService(table: string, column: string, value: any): Pr
       .delete()
       .eq(column, value)
       .select('*');
-    if (error) return 0;
+    if (error) {
+      if (isMissingRelationError(error, table)) return 0;
+      throw error;
+    }
     return Array.isArray(data) ? data.length : 0;
-  } catch {
-    return 0;
+  } catch (err) {
+    if (isMissingRelationError(err, table)) return 0;
+    throw err;
   }
 }
 
@@ -432,6 +458,8 @@ async function main() {
     }
   } finally {
     if (reviewId) {
+      serviceRoleCleanupWrites += await deleteWhereService('review_audit_logs', 'review_id', reviewId);
+      serviceRoleCleanupWrites += await deleteWhereService('review_timeline_events', 'review_id', reviewId);
       serviceRoleCleanupWrites += await deleteWhereService('review_members', 'review_id', reviewId);
       serviceRoleCleanupWrites += await deleteWhereService('review_type_details', 'review_id', reviewId);
       serviceRoleCleanupWrites += await deleteWhereService('review_dict_items', 'code', dictCode);
