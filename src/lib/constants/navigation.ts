@@ -69,14 +69,14 @@ export const PORTAL_GROUPS: PortalGroup[] = [
   {
     id: 'review',
     label: '项目复盘',
-    description: '项目异常记录与改善中心',
+    description: '项目异常复盘、改善与闭环管理',
     icon: '🔧',
     color: 'orange',
     items: [
-      { label: '复盘首页', path: '/review-center', icon: '🏠' },
+      { label: '全部复盘', path: '/review-center/reviews', icon: '📚' },
       { label: '新建复盘', path: '/review-center/new', icon: '➕' },
       { label: '我的复盘', path: '/review-center/reviews/mine', icon: '📋' },
-      { label: '全部复盘', path: '/review-center/reviews', icon: '📚' },
+      { label: '复盘首页', path: '/review-center', icon: '🏠' },
       { label: '待我审核', path: '/review-center/approvals', icon: '✅' },
       { label: '改善任务', path: '/review-center/actions', icon: '🛠️' },
       { label: '分析中心', path: '/review-center/analytics', icon: '📊' },

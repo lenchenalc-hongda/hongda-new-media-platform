@@ -4,6 +4,8 @@ import Link from 'next/link';
 import { PORTAL_GROUPS, WORKSPACE_HOME } from '@/lib/constants/navigation';
 import { isFeatureEnabled, FEATURES } from '@/lib/features';
 import EnvStatusBadge from '@/components/system/EnvStatusBadge';
+import { useCanCreateReview } from '@/components/layout/RoleProvider';
+import { applyCreateVisibility } from '@/lib/review-center/navigation';
 
 const MOCK_METRICS = {
   pendingReview: 5,
@@ -13,6 +15,7 @@ const MOCK_METRICS = {
 };
 
 export default function WorkspaceHome() {
+  const canCreateReview = useCanCreateReview();
   const [user] = useState(() => {
     if (typeof window !== 'undefined') {
       const u = localStorage.getItem('nmc_user');
@@ -21,9 +24,10 @@ export default function WorkspaceHome() {
     return null;
   });
 
-  const enabledGroups = PORTAL_GROUPS.filter(g =>
+  const baseGroups = PORTAL_GROUPS.filter(g =>
     g.id !== 'review' || isFeatureEnabled(FEATURES.PROJECT_REVIEW_CENTER)
   );
+  const enabledGroups = applyCreateVisibility(baseGroups, canCreateReview);
   const totalTodos = enabledGroups.reduce((sum, g) => sum + g.items.length, 0);
 
   return (
@@ -40,13 +44,25 @@ export default function WorkspaceHome() {
           </div>
           <div className="flex items-center gap-4">
             <EnvStatusBadge />
-            <div className="flex items-center gap-2 text-sm text-gray-600">
-              <span className="w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center text-xs text-blue-700 font-medium">
-                {user?.full_name?.charAt(0) || 'U'}
-              </span>
-              <span>{user?.full_name || '用户'}</span>
-            </div>
+          <div className="flex items-center gap-2 text-sm text-gray-600">
+            <span className="w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center text-xs text-blue-700 font-medium">
+              {user?.full_name?.charAt(0) || 'U'}
+            </span>
+            <span>{user?.full_name || '用户'}</span>
           </div>
+          <button
+            type="button"
+            onClick={async () => {
+              try {
+                await fetch('/api/auth/logout', { method: 'POST' });
+              } catch {}
+              window.location.href = '/login';
+            }}
+            className="text-sm text-gray-500 hover:text-red-600 transition-colors"
+          >
+            退出登录
+          </button>
+        </div>
         </div>
       </header>
 

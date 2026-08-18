@@ -5,14 +5,18 @@ import { useState } from 'react';
 import { cn } from '@/lib/utils';
 import { PORTAL_GROUPS, getPortalForPath } from '@/lib/constants/navigation';
 import { isFeatureEnabled, FEATURES } from '@/lib/features';
+import { useCanCreateReview } from './RoleProvider';
+import { applyCreateVisibility } from '@/lib/review-center/navigation';
 
 export default function Sidebar() {
   const pathname = usePathname();
+  const canCreateReview = useCanCreateReview();
 
   // Determine which portal is active based on current path
-  const enabledGroups = PORTAL_GROUPS.filter(g =>
+  const baseGroups = PORTAL_GROUPS.filter(g =>
     g.id !== 'review' || isFeatureEnabled(FEATURES.PROJECT_REVIEW_CENTER)
   );
+  const enabledGroups = applyCreateVisibility(baseGroups, canCreateReview);
   const activePortal = getPortalForPath(pathname);
   const [expandedPortal, setExpandedPortal] = useState<string>(activePortal);
 

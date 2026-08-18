@@ -8,7 +8,12 @@ import { cookies } from 'next/headers';
 import { canPerformAction } from './roles';
 import { CurrentUser, AuthError, getAuthMode, isSupabaseConfigured, type Role, type Action } from './types';
 import { getMockUserFromCookie } from './mock-user';
-import { getSupabaseUserFromRequest, getSupabaseUserFromServer } from './supabase-user';
+import {
+  getSupabaseUserFromRequest,
+  getSupabaseUserFromServer,
+  resolveSupabaseCurrentUser,
+} from './supabase-user';
+import { createReadOnlySupabaseClient } from '@/lib/supabase/readonly';
 
 export type { CurrentUser, Role, Action };
 
@@ -55,6 +60,17 @@ export async function requireUser(): Promise<CurrentUser> {
   const user = await getCurrentUser();
   if (!user) throw new AuthError('UNAUTHENTICATED', '未登录');
   return user;
+}
+
+export async function getCurrentUserReadOnly(): Promise<CurrentUser | null> {
+  if (getAuthMode() === 'supabase') {
+    if (!isSupabaseConfigured()) return null;
+    const client = await createReadOnlySupabaseClient();
+    if (!client) return null;
+    return resolveSupabaseCurrentUser(client as any);
+  }
+  const cookieStore = await cookies();
+  return getMockUserFromCookie(cookieStore.get('nmc_user')?.value);
 }
 
 export async function requireRole(roles: Role[]): Promise<CurrentUser> {

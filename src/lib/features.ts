@@ -2,12 +2,18 @@
 // Environment-variable driven feature switches.
 // NOT a security boundary — real access must always be enforced by auth/roles.
 
-const FEATURE_PREFIX = 'NEXT_PUBLIC_FEATURE_';
+export function parseFeatureFlag(value: string | undefined): boolean {
+  return value === 'true' || value === '1';
+}
+
+const FEATURE_FLAGS: Record<string, boolean> = {
+  project_review_center: parseFeatureFlag(
+    process.env.NEXT_PUBLIC_FEATURE_PROJECT_REVIEW_CENTER,
+  ),
+};
 
 export function isFeatureEnabled(name: string): boolean {
-  const key = FEATURE_PREFIX + name.toUpperCase().replace(/[^A-Z0-9_]/g, '_');
-  const value = process.env[key];
-  return value === 'true' || value === '1';
+  return FEATURE_FLAGS[name] === true;
 }
 
 export const FEATURES = {
