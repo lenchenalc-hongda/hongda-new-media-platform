@@ -10,7 +10,7 @@
     "lint": "node node_modules/next/dist/bin/next lint",
     "typecheck": "tsc --noEmit",
     "build:meta": "node scripts/build-meta.mjs",
-    "test:review-center": "node node_modules/tsx/dist/cli.mjs tests/unit/review-center-phase1.test.ts && BASE_URL=http://localhost:3000 node node_modules/tsx/dist/cli.mjs tests/e2e/review-center.spec.ts",
+    "test:review-center": "node node_modules/tsx/dist/cli.mjs tests/unit/review-center-phase1.test.ts && node node_modules/tsx/dist/cli.mjs tests/unit/review-center-mutation.test.ts && BASE_URL=http://localhost:3000 node node_modules/tsx/dist/cli.mjs tests/e2e/review-center.spec.ts",
     "test:auth": "node node_modules/tsx/dist/cli.mjs tests/unit/current-user.test.ts && node node_modules/tsx/dist/cli.mjs tests/unit/auth-service.test.ts && node node_modules/tsx/dist/cli.mjs tests/unit/live-auth-gate.test.ts",
     "test:auth:live": "node node_modules/tsx/dist/cli.mjs tests/live/auth-live.spec.ts",
     "test:review-center:live": "node node_modules/tsx/dist/cli.mjs tests/live/review-center-rls-live.spec.ts",
