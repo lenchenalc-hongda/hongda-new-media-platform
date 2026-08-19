@@ -16,6 +16,7 @@
     "test:review-center:live": "node node_modules/tsx/dist/cli.mjs tests/live/review-center-rls-live.spec.ts",
     "test:review-center:rpc:live": "node node_modules/tsx/dist/cli.mjs tests/live/review-center-rpc-live.spec.ts",
     "test:review-center:profile-directory:live": "node node_modules/tsx/dist/cli.mjs tests/live/review-center-profile-directory-live.spec.ts",
+    "test:review-center:participant-directory:live": "node node_modules/tsx/dist/cli.mjs tests/live/review-center-participant-directory-live.spec.ts",
     "review-center:doctor": "node node_modules/tsx/dist/cli.mjs scripts/review-center-readiness.ts"
   },
   "dependencies": {
