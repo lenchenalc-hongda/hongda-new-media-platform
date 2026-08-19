@@ -140,5 +140,11 @@ export const assignmentsRequestSchema = z.object({
   pmoId: uuidSchema.nullable().optional(),
 }).strict();
 
+export const directoryPurposeSchema = z.enum(['MEMBER', 'ASSIGNMENT']);
+
+export const profileDirectoryQuerySchema = z.object({
+  purpose: directoryPurposeSchema,
+}).strict();
+
 export type CreateDraftSchemaInput = z.infer<typeof createDraftSchema>;
 export type ListQuerySchemaInput = z.infer<typeof listQuerySchema>;
