@@ -4,9 +4,11 @@ import type {
   ReviewListItem,
   ReviewListQuery,
   ReviewListResponse,
+  ReviewParticipant,
 } from './types';
 import { nextReviewNumber } from './review-number';
 import { normalizeSearchQuery } from './search';
+import { ParticipantReadError, parseParticipantDirectoryResult } from './participant';
 
 export class ReviewServiceError extends Error {
   status: number;
@@ -145,6 +147,7 @@ export async function createDraftReview(
         ...(data as ReviewDetail),
         type_details: null,
         members: [],
+        participants: [],
       };
     }
     if (error?.code === '23505' && attempt < maxAttempts) continue;
@@ -186,9 +189,23 @@ export async function getReviewDetail(
     .order('created_at', { ascending: true });
   if (membersResult.error) throw new ReviewServiceError('复盘成员读取失败', 500);
 
+  let participants: ReviewParticipant[] = [];
+  try {
+    const participantResult = await client.rpc('review_participant_directory', {
+      p_review_id: reviewId,
+    });
+    participants = parseParticipantDirectoryResult(participantResult);
+  } catch (err) {
+    if (err instanceof ParticipantReadError) {
+      throw new ReviewServiceError('复盘详情读取失败', err.status);
+    }
+    throw new ReviewServiceError('复盘详情读取失败', 500);
+  }
+
   return {
     ...(review as ReviewDetail),
     type_details: typeResult.data ?? null,
     members: membersResult.data ?? [],
+    participants,
   };
 }

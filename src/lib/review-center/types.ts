@@ -53,6 +53,14 @@ export interface ReviewMemberItem {
   created_at: string;
 }
 
+export interface ReviewParticipant {
+  profile_id: string;
+  display_name: string;
+  role: 'admin' | 'manager' | 'operator' | 'sales' | 'viewer';
+  department: string | null;
+  is_active: boolean;
+}
+
 export interface ReviewDetail {
   id: string;
   org_id: string;
@@ -83,6 +91,7 @@ export interface ReviewDetail {
   updated_at: string;
   type_details: Record<string, unknown> | null;
   members: ReviewMemberItem[];
+  participants: ReviewParticipant[];
 }
 
 export interface CreateDraftInput {
