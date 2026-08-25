@@ -6,6 +6,7 @@ import PageHeader from '@/components/layout/PageHeader';
 import ReviewCenterEmpty from '@/components/review-center/ReviewCenterEmpty';
 import { reviewStatusLabel, riskLevelLabel, formatReviewDateTime, formatReviewDate } from '@/lib/review-center/formatters';
 import type { ReviewDetail } from '@/lib/review-center/types';
+import TimelineSection from './timeline-section';
 
 export default function ReviewDetailPage() {
   const params = useParams();
@@ -78,6 +79,10 @@ export default function ReviewDetailPage() {
         <div className="card"><h3 className="font-medium text-gray-800 mb-2">专项复盘内容</h3><p className="text-sm text-gray-400">下一阶段配置</p></div>
         <div className="card"><h3 className="font-medium text-gray-800 mb-2">项目成员</h3><p className="text-sm text-gray-400">{review.members.length > 0 ? `${review.members.length} 位成员` : '下一阶段配置'}</p></div>
         <div className="card"><h3 className="font-medium text-gray-800 mb-2">改善行动</h3><p className="text-sm text-gray-400">下一阶段配置</p></div>
+      </div>
+
+      <div className="mt-5">
+        <TimelineSection reviewId={id ?? ''} />
       </div>
     </AppLayout>
   );
