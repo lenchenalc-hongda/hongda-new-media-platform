@@ -20,9 +20,38 @@ import {
   type EditorMe,
   type EditorMutationState,
 } from '@/lib/review-center/editor';
+import {
+  classifyTypeDetailsMutationResponse,
+  diffTypeDetails,
+  extractTypeDetailsSaveResult,
+  isTypeDetailsDirty,
+  normalizeTypeDetails,
+  type AdditionalNoteRow,
+  type TypeDetailFieldKey,
+  type TypeDetailsDraft,
+  TYPE_DETAIL_GROUPS,
+  TYPE_DETAIL_LABELS,
+  getReviewTypeChangeBlockReason,
+  typeDetailsSaveBlockedByBasic,
+} from '@/lib/review-center/type-details-editor';
 
 const TYPE_OPTIONS: ReviewType[] = ['A', 'B', 'C'];
 const RISK_OPTIONS: RiskLevel[] = ['RED', 'YELLOW', 'GREEN'];
+const LONG_TYPE_FIELDS = new Set<TypeDetailFieldKey>([
+  'pre_production_stage',
+  'problem_found_stage',
+  'order_loss_reason',
+  'customer_trust_impact',
+  'abnormal_phenomenon',
+  'defect_items',
+  'delivery_impact',
+  'onsite_records',
+  'frontend_stage',
+  'production_stage',
+  'root_cause_summary',
+  'responsibility',
+  'improvement_advice',
+]);
 
 export default function ReviewEditPage() {
   const params = useParams();
@@ -36,6 +65,10 @@ export default function ReviewEditPage() {
   const [draftBasicInfo, setDraftBasicInfo] = useState<BasicInfoDraft | null>(null);
   const [saveState, setSaveState] = useState<EditorMutationState>('idle');
   const [saveMessage, setSaveMessage] = useState('');
+  const [initialTypeDetails, setInitialTypeDetails] = useState<TypeDetailsDraft | null>(null);
+  const [draftTypeDetails, setDraftTypeDetails] = useState<TypeDetailsDraft | null>(null);
+  const [typeDetailsSaveState, setTypeDetailsSaveState] = useState<EditorMutationState>('idle');
+  const [typeDetailsSaveMessage, setTypeDetailsSaveMessage] = useState('');
 
   const loadEditor = useCallback(async () => {
     if (!id) return;
@@ -43,6 +76,8 @@ export default function ReviewEditPage() {
     setLoadError('');
     setSaveState('idle');
     setSaveMessage('');
+    setTypeDetailsSaveState('idle');
+    setTypeDetailsSaveMessage('');
     try {
       const [meResponse, detailResponse] = await Promise.all([
         fetch('/api/review-center/me'),
@@ -89,6 +124,9 @@ export default function ReviewEditPage() {
       setCurrentVersion(nextDetail.version);
       setInitialBasicInfo(nextInitial);
       setDraftBasicInfo(nextInitial);
+      const nextTypeDetails = normalizeTypeDetails(nextDetail.type_details);
+      setInitialTypeDetails(nextTypeDetails);
+      setDraftTypeDetails(nextTypeDetails);
     } catch {
       setLoadError('复盘详情加载失败，请稍后重试');
     } finally {
@@ -113,6 +151,23 @@ export default function ReviewEditPage() {
     || saveState === 'non_editable'
     || saveState === 'reload_required'
     || saveState === 'forbidden';
+  const typeDetailsDirty = !!(initialTypeDetails && draftTypeDetails && isTypeDetailsDirty(initialTypeDetails, draftTypeDetails));
+  const basicTypeChangePending = !!(
+    initialBasicInfo
+    && draftBasicInfo
+    && typeDetailsSaveBlockedByBasic({
+      basicInfoDirty: dirty,
+      persistedReviewType: initialBasicInfo.review_type,
+      draftReviewType: draftBasicInfo.review_type,
+    })
+  );
+  const reviewTypeChangeBlockReason = !!initialBasicInfo && !!draftBasicInfo
+    ? getReviewTypeChangeBlockReason({
+        persistedReviewType: initialBasicInfo.review_type,
+        draftReviewType: draftBasicInfo.review_type,
+        typeDetailsDirty,
+      })
+    : null;
 
   function updateField(key: keyof BasicInfoDraft, value: string) {
     setDraftBasicInfo(prev => (prev ? { ...prev, [key]: value } : prev));
@@ -127,6 +182,11 @@ export default function ReviewEditPage() {
     if (!draftBasicInfo.title.trim()) {
       setSaveState('validation');
       setSaveMessage('请检查填写内容后重试。');
+      return;
+    }
+    if (reviewTypeChangeBlockReason) {
+      setSaveState('validation');
+      setSaveMessage(reviewTypeChangeBlockReason);
       return;
     }
     const patch = diffBasicInfo(initialBasicInfo, draftBasicInfo);
@@ -162,12 +222,178 @@ export default function ReviewEditPage() {
         setInitialBasicInfo(nextInitial);
         setDraftBasicInfo(nextInitial);
       }
+      if (
+        saved
+        && typeof saved === 'object'
+        && !detail?.type_details
+        && typeof (saved as any).review_type === 'string'
+        && (saved as any).review_type !== detail?.review_type
+      ) {
+        const nextType = normalizeTypeDetails(null);
+        setInitialTypeDetails(nextType);
+        setDraftTypeDetails(nextType);
+        setTypeDetailsSaveState('idle');
+        setTypeDetailsSaveMessage('');
+      }
       setSaveState('saved');
       setSaveMessage('已保存');
     } catch {
       setSaveState('error');
       setSaveMessage('保存失败，请稍后重试。');
     }
+  }
+
+  function applyTypeDetailsAuthority(nextVersion: number, typeDetails: Record<string, unknown> | null) {
+    setCurrentVersion(nextVersion);
+    setDetail(prev => prev ? { ...prev, version: nextVersion, type_details: typeDetails } : prev);
+    const next = normalizeTypeDetails(typeDetails);
+    setInitialTypeDetails(next);
+    setDraftTypeDetails(next);
+  }
+
+  async function handleTypeDetailsSave() {
+    if (!id || !initialTypeDetails || !draftTypeDetails || currentVersion === null) return;
+    const diffResult = diffTypeDetails(initialTypeDetails, draftTypeDetails);
+    if (!diffResult.valid) {
+      setTypeDetailsSaveState('validation');
+      setTypeDetailsSaveMessage(diffResult.error || '请检查专项复盘内容后重试。');
+      return;
+    }
+    if (Object.keys(diffResult.patch).length === 0) return;
+    if (basicTypeChangePending) {
+      setTypeDetailsSaveState('validation');
+      setTypeDetailsSaveMessage('复盘类型尚未保存，请先保存基础信息中的复盘类型，再填写专项复盘内容。');
+      return;
+    }
+
+    setTypeDetailsSaveState('saving');
+    setTypeDetailsSaveMessage('');
+    try {
+      const response = await fetch(`/api/review-center/reviews/${encodeURIComponent(id)}/type-details`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ expectedVersion: currentVersion, patch: diffResult.patch }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        const info = classifyTypeDetailsMutationResponse(response.status, data);
+        if (info.state === 'conflict' || info.state === 'non_editable' || info.state === 'reload_required' || info.state === 'forbidden') {
+          setSaveState(info.state);
+          setSaveMessage(info.message);
+        }
+        setTypeDetailsSaveState(info.state);
+        setTypeDetailsSaveMessage(info.message);
+        return;
+      }
+
+      const saved = extractTypeDetailsSaveResult(data);
+      if (saved) {
+        applyTypeDetailsAuthority(saved.version, saved.typeDetails);
+      } else {
+        const syncResponse = await fetch(`/api/review-center/reviews/${encodeURIComponent(id)}`);
+        const syncData = await syncResponse.json();
+        if (!syncResponse.ok || syncData.error || !syncData.id) {
+          setTypeDetailsSaveState('error');
+          setTypeDetailsSaveMessage('专项内容保存失败，请稍后重试。');
+          return;
+        }
+        applyTypeDetailsAuthority(syncData.version, syncData.type_details ?? null);
+      }
+      setTypeDetailsSaveState('saved');
+      setTypeDetailsSaveMessage('专项内容已保存');
+    } catch {
+      setTypeDetailsSaveState('error');
+      setTypeDetailsSaveMessage('专项内容保存失败，请稍后重试。');
+    }
+  }
+
+  function updateTypeDetailField(key: keyof TypeDetailsDraft, value: string) {
+    setDraftTypeDetails(prev => (prev ? { ...prev, [key]: value } : prev));
+    if (typeDetailsSaveState === 'saved' || typeDetailsSaveState === 'validation' || typeDetailsSaveState === 'error') {
+      setTypeDetailsSaveState('idle');
+      setTypeDetailsSaveMessage('');
+    }
+  }
+
+  function updateNoteRow(index: number, patch: Partial<AdditionalNoteRow>) {
+    setDraftTypeDetails(prev => prev ? {
+      ...prev,
+      noteRows: prev.noteRows.map((row, i) => (i === index ? { ...row, ...patch } : row)),
+    } : prev);
+    if (typeDetailsSaveState === 'saved' || typeDetailsSaveState === 'validation' || typeDetailsSaveState === 'error') {
+      setTypeDetailsSaveState('idle');
+      setTypeDetailsSaveMessage('');
+    }
+  }
+
+  function addNoteRow() {
+    setDraftTypeDetails(prev => prev ? { ...prev, noteRows: [...prev.noteRows, { key: '', value: '' }] } : prev);
+    if (typeDetailsSaveState === 'saved' || typeDetailsSaveState === 'validation' || typeDetailsSaveState === 'error') {
+      setTypeDetailsSaveState('idle');
+      setTypeDetailsSaveMessage('');
+    }
+  }
+
+  function removeNoteRow(index: number) {
+    setDraftTypeDetails(prev => prev ? { ...prev, noteRows: prev.noteRows.filter((_, i) => i !== index) } : prev);
+    if (typeDetailsSaveState === 'saved' || typeDetailsSaveState === 'validation' || typeDetailsSaveState === 'error') {
+      setTypeDetailsSaveState('idle');
+      setTypeDetailsSaveMessage('');
+    }
+  }
+
+  function renderTypeDetailField(field: TypeDetailFieldKey) {
+    const label = TYPE_DETAIL_LABELS[field];
+    const long = LONG_TYPE_FIELDS.has(field);
+    if (field === 'customer_notified') {
+      return (
+        <div>
+          <label className="block text-xs text-gray-500 mb-1">{label}</label>
+          <select
+            value={draftTypeDetails?.customer_notified ?? ''}
+            onChange={e => updateTypeDetailField('customer_notified', e.target.value)}
+            className="select-field"
+          >
+            <option value="">未填写</option>
+            <option value="true">是</option>
+            <option value="false">否</option>
+          </select>
+        </div>
+      );
+    }
+    if (field === 'defect_rate') {
+      return (
+        <div>
+          <label className="block text-xs text-gray-500 mb-1">{label}</label>
+          <input
+            type="number"
+            step="any"
+            value={draftTypeDetails?.defect_rate ?? ''}
+            onChange={e => updateTypeDetailField('defect_rate', e.target.value)}
+            className="input-field"
+          />
+        </div>
+      );
+    }
+    return (
+      <div className={long ? 'md:col-span-2' : ''}>
+        <label className="block text-xs text-gray-500 mb-1">{label}</label>
+        {long ? (
+          <textarea
+            value={draftTypeDetails?.[field] ?? ''}
+            onChange={e => updateTypeDetailField(field, e.target.value)}
+            rows={3}
+            className="input-field"
+          />
+        ) : (
+          <input
+            value={draftTypeDetails?.[field] ?? ''}
+            onChange={e => updateTypeDetailField(field, e.target.value)}
+            className="input-field"
+          />
+        )}
+      </div>
+    );
   }
 
   if (loading) {
@@ -230,6 +456,12 @@ export default function ReviewEditPage() {
           <h2 className="text-base font-semibold text-gray-800">基础信息</h2>
           {saveState === 'saved' && <span className="text-sm text-green-600">已保存</span>}
         </div>
+
+        {reviewTypeChangeBlockReason && (
+          <div className="mb-4 p-3 bg-amber-50 text-amber-800 rounded-lg text-sm">
+            {reviewTypeChangeBlockReason}
+          </div>
+        )}
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="md:col-span-2">
@@ -360,11 +592,85 @@ export default function ReviewEditPage() {
           <Link href={`/review-center/reviews/${id}`} className="btn-secondary">取消</Link>
           <button
             type="button"
-            disabled={!dirty || saveState === 'saving' || blocked || !(draftBasicInfo?.title.trim())}
+            disabled={!dirty || saveState === 'saving' || blocked || !!reviewTypeChangeBlockReason || !(draftBasicInfo?.title.trim())}
             onClick={handleSave}
             className="btn-primary"
           >
             {saveState === 'saving' ? '保存中…' : '保存基础信息'}
+          </button>
+        </div>
+      </div>
+
+      <div className="bg-white border border-gray-200 rounded-lg p-6 mt-5">
+        <div className="flex items-center justify-between mb-5">
+          <div>
+            <h2 className="text-base font-semibold text-gray-800">专项复盘内容</h2>
+            <p className="text-xs text-gray-500 mt-1">
+              {detail.review_type} 类复盘 · {detail.review_type === 'A' ? '量产前 / 订单损失 / 客户信任相关复盘' : detail.review_type === 'B' ? '量产过程 / 品质 / 交付异常复盘' : '前端问题最终在生产爆发的综合复盘'}
+            </p>
+          </div>
+          {typeDetailsSaveState === 'saved' && <span className="text-sm text-green-600">已保存</span>}
+        </div>
+
+        {basicTypeChangePending && (
+          <div className="mb-4 p-3 bg-amber-50 text-amber-800 rounded-lg text-sm">
+            复盘类型尚未保存，请先保存基础信息中的复盘类型，再填写专项复盘内容。
+          </div>
+        )}
+
+        {(typeDetailsSaveState === 'validation' || typeDetailsSaveState === 'error') && typeDetailsSaveMessage && (
+          <div className="mb-4 p-3 bg-red-50 text-red-700 rounded-lg text-sm">{typeDetailsSaveMessage}</div>
+        )}
+
+        {TYPE_DETAIL_GROUPS[detail.review_type].map((group, groupIndex) => (
+          <div key={group.title} className={groupIndex > 0 ? 'mt-5 pt-5 border-t border-gray-100' : ''}>
+            <h3 className="text-sm font-medium text-gray-700 mb-3">{group.title}</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {group.fields.map(field => renderTypeDetailField(field))}
+            </div>
+          </div>
+        ))}
+
+        <div className="mt-6 pt-5 border-t border-gray-100">
+          <h3 className="text-sm font-medium text-gray-700 mb-1">补充说明</h3>
+          <p className="text-xs text-gray-400 mb-3">支持简单键值说明；历史结构化值只读保留。</p>
+          <div className="space-y-2">
+            {draftTypeDetails?.noteRows.map((row, index) => (
+              <div key={index} className="grid grid-cols-1 md:grid-cols-[1fr_1fr_auto] gap-2 items-center">
+                <input
+                  value={row.key}
+                  onChange={e => updateNoteRow(index, { key: e.target.value })}
+                  placeholder="说明键"
+                  className="input-field"
+                />
+                <input
+                  value={row.value}
+                  onChange={e => updateNoteRow(index, { value: e.target.value })}
+                  placeholder="说明值"
+                  className="input-field"
+                />
+                <button type="button" onClick={() => removeNoteRow(index)} className="btn-secondary btn-sm">删除</button>
+              </div>
+            ))}
+          </div>
+          <button type="button" onClick={addNoteRow} className="btn-secondary btn-sm mt-2">新增说明</button>
+          {draftTypeDetails && Object.keys(draftTypeDetails.preservedNotes).length > 0 && (
+            <div className="mt-3 space-y-1">
+              {Object.keys(draftTypeDetails.preservedNotes).map(key => (
+                <div key={key} className="text-xs text-gray-500">{key}：结构化值（当前版本只读）</div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="mt-6 flex justify-end">
+          <button
+            type="button"
+            disabled={!typeDetailsDirty || typeDetailsSaveState === 'saving' || blocked || basicTypeChangePending}
+            onClick={handleTypeDetailsSave}
+            className="btn-primary"
+          >
+            {typeDetailsSaveState === 'saving' ? '保存中…' : '保存专项内容'}
           </button>
         </div>
       </div>
