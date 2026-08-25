@@ -1,5 +1,9 @@
-import type { ReviewType } from './types';
-import { classifyMutationResponse, type EditorMutationErrorInfo } from './editor';
+import type { ReviewDetail, ReviewType } from './types';
+import {
+  classifyMutationResponse,
+  type BasicInfoDraft,
+  type EditorMutationErrorInfo,
+} from './editor';
 
 const A_ONLY_FIELDS = [
   'pre_production_stage',
@@ -302,6 +306,34 @@ export function rebuildTypeDetailsBaseline(
 ): { initial: TypeDetailsDraft; draft: TypeDetailsDraft } {
   const next = normalizeTypeDetails(typeDetails);
   return { initial: next, draft: next };
+}
+
+export const TYPE_DETAILS_FALLBACK_SYNC_FAILURE_MESSAGE =
+  '专项内容已保存，但最新状态同步失败，请重新加载页面后继续操作。';
+
+export interface TypeDetailsFallbackPlan {
+  version: number;
+  detail: ReviewDetail;
+  initialTypeDetails: TypeDetailsDraft;
+  draftTypeDetails: TypeDetailsDraft;
+  basicInitial: BasicInfoDraft;
+  basicDraft: BasicInfoDraft;
+}
+
+export function planTypeDetailsFallbackSync(
+  latestDetail: ReviewDetail,
+  basicInitial: BasicInfoDraft,
+  basicDraft: BasicInfoDraft,
+): TypeDetailsFallbackPlan {
+  const nextType = normalizeTypeDetails(latestDetail.type_details);
+  return {
+    version: latestDetail.version,
+    detail: latestDetail,
+    initialTypeDetails: nextType,
+    draftTypeDetails: nextType,
+    basicInitial,
+    basicDraft,
+  };
 }
 
 export function classifyTypeDetailsMutationResponse(

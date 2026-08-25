@@ -38,6 +38,58 @@ export interface EditorMutationErrorInfo {
   message: string;
 }
 
+export type EditorMutationKind = 'basic' | 'type-details';
+
+export interface EditorMutationLock {
+  acquire(kind: EditorMutationKind): boolean;
+  release(): void;
+  current(): EditorMutationKind | null;
+}
+
+export function createEditorMutationLock(): EditorMutationLock {
+  let current: EditorMutationKind | null = null;
+  return {
+    acquire(kind) {
+      if (current !== null) return false;
+      current = kind;
+      return true;
+    },
+    release() {
+      current = null;
+    },
+    current() {
+      return current;
+    },
+  };
+}
+
+export interface EditorAuthoritySnapshot {
+  version: number;
+  status: ReviewStatus;
+  persistedReviewType: ReviewType;
+  typeDetailsExists: boolean;
+  canEdit: boolean;
+}
+
+export function deriveEditorAuthority(
+  detail: ReviewDetail,
+  me: EditorMe,
+): EditorAuthoritySnapshot {
+  return {
+    version: detail.version,
+    status: detail.status,
+    persistedReviewType: detail.review_type,
+    typeDetailsExists: isReviewTypeLocked(detail.type_details),
+    canEdit: canEditDraft({
+      role: me.role,
+      status: detail.status,
+      currentProfileId: me.profile_id ?? null,
+      ownerId: detail.owner_id,
+      pmoId: detail.pmo_id,
+    }),
+  };
+}
+
 const TEXT_BASIC_FIELDS = [
   'customer_name',
   'order_no',
@@ -148,6 +200,43 @@ export function diffBasicInfo(
 
 export function basicInfoDirty(initial: BasicInfoDraft, draft: BasicInfoDraft): boolean {
   return Object.keys(diffBasicInfo(initial, draft)).length > 0;
+}
+
+export interface BasicFallbackRebaseAnalysis {
+  localChangedFields: Record<string, unknown>;
+  remoteChangedFields: Record<string, unknown>;
+  conflictingFields: string[];
+  hasConflict: boolean;
+  rebasedInitial: BasicInfoDraft;
+  rebasedDraft: BasicInfoDraft;
+}
+
+export function analyzeBasicFallbackRebase(
+  initial: BasicInfoDraft,
+  draft: BasicInfoDraft,
+  latest: BasicInfoDraft,
+): BasicFallbackRebaseAnalysis {
+  const localChangedFields = diffBasicInfo(initial, draft);
+  const remoteChangedFields = diffBasicInfo(initial, latest);
+  const conflictingFields = Object.keys(localChangedFields).filter(key =>
+    Object.prototype.hasOwnProperty.call(remoteChangedFields, key),
+  );
+  const rebasedInitial: BasicInfoDraft = { ...latest };
+  const rebasedDraft: BasicInfoDraft = { ...latest };
+  for (const key of Object.keys(localChangedFields)) {
+    if (Object.prototype.hasOwnProperty.call(rebasedDraft, key)) {
+      const fieldKey = key as keyof BasicInfoDraft;
+      Object.assign(rebasedDraft, { [fieldKey]: draft[fieldKey] });
+    }
+  }
+  return {
+    localChangedFields,
+    remoteChangedFields,
+    conflictingFields,
+    hasConflict: conflictingFields.length > 0,
+    rebasedInitial,
+    rebasedDraft,
+  };
 }
 
 export function classifyMutationResponse(

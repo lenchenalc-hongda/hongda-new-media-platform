@@ -1,5 +1,5 @@
 'use client';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import AppLayout from '@/components/layout/AppLayout';
@@ -8,16 +8,20 @@ import ReviewCenterEmpty from '@/components/review-center/ReviewCenterEmpty';
 import { reviewStatusLabel } from '@/lib/review-center/formatters';
 import type { ReviewDetail, ReviewType, RiskLevel } from '@/lib/review-center/types';
 import {
+  analyzeBasicFallbackRebase,
   basicInfoDirty,
   canEditDraft,
   classifyEditorDetailLoadStatus,
   classifyMutationResponse,
+  createEditorMutationLock,
   diffBasicInfo,
   extractMutationVersion,
   isReviewTypeLocked,
   normalizeBasicInfo,
   type BasicInfoDraft,
   type EditorMe,
+  type EditorMutationKind,
+  type EditorMutationLock,
   type EditorMutationState,
 } from '@/lib/review-center/editor';
 import {
@@ -26,6 +30,8 @@ import {
   extractTypeDetailsSaveResult,
   isTypeDetailsDirty,
   normalizeTypeDetails,
+  planTypeDetailsFallbackSync,
+  TYPE_DETAILS_FALLBACK_SYNC_FAILURE_MESSAGE,
   type AdditionalNoteRow,
   type TypeDetailFieldKey,
   type TypeDetailsDraft,
@@ -37,6 +43,8 @@ import {
 
 const TYPE_OPTIONS: ReviewType[] = ['A', 'B', 'C'];
 const RISK_OPTIONS: RiskLevel[] = ['RED', 'YELLOW', 'GREEN'];
+const BASIC_FALLBACK_CONFLICT_MESSAGE =
+  '专项内容已保存，但基础信息在你编辑期间也被其他人更新。为避免覆盖他人的修改，请重新加载最新数据后继续。';
 const LONG_TYPE_FIELDS = new Set<TypeDetailFieldKey>([
   'pre_production_stage',
   'problem_found_stage',
@@ -69,6 +77,11 @@ export default function ReviewEditPage() {
   const [draftTypeDetails, setDraftTypeDetails] = useState<TypeDetailsDraft | null>(null);
   const [typeDetailsSaveState, setTypeDetailsSaveState] = useState<EditorMutationState>('idle');
   const [typeDetailsSaveMessage, setTypeDetailsSaveMessage] = useState('');
+  const mutationLockRef = useRef<EditorMutationLock | null>(null);
+  if (mutationLockRef.current === null) {
+    mutationLockRef.current = createEditorMutationLock();
+  }
+  const [activeMutation, setActiveMutation] = useState<EditorMutationKind | null>(null);
 
   const loadEditor = useCallback(async () => {
     if (!id) return;
@@ -177,6 +190,18 @@ export default function ReviewEditPage() {
     }
   }
 
+  function acquireMutation(kind: EditorMutationKind): boolean {
+    const lock = mutationLockRef.current;
+    if (!lock || !lock.acquire(kind)) return false;
+    setActiveMutation(kind);
+    return true;
+  }
+
+  function releaseMutation() {
+    mutationLockRef.current?.release();
+    setActiveMutation(null);
+  }
+
   async function handleSave() {
     if (!id || !initialBasicInfo || !draftBasicInfo || currentVersion === null) return;
     if (!draftBasicInfo.title.trim()) {
@@ -191,6 +216,7 @@ export default function ReviewEditPage() {
     }
     const patch = diffBasicInfo(initialBasicInfo, draftBasicInfo);
     if (Object.keys(patch).length === 0) return;
+    if (!acquireMutation('basic')) return;
 
     setSaveState('saving');
     setSaveMessage('');
@@ -240,6 +266,8 @@ export default function ReviewEditPage() {
     } catch {
       setSaveState('error');
       setSaveMessage('保存失败，请稍后重试。');
+    } finally {
+      releaseMutation();
     }
   }
 
@@ -265,6 +293,7 @@ export default function ReviewEditPage() {
       setTypeDetailsSaveMessage('复盘类型尚未保存，请先保存基础信息中的复盘类型，再填写专项复盘内容。');
       return;
     }
+    if (!acquireMutation('type-details')) return;
 
     setTypeDetailsSaveState('saving');
     setTypeDetailsSaveMessage('');
@@ -290,20 +319,54 @@ export default function ReviewEditPage() {
       if (saved) {
         applyTypeDetailsAuthority(saved.version, saved.typeDetails);
       } else {
+        if (!initialBasicInfo || !draftBasicInfo) {
+          setSaveState('reload_required');
+          setSaveMessage(TYPE_DETAILS_FALLBACK_SYNC_FAILURE_MESSAGE);
+          setTypeDetailsSaveState('reload_required');
+          setTypeDetailsSaveMessage(TYPE_DETAILS_FALLBACK_SYNC_FAILURE_MESSAGE);
+          return;
+        }
         const syncResponse = await fetch(`/api/review-center/reviews/${encodeURIComponent(id)}`);
         const syncData = await syncResponse.json();
         if (!syncResponse.ok || syncData.error || !syncData.id) {
-          setTypeDetailsSaveState('error');
-          setTypeDetailsSaveMessage('专项内容保存失败，请稍后重试。');
+          setSaveState('reload_required');
+          setSaveMessage(TYPE_DETAILS_FALLBACK_SYNC_FAILURE_MESSAGE);
+          setTypeDetailsSaveState('reload_required');
+          setTypeDetailsSaveMessage(TYPE_DETAILS_FALLBACK_SYNC_FAILURE_MESSAGE);
           return;
         }
-        applyTypeDetailsAuthority(syncData.version, syncData.type_details ?? null);
+        const latestDetail = syncData as ReviewDetail;
+        const plan = planTypeDetailsFallbackSync(
+          latestDetail,
+          initialBasicInfo,
+          draftBasicInfo,
+        );
+        const basicRebase = analyzeBasicFallbackRebase(
+          initialBasicInfo,
+          draftBasicInfo,
+          normalizeBasicInfo(latestDetail),
+        );
+        setDetail(plan.detail);
+        setInitialTypeDetails(plan.initialTypeDetails);
+        setDraftTypeDetails(plan.draftTypeDetails);
+        if (basicRebase.hasConflict) {
+          setSaveState('reload_required');
+          setSaveMessage(BASIC_FALLBACK_CONFLICT_MESSAGE);
+          setTypeDetailsSaveState('reload_required');
+          setTypeDetailsSaveMessage(BASIC_FALLBACK_CONFLICT_MESSAGE);
+        } else {
+          setCurrentVersion(plan.version);
+          setInitialBasicInfo(basicRebase.rebasedInitial);
+          setDraftBasicInfo(basicRebase.rebasedDraft);
+          setTypeDetailsSaveState('saved');
+          setTypeDetailsSaveMessage('专项内容已保存');
+        }
       }
-      setTypeDetailsSaveState('saved');
-      setTypeDetailsSaveMessage('专项内容已保存');
     } catch {
       setTypeDetailsSaveState('error');
       setTypeDetailsSaveMessage('专项内容保存失败，请稍后重试。');
+    } finally {
+      releaseMutation();
     }
   }
 
@@ -592,7 +655,7 @@ export default function ReviewEditPage() {
           <Link href={`/review-center/reviews/${id}`} className="btn-secondary">取消</Link>
           <button
             type="button"
-            disabled={!dirty || saveState === 'saving' || blocked || !!reviewTypeChangeBlockReason || !(draftBasicInfo?.title.trim())}
+            disabled={!dirty || saveState === 'saving' || blocked || !!reviewTypeChangeBlockReason || activeMutation !== null || !(draftBasicInfo?.title.trim())}
             onClick={handleSave}
             className="btn-primary"
           >
@@ -666,7 +729,7 @@ export default function ReviewEditPage() {
         <div className="mt-6 flex justify-end">
           <button
             type="button"
-            disabled={!typeDetailsDirty || typeDetailsSaveState === 'saving' || blocked || basicTypeChangePending}
+            disabled={!typeDetailsDirty || typeDetailsSaveState === 'saving' || blocked || basicTypeChangePending || activeMutation !== null}
             onClick={handleTypeDetailsSave}
             className="btn-primary"
           >
