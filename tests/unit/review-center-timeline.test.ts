@@ -182,5 +182,103 @@ const dtoChangedFields = dto.details.changedFields as string[];
 assert(dtoChangedFields.length === 1 && dtoChangedFields[0] === 'title', 'DTO details whitelisted');
 assert(!('version' in dto) && !('payload' in dto) && !('actor_profile_id' in dto), 'DTO excludes raw fields');
 
+assert(deepEqual(sanitizeTimelineDetails('REVIEW_SUBMITTED', {
+  from_status: 'draft',
+  to_status: 'submitted',
+  reason: 'x',
+  email: 'e@example.com',
+  token: 't',
+  secret: 's',
+}), {}), 'REVIEW_SUBMITTED details empty');
+
+assert(deepEqual(sanitizeTimelineDetails('REVIEW_CLOSED', {
+  from_status: 'submitted',
+  to_status: 'closed',
+  owner_id: 'o',
+  pmo_id: 'p',
+}), {}), 'REVIEW_CLOSED details empty');
+
+assert(deepEqual(sanitizeTimelineDetails('REVIEW_REOPENED', {
+  from_status: 'submitted',
+  to_status: 'draft',
+  reason: 'should not expose',
+}), { fromStatus: 'submitted' }), 'REVIEW_REOPENED submitted hides reason');
+
+assert(deepEqual(sanitizeTimelineDetails('REVIEW_REOPENED', {
+  from_status: 'closed',
+  to_status: 'draft',
+  reason: '  closed reason  ',
+}), { fromStatus: 'closed', reason: 'closed reason' }), 'REVIEW_REOPENED closed trims reason');
+
+assert(deepEqual(sanitizeTimelineDetails('REVIEW_REOPENED', {
+  from_status: 'closed',
+  reason: '   ',
+}), { fromStatus: 'closed' }), 'REVIEW_REOPENED whitespace reason omitted');
+
+assert(
+  sanitizeTimelineDetails('REVIEW_REOPENED', {
+    from_status: 'closed',
+    reason: 'x'.repeat(1000),
+  }).reason === 'x'.repeat(1000),
+  'REVIEW_REOPENED exact 1000 reason accepted',
+);
+
+assert(
+  !('reason' in sanitizeTimelineDetails('REVIEW_REOPENED', {
+    from_status: 'closed',
+    reason: 'x'.repeat(1001),
+  })),
+  'REVIEW_REOPENED oversized reason omitted',
+);
+
+for (const badReason of [123, {}, [], null, true]) {
+  const sanitized = sanitizeTimelineDetails('REVIEW_REOPENED', {
+    from_status: 'closed',
+    reason: badReason,
+  });
+  assert(deepEqual(sanitized, { fromStatus: 'closed' }), 'REVIEW_REOPENED non-string reason omitted');
+}
+
+assert(deepEqual(sanitizeTimelineDetails('REVIEW_REOPENED', {
+  from_status: 'approved_secret',
+}), {}), 'REVIEW_REOPENED unknown from_status empty');
+
+assert(deepEqual(sanitizeTimelineDetails('REVIEW_REOPENED', {}), {}), 'REVIEW_REOPENED missing from_status empty');
+assert(deepEqual(sanitizeTimelineDetails('REVIEW_REOPENED', null), {}), 'REVIEW_REOPENED null payload empty');
+assert(deepEqual(sanitizeTimelineDetails('REVIEW_REOPENED', ['x']), {}), 'REVIEW_REOPENED array payload empty');
+
+const lifecycleSecretRow: TimelineRow = {
+  id: 'event-secret',
+  event_type: 'REVIEW_REOPENED',
+  actor_profile_id: null,
+  payload: {
+    from_status: 'closed',
+    to_status: 'draft',
+    reason: 'QA reason',
+    email: 'SECRET_EMAIL_MARKER',
+    token: 'SECRET_TOKEN_MARKER',
+    owner_id: 'SECRET_OWNER_MARKER',
+    org_id: 'SECRET_ORG_MARKER',
+    review_id: 'SECRET_REVIEW_MARKER',
+    actor_profile_id: 'SECRET_ACTOR_MARKER',
+  },
+  version: 2,
+  created_at: '2026-08-25T00:00:00Z',
+};
+const lifecycleSecretDto = buildTimelineDTO(lifecycleSecretRow, []);
+const lifecycleSecretText = JSON.stringify(lifecycleSecretDto);
+assert(deepEqual(lifecycleSecretDto.details, { fromStatus: 'closed', reason: 'QA reason' }), 'lifecycle DTO details whitelist');
+for (const marker of [
+  'SECRET_EMAIL_MARKER',
+  'SECRET_TOKEN_MARKER',
+  'SECRET_OWNER_MARKER',
+  'SECRET_ORG_MARKER',
+  'SECRET_REVIEW_MARKER',
+  'SECRET_ACTOR_MARKER',
+]) {
+  assert(!lifecycleSecretText.includes(marker), 'lifecycle DTO excludes marker: ' + marker);
+}
+assert(!('version' in lifecycleSecretDto) && !('payload' in lifecycleSecretDto), 'lifecycle DTO top-level unchanged');
+
 console.log('\nPassed: ' + passed + ', Failed: ' + failed + ' / ' + (passed + failed));
 if (failed > 0) process.exitCode = 1;

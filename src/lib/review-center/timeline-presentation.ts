@@ -213,6 +213,28 @@ export function formatTimelineEvent(item: TimelineItemDTO): TimelineEventPresent
     return { ...base, title: '设置了角色主负责人', summaryItems };
   }
 
+  if (item.eventType === 'REVIEW_SUBMITTED') {
+    return { ...base, title: '提交了复盘', summaryItems: [] };
+  }
+
+  if (item.eventType === 'REVIEW_CLOSED') {
+    return { ...base, title: '关闭了复盘', summaryItems: [] };
+  }
+
+  if (item.eventType === 'REVIEW_REOPENED') {
+    if (item.details.fromStatus === 'submitted') {
+      return { ...base, title: '退回了复盘修改', summaryItems: [] };
+    }
+    if (item.details.fromStatus === 'closed') {
+      const reason = typeof item.details.reason === 'string'
+        ? item.details.reason.trim()
+        : '';
+      const summaryItems = reason ? [`重新打开原因：${reason}`] : [];
+      return { ...base, title: '重新打开了复盘', summaryItems };
+    }
+    return { ...base, title: '更新了复盘状态', summaryItems: [] };
+  }
+
   return { ...base, title: '记录了一项项目动态', summaryItems: [] };
 }
 

@@ -316,5 +316,72 @@ for (const internal of [
   assert(!allOutput.includes(internal), 'internal label not exposed: ' + internal);
 }
 
+const submittedEvent = formatTimelineEvent(item({
+  eventType: 'REVIEW_SUBMITTED',
+  details: {},
+}));
+assert(submittedEvent.title === '提交了复盘' && submittedEvent.summaryItems.length === 0, 'REVIEW_SUBMITTED presentation');
+
+const closedEvent = formatTimelineEvent(item({
+  eventType: 'REVIEW_CLOSED',
+  details: {},
+}));
+assert(closedEvent.title === '关闭了复盘' && closedEvent.summaryItems.length === 0, 'REVIEW_CLOSED presentation');
+
+const submittedReopen = formatTimelineEvent(item({
+  eventType: 'REVIEW_REOPENED',
+  details: { fromStatus: 'submitted', reason: 'should not show' },
+}));
+assert(submittedReopen.title === '退回了复盘修改' && submittedReopen.summaryItems.length === 0, 'REVIEW_REOPENED submitted presentation');
+
+const closedReopenNoReason = formatTimelineEvent(item({
+  eventType: 'REVIEW_REOPENED',
+  details: { fromStatus: 'closed' },
+}));
+assert(closedReopenNoReason.title === '重新打开了复盘' && closedReopenNoReason.summaryItems.length === 0, 'REVIEW_REOPENED closed no reason presentation');
+
+const closedReopenReason = formatTimelineEvent(item({
+  eventType: 'REVIEW_REOPENED',
+  details: { fromStatus: 'closed', reason: '客户确认标准发生调整' },
+}));
+assert(
+  closedReopenReason.title === '重新打开了复盘'
+    && closedReopenReason.summaryItems[0] === '重新打开原因：客户确认标准发生调整',
+  'REVIEW_REOPENED closed reason summary',
+);
+
+const scriptReason = formatTimelineEvent(item({
+  eventType: 'REVIEW_REOPENED',
+  details: { fromStatus: 'closed', reason: '<script>alert(1)</script>' },
+}));
+assert(
+  scriptReason.summaryItems[0] === '重新打开原因：<script>alert(1)</script>',
+  'REVIEW_REOPENED reason stays plain text',
+);
+
+const malformedReopen = formatTimelineEvent(item({
+  eventType: 'REVIEW_REOPENED',
+  details: {},
+}));
+assert(malformedReopen.title === '更新了复盘状态' && malformedReopen.summaryItems.length === 0, 'REVIEW_REOPENED malformed fallback');
+
+const unknownReopenStatus = formatTimelineEvent(item({
+  eventType: 'REVIEW_REOPENED',
+  details: { fromStatus: 'approved_secret' },
+}));
+assert(unknownReopenStatus.title === '更新了复盘状态' && unknownReopenStatus.summaryItems.length === 0, 'REVIEW_REOPENED unknown fromStatus fallback');
+
+const objectReason = formatTimelineEvent(item({
+  eventType: 'REVIEW_REOPENED',
+  details: { fromStatus: 'closed', reason: { a: 1 } },
+}));
+assert(objectReason.summaryItems.length === 0 && !JSON.stringify(objectReason).includes('[object Object]'), 'REVIEW_REOPENED object reason ignored');
+
+const fallbackUnknown = formatTimelineEvent(item({
+  eventType: 'CAPA_FUTURE_INTERNAL_EVENT',
+  details: {},
+}));
+assert(fallbackUnknown.title === '记录了一项项目动态' && fallbackUnknown.summaryItems.length === 0, 'unknown event fallback preserved');
+
 console.log('\nPassed: ' + passed + ', Failed: ' + failed + ' / ' + (passed + failed));
 if (failed > 0) process.exitCode = 1;
