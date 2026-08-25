@@ -81,6 +81,8 @@ export interface ReviewDetail {
   created_by: string;
   owner_id: string;
   pmo_id: string | null;
+  submitted_at: string | null;
+  submitted_by_profile_id: string | null;
   closed_at: string | null;
   closed_by: string | null;
   close_override_reason: string | null;

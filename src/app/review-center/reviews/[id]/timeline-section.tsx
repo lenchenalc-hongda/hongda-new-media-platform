@@ -11,7 +11,13 @@ import {
   type TimelineSectionState,
 } from '@/lib/review-center/timeline-presentation';
 
-export default function TimelineSection({ reviewId }: { reviewId: string }) {
+export default function TimelineSection({
+  reviewId,
+  refreshKey = 0,
+}: {
+  reviewId: string;
+  refreshKey?: number;
+}) {
   const [view, setView] = useState<TimelineSectionState>(INITIAL_TIMELINE_SECTION_STATE);
   const controllerRef = useRef<TimelineSectionController | null>(null);
 
@@ -62,7 +68,7 @@ export default function TimelineSection({ reviewId }: { reviewId: string }) {
     if (!controller) return;
     controller.start(reviewId);
     return () => controller.invalidate();
-  }, [reviewId]);
+  }, [reviewId, refreshKey]);
 
   const controller = controllerRef.current;
 

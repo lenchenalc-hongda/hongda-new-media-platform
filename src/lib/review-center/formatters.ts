@@ -2,7 +2,7 @@ import type { ReviewStatus, RiskLevel } from './types';
 
 export const REVIEW_STATUS_LABELS: Record<ReviewStatus, string> = {
   draft: '草稿',
-  submitted: '已提交',
+  submitted: '待确认',
   in_review: '复盘中',
   action_required: '待改善',
   verifying: '验证中',

@@ -1,31 +1,86 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams } from 'next/navigation';
 import AppLayout from '@/components/layout/AppLayout';
 import PageHeader from '@/components/layout/PageHeader';
 import ReviewCenterEmpty from '@/components/review-center/ReviewCenterEmpty';
 import { reviewStatusLabel, riskLevelLabel, formatReviewDateTime, formatReviewDate } from '@/lib/review-center/formatters';
+import { applyLifecycleSuccessToDetail, type LifecycleSuccessData } from '@/lib/review-center/lifecycle-presentation';
 import type { ReviewDetail } from '@/lib/review-center/types';
 import TimelineSection from './timeline-section';
+import LifecycleSection from './lifecycle-section';
 
 export default function ReviewDetailPage() {
   const params = useParams();
   const id = Array.isArray(params.id) ? params.id[0] : params.id;
   const [review, setReview] = useState<ReviewDetail | null>(null);
+  const [me, setMe] = useState<{ role: string | null; profile_id: string | null } | null>(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
+  const [timelineRefreshKey, setTimelineRefreshKey] = useState(0);
+  const requestIdRef = useRef(0);
+
+  const reloadAuthority = useCallback(async (showLoading: boolean) => {
+    if (!id) return;
+    const requestId = ++requestIdRef.current;
+    if (showLoading) setLoading(true);
+    try {
+      const [meResponse, detailResponse] = await Promise.all([
+        fetch('/api/review-center/me'),
+        fetch(`/api/review-center/reviews/${encodeURIComponent(id)}`),
+      ]);
+      if (requestId !== requestIdRef.current) return;
+      const [meData, detailData] = await Promise.all([
+        meResponse.json().catch(() => null),
+        detailResponse.json().catch(() => null),
+      ]);
+      if (requestId !== requestIdRef.current) return;
+      if (meResponse.ok && meData && !meData.error) {
+        setMe({
+          role: typeof meData.role === 'string' ? meData.role : null,
+          profile_id: typeof meData.profile_id === 'string' ? meData.profile_id : null,
+        });
+      } else {
+        setMe(null);
+      }
+      if (detailResponse.ok && detailData && !detailData.error) {
+        setReview(detailData);
+        setError('');
+      } else if (detailResponse.status === 401) {
+        setError('未登录或登录已过期');
+        setReview(null);
+      } else if (detailResponse.status === 403) {
+        setError('你没有权限访问此复盘');
+        setReview(null);
+      } else if (detailResponse.status === 404) {
+        setError('复盘不存在或不可见');
+        setReview(null);
+      } else {
+        setError('复盘详情加载失败');
+        setReview(null);
+      }
+    } catch {
+      if (requestId === requestIdRef.current) {
+        setError('复盘详情加载失败');
+        setReview(null);
+      }
+    } finally {
+      if (requestId === requestIdRef.current) setLoading(false);
+    }
+  }, [id]);
 
   useEffect(() => {
-    if (!id) return;
-    fetch(`/api/review-center/reviews/${id}`)
-      .then(res => res.json())
-      .then(data => {
-        if (data.error) setError(data.error);
-        else setReview(data);
-      })
-      .catch(() => setError('复盘详情加载失败'))
-      .finally(() => setLoading(false));
-  }, [id]);
+    void reloadAuthority(true);
+  }, [reloadAuthority]);
+
+  const handleLifecycleSuccess = useCallback((data: LifecycleSuccessData) => {
+    setReview(prev => prev ? applyLifecycleSuccessToDetail(prev, data) : prev);
+  }, []);
+
+  const handleAuthorityRefresh = useCallback(() => {
+    setTimelineRefreshKey(key => key + 1);
+    void reloadAuthority(false);
+  }, [reloadAuthority]);
 
   if (loading) {
     return (
@@ -81,8 +136,23 @@ export default function ReviewDetailPage() {
         <div className="card"><h3 className="font-medium text-gray-800 mb-2">改善行动</h3><p className="text-sm text-gray-400">下一阶段配置</p></div>
       </div>
 
+      <LifecycleSection
+        reviewId={id ?? ''}
+        status={review.status}
+        version={review.version}
+        ownerId={review.owner_id}
+        pmoId={review.pmo_id}
+        currentProfileId={me?.profile_id ?? null}
+        currentRole={me?.role ?? null}
+        editHref={`/review-center/reviews/${id}/edit`}
+        submittedAt={review.submitted_at ?? null}
+        closedAt={review.closed_at}
+        onLifecycleSuccess={handleLifecycleSuccess}
+        onAuthorityRefresh={handleAuthorityRefresh}
+      />
+
       <div className="mt-5">
-        <TimelineSection reviewId={id ?? ''} />
+        <TimelineSection reviewId={id ?? ''} refreshKey={timelineRefreshKey} />
       </div>
     </AppLayout>
   );
