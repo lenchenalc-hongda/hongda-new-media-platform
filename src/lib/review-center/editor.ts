@@ -38,7 +38,13 @@ export interface EditorMutationErrorInfo {
   message: string;
 }
 
-export type EditorMutationKind = 'basic' | 'type-details' | 'assignments';
+export type EditorMutationKind =
+  | 'basic'
+  | 'type-details'
+  | 'assignments'
+  | 'member-add'
+  | 'member-remove'
+  | 'member-primary';
 
 export interface EditorMutationLock {
   acquire(kind: EditorMutationKind): boolean;

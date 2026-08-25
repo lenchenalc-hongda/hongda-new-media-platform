@@ -22,6 +22,22 @@ import {
   type AssignmentsState,
 } from '@/lib/review-center/assignments-editor';
 import {
+  appendMemberIfMissing,
+  canAddMemberCombination,
+  canSetMemberPrimary,
+  classifyMemberMutationError,
+  createMemberDirectoryGuard,
+  groupMembersByRole,
+  reconcilePrimaryMember,
+  removeMemberFromList,
+  resolveMemberDisplay,
+  type MemberDirectoryCandidate,
+  type MemberDirectoryGuard,
+  type MemberMutationErrorInfo,
+  type MemberRole,
+  MEMBER_ROLE_OPTIONS,
+} from '@/lib/review-center/members-editor';
+import {
   analyzeBasicFallbackRebase,
   basicInfoDirty,
   canEditDraft,
@@ -99,12 +115,46 @@ export default function ReviewEditPage() {
   const [assignmentDirectoryState, setAssignmentDirectoryState] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
   const [assignmentsSaveState, setAssignmentsSaveState] = useState<AssignmentsSaveState>('idle');
   const [assignmentsSaveMessage, setAssignmentsSaveMessage] = useState('');
+  const [memberDirectoryCandidates, setMemberDirectoryCandidates] = useState<MemberDirectoryCandidate[]>([]);
+  const [memberDirectoryState, setMemberDirectoryState] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
+  const [selectedMemberProfileId, setSelectedMemberProfileId] = useState('');
+  const [selectedMemberRole, setSelectedMemberRole] = useState<MemberRole | ''>('');
+  const [pendingRemoveMemberId, setPendingRemoveMemberId] = useState<string | null>(null);
+  const [memberMutationState, setMemberMutationState] = useState<'idle' | 'saving' | 'stale_candidate' | 'duplicate' | 'validation' | 'error'>('idle');
+  const [memberMutationMessage, setMemberMutationMessage] = useState('');
   const mutationLockRef = useRef<EditorMutationLock | null>(null);
   if (mutationLockRef.current === null) {
     mutationLockRef.current = createEditorMutationLock();
   }
+  const memberDirectoryGuardRef = useRef<MemberDirectoryGuard | null>(null);
+  if (memberDirectoryGuardRef.current === null) {
+    memberDirectoryGuardRef.current = createMemberDirectoryGuard();
+  }
   const assignmentDirectoryRequestRef = useRef(0);
   const [activeMutation, setActiveMutation] = useState<EditorMutationKind | null>(null);
+
+  async function loadMemberDirectory() {
+    const guard = memberDirectoryGuardRef.current;
+    if (!guard) return;
+    const requestId = guard.next();
+    setMemberDirectoryState('loading');
+    setMemberMutationState('idle');
+    setMemberMutationMessage('');
+    try {
+      const response = await fetch('/api/review-center/profile-directory?purpose=MEMBER');
+      const data = await response.json();
+      if (!guard.isCurrent(requestId)) return;
+      if (!response.ok || !data?.ok || !Array.isArray(data?.data?.items)) {
+        setMemberDirectoryState('error');
+        return;
+      }
+      setMemberDirectoryCandidates(data.data.items as MemberDirectoryCandidate[]);
+      setMemberDirectoryState('ready');
+    } catch {
+      if (!guard.isCurrent(requestId)) return;
+      setMemberDirectoryState('error');
+    }
+  }
 
   async function loadAssignmentDirectory() {
     const requestId = ++assignmentDirectoryRequestRef.current;
@@ -135,6 +185,14 @@ export default function ReviewEditPage() {
     setSaveMessage('');
     setTypeDetailsSaveState('idle');
     setTypeDetailsSaveMessage('');
+    memberDirectoryGuardRef.current?.invalidate();
+    setMemberDirectoryState('idle');
+    setMemberDirectoryCandidates([]);
+    setSelectedMemberProfileId('');
+    setSelectedMemberRole('');
+    setPendingRemoveMemberId(null);
+    setMemberMutationState('idle');
+    setMemberMutationMessage('');
     try {
       const [meResponse, detailResponse] = await Promise.all([
         fetch('/api/review-center/me'),
@@ -193,6 +251,16 @@ export default function ReviewEditPage() {
       setAssignmentCandidates([]);
       if (nextDetail.status === 'draft' && (nextMe.role === 'admin' || nextMe.role === 'manager')) {
         void loadAssignmentDirectory();
+      }
+      const nextCanEditMembers = canEditDraft({
+        role: nextMe.role,
+        status: nextDetail.status,
+        currentProfileId: nextMe.profile_id ?? null,
+        ownerId: nextDetail.owner_id,
+        pmoId: nextDetail.pmo_id,
+      });
+      if (nextCanEditMembers) {
+        void loadMemberDirectory();
       }
     } catch {
       setLoadError('复盘详情加载失败，请稍后重试');
@@ -267,6 +335,28 @@ export default function ReviewEditPage() {
         'PMO资料不可用',
       )
     : null;
+  const memberDirectoryIds = useMemo(
+    () => new Set(memberDirectoryCandidates.map(candidate => candidate.profile_id)),
+    [memberDirectoryCandidates],
+  );
+  const memberAddValidation = canAddMemberCombination({
+    members: detail?.members ?? [],
+    selectedProfileId: selectedMemberProfileId,
+    selectedRole: selectedMemberRole,
+    candidateIds: memberDirectoryIds,
+  });
+  const memberGroups = useMemo(
+    () => groupMembersByRole(detail?.members ?? []),
+    [detail?.members],
+  );
+  useEffect(() => {
+    if (!canEdit) {
+      memberDirectoryGuardRef.current?.invalidate();
+    }
+  }, [canEdit]);
+  useEffect(() => () => {
+    memberDirectoryGuardRef.current?.invalidate();
+  }, []);
 
   function updateField(key: keyof BasicInfoDraft, value: string) {
     setDraftBasicInfo(prev => (prev ? { ...prev, [key]: value } : prev));
@@ -355,6 +445,149 @@ export default function ReviewEditPage() {
     } catch {
       setAssignmentsSaveState('error');
       setAssignmentsSaveMessage('负责人设置保存失败，请稍后重试。');
+    } finally {
+      releaseMutation();
+    }
+  }
+
+  function updateSelectedMemberProfile(profileId: string) {
+    setSelectedMemberProfileId(profileId);
+    if (memberMutationState === 'validation' || memberMutationState === 'error' || memberMutationState === 'stale_candidate' || memberMutationState === 'duplicate') {
+      setMemberMutationState('idle');
+      setMemberMutationMessage('');
+    }
+  }
+
+  function updateSelectedMemberRole(role: MemberRole | '') {
+    setSelectedMemberRole(role);
+    if (memberMutationState === 'validation' || memberMutationState === 'error' || memberMutationState === 'stale_candidate' || memberMutationState === 'duplicate') {
+      setMemberMutationState('idle');
+      setMemberMutationMessage('');
+    }
+  }
+
+  function applyMemberMutationError(info: MemberMutationErrorInfo) {
+    if (info.globalState) {
+      setSaveState(info.globalState);
+      setSaveMessage(info.globalMessage);
+      setMemberMutationState('error');
+      setMemberMutationMessage(info.scopedMessage);
+    } else {
+      setMemberMutationState(info.scopedState ?? 'error');
+      setMemberMutationMessage(info.scopedMessage);
+    }
+  }
+
+  async function handleAddMember() {
+    if (!id || !canEdit || memberDirectoryState !== 'ready' || !memberAddValidation.valid || currentVersion === null) return;
+    if (memberMutationState === 'saving' || memberMutationState === 'stale_candidate' || memberMutationState === 'duplicate') return;
+    if (!acquireMutation('member-add')) return;
+
+    setMemberMutationState('saving');
+    setMemberMutationMessage('');
+    try {
+      const response = await fetch(`/api/review-center/reviews/${encodeURIComponent(id)}/members`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          expectedVersion: currentVersion,
+          profileId: selectedMemberProfileId,
+          memberRole: selectedMemberRole,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        applyMemberMutationError(classifyMemberMutationError(response.status, data));
+        return;
+      }
+      const member = data?.data?.member;
+      const version = data?.data?.version;
+      if (!member || typeof version !== 'number') {
+        setMemberMutationState('error');
+        setMemberMutationMessage('成员操作失败，请稍后重试。');
+        return;
+      }
+      setCurrentVersion(version);
+      setDetail(prev => (prev ? { ...prev, version, members: appendMemberIfMissing(prev.members, member) } : prev));
+      setSelectedMemberProfileId('');
+      setMemberMutationState('idle');
+      setMemberMutationMessage('');
+    } catch {
+      setMemberMutationState('error');
+      setMemberMutationMessage('成员操作失败，请稍后重试。');
+    } finally {
+      releaseMutation();
+    }
+  }
+
+  async function handleRemoveMember() {
+    if (!id || !canEdit || !pendingRemoveMemberId || currentVersion === null) return;
+    if (!acquireMutation('member-remove')) return;
+
+    setMemberMutationState('saving');
+    setMemberMutationMessage('');
+    try {
+      const response = await fetch(`/api/review-center/reviews/${encodeURIComponent(id)}/members/${encodeURIComponent(pendingRemoveMemberId)}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ expectedVersion: currentVersion }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        applyMemberMutationError(classifyMemberMutationError(response.status, data));
+        return;
+      }
+      const memberId = data?.data?.member_id;
+      const version = data?.data?.version;
+      if (typeof version !== 'number' || typeof memberId !== 'string') {
+        setMemberMutationState('error');
+        setMemberMutationMessage('成员操作失败，请稍后重试。');
+        return;
+      }
+      setCurrentVersion(version);
+      setDetail(prev => (prev ? { ...prev, version, members: removeMemberFromList(prev.members, memberId) } : prev));
+      setPendingRemoveMemberId(null);
+      setMemberMutationState('idle');
+      setMemberMutationMessage('');
+    } catch {
+      setMemberMutationState('error');
+      setMemberMutationMessage('成员操作失败，请稍后重试。');
+    } finally {
+      releaseMutation();
+    }
+  }
+
+  async function handleSetPrimary(memberId: string) {
+    if (!id || !canEdit || !memberId || currentVersion === null) return;
+    if (!acquireMutation('member-primary')) return;
+
+    setMemberMutationState('saving');
+    setMemberMutationMessage('');
+    try {
+      const response = await fetch(`/api/review-center/reviews/${encodeURIComponent(id)}/members/${encodeURIComponent(memberId)}/primary`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ expectedVersion: currentVersion }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        applyMemberMutationError(classifyMemberMutationError(response.status, data));
+        return;
+      }
+      const member = data?.data?.member;
+      const version = data?.data?.version;
+      if (!member || typeof version !== 'number') {
+        setMemberMutationState('error');
+        setMemberMutationMessage('成员操作失败，请稍后重试。');
+        return;
+      }
+      setCurrentVersion(version);
+      setDetail(prev => (prev ? { ...prev, version, members: reconcilePrimaryMember(prev.members, member) } : prev));
+      setMemberMutationState('idle');
+      setMemberMutationMessage('');
+    } catch {
+      setMemberMutationState('error');
+      setMemberMutationMessage('成员操作失败，请稍后重试。');
     } finally {
       releaseMutation();
     }
@@ -494,6 +727,16 @@ export default function ReviewEditPage() {
           return;
         }
         const latestDetail = syncData as ReviewDetail;
+        const latestCanEditMembers = canEditDraft({
+          role: me?.role ?? 'viewer',
+          status: latestDetail.status,
+          currentProfileId: me?.profile_id ?? null,
+          ownerId: latestDetail.owner_id,
+          pmoId: latestDetail.pmo_id,
+        });
+        if (!latestCanEditMembers) {
+          memberDirectoryGuardRef.current?.invalidate();
+        }
         const plan = planTypeDetailsFallbackSync(
           latestDetail,
           initialBasicInfo,
@@ -511,6 +754,9 @@ export default function ReviewEditPage() {
           latestAssignments,
         );
         setDetail(plan.detail);
+        if (pendingRemoveMemberId && !latestDetail.members.some(member => member.id === pendingRemoveMemberId)) {
+          setPendingRemoveMemberId(null);
+        }
         setInitialTypeDetails(plan.initialTypeDetails);
         setDraftTypeDetails(plan.draftTypeDetails);
         if (basicRebase.hasConflict || assignmentsFallback.conflict) {
@@ -635,6 +881,188 @@ export default function ReviewEditPage() {
     );
   }
 
+  function renderMembersCard() {
+    return (
+      <div className="bg-white border border-gray-200 rounded-lg p-6 mt-5">
+        <div className="flex items-center justify-between mb-5">
+          <div>
+            <h2 className="text-base font-semibold text-gray-800">项目成员 / 专业角色</h2>
+            <p className="text-xs text-gray-500 mt-1">成员按专业角色分组，每个角色可设一名主负责人</p>
+          </div>
+        </div>
+
+        {canEdit && memberDirectoryState === 'error' && (
+          <div className="mb-4 p-3 bg-red-50 text-red-700 rounded-lg text-sm">
+            <p>成员候选列表加载失败，请重试。</p>
+            <button type="button" onClick={loadMemberDirectory} className="btn-secondary btn-sm mt-2">重新加载成员候选</button>
+          </div>
+        )}
+        {canEdit && memberDirectoryState === 'loading' && (
+          <p className="mb-4 text-sm text-gray-500">成员候选加载中...</p>
+        )}
+
+        {canEdit && memberDirectoryState === 'ready' && (
+          <div className="mb-5 p-4 bg-gray-50 border border-gray-200 rounded-lg">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">成员</label>
+                <select
+                  value={selectedMemberProfileId}
+                  onChange={e => updateSelectedMemberProfile(e.target.value)}
+                  className="select-field"
+                >
+                  <option value="">请选择成员</option>
+                  {memberDirectoryCandidates.map(candidate => (
+                    <option key={candidate.profile_id} value={candidate.profile_id}>
+                      {candidate.display_name}
+                      {candidate.department ? ` · ${candidate.department}` : ''}
+                      {' · '}{candidate.role}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">角色</label>
+                <select
+                  value={selectedMemberRole}
+                  onChange={e => updateSelectedMemberRole(e.target.value as MemberRole | '')}
+                  className="select-field"
+                >
+                  <option value="">请选择角色</option>
+                  {MEMBER_ROLE_OPTIONS.map(option => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            {memberAddValidation.reason && (
+              <p className="mt-2 text-sm text-amber-800">{memberAddValidation.reason}</p>
+            )}
+            <div className="mt-4 flex justify-end">
+              <button
+                type="button"
+                disabled={
+                  !memberAddValidation.valid
+                  || memberMutationState === 'saving'
+                  || memberMutationState === 'stale_candidate'
+                  || memberMutationState === 'duplicate'
+                  || blocked
+                  || activeMutation !== null
+                }
+                onClick={handleAddMember}
+                className="btn-primary"
+              >
+                {memberMutationState === 'saving' ? '添加中…' : '添加成员'}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {memberGroups.length === 0 ? (
+          <p className="text-sm text-gray-500">暂无项目成员</p>
+        ) : (
+          <div className="space-y-5">
+            {memberGroups.map(group => (
+              <div key={group.role}>
+                <h3 className="text-sm font-medium text-gray-700 mb-2">
+                  {MEMBER_ROLE_OPTIONS.find(option => option.value === group.role)?.label ?? group.role}
+                </h3>
+                <div className="space-y-2">
+                  {group.items.map(member => {
+                    const display = resolveMemberDisplay(
+                      member,
+                      detail?.participants ?? [],
+                      memberDirectoryCandidates,
+                    );
+                    const primaryEligible = canSetMemberPrimary(
+                      member,
+                      detail?.participants ?? [],
+                      memberDirectoryCandidates,
+                    );
+                    const confirmingRemove = pendingRemoveMemberId === member.id;
+                    return (
+                      <div key={member.id} className="flex flex-wrap items-center justify-between gap-2 border border-gray-100 rounded-lg px-3 py-2">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-medium text-gray-800">{display.displayName}</span>
+                            {member.is_primary && (
+                              <span className="text-xs bg-blue-50 text-blue-700 rounded px-1.5 py-0.5">该角色主负责人</span>
+                            )}
+                            {display.isActiveKnown && !display.isActive && (
+                              <span className="text-xs bg-gray-100 text-gray-500 rounded px-1.5 py-0.5">已停用</span>
+                            )}
+                          </div>
+                          <div className="text-xs text-gray-500">
+                            {[display.department, display.authRole, member.member_role].filter(Boolean).join(' · ')}
+                          </div>
+                        </div>
+                        {canEdit && (
+                          <div className="flex items-center gap-2">
+                            {!member.is_primary && primaryEligible && (
+                              <button
+                                type="button"
+                                onClick={() => handleSetPrimary(member.id)}
+                                disabled={memberMutationState === 'saving' || blocked || activeMutation !== null}
+                                className="btn-secondary btn-sm"
+                              >
+                                设为该角色主负责人
+                              </button>
+                            )}
+                            {confirmingRemove ? (
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={handleRemoveMember}
+                                  disabled={memberMutationState === 'saving' || blocked || activeMutation !== null}
+                                  className="btn-primary btn-sm"
+                                >
+                                  确认移除
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setPendingRemoveMemberId(null)}
+                                  disabled={memberMutationState === 'saving'}
+                                  className="btn-secondary btn-sm"
+                                >
+                                  取消
+                                </button>
+                              </>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => setPendingRemoveMemberId(member.id)}
+                                disabled={memberMutationState === 'saving' || blocked || activeMutation !== null}
+                                className="btn-secondary btn-sm"
+                              >
+                                移除
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {(memberMutationState === 'stale_candidate' || memberMutationState === 'duplicate' || memberMutationState === 'validation' || memberMutationState === 'error') && memberMutationMessage && (
+          <div className="mt-4 p-3 bg-red-50 text-red-700 rounded-lg text-sm">
+            <p>{memberMutationMessage}</p>
+            {memberMutationState === 'stale_candidate' && (
+              <button type="button" onClick={loadMemberDirectory} className="btn-secondary btn-sm mt-2">重新加载成员候选</button>
+            )}
+            {memberMutationState === 'duplicate' && (
+              <button type="button" onClick={loadEditor} className="btn-secondary btn-sm mt-2">重新加载最新数据</button>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  }
+
   if (loading) {
     return (
       <AppLayout>
@@ -687,6 +1115,7 @@ export default function ReviewEditPage() {
             </div>
           </div>
         )}
+        {renderMembersCard()}
       </AppLayout>
     );
   }
@@ -1065,6 +1494,7 @@ export default function ReviewEditPage() {
           </div>
         )}
       </div>
+      {renderMembersCard()}
     </AppLayout>
   );
 }
