@@ -1,5 +1,5 @@
 'use client';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import AppLayout from '@/components/layout/AppLayout';
@@ -7,6 +7,20 @@ import PageHeader from '@/components/layout/PageHeader';
 import ReviewCenterEmpty from '@/components/review-center/ReviewCenterEmpty';
 import { reviewStatusLabel } from '@/lib/review-center/formatters';
 import type { ReviewDetail, ReviewType, RiskLevel } from '@/lib/review-center/types';
+import {
+  buildAssignmentsRequest,
+  canManageAssignments,
+  classifyAssignmentsMutationError,
+  eligibleAssignmentIds,
+  isAssignmentsDirty,
+  normalizeAssignments,
+  planAssignmentsFallbackSync,
+  resolveAssignmentDisplay,
+  validateAssignmentDraft,
+  type AssignmentCandidate,
+  type AssignmentsSaveState,
+  type AssignmentsState,
+} from '@/lib/review-center/assignments-editor';
 import {
   analyzeBasicFallbackRebase,
   basicInfoDirty,
@@ -45,6 +59,8 @@ const TYPE_OPTIONS: ReviewType[] = ['A', 'B', 'C'];
 const RISK_OPTIONS: RiskLevel[] = ['RED', 'YELLOW', 'GREEN'];
 const BASIC_FALLBACK_CONFLICT_MESSAGE =
   '专项内容已保存，但基础信息在你编辑期间也被其他人更新。为避免覆盖他人的修改，请重新加载最新数据后继续。';
+const ASSIGNMENTS_FALLBACK_CONFLICT_MESSAGE =
+  '专项内容已保存，但负责人设置在你编辑期间也被其他人更新。为避免覆盖他人的修改，请重新加载最新数据后继续。';
 const LONG_TYPE_FIELDS = new Set<TypeDetailFieldKey>([
   'pre_production_stage',
   'problem_found_stage',
@@ -77,11 +93,39 @@ export default function ReviewEditPage() {
   const [draftTypeDetails, setDraftTypeDetails] = useState<TypeDetailsDraft | null>(null);
   const [typeDetailsSaveState, setTypeDetailsSaveState] = useState<EditorMutationState>('idle');
   const [typeDetailsSaveMessage, setTypeDetailsSaveMessage] = useState('');
+  const [initialAssignments, setInitialAssignments] = useState<AssignmentsState | null>(null);
+  const [draftAssignments, setDraftAssignments] = useState<AssignmentsState | null>(null);
+  const [assignmentCandidates, setAssignmentCandidates] = useState<AssignmentCandidate[]>([]);
+  const [assignmentDirectoryState, setAssignmentDirectoryState] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
+  const [assignmentsSaveState, setAssignmentsSaveState] = useState<AssignmentsSaveState>('idle');
+  const [assignmentsSaveMessage, setAssignmentsSaveMessage] = useState('');
   const mutationLockRef = useRef<EditorMutationLock | null>(null);
   if (mutationLockRef.current === null) {
     mutationLockRef.current = createEditorMutationLock();
   }
+  const assignmentDirectoryRequestRef = useRef(0);
   const [activeMutation, setActiveMutation] = useState<EditorMutationKind | null>(null);
+
+  async function loadAssignmentDirectory() {
+    const requestId = ++assignmentDirectoryRequestRef.current;
+    setAssignmentDirectoryState('loading');
+    setAssignmentsSaveState('idle');
+    setAssignmentsSaveMessage('');
+    try {
+      const response = await fetch('/api/review-center/profile-directory?purpose=ASSIGNMENT');
+      const data = await response.json();
+      if (requestId !== assignmentDirectoryRequestRef.current) return;
+      if (!response.ok || !data?.ok || !Array.isArray(data?.data?.items)) {
+        setAssignmentDirectoryState('error');
+        return;
+      }
+      setAssignmentCandidates(data.data.items as AssignmentCandidate[]);
+      setAssignmentDirectoryState('ready');
+    } catch {
+      if (requestId !== assignmentDirectoryRequestRef.current) return;
+      setAssignmentDirectoryState('error');
+    }
+  }
 
   const loadEditor = useCallback(async () => {
     if (!id) return;
@@ -140,6 +184,16 @@ export default function ReviewEditPage() {
       const nextTypeDetails = normalizeTypeDetails(nextDetail.type_details);
       setInitialTypeDetails(nextTypeDetails);
       setDraftTypeDetails(nextTypeDetails);
+      const nextAssignments = normalizeAssignments(nextDetail);
+      setInitialAssignments(nextAssignments);
+      setDraftAssignments(nextAssignments);
+      setAssignmentsSaveState('idle');
+      setAssignmentsSaveMessage('');
+      setAssignmentDirectoryState('idle');
+      setAssignmentCandidates([]);
+      if (nextDetail.status === 'draft' && (nextMe.role === 'admin' || nextMe.role === 'manager')) {
+        void loadAssignmentDirectory();
+      }
     } catch {
       setLoadError('复盘详情加载失败，请稍后重试');
     } finally {
@@ -181,6 +235,38 @@ export default function ReviewEditPage() {
         typeDetailsDirty,
       })
     : null;
+  const assignmentsEditable = canManageAssignments({
+    role: me?.role ?? 'viewer',
+    status: detail?.status ?? 'draft',
+  });
+  const assignmentsDirty = !!(
+    initialAssignments
+    && draftAssignments
+    && isAssignmentsDirty(initialAssignments, draftAssignments)
+  );
+  const eligibleCandidateIds = useMemo(
+    () => eligibleAssignmentIds(assignmentCandidates),
+    [assignmentCandidates],
+  );
+  const assignmentValidation = draftAssignments
+    ? validateAssignmentDraft(draftAssignments, eligibleCandidateIds)
+    : null;
+  const ownerAssignmentDisplay = draftAssignments
+    ? resolveAssignmentDisplay(
+        draftAssignments.ownerId,
+        detail?.participants ?? [],
+        assignmentCandidates,
+        '负责人资料不可用',
+      )
+    : null;
+  const pmoAssignmentDisplay = draftAssignments
+    ? resolveAssignmentDisplay(
+        draftAssignments.pmoId,
+        detail?.participants ?? [],
+        assignmentCandidates,
+        'PMO资料不可用',
+      )
+    : null;
 
   function updateField(key: keyof BasicInfoDraft, value: string) {
     setDraftBasicInfo(prev => (prev ? { ...prev, [key]: value } : prev));
@@ -200,6 +286,78 @@ export default function ReviewEditPage() {
   function releaseMutation() {
     mutationLockRef.current?.release();
     setActiveMutation(null);
+  }
+
+  function updateAssignmentOwner(ownerId: string) {
+    setDraftAssignments(prev => (prev ? { ...prev, ownerId } : prev));
+    if (assignmentsSaveState === 'saved' || assignmentsSaveState === 'validation' || assignmentsSaveState === 'error') {
+      setAssignmentsSaveState('idle');
+      setAssignmentsSaveMessage('');
+    }
+  }
+
+  function updateAssignmentPmo(pmoId: string) {
+    setDraftAssignments(prev => (prev ? { ...prev, pmoId: pmoId === '' ? null : pmoId } : prev));
+    if (assignmentsSaveState === 'saved' || assignmentsSaveState === 'validation' || assignmentsSaveState === 'error') {
+      setAssignmentsSaveState('idle');
+      setAssignmentsSaveMessage('');
+    }
+  }
+
+  async function handleAssignmentsSave() {
+    if (!id || !initialAssignments || !draftAssignments || currentVersion === null) return;
+    if (!assignmentsEditable || assignmentDirectoryState !== 'ready' || !assignmentValidation?.canSave) return;
+    if (assignmentsSaveState === 'invalid_member') return;
+    if (!acquireMutation('assignments')) return;
+
+    setAssignmentsSaveState('saving');
+    setAssignmentsSaveMessage('');
+    try {
+      const request = buildAssignmentsRequest(currentVersion, draftAssignments);
+      const response = await fetch(`/api/review-center/reviews/${encodeURIComponent(id)}/assignments`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(request),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        const info = classifyAssignmentsMutationError(response.status, data);
+        if (info.globalState) {
+          setSaveState(info.globalState);
+          setSaveMessage(info.globalMessage);
+        }
+        setAssignmentsSaveState(info.scopedState ?? 'error');
+        setAssignmentsSaveMessage(info.scopedMessage);
+        return;
+      }
+      const saved = data?.data;
+      if (!saved || typeof saved.version !== 'number' || typeof saved.owner_id !== 'string') {
+        setAssignmentsSaveState('error');
+        setAssignmentsSaveMessage('负责人设置保存失败，请稍后重试。');
+        return;
+      }
+      const nextAssignments = normalizeAssignments({
+        owner_id: saved.owner_id,
+        pmo_id: saved.pmo_id ?? null,
+      });
+      setCurrentVersion(saved.version);
+      setDetail(prev => (prev ? {
+        ...prev,
+        ...saved,
+        type_details: prev.type_details,
+        members: prev.members,
+        participants: prev.participants,
+      } : prev));
+      setInitialAssignments(nextAssignments);
+      setDraftAssignments(nextAssignments);
+      setAssignmentsSaveState('saved');
+      setAssignmentsSaveMessage('已保存');
+    } catch {
+      setAssignmentsSaveState('error');
+      setAssignmentsSaveMessage('负责人设置保存失败，请稍后重试。');
+    } finally {
+      releaseMutation();
+    }
   }
 
   async function handleSave() {
@@ -346,18 +504,36 @@ export default function ReviewEditPage() {
           draftBasicInfo,
           normalizeBasicInfo(latestDetail),
         );
+        const latestAssignments = normalizeAssignments(latestDetail);
+        const assignmentsFallback = planAssignmentsFallbackSync(
+          initialAssignments,
+          draftAssignments,
+          latestAssignments,
+        );
         setDetail(plan.detail);
         setInitialTypeDetails(plan.initialTypeDetails);
         setDraftTypeDetails(plan.draftTypeDetails);
-        if (basicRebase.hasConflict) {
+        if (basicRebase.hasConflict || assignmentsFallback.conflict) {
           setSaveState('reload_required');
-          setSaveMessage(BASIC_FALLBACK_CONFLICT_MESSAGE);
+          setSaveMessage(
+            assignmentsFallback.conflict
+              ? ASSIGNMENTS_FALLBACK_CONFLICT_MESSAGE
+              : BASIC_FALLBACK_CONFLICT_MESSAGE,
+          );
           setTypeDetailsSaveState('reload_required');
-          setTypeDetailsSaveMessage(BASIC_FALLBACK_CONFLICT_MESSAGE);
+          setTypeDetailsSaveMessage(
+            assignmentsFallback.conflict
+              ? ASSIGNMENTS_FALLBACK_CONFLICT_MESSAGE
+              : BASIC_FALLBACK_CONFLICT_MESSAGE,
+          );
         } else {
           setCurrentVersion(plan.version);
           setInitialBasicInfo(basicRebase.rebasedInitial);
           setDraftBasicInfo(basicRebase.rebasedDraft);
+          if (assignmentsFallback.initial && assignmentsFallback.draft) {
+            setInitialAssignments(assignmentsFallback.initial);
+            setDraftAssignments(assignmentsFallback.draft);
+          }
           setTypeDetailsSaveState('saved');
           setTypeDetailsSaveMessage('专项内容已保存');
         }
@@ -490,6 +666,27 @@ export default function ReviewEditPage() {
           title={reason}
           action={{ label: '返回详情', href: `/review-center/reviews/${id}` }}
         />
+        {ownerAssignmentDisplay && pmoAssignmentDisplay && (
+          <div className="mt-5 bg-white border border-gray-200 rounded-lg p-6">
+            <h2 className="text-base font-semibold text-gray-800">项目负责人</h2>
+            <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">当前项目负责人</label>
+                <p className="text-sm text-gray-800">
+                  {ownerAssignmentDisplay.displayName}
+                  {ownerAssignmentDisplay.meta ? ` · ${ownerAssignmentDisplay.meta}` : ''}
+                </p>
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">PMO</label>
+                <p className="text-sm text-gray-800">
+                  {pmoAssignmentDisplay.displayName}
+                  {pmoAssignmentDisplay.meta ? ` · ${pmoAssignmentDisplay.meta}` : ''}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
       </AppLayout>
     );
   }
@@ -736,6 +933,137 @@ export default function ReviewEditPage() {
             {typeDetailsSaveState === 'saving' ? '保存中…' : '保存专项内容'}
           </button>
         </div>
+      </div>
+
+      <div className="bg-white border border-gray-200 rounded-lg p-6 mt-5">
+        <div className="flex items-center justify-between mb-5">
+          <div>
+            <h2 className="text-base font-semibold text-gray-800">项目负责人</h2>
+            <p className="text-xs text-gray-500 mt-1">负责人与 PMO 设置</p>
+          </div>
+          {assignmentsSaveState === 'saved' && <span className="text-sm text-green-600">已保存</span>}
+        </div>
+
+        {assignmentsEditable && assignmentDirectoryState === 'error' && (
+          <div className="mb-4 p-3 bg-red-50 text-red-700 rounded-lg text-sm">
+            <p>负责人候选列表加载失败，请重试。</p>
+            <button type="button" onClick={loadAssignmentDirectory} className="btn-secondary btn-sm mt-2">重新加载候选人</button>
+          </div>
+        )}
+        {assignmentsEditable && assignmentDirectoryState === 'loading' && (
+          <p className="mb-4 text-sm text-gray-500">负责人候选加载中...</p>
+        )}
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">当前项目负责人</label>
+            {ownerAssignmentDisplay && (
+              <p className="text-sm text-gray-800">
+                {ownerAssignmentDisplay.displayName}
+                {ownerAssignmentDisplay.meta ? ` · ${ownerAssignmentDisplay.meta}` : ''}
+              </p>
+            )}
+            {assignmentsEditable && assignmentDirectoryState === 'ready' && draftAssignments && (
+              <div className="mt-2">
+                <label className="block text-xs text-gray-500 mb-1">更换项目负责人</label>
+                <select
+                  value={eligibleCandidateIds.has(draftAssignments.ownerId) ? draftAssignments.ownerId : ''}
+                  onChange={e => updateAssignmentOwner(e.target.value)}
+                  className="select-field"
+                >
+                  <option value="" disabled>
+                    {eligibleCandidateIds.has(draftAssignments.ownerId) ? '请选择' : '请选择新的项目负责人'}
+                  </option>
+                  {assignmentCandidates
+                    .filter(candidate => candidate.assignment_eligible !== false)
+                    .map(candidate => (
+                      <option key={candidate.profile_id} value={candidate.profile_id}>
+                        {candidate.display_name}
+                        {candidate.department ? ` · ${candidate.department}` : ''}
+                        {' · '}{candidate.role}
+                      </option>
+                    ))}
+                </select>
+              </div>
+            )}
+          </div>
+
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">PMO</label>
+            {pmoAssignmentDisplay && (
+              <p className="text-sm text-gray-800">
+                {pmoAssignmentDisplay.displayName}
+                {pmoAssignmentDisplay.meta ? ` · ${pmoAssignmentDisplay.meta}` : ''}
+              </p>
+            )}
+            {assignmentsEditable && assignmentDirectoryState === 'ready' && draftAssignments && (
+              <div className="mt-2">
+                <label className="block text-xs text-gray-500 mb-1">更换 PMO</label>
+                <select
+                  value={
+                    draftAssignments.pmoId !== null && eligibleCandidateIds.has(draftAssignments.pmoId)
+                      ? draftAssignments.pmoId
+                      : draftAssignments.pmoId === null
+                        ? ''
+                        : '__ineligible__'
+                  }
+                  onChange={e => updateAssignmentPmo(e.target.value)}
+                  className="select-field"
+                >
+                  <option value="">未设置</option>
+                  {draftAssignments.pmoId !== null && !eligibleCandidateIds.has(draftAssignments.pmoId) && (
+                    <option value="__ineligible__" disabled>请选择新的处理方式</option>
+                  )}
+                  {assignmentCandidates
+                    .filter(candidate => candidate.assignment_eligible !== false)
+                    .map(candidate => (
+                      <option key={candidate.profile_id} value={candidate.profile_id}>
+                        {candidate.display_name}
+                        {candidate.department ? ` · ${candidate.department}` : ''}
+                        {' · '}{candidate.role}
+                      </option>
+                    ))}
+                </select>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {assignmentsEditable && assignmentDirectoryState === 'ready' && assignmentsDirty && assignmentValidation && !assignmentValidation.canSave && assignmentValidation.reason && (
+          <div className="mt-4 p-3 bg-amber-50 text-amber-800 rounded-lg text-sm">
+            {assignmentValidation.reason}
+          </div>
+        )}
+
+        {(assignmentsSaveState === 'validation' || assignmentsSaveState === 'error' || assignmentsSaveState === 'invalid_member') && assignmentsSaveMessage && (
+          <div className="mt-4 p-3 bg-red-50 text-red-700 rounded-lg text-sm">
+            <p>{assignmentsSaveMessage}</p>
+            {assignmentsSaveState === 'invalid_member' && (
+              <button type="button" onClick={loadAssignmentDirectory} className="btn-secondary btn-sm mt-2">重新加载候选人</button>
+            )}
+          </div>
+        )}
+
+        {assignmentsEditable && (
+          <div className="mt-6 flex justify-end">
+            <button
+              type="button"
+              disabled={
+                assignmentDirectoryState !== 'ready'
+                || !assignmentsDirty
+                || !assignmentValidation?.canSave
+                || assignmentsSaveState === 'saving'
+                || assignmentsSaveState === 'invalid_member'
+                || blocked
+                || activeMutation !== null
+              }
+              onClick={handleAssignmentsSave}
+              className="btn-primary"
+            >
+              {assignmentsSaveState === 'saving' ? '保存中…' : '保存负责人设置'}
+            </button>
+          </div>
+        )}
       </div>
     </AppLayout>
   );

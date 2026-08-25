@@ -38,7 +38,7 @@ export interface EditorMutationErrorInfo {
   message: string;
 }
 
-export type EditorMutationKind = 'basic' | 'type-details';
+export type EditorMutationKind = 'basic' | 'type-details' | 'assignments';
 
 export interface EditorMutationLock {
   acquire(kind: EditorMutationKind): boolean;

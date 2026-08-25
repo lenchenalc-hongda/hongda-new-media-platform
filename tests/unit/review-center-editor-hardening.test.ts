@@ -100,6 +100,16 @@ lock.release();
 assert(lock.acquire('type-details') === true, 'after release -> type details can start');
 assert(lock.acquire('basic') === false, 'type details active -> basic blocked');
 lock.release();
+assert(lock.acquire('assignments') === true, 'no active mutation -> assignments can start');
+assert(lock.acquire('basic') === false, 'assignments active -> basic blocked');
+assert(lock.acquire('type-details') === false, 'assignments active -> type details blocked');
+lock.release();
+assert(lock.acquire('basic') === true, 'after release -> basic can start');
+assert(lock.acquire('assignments') === false, 'basic active -> assignments blocked');
+lock.release();
+assert(lock.acquire('type-details') === true, 'after release -> type details can start');
+assert(lock.acquire('assignments') === false, 'type details active -> assignments blocked');
+lock.release();
 
 const operator = makeMe('operator');
 const draftOwner = makeDetail({ status: 'draft', owner_id: operator.profile_id });
