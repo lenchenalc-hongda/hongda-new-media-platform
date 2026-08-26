@@ -14,6 +14,10 @@ import {
   type LifecycleSuccessData,
   type MutationLock,
 } from '@/lib/review-center/lifecycle-presentation';
+import {
+  buildMissingDimensionsQuery,
+  missingDimensionLabel,
+} from '@/lib/review-center/metadata';
 
 interface LifecycleSectionProps {
   reviewId: string;
@@ -51,6 +55,7 @@ export default function LifecycleSection({
   const [reopenError, setReopenError] = useState<string | null>(null);
   const [mutationError, setMutationError] = useState<string | null>(null);
   const [incompleteFields, setIncompleteFields] = useState<string[]>([]);
+  const [missingDimensions, setMissingDimensions] = useState<string[]>([]);
   const [isMutating, setIsMutating] = useState(false);
   const lockRef = useRef<MutationLock>(createMutationLock());
   const generationRef = useRef(0);
@@ -74,6 +79,7 @@ export default function LifecycleSection({
     setReopenError(null);
     setMutationError(null);
     setIncompleteFields([]);
+    setMissingDimensions([]);
     setIsMutating(false);
   }, [reviewId]);
 
@@ -99,6 +105,7 @@ export default function LifecycleSection({
     setIsMutating(true);
     setMutationError(null);
     setIncompleteFields([]);
+    setMissingDimensions([]);
     setReopenError(null);
 
     try {
@@ -150,6 +157,7 @@ export default function LifecycleSection({
       setDialog(null);
       setMutationError(error.message);
       setIncompleteFields(error.incompleteFields);
+      setMissingDimensions(error.missingDimensions);
       if (error.shouldRefreshAuthority) {
         onAuthorityRefresh();
       }
@@ -182,7 +190,7 @@ export default function LifecycleSection({
         <p className="mt-1 text-xs text-gray-400">关闭时间：{formatReviewDateTime(closedAt)}</p>
       )}
 
-      {(mutationError || incompleteFields.length > 0) && (
+      {(mutationError || incompleteFields.length > 0 || missingDimensions.length > 0) && (
         <div className="mt-3 rounded-md border border-gray-200 bg-gray-50 p-3 text-sm">
           {mutationError && <p className="text-gray-700">{mutationError}</p>}
           {incompleteFields.length > 0 && (
@@ -192,8 +200,23 @@ export default function LifecycleSection({
               ))}
             </ul>
           )}
+          {missingDimensions.length > 0 && (
+            <ul className="mt-1 list-disc pl-5 text-gray-600">
+              {missingDimensions.map(dimension => (
+                <li key={dimension}>{missingDimensionLabel(dimension)}</li>
+              ))}
+            </ul>
+          )}
           {incompleteFields.length > 0 && presentation.canEdit && (
             <Link href={editHref} className="btn-secondary mt-2 inline-block">去编辑</Link>
+          )}
+          {missingDimensions.length > 0 && presentation.canEdit && (
+            <Link
+              href={`${editHref}?missing=${encodeURIComponent(buildMissingDimensionsQuery(missingDimensions))}#metadata`}
+              className="btn-secondary mt-2 inline-block"
+            >
+              前往补齐分类
+            </Link>
           )}
           {incompleteFields.length > 0 && !presentation.canEdit && (
             <p className="mt-2 text-gray-600">请联系项目负责人或管理员补充复盘内容。</p>

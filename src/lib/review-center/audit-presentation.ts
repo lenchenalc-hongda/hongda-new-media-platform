@@ -390,6 +390,14 @@ export function formatAuditEvent(item: AuditLogDTO): AuditEventPresentation {
     return { ...base, title: '取消了一项改善行动', summaryItems: summary };
   }
 
+  if (item.entityType === 'REVIEW_METADATA' && item.action === 'REVIEW_METADATA_UPDATED') {
+    return {
+      ...base,
+      title: '更新了项目分类',
+      summaryItems: ['调整了项目的材质、工艺或问题分类信息'],
+    };
+  }
+
   return { ...base, title: '记录了一项管理操作', summaryItems: [] };
 }
 

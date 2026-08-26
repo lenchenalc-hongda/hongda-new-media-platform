@@ -5,8 +5,11 @@ import { useParams } from 'next/navigation';
 import AppLayout from '@/components/layout/AppLayout';
 import PageHeader from '@/components/layout/PageHeader';
 import ReviewCenterEmpty from '@/components/review-center/ReviewCenterEmpty';
+import MetadataChips from '@/components/review-center/MetadataChips';
+import MetadataEditor from '@/components/review-center/MetadataEditor';
 import { reviewStatusLabel } from '@/lib/review-center/formatters';
-import type { ReviewDetail, ReviewType, RiskLevel } from '@/lib/review-center/types';
+import { sanitizeMissingDimensions } from '@/lib/review-center/metadata';
+import type { ReviewDetail, ReviewMetadataDto, ReviewType, RiskLevel } from '@/lib/review-center/types';
 import {
   buildAssignmentsRequest,
   canManageAssignments,
@@ -101,6 +104,7 @@ export default function ReviewEditPage() {
   const [me, setMe] = useState<EditorMe | null>(null);
   const [detail, setDetail] = useState<ReviewDetail | null>(null);
   const [currentVersion, setCurrentVersion] = useState<number | null>(null);
+  const [metadataMissingDimensions, setMetadataMissingDimensions] = useState<string[]>([]);
   const [initialBasicInfo, setInitialBasicInfo] = useState<BasicInfoDraft | null>(null);
   const [draftBasicInfo, setDraftBasicInfo] = useState<BasicInfoDraft | null>(null);
   const [saveState, setSaveState] = useState<EditorMutationState>('idle');
@@ -272,6 +276,24 @@ export default function ReviewEditPage() {
   useEffect(() => {
     loadEditor();
   }, [loadEditor]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const raw = params.get('missing');
+    if (raw) {
+      setMetadataMissingDimensions(sanitizeMissingDimensions(raw.split(',')));
+    }
+    if (window.location.hash === '#metadata') {
+      requestAnimationFrame(() => {
+        document.getElementById('metadata')?.scrollIntoView({ behavior: 'smooth' });
+      });
+    }
+  }, []);
+
+  function handleMetadataSaved(version: number, metadata: ReviewMetadataDto) {
+    setCurrentVersion(version);
+    setDetail(prev => prev ? { ...prev, version, metadata } : prev);
+  }
 
   const canEdit = canEditDraft({
     role: me?.role ?? 'viewer',
@@ -1288,6 +1310,32 @@ export default function ReviewEditPage() {
             {saveState === 'saving' ? '保存中…' : '保存基础信息'}
           </button>
         </div>
+      </div>
+
+      <div id="metadata" className="bg-white border border-gray-200 rounded-lg p-6 mt-5">
+        <div className="mb-4 flex items-center justify-between">
+          <div>
+            <h2 className="text-base font-semibold text-gray-800">项目分类</h2>
+            <p className="mt-1 text-xs text-gray-500">材质、工艺、问题环节与问题表现</p>
+          </div>
+        </div>
+        {canEdit ? (
+          <MetadataEditor
+            reviewId={id ?? ''}
+            initialMetadata={detail.metadata}
+            status={detail.status}
+            reviewType={detail.review_type}
+            expectedVersion={currentVersion ?? 1}
+            currentRole={me?.role ?? null}
+            currentProfileId={me?.profile_id ?? null}
+            ownerId={detail.owner_id}
+            pmoId={detail.pmo_id}
+            onSaved={handleMetadataSaved}
+            missingDimensions={metadataMissingDimensions}
+          />
+        ) : (
+          <MetadataChips metadata={detail.metadata} />
+        )}
       </div>
 
       <div className="bg-white border border-gray-200 rounded-lg p-6 mt-5">

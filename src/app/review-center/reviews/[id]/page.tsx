@@ -6,8 +6,9 @@ import PageHeader from '@/components/layout/PageHeader';
 import ReviewCenterEmpty from '@/components/review-center/ReviewCenterEmpty';
 import { reviewStatusLabel, riskLevelLabel, formatReviewDateTime, formatReviewDate } from '@/lib/review-center/formatters';
 import { applyLifecycleSuccessToDetail, type LifecycleSuccessData } from '@/lib/review-center/lifecycle-presentation';
-import type { ReviewDetail } from '@/lib/review-center/types';
+import type { ReviewDetail, ReviewMetadataDto } from '@/lib/review-center/types';
 import { canViewManagementAudit } from '@/lib/review-center/audit-presentation';
+import MetadataSection from './metadata-section';
 import TimelineSection from './timeline-section';
 import LifecycleSection from './lifecycle-section';
 import ActionSection from './action-section';
@@ -85,6 +86,10 @@ export default function ReviewDetailPage() {
     void reloadAuthority(false);
   }, [reloadAuthority]);
 
+  const handleMetadataUpdated = useCallback((version: number, metadata: ReviewMetadataDto) => {
+    setReview(prev => prev ? { ...prev, version, metadata } : prev);
+  }, []);
+
   if (loading) {
     return (
       <AppLayout>
@@ -132,6 +137,12 @@ export default function ReviewDetailPage() {
           </div>
         </div>
       </div>
+
+      <MetadataSection
+        review={review}
+        me={me}
+        onMetadataUpdated={handleMetadataUpdated}
+      />
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="card"><h3 className="font-medium text-gray-800 mb-2">专项复盘内容</h3><p className="text-sm text-gray-400">下一阶段配置</p></div>

@@ -19,6 +19,12 @@ export const METADATA_MISSING_DIMENSION_WHITELIST = [
   'PROCESS',
 ] as const;
 
+export const METADATA_MISSING_DIMENSION_LABELS: Record<string, string> = {
+  PROBLEM_DOMAIN: '请至少选择一个“问题环节”',
+  PRIMARY_MATERIAL: '请选择“主要材质”',
+  PROCESS: '当前问题环节要求至少选择一种“工艺”',
+};
+
 export interface MetadataOptionDbRow {
   org_id: string | null;
   dict_type: string;
@@ -135,4 +141,12 @@ export function sanitizeMissingDimensions(value: unknown): string[] {
     }
   }
   return result;
+}
+
+export function missingDimensionLabel(code: string): string {
+  return METADATA_MISSING_DIMENSION_LABELS[code] ?? code;
+}
+
+export function buildMissingDimensionsQuery(values: string[]): string {
+  return sanitizeMissingDimensions(values).join(',');
 }

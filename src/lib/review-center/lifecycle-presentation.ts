@@ -1,5 +1,6 @@
 import type { ReviewDetail, ReviewStatus } from './types';
 import { REVIEW_STATUS_LABELS } from './formatters';
+import { sanitizeMissingDimensions } from './metadata';
 
 export type LifecycleActionKind = 'SUBMIT' | 'CLOSE' | 'RETURN' | 'REOPEN';
 
@@ -40,6 +41,7 @@ export interface LifecycleUiError {
   shouldRefreshAuthority: boolean;
   keepDialogOpen: boolean;
   incompleteFields: string[];
+  missingDimensions: string[];
 }
 
 export interface MutationLock {
@@ -192,6 +194,7 @@ export function classifyLifecycleError(
       shouldRefreshAuthority: false,
       keepDialogOpen: false,
       incompleteFields: [],
+      missingDimensions: [],
     };
   }
   if (status === 403) {
@@ -201,6 +204,7 @@ export function classifyLifecycleError(
       shouldRefreshAuthority: true,
       keepDialogOpen: false,
       incompleteFields: [],
+      missingDimensions: [],
     };
   }
   if (status === 409 && code === 'VERSION_CONFLICT') {
@@ -210,6 +214,7 @@ export function classifyLifecycleError(
       shouldRefreshAuthority: true,
       keepDialogOpen: false,
       incompleteFields: [],
+      missingDimensions: [],
     };
   }
   if (status === 409 && code === 'INVALID_TRANSITION') {
@@ -219,6 +224,7 @@ export function classifyLifecycleError(
       shouldRefreshAuthority: true,
       keepDialogOpen: false,
       incompleteFields: [],
+      missingDimensions: [],
     };
   }
   if (status === 422 && code === 'INCOMPLETE_REVIEW') {
@@ -233,6 +239,22 @@ export function classifyLifecycleError(
       incompleteFields: sanitizeIncompleteFields(
         data?.missingFields ?? data?.missing_fields,
       ),
+      missingDimensions: [],
+    };
+  }
+  if (status === 422 && code === 'METADATA_INCOMPLETE') {
+    const data = body?.data && typeof body.data === 'object'
+      ? (body.data as Record<string, unknown>)
+      : null;
+    return {
+      code,
+      message: '项目分类信息未完整，请补齐以下内容：',
+      shouldRefreshAuthority: false,
+      keepDialogOpen: false,
+      incompleteFields: [],
+      missingDimensions: sanitizeMissingDimensions(
+        data?.missingDimensions ?? data?.missing_dimensions,
+      ),
     };
   }
   if (status === 422 && code === 'INVALID_REASON') {
@@ -242,6 +264,7 @@ export function classifyLifecycleError(
       shouldRefreshAuthority: false,
       keepDialogOpen: true,
       incompleteFields: [],
+      missingDimensions: [],
     };
   }
   if (status === 409 && code === 'OPEN_ACTIONS_EXIST') {
@@ -263,6 +286,7 @@ export function classifyLifecycleError(
       shouldRefreshAuthority: false,
       keepDialogOpen: false,
       incompleteFields: [],
+      missingDimensions: [],
     };
   }
   return {
@@ -271,6 +295,7 @@ export function classifyLifecycleError(
     shouldRefreshAuthority: false,
     keepDialogOpen: false,
     incompleteFields: [],
+    missingDimensions: [],
   };
 }
 
