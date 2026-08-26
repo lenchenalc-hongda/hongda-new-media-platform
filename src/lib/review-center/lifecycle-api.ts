@@ -55,8 +55,20 @@ const LOCAL_ERROR_MESSAGES: Record<string, string> = {
   INVALID_TRANSITION: '当前复盘状态不允许执行此操作',
   INCOMPLETE_REVIEW: '复盘内容尚未填写完整，暂不能提交',
   INVALID_REASON: '重新打开原因无效，请填写有效原因',
+  OPEN_ACTIONS_EXIST: '仍有改善行动未完成验证，暂不能关闭复盘。',
   INTERNAL_ERROR: '复盘状态操作失败，请稍后重试',
 };
+
+function safeOpenActionCount(value: unknown): number | null {
+  if (
+    typeof value !== 'number'
+    || !Number.isSafeInteger(value)
+    || value < 1
+  ) {
+    return null;
+  }
+  return value;
+}
 
 function jsonError(message: string, status: number): NextResponse {
   return NextResponse.json({ error: message }, { status });
@@ -148,6 +160,25 @@ export function mapLifecycleRpcResult(
   }
 
   const code = typeof envelope.code === 'string' ? envelope.code : 'UNKNOWN';
+
+  if (code === 'OPEN_ACTIONS_EXIST') {
+    const rawData = envelope.data && typeof envelope.data === 'object'
+      ? (envelope.data as Record<string, unknown>)
+      : {};
+    const count = safeOpenActionCount(rawData.openActionCount);
+    return {
+      status: 409,
+      body: {
+        ok: false,
+        code,
+        message: count === null
+          ? LOCAL_ERROR_MESSAGES.OPEN_ACTIONS_EXIST
+          : `还有 ${count} 项改善行动未完成验证，暂不能关闭复盘。`,
+        data: count === null ? null : { openActionCount: count },
+      },
+    };
+  }
+
   const message = LOCAL_ERROR_MESSAGES[code] ?? LOCAL_ERROR_MESSAGES.INTERNAL_ERROR;
 
   if (code === 'FORBIDDEN') {

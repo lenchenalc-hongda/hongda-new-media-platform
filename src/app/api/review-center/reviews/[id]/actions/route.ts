@@ -10,6 +10,10 @@ import {
   mapActionRowsToDtos,
 } from '@/lib/review-center/actions';
 import { ParticipantReadError } from '@/lib/review-center/participant';
+import { createActionCommandSchema } from '@/lib/review-center/action-command-schemas';
+import {
+  runActionCommandRoute,
+} from '@/lib/review-center/action-command';
 
 export const dynamic = 'force-dynamic';
 
@@ -127,4 +131,26 @@ export async function GET(
     if (err instanceof ActionReadError) return jsonError('服务异常', 500);
     return jsonError('服务异常', 500);
   }
+}
+
+export async function POST(
+  req: NextRequest,
+  { params }: { params: { id: string } },
+) {
+  return runActionCommandRoute(
+    req,
+    params,
+    reviewIdSchema,
+    createActionCommandSchema,
+    'review_action_create',
+    (routeParams, body) => ({
+      p_review_id: routeParams.id,
+      p_title: body.title,
+      p_description: body.description ?? null,
+      p_action_type: body.actionType,
+      p_owner_profile_id: body.ownerProfileId,
+      p_due_date: body.dueDate,
+    }),
+    { createStatus201: true },
+  );
 }

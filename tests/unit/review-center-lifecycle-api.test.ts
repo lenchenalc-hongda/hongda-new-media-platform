@@ -173,5 +173,21 @@ assert(!JSON.stringify(transportMapped.body).includes('RAW TRANSPORT MESSAGE'), 
 assert(!JSON.stringify(transportMapped.body).includes('RAW DETAILS'), 'transport raw details hidden');
 assert(!JSON.stringify(transportMapped.body).includes('RAW HINT'), 'transport raw hint hidden');
 
+const openActions = mapLifecycleRpcResult('CLOSE', business('OPEN_ACTIONS_EXIST', 'RAW OPEN', {
+  openActionCount: 2,
+  secret_action_id: 'raw-action',
+  secret_title: 'raw-title',
+}));
+assert(openActions.status === 409 && openActions.body.code === 'OPEN_ACTIONS_EXIST', 'OPEN_ACTIONS_EXIST 409');
+assert(JSON.stringify(openActions.body.data) === '{"openActionCount":2}', 'OPEN_ACTIONS_EXIST data whitelist');
+assert(!JSON.stringify(openActions.body).includes('RAW OPEN'), 'OPEN_ACTIONS_EXIST raw message hidden');
+assert(!JSON.stringify(openActions.body).includes('raw-action'), 'OPEN_ACTIONS_EXIST action id hidden');
+assert(!JSON.stringify(openActions.body).includes('raw-title'), 'OPEN_ACTIONS_EXIST title hidden');
+
+for (const badCount of ['2', 0, -1, 1.5, null]) {
+  const malformed = mapLifecycleRpcResult('CLOSE', business('OPEN_ACTIONS_EXIST', 'RAW', { openActionCount: badCount }));
+  assert(malformed.status === 409 && malformed.body.data === null, 'OPEN_ACTIONS_EXIST malformed count safe 409');
+}
+
 console.log('\nPassed: ' + passed + ', Failed: ' + failed + ' / ' + (passed + failed));
 if (failed > 0) process.exitCode = 1;
