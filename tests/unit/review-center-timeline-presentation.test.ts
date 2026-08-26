@@ -383,5 +383,163 @@ const fallbackUnknown = formatTimelineEvent(item({
 }));
 assert(fallbackUnknown.title === '记录了一项项目动态' && fallbackUnknown.summaryItems.length === 0, 'unknown event fallback preserved');
 
+const actionCreatedEvent = formatTimelineEvent(item({
+  eventType: 'ACTION_CREATED',
+  details: { sequence: 1, title: '调整杯身印刷定位' },
+}));
+assert(
+  actionCreatedEvent.title === '创建了改善行动 #1：调整杯身印刷定位'
+    && actionCreatedEvent.summaryItems.length === 0,
+  'ACTION_CREATED presentation',
+);
+
+const actionUpdatedEvent = formatTimelineEvent(item({
+  eventType: 'ACTION_UPDATED',
+  details: {
+    sequence: 2,
+    title: '更新后标题',
+    changedFields: ['title', 'owner_profile_id', 'due_date', 'SECRET_FIELD'],
+  },
+}));
+assert(
+  actionUpdatedEvent.title === '更新了改善行动 #2：更新后标题',
+  'ACTION_UPDATED presentation',
+);
+assert(
+  actionUpdatedEvent.summaryItems[0] === '变更内容：标题、负责人、截止日期',
+  'ACTION_UPDATED changed field labels',
+);
+assert(!JSON.stringify(actionUpdatedEvent).includes('owner_profile_id'), 'ACTION_UPDATED raw key hidden');
+assert(!JSON.stringify(actionUpdatedEvent).includes('SECRET_FIELD'), 'ACTION_UPDATED unknown field hidden');
+
+const actionStartedEvent = formatTimelineEvent(item({
+  eventType: 'ACTION_STARTED',
+  details: { sequence: 3, title: '开始执行行动' },
+}));
+assert(
+  actionStartedEvent.title === '开始执行改善行动 #3：开始执行行动'
+    && actionStartedEvent.summaryItems.length === 0,
+  'ACTION_STARTED presentation',
+);
+
+const actionSubmittedEvent = formatTimelineEvent(item({
+  eventType: 'ACTION_SUBMITTED_FOR_VERIFICATION',
+  details: {
+    sequence: 4,
+    title: '提交验证行动',
+    completionNote: 'SECRET_COMPLETION_NOTE',
+  },
+}));
+assert(
+  actionSubmittedEvent.title === '提交改善行动 #4 等待验证：提交验证行动',
+  'ACTION_SUBMITTED_FOR_VERIFICATION presentation',
+);
+assert(!JSON.stringify(actionSubmittedEvent).includes('SECRET_COMPLETION_NOTE'), 'ACTION_SUBMITTED completion note hidden');
+
+const actionVerifiedEvent = formatTimelineEvent(item({
+  eventType: 'ACTION_VERIFIED',
+  details: {
+    sequence: 5,
+    title: '验证行动',
+    verificationNote: 'SECRET_VERIFICATION_NOTE',
+  },
+}));
+assert(
+  actionVerifiedEvent.title === '验证通过改善行动 #5：验证行动',
+  'ACTION_VERIFIED presentation',
+);
+assert(!JSON.stringify(actionVerifiedEvent).includes('SECRET_VERIFICATION_NOTE'), 'ACTION_VERIFIED verification note hidden');
+
+const actionReturnedEvent = formatTimelineEvent(item({
+  eventType: 'ACTION_RETURNED',
+  details: {
+    sequence: 6,
+    title: '退回行动',
+    reason: 'SECRET_RETURN_REASON',
+  },
+}));
+assert(
+  actionReturnedEvent.title === '退回了改善行动 #6：退回行动'
+    && actionReturnedEvent.summaryItems.length === 0,
+  'ACTION_RETURNED presentation',
+);
+assert(!JSON.stringify(actionReturnedEvent).includes('SECRET_RETURN_REASON'), 'ACTION_RETURNED reason hidden');
+
+const actionCancelledEvent = formatTimelineEvent(item({
+  eventType: 'ACTION_CANCELLED',
+  details: {
+    sequence: 7,
+    title: '取消行动',
+    cancelReason: 'SECRET_CANCEL_REASON',
+  },
+}));
+assert(
+  actionCancelledEvent.title === '取消了改善行动 #7：取消行动'
+    && actionCancelledEvent.summaryItems.length === 0,
+  'ACTION_CANCELLED presentation',
+);
+assert(!JSON.stringify(actionCancelledEvent).includes('SECRET_CANCEL_REASON'), 'ACTION_CANCELLED cancel reason hidden');
+
+const malformedActionStarted = formatTimelineEvent(item({
+  eventType: 'ACTION_STARTED',
+  details: { sequence: 0, title: 'x' },
+}));
+assert(
+  malformedActionStarted.title === '开始执行了一项改善行动'
+    && malformedActionStarted.summaryItems.length === 0,
+  'ACTION_STARTED malformed fallback',
+);
+
+const malformedActionUpdated = formatTimelineEvent(item({
+  eventType: 'ACTION_UPDATED',
+  details: { sequence: 2, title: '' },
+}));
+assert(
+  malformedActionUpdated.title === '更新了一项改善行动',
+  'ACTION_UPDATED malformed fallback',
+);
+
+const actionFutureSecret = formatTimelineEvent(item({
+  eventType: 'ACTION_FUTURE_SECRET_EVENT',
+  details: { secret: 'x' },
+}));
+assert(
+  actionFutureSecret.title === '记录了一项项目动态'
+    && actionFutureSecret.summaryItems.length === 0,
+  'unknown ACTION_* event stays global fallback',
+);
+assert(!JSON.stringify(actionFutureSecret).includes('ACTION_FUTURE_SECRET_EVENT'), 'unknown ACTION event type hidden');
+
+const actionInactiveActor = formatTimelineEvent(item({
+  eventType: 'ACTION_CREATED',
+  actor: { displayName: '李四', role: 'manager', isActive: false },
+  details: { sequence: 1, title: '历史行动' },
+}));
+assert(
+  actionInactiveActor.actorLabel === '李四' && actionInactiveActor.actorStateLabel === '已停用',
+  'ACTION event inactive actor preserved',
+);
+
+const actionNullActor = formatTimelineEvent(item({
+  eventType: 'ACTION_CREATED',
+  actor: { displayName: '系统操作', role: null, isActive: null },
+  details: { sequence: 1, title: '系统行动' },
+}));
+assert(actionNullActor.actorLabel === '系统操作', 'ACTION event null actor reuse');
+
+const actionSecretPayload = formatTimelineEvent(item({
+  eventType: 'ACTION_CREATED',
+  details: {
+    sequence: 1,
+    title: '安全标题',
+    action_id: 'SECRET_UUID',
+    email: 'SECRET_EMAIL',
+    nested: { secret: 'SECRET_NESTED' },
+  },
+}));
+for (const marker of ['SECRET_UUID', 'SECRET_EMAIL', 'SECRET_NESTED']) {
+  assert(!JSON.stringify(actionSecretPayload).includes(marker), 'ACTION presentation excludes marker: ' + marker);
+}
+
 console.log('\nPassed: ' + passed + ', Failed: ' + failed + ' / ' + (passed + failed));
 if (failed > 0) process.exitCode = 1;

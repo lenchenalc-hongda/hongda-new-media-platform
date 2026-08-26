@@ -145,6 +145,101 @@ const unknown = sanitizeTimelineDetails('CAPA_FUTURE_EVENT', {
 });
 assert(deepEqual(unknown, {}), 'unknown event returns empty details');
 
+const actionCreated = sanitizeTimelineDetails('ACTION_CREATED', {
+  action_id: 'SECRET_UUID',
+  sequence: 1,
+  title: '调整杯身印刷定位',
+  description: 'SECRET_DESCRIPTION',
+  owner_profile_id: 'SECRET_OWNER',
+  email: 'SECRET_EMAIL',
+  nested: { secret: 'SECRET_NESTED' },
+});
+assert(
+  deepEqual(actionCreated, { sequence: 1, title: '调整杯身印刷定位' }),
+  'ACTION_CREATED whitelist only',
+);
+assert(!JSON.stringify(actionCreated).includes('SECRET_UUID'), 'ACTION_CREATED action id hidden');
+assert(!JSON.stringify(actionCreated).includes('SECRET_DESCRIPTION'), 'ACTION_CREATED description hidden');
+assert(!JSON.stringify(actionCreated).includes('SECRET_OWNER'), 'ACTION_CREATED owner hidden');
+assert(!JSON.stringify(actionCreated).includes('SECRET_EMAIL'), 'ACTION_CREATED email hidden');
+assert(!JSON.stringify(actionCreated).includes('SECRET_NESTED'), 'ACTION_CREATED nested secret hidden');
+
+const actionUpdated = sanitizeTimelineDetails('ACTION_UPDATED', {
+  action_id: 'SECRET_UUID',
+  sequence: 2,
+  title: '更新后标题',
+  changed_fields: [
+    'title',
+    'owner_profile_id',
+    'due_date',
+    'SECRET_FIELD',
+    'title',
+    'owner_profile_id',
+    'due_date',
+    'due_date',
+    'description',
+    'action_type',
+  ],
+  old_value: 'x',
+  new_value: 'y',
+  owner_uuid: 'SECRET_UUID',
+  description: 'SECRET_DESCRIPTION',
+});
+assert(
+  deepEqual(actionUpdated, {
+    sequence: 2,
+    title: '更新后标题',
+    changedFields: ['title', 'owner_profile_id', 'due_date', 'description', 'action_type'],
+  }),
+  'ACTION_UPDATED changedFields whitelist dedup order cap',
+);
+assert(!JSON.stringify(actionUpdated).includes('SECRET_FIELD'), 'ACTION_UPDATED unknown field hidden');
+assert(!JSON.stringify(actionUpdated).includes('old_value'), 'ACTION_UPDATED old value hidden');
+assert(!JSON.stringify(actionUpdated).includes('owner_uuid'), 'ACTION_UPDATED owner uuid hidden');
+assert(!JSON.stringify(actionUpdated).includes('SECRET_DESCRIPTION'), 'ACTION_UPDATED description hidden');
+
+for (const badPayload of [
+  null,
+  ['x'],
+  {},
+  { sequence: 0, title: 'x' },
+  { sequence: -1, title: 'x' },
+  { sequence: 1.5, title: 'x' },
+  { sequence: '1', title: 'x' },
+  { sequence: 1, title: '' },
+  { sequence: 1, title: '   ' },
+  { sequence: 1, title: 'x'.repeat(201) },
+  { sequence: 1, title: { bad: true } },
+]) {
+  const result = sanitizeTimelineDetails('ACTION_STARTED', badPayload);
+  assert(!('sequence' in result) || (result.sequence as number) >= 1, 'ACTION_STARTED bad sequence safe');
+  assert(!('title' in result) || typeof result.title === 'string', 'ACTION_STARTED bad title safe');
+}
+
+const actionUpdatedBadChanged = sanitizeTimelineDetails('ACTION_UPDATED', {
+  sequence: 3,
+  title: '标题',
+  changed_fields: 'bad',
+});
+assert(
+  deepEqual(actionUpdatedBadChanged, {
+    sequence: 3,
+    title: '标题',
+    changedFields: [],
+  }),
+  'ACTION_UPDATED malformed changed_fields becomes empty array',
+);
+
+const actionUpdatedNullChanged = sanitizeTimelineDetails('ACTION_UPDATED', {
+  sequence: 3,
+  title: '标题',
+  changed_fields: null,
+});
+assert(
+  deepEqual(actionUpdatedNullChanged.changedFields, []),
+  'ACTION_UPDATED null changed_fields becomes empty array',
+);
+
 const activeActor = resolveTimelineActor('p1', [
   { profile_id: 'p1', display_name: '张三', role: 'admin', is_active: true },
 ]);

@@ -54,6 +54,37 @@ export const TYPE_DETAIL_FIELD_LABELS: Record<string, string> = {
   improvement_advice: '改善建议',
 };
 
+const ACTION_TIMELINE_EVENT_TYPES = new Set([
+  'ACTION_CREATED',
+  'ACTION_UPDATED',
+  'ACTION_STARTED',
+  'ACTION_SUBMITTED_FOR_VERIFICATION',
+  'ACTION_VERIFIED',
+  'ACTION_RETURNED',
+  'ACTION_CANCELLED',
+]);
+
+const ACTION_CHANGED_FIELD_LABELS: Record<string, string> = {
+  title: '标题',
+  description: '描述',
+  action_type: '行动类型',
+  owner_profile_id: '负责人',
+  due_date: '截止日期',
+};
+
+const ACTION_EVENT_PRESENTATION: Record<string, { full: string; generic: string }> = {
+  ACTION_CREATED: { full: '创建了改善行动', generic: '创建了一项改善行动' },
+  ACTION_UPDATED: { full: '更新了改善行动', generic: '更新了一项改善行动' },
+  ACTION_STARTED: { full: '开始执行改善行动', generic: '开始执行了一项改善行动' },
+  ACTION_SUBMITTED_FOR_VERIFICATION: {
+    full: '提交改善行动',
+    generic: '提交了一项改善行动等待验证',
+  },
+  ACTION_VERIFIED: { full: '验证通过改善行动', generic: '验证通过了一项改善行动' },
+  ACTION_RETURNED: { full: '退回了改善行动', generic: '退回了一项改善行动' },
+  ACTION_CANCELLED: { full: '取消了改善行动', generic: '取消了一项改善行动' },
+};
+
 export interface TimelineEventPresentation {
   title: string;
   summaryItems: string[];
@@ -121,6 +152,61 @@ export function formatTimelineFieldLabels(
     result.push(label);
   }
   return result;
+}
+
+function getActionTimelineSequence(details: Record<string, unknown>): number | undefined {
+  const value = details.sequence;
+  return typeof value === 'number' && Number.isInteger(value) && value >= 1
+    ? value
+    : undefined;
+}
+
+function getActionTimelineTitle(details: Record<string, unknown>): string | undefined {
+  const value = details.title;
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  if (trimmed.length < 1 || trimmed.length > 200) return undefined;
+  return trimmed;
+}
+
+function getActionTimelineChangedFields(details: Record<string, unknown>): string[] {
+  const value = details.changedFields;
+  return Array.isArray(value) ? value.slice(0, 5) : [];
+}
+
+function formatActionTimelineEvent(item: TimelineItemDTO): TimelineEventPresentation {
+  const base = {
+    actorLabel: formatTimelineActorLabel(item.actor.displayName),
+    actorRoleLabel: formatAuthRoleLabel(item.actor.role),
+    actorStateLabel: item.actor.isActive === false ? '已停用' : null,
+  };
+  const spec = ACTION_EVENT_PRESENTATION[item.eventType];
+  if (!spec) {
+    return { ...base, title: '记录了一项项目动态', summaryItems: [] };
+  }
+
+  const sequence = getActionTimelineSequence(item.details);
+  const title = getActionTimelineTitle(item.details);
+  const hasIdentity = sequence !== undefined && title !== undefined;
+  let primary: string;
+  if (hasIdentity) {
+    primary = item.eventType === 'ACTION_SUBMITTED_FOR_VERIFICATION'
+      ? `提交改善行动 #${sequence} 等待验证：${title}`
+      : `${spec.full} #${sequence}：${title}`;
+  } else {
+    primary = spec.generic;
+  }
+
+  const summaryItems: string[] = [];
+  if (item.eventType === 'ACTION_UPDATED') {
+    const labels = formatTimelineFieldLabels(
+      getActionTimelineChangedFields(item.details),
+      ACTION_CHANGED_FIELD_LABELS,
+    );
+    if (labels.length > 0) summaryItems.push(`变更内容：${labels.join('、')}`);
+  }
+
+  return { ...base, title: primary, summaryItems };
 }
 
 export function formatTimelineActorLabel(displayName: unknown): string {
@@ -233,6 +319,10 @@ export function formatTimelineEvent(item: TimelineItemDTO): TimelineEventPresent
       return { ...base, title: '重新打开了复盘', summaryItems };
     }
     return { ...base, title: '更新了复盘状态', summaryItems: [] };
+  }
+
+  if (ACTION_TIMELINE_EVENT_TYPES.has(item.eventType)) {
+    return formatActionTimelineEvent(item);
   }
 
   return { ...base, title: '记录了一项项目动态', summaryItems: [] };

@@ -233,5 +233,69 @@ const actorUnknown = await runGet(baseOptions({
 assert(actorUnknown.status === 500 && actorUnknown.body.error === '项目动态加载失败，请稍后重试。', 'actor unknown business code returns generic 500');
 assert(!JSON.stringify(actorUnknown.body).includes('RAW UNKNOWN'), 'actor unknown raw message not exposed');
 
+const ACTION_EVENT_TYPES = [
+  'ACTION_CREATED',
+  'ACTION_UPDATED',
+  'ACTION_STARTED',
+  'ACTION_SUBMITTED_FOR_VERIFICATION',
+  'ACTION_VERIFIED',
+  'ACTION_RETURNED',
+  'ACTION_CANCELLED',
+];
+const actionTimelineRows = ACTION_EVENT_TYPES.map((eventType, index) => ({
+  id: `action-event-${index}`,
+  event_type: eventType,
+  actor_profile_id: PROFILE_ID,
+  payload: {
+    action_id: 'SECRET_UUID',
+    sequence: index + 1,
+    title: '行动标题',
+    description: 'SECRET_DESCRIPTION',
+    completion_note: 'SECRET_COMPLETION_NOTE',
+    verification_note: 'SECRET_VERIFICATION_NOTE',
+    cancel_reason: 'SECRET_CANCEL_REASON',
+    email: 'SECRET_EMAIL',
+    nested: { secret: 'SECRET_NESTED' },
+    ...(eventType === 'ACTION_UPDATED' ? {
+      changed_fields: ['title', 'owner_profile_id', 'SECRET_FIELD'],
+    } : {}),
+  },
+  version: index + 1,
+  created_at: '2026-08-25T00:00:00Z',
+}));
+const actionTimeline = await runGet(baseOptions({
+  timeline: { data: actionTimelineRows, error: null },
+  rpcResult: actorOk([
+    { profile_id: PROFILE_ID, display_name: '管理员', role: 'admin', is_active: true },
+  ]),
+}));
+assert(actionTimeline.status === 200 && actionTimeline.body.data.items.length === 7, 'all seven ACTION events returned');
+for (let i = 0; i < ACTION_EVENT_TYPES.length; i++) {
+  const actionItem = actionTimeline.body.data.items[i];
+  assert(actionItem.eventType === ACTION_EVENT_TYPES[i], 'ACTION event type preserved: ' + ACTION_EVENT_TYPES[i]);
+  assert(actionItem.details.sequence === i + 1, 'ACTION sequence safe: ' + ACTION_EVENT_TYPES[i]);
+  assert(actionItem.details.title === '行动标题', 'ACTION title safe: ' + ACTION_EVENT_TYPES[i]);
+  if (ACTION_EVENT_TYPES[i] === 'ACTION_UPDATED') {
+    assert(
+      JSON.stringify(actionItem.details.changedFields) === '["title","owner_profile_id"]',
+      'ACTION_UPDATED changedFields whitelist',
+    );
+  }
+}
+const actionSerialized = JSON.stringify(actionTimeline.body);
+for (const marker of [
+  'SECRET_UUID',
+  'SECRET_DESCRIPTION',
+  'SECRET_COMPLETION_NOTE',
+  'SECRET_VERIFICATION_NOTE',
+  'SECRET_CANCEL_REASON',
+  'SECRET_EMAIL',
+  'SECRET_NESTED',
+  'action_id',
+  'changed_fields',
+]) {
+  assert(!actionSerialized.includes(marker), 'ACTION timeline response excludes marker: ' + marker);
+}
+
 console.log('\nPassed: ' + passed + ', Failed: ' + failed + ' / ' + (passed + failed));
 if (failed > 0) process.exitCode = 1;

@@ -83,6 +83,24 @@ const MEMBER_ROLES = new Set([
   'OTHER',
 ]);
 
+const ACTION_TIMELINE_EVENT_TYPES = new Set([
+  'ACTION_CREATED',
+  'ACTION_UPDATED',
+  'ACTION_STARTED',
+  'ACTION_SUBMITTED_FOR_VERIFICATION',
+  'ACTION_VERIFIED',
+  'ACTION_RETURNED',
+  'ACTION_CANCELLED',
+]);
+
+const ACTION_CHANGED_FIELD_KEYS = new Set([
+  'title',
+  'description',
+  'action_type',
+  'owner_profile_id',
+  'due_date',
+]);
+
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
@@ -107,6 +125,50 @@ function normalizeMemberRole(value: unknown): string | null {
 
 function objectChanged(value: unknown): boolean {
   return isObject(value);
+}
+
+function sanitizeActionSequence(value: unknown): number | undefined {
+  if (typeof value !== 'number' || !Number.isInteger(value) || value < 1) {
+    return undefined;
+  }
+  return value;
+}
+
+function sanitizeActionTitle(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  if (trimmed.length < 1 || trimmed.length > 200) return undefined;
+  return trimmed;
+}
+
+function sanitizeActionChangedFields(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const field of value) {
+    if (typeof field !== 'string') continue;
+    if (!ACTION_CHANGED_FIELD_KEYS.has(field)) continue;
+    if (seen.has(field)) continue;
+    seen.add(field);
+    result.push(field);
+    if (result.length >= ACTION_CHANGED_FIELD_KEYS.size) break;
+  }
+  return result;
+}
+
+function sanitizeActionTimelineDetails(
+  eventType: string,
+  source: Record<string, unknown>,
+): Record<string, unknown> {
+  const details: Record<string, unknown> = {};
+  const sequence = sanitizeActionSequence(source.sequence);
+  if (sequence !== undefined) details.sequence = sequence;
+  const title = sanitizeActionTitle(source.title);
+  if (title !== undefined) details.title = title;
+  if (eventType === 'ACTION_UPDATED') {
+    details.changedFields = sanitizeActionChangedFields(source.changed_fields);
+  }
+  return details;
 }
 
 export function parseTimelinePagination(
@@ -214,6 +276,10 @@ export function sanitizeTimelineDetails(
       return details;
     }
     return {};
+  }
+
+  if (ACTION_TIMELINE_EVENT_TYPES.has(eventType)) {
+    return sanitizeActionTimelineDetails(eventType, source);
   }
 
   return {};
