@@ -27,10 +27,12 @@ console.log('\n=== Review Center Profile Directory API ===');
 
 assert(parseProfileDirectoryQuery(new URLSearchParams('?purpose=MEMBER')).success, 'MEMBER query pass');
 assert(parseProfileDirectoryQuery(new URLSearchParams('?purpose=ASSIGNMENT')).success, 'ASSIGNMENT query pass');
+assert(parseProfileDirectoryQuery(new URLSearchParams('?purpose=ACTION_OWNER')).success, 'ACTION_OWNER query pass');
 assert(!parseProfileDirectoryQuery(new URLSearchParams('')).success, 'missing purpose rejected');
 assert(!parseProfileDirectoryQuery(new URLSearchParams('?purpose=')).success, 'empty purpose rejected');
 assert(!parseProfileDirectoryQuery(new URLSearchParams('?purpose=member')).success, 'lowercase member rejected');
 assert(!parseProfileDirectoryQuery(new URLSearchParams('?purpose=assignment')).success, 'lowercase assignment rejected');
+assert(!parseProfileDirectoryQuery(new URLSearchParams('?purpose=action_owner')).success, 'lowercase action_owner rejected');
 assert(!parseProfileDirectoryQuery(new URLSearchParams('?purpose=%20MEMBER%20')).success, 'whitespace purpose rejected');
 assert(!parseProfileDirectoryQuery(new URLSearchParams('?purpose=UNKNOWN')).success, 'unknown purpose rejected');
 assert(!parseProfileDirectoryQuery(new URLSearchParams('?purpose=MEMBER&orgId=x')).success, 'extra orgId rejected');
@@ -107,9 +109,11 @@ async function runServiceMappingTests() {
 
   await callProfileDirectory(client, 'MEMBER');
   await callProfileDirectory(client, 'ASSIGNMENT');
-  assert(calls.length === 2, 'two rpc calls');
+  await callProfileDirectory(client, 'ACTION_OWNER');
+  assert(calls.length === 3, 'three rpc calls');
   assert(calls[0].name === 'review_profile_directory' && calls[0].args.p_purpose === 'MEMBER', 'member rpc mapping');
   assert(calls[1].name === 'review_profile_directory' && calls[1].args.p_purpose === 'ASSIGNMENT', 'assignment rpc mapping');
+  assert(calls[2].name === 'review_profile_directory' && calls[2].args.p_purpose === 'ACTION_OWNER', 'action owner rpc mapping');
 }
 
 runServiceMappingTests().then(() => {

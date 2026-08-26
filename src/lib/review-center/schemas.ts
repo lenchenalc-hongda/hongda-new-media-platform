@@ -140,7 +140,7 @@ export const assignmentsRequestSchema = z.object({
   pmoId: uuidSchema.nullable().optional(),
 }).strict();
 
-export const directoryPurposeSchema = z.enum(['MEMBER', 'ASSIGNMENT']);
+export const directoryPurposeSchema = z.enum(['MEMBER', 'ASSIGNMENT', 'ACTION_OWNER']);
 
 export const profileDirectoryQuerySchema = z.object({
   purpose: directoryPurposeSchema,

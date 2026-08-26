@@ -181,6 +181,19 @@ const incomplete = classifyLifecycleError(422, {
 assert(incomplete.message === '复盘内容还未填写完整，请先补充以下内容：' && JSON.stringify(incomplete.incompleteFields) === '["description"]', 'incomplete mapping');
 const invalidReason = classifyLifecycleError(422, { code: 'INVALID_REASON', message: 'RAW' });
 assert(invalidReason.message === '请填写有效的重新打开原因。' && invalidReason.keepDialogOpen, 'invalid reason mapping');
+const openActions = classifyLifecycleError(409, {
+  code: 'OPEN_ACTIONS_EXIST',
+  message: 'RAW',
+  data: { openActionCount: 2 },
+});
+assert(openActions.message === '还有 2 项改善行动未完成验证，暂不能关闭复盘。', 'OPEN_ACTIONS_EXIST count mapping');
+const openActionsNoCount = classifyLifecycleError(409, {
+  code: 'OPEN_ACTIONS_EXIST',
+  message: 'RAW',
+  data: null,
+});
+assert(openActionsNoCount.message === '还有改善行动未完成验证，暂不能关闭复盘。', 'OPEN_ACTIONS_EXIST fallback mapping');
+assert(!openActions.message.includes('RAW') && !openActionsNoCount.message.includes('RAW'), 'OPEN_ACTIONS_EXIST raw hidden');
 const internal = classifyLifecycleError(500, { code: 'SOMETHING', message: 'RAW' });
 assert(internal.message === '操作失败，请稍后重试。', '500 generic');
 

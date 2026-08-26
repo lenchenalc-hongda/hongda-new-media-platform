@@ -244,6 +244,27 @@ export function classifyLifecycleError(
       incompleteFields: [],
     };
   }
+  if (status === 409 && code === 'OPEN_ACTIONS_EXIST') {
+    const data = body?.data && typeof body.data === 'object'
+      ? (body.data as Record<string, unknown>)
+      : null;
+    const count =
+      data?.openActionCount !== null
+      && typeof data?.openActionCount === 'number'
+      && Number.isSafeInteger(data.openActionCount)
+      && data.openActionCount >= 1
+        ? data.openActionCount as number
+        : null;
+    return {
+      code,
+      message: count === null
+        ? '还有改善行动未完成验证，暂不能关闭复盘。'
+        : `还有 ${count} 项改善行动未完成验证，暂不能关闭复盘。`,
+      shouldRefreshAuthority: false,
+      keepDialogOpen: false,
+      incompleteFields: [],
+    };
+  }
   return {
     code: 'INTERNAL_ERROR',
     message: '操作失败，请稍后重试。',

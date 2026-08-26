@@ -9,6 +9,7 @@ import { applyLifecycleSuccessToDetail, type LifecycleSuccessData } from '@/lib/
 import type { ReviewDetail } from '@/lib/review-center/types';
 import TimelineSection from './timeline-section';
 import LifecycleSection from './lifecycle-section';
+import ActionSection from './action-section';
 
 export default function ReviewDetailPage() {
   const params = useParams();
@@ -130,11 +131,19 @@ export default function ReviewDetailPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="card"><h3 className="font-medium text-gray-800 mb-2">专项复盘内容</h3><p className="text-sm text-gray-400">下一阶段配置</p></div>
         <div className="card"><h3 className="font-medium text-gray-800 mb-2">项目成员</h3><p className="text-sm text-gray-400">{review.members.length > 0 ? `${review.members.length} 位成员` : '下一阶段配置'}</p></div>
-        <div className="card"><h3 className="font-medium text-gray-800 mb-2">改善行动</h3><p className="text-sm text-gray-400">下一阶段配置</p></div>
       </div>
+
+      <ActionSection
+        reviewId={id ?? ''}
+        reviewStatus={review.status}
+        reviewOwnerProfileId={review.owner_id}
+        reviewPmoProfileId={review.pmo_id}
+        currentProfileId={me?.profile_id ?? null}
+        currentRole={me?.role ?? null}
+      />
 
       <LifecycleSection
         reviewId={id ?? ''}
