@@ -1,8 +1,11 @@
 'use client';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import AppLayout from '@/components/layout/AppLayout';
 import PageHeader from '@/components/layout/PageHeader';
 import ReviewCenterEmpty from '@/components/review-center/ReviewCenterEmpty';
+import DashboardSection from '@/app/review-center/dashboard-section';
+import { canViewManagementDashboard } from '@/lib/review-center/dashboard-presentation';
 
 const QUICK_LINKS = [
   { label: '新建复盘', href: '/review-center/new', icon: '➕', desc: '记录项目异常' },
@@ -11,7 +14,36 @@ const QUICK_LINKS = [
   { label: '改善任务', href: '/review-center/actions', icon: '🛠️', desc: '跟踪改善执行' },
 ];
 
+const PLACEHOLDER_CARDS = [
+  { title: '近期复盘', description: '项目异常复盘提交后，将在这里展示。' },
+  { title: '待处理事项', description: '待审核、待验证事项将在这里集中展示。' },
+  { title: '改善任务', description: '改善任务创建后，将在这里跟踪执行进度。' },
+];
+
 export default function ReviewCenterHomePage() {
+  const [meRole, setMeRole] = useState<string | null>(null);
+  const [meReady, setMeReady] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    fetch('/api/review-center/me')
+      .then(response => response.json())
+      .then(data => {
+        if (active) setMeRole(typeof data.role === 'string' ? data.role : null);
+      })
+      .catch(() => {
+        if (active) setMeRole(null);
+      })
+      .finally(() => {
+        if (active) setMeReady(true);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const showDashboard = meReady && canViewManagementDashboard(meRole);
+
   return (
     <AppLayout>
       <PageHeader
@@ -29,24 +61,18 @@ export default function ReviewCenterHomePage() {
         ))}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <div className="card">
-          <h3 className="font-semibold text-gray-800 mb-3">近期复盘</h3>
-          <ReviewCenterEmpty title="暂无数据" description="项目异常复盘提交后，将在这里展示。" />
+      {showDashboard ? (
+        <DashboardSection />
+      ) : (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          {PLACEHOLDER_CARDS.map(card => (
+            <div key={card.title} className="card">
+              <h3 className="font-semibold text-gray-800 mb-3">{card.title}</h3>
+              <ReviewCenterEmpty title="暂无数据" description={card.description} />
+            </div>
+          ))}
         </div>
-        <div className="card">
-          <h3 className="font-semibold text-gray-800 mb-3">待处理事项</h3>
-          <ReviewCenterEmpty title="暂无数据" description="待审核、待验证事项将在这里集中展示。" />
-        </div>
-        <div className="card">
-          <h3 className="font-semibold text-gray-800 mb-3">改善任务</h3>
-          <ReviewCenterEmpty title="暂无数据" description="改善任务创建后，将在这里跟踪执行进度。" />
-        </div>
-        <div className="card">
-          <h3 className="font-semibold text-gray-800 mb-3">管理概览</h3>
-          <ReviewCenterEmpty title="暂无数据" description="复盘数据积累后，将在这里展示管理统计。" />
-        </div>
-      </div>
+      )}
     </AppLayout>
   );
 }

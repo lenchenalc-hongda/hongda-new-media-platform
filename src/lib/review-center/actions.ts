@@ -55,7 +55,7 @@ export class ActionReadError extends Error {
   }
 }
 
-const ACTION_STATUSES = [
+export const ACTION_STATUSES = [
   'OPEN',
   'IN_PROGRESS',
   'PENDING_VERIFICATION',
@@ -63,7 +63,7 @@ const ACTION_STATUSES = [
   'CANCELLED',
 ] as const;
 
-const ACTION_TYPES = [
+export const ACTION_TYPES = [
   'IMMEDIATE',
   'CORRECTIVE',
   'PREVENTIVE',
