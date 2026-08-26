@@ -7,9 +7,11 @@ import ReviewCenterEmpty from '@/components/review-center/ReviewCenterEmpty';
 import { reviewStatusLabel, riskLevelLabel, formatReviewDateTime, formatReviewDate } from '@/lib/review-center/formatters';
 import { applyLifecycleSuccessToDetail, type LifecycleSuccessData } from '@/lib/review-center/lifecycle-presentation';
 import type { ReviewDetail } from '@/lib/review-center/types';
+import { canViewManagementAudit } from '@/lib/review-center/audit-presentation';
 import TimelineSection from './timeline-section';
 import LifecycleSection from './lifecycle-section';
 import ActionSection from './action-section';
+import AuditSection from './audit-section';
 
 export default function ReviewDetailPage() {
   const params = useParams();
@@ -163,6 +165,12 @@ export default function ReviewDetailPage() {
       <div className="mt-5">
         <TimelineSection reviewId={id ?? ''} refreshKey={timelineRefreshKey} />
       </div>
+
+      {canViewManagementAudit(me?.role ?? null) && (
+        <div className="mt-5">
+          <AuditSection reviewId={id ?? ''} currentRole={me?.role ?? null} />
+        </div>
+      )}
     </AppLayout>
   );
 }
