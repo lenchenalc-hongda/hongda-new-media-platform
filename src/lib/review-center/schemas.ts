@@ -128,6 +128,39 @@ export const typeDetailsRequestSchema = z.object({
   patch: typeDetailsPatchSchema,
 }).strict();
 
+export const metadataCodeSchema = z.string().trim().min(1, '分类代码不能为空').max(100);
+
+export function optionalMetadataOtherText() {
+  return z.preprocess(
+    (value) => (typeof value === 'string' && value.trim() === '' ? null : value),
+    z.string().trim().max(200).nullable(),
+  );
+}
+
+export const metadataMaterialInputSchema = z.object({
+  code: metadataCodeSchema,
+  isPrimary: z.boolean(),
+}).strict();
+
+export const metadataOtherInputSchema = z.object({
+  materialOtherText: optionalMetadataOtherText(),
+  processOtherText: optionalMetadataOtherText(),
+  problemDomainOtherText: optionalMetadataOtherText(),
+  problemSymptomOtherText: optionalMetadataOtherText(),
+}).strict();
+
+export const metadataMutationSchema = z.object({
+  expectedVersion: expectedVersionSchema,
+  materials: z.array(metadataMaterialInputSchema).max(50),
+  processes: z.array(metadataCodeSchema).max(50),
+  problemDomains: z.array(metadataCodeSchema).max(50),
+  problemSymptoms: z.array(metadataCodeSchema).max(50),
+  other: metadataOtherInputSchema,
+  reason: z.string().trim().max(1000).optional(),
+}).strict();
+
+export type MetadataMutationInput = z.infer<typeof metadataMutationSchema>;
+
 export const addMemberRequestSchema = z.object({
   expectedVersion: expectedVersionSchema,
   profileId: uuidSchema,

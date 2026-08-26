@@ -5,7 +5,12 @@ import type {
   ReviewListQuery,
   ReviewListResponse,
   ReviewParticipant,
+  ReviewMetadataDto,
 } from './types';
+import {
+  buildReviewMetadataDto,
+  type ReviewMetadataItemRow,
+} from './metadata';
 import { nextReviewNumber } from './review-number';
 import { normalizeSearchQuery } from './search';
 import { ParticipantReadError, parseParticipantDirectoryResult } from './participant';
@@ -148,6 +153,7 @@ export async function createDraftReview(
         type_details: null,
         members: [],
         participants: [],
+        metadata: null,
       };
     }
     if (error?.code === '23505' && attempt < maxAttempts) continue;
@@ -158,6 +164,57 @@ export async function createDraftReview(
   }
 
   throw new ReviewServiceError('复盘编号冲突，请重试', 409);
+}
+
+export async function getReviewMetadataDTO(
+  client: any,
+  orgId: string,
+  reviewId: string,
+): Promise<ReviewMetadataDto | null> {
+  const metadataResult = await client
+    .from('review_metadata')
+    .select(
+      'review_id,org_id,material_other_text,process_other_text,problem_domain_other_text,problem_symptom_other_text',
+    )
+    .eq('review_id', reviewId)
+    .eq('org_id', orgId)
+    .maybeSingle();
+  if (metadataResult.error) throw new ReviewServiceError('复盘详情读取失败', 500);
+  if (!metadataResult.data) return null;
+
+  const itemsResult = await client
+    .from('review_metadata_items')
+    .select('metadata_type,is_primary,dict_item_id')
+    .eq('review_id', reviewId)
+    .eq('org_id', orgId);
+  if (itemsResult.error) throw new ReviewServiceError('复盘详情读取失败', 500);
+
+  const itemRows: ReviewMetadataItemRow[] = [];
+  if (itemsResult.data && itemsResult.data.length > 0) {
+    const dictIds = itemsResult.data.map((row: any) => row.dict_item_id);
+    const dictResult = await client
+      .from('review_dict_items')
+      .select('id,code,label')
+      .in('id', dictIds);
+    if (dictResult.error) throw new ReviewServiceError('复盘详情读取失败', 500);
+
+    const labelMap = new Map<string, { code: string; label: string }>();
+    for (const dictRow of dictResult.data ?? []) {
+      labelMap.set(dictRow.id, { code: dictRow.code, label: dictRow.label });
+    }
+
+    for (const row of itemsResult.data) {
+      const label = labelMap.get(row.dict_item_id) ?? { code: 'UNKNOWN', label: '未知分类' };
+      itemRows.push({
+        metadata_type: row.metadata_type,
+        is_primary: row.is_primary,
+        code: label.code,
+        label: label.label,
+      });
+    }
+  }
+
+  return buildReviewMetadataDto({ metadataRow: metadataResult.data, items: itemRows });
 }
 
 export async function getReviewDetail(
@@ -202,10 +259,13 @@ export async function getReviewDetail(
     throw new ReviewServiceError('复盘详情读取失败', 500);
   }
 
+  const metadata = await getReviewMetadataDTO(client, orgId, reviewId);
+
   return {
     ...(review as ReviewDetail),
     type_details: typeResult.data ?? null,
     members: membersResult.data ?? [],
     participants,
+    metadata,
   };
 }

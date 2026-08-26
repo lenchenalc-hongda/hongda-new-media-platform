@@ -4,6 +4,7 @@ import { requireUserFromRequest } from '@/lib/auth/current-user';
 import { AuthError } from '@/lib/auth/types';
 import { createClient } from '@/lib/supabase/server';
 import { reviewIdSchema } from './schemas';
+import { sanitizeMissingDimensions } from './metadata';
 
 export type LifecycleCommand = 'SUBMIT' | 'CLOSE' | 'REOPEN';
 
@@ -54,6 +55,7 @@ const LOCAL_ERROR_MESSAGES: Record<string, string> = {
   VERSION_CONFLICT: '复盘已被其他操作更新，请刷新后重试',
   INVALID_TRANSITION: '当前复盘状态不允许执行此操作',
   INCOMPLETE_REVIEW: '复盘内容尚未填写完整，暂不能提交',
+  METADATA_INCOMPLETE: '项目分类信息未完整，暂不能提交',
   INVALID_REASON: '重新打开原因无效，请填写有效原因',
   OPEN_ACTIONS_EXIST: '仍有改善行动未完成验证，暂不能关闭复盘。',
   INTERNAL_ERROR: '复盘状态操作失败，请稍后重试',
@@ -175,6 +177,24 @@ export function mapLifecycleRpcResult(
           ? LOCAL_ERROR_MESSAGES.OPEN_ACTIONS_EXIST
           : `还有 ${count} 项改善行动未完成验证，暂不能关闭复盘。`,
         data: count === null ? null : { openActionCount: count },
+      },
+    };
+  }
+
+  if (code === 'METADATA_INCOMPLETE') {
+    if (command !== 'SUBMIT') return internalError();
+    const rawData = envelope.data && typeof envelope.data === 'object'
+      ? (envelope.data as Record<string, unknown>)
+      : {};
+    return {
+      status: 422,
+      body: {
+        ok: false,
+        code,
+        message: LOCAL_ERROR_MESSAGES.METADATA_INCOMPLETE,
+        data: {
+          missingDimensions: sanitizeMissingDimensions(rawData.missingDimensions),
+        },
       },
     };
   }

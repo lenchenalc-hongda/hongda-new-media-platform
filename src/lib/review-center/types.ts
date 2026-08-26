@@ -61,6 +61,42 @@ export interface ReviewParticipant {
   is_active: boolean;
 }
 
+export interface ReviewMetadataMaterialDto {
+  code: string;
+  label: string;
+  isPrimary: boolean;
+}
+
+export interface ReviewMetadataCodeDto {
+  code: string;
+  label: string;
+}
+
+export interface ReviewMetadataDto {
+  materials: ReviewMetadataMaterialDto[];
+  processes: ReviewMetadataCodeDto[];
+  problemDomains: ReviewMetadataCodeDto[];
+  problemSymptoms: ReviewMetadataCodeDto[];
+  materialOtherText: string | null;
+  processOtherText: string | null;
+  problemDomainOtherText: string | null;
+  problemSymptomOtherText: string | null;
+}
+
+export interface MetadataOptionDto {
+  code: string;
+  label: string;
+  description: string | null;
+  sortOrder: number;
+}
+
+export interface MetadataOptionsDto {
+  materials: MetadataOptionDto[];
+  processes: MetadataOptionDto[];
+  problemDomains: MetadataOptionDto[];
+  problemSymptoms: MetadataOptionDto[];
+}
+
 export interface ReviewDetail {
   id: string;
   org_id: string;
@@ -94,6 +130,7 @@ export interface ReviewDetail {
   type_details: Record<string, unknown> | null;
   members: ReviewMemberItem[];
   participants: ReviewParticipant[];
+  metadata: ReviewMetadataDto | null;
 }
 
 export interface CreateDraftInput {

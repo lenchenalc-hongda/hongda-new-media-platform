@@ -76,6 +76,7 @@ function makeDetail(): ReviewDetail {
     type_details: null,
     members: [],
     participants: [],
+    metadata: null,
   };
 }
 

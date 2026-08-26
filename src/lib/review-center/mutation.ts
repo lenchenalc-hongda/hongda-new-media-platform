@@ -6,10 +6,12 @@ const MUTATION_STATUS: Record<string, number> = {
   OK: 200,
   INVALID_PATCH: 400,
   INVALID_MEMBER: 400,
+  INVALID_METADATA: 400,
   FORBIDDEN: 403,
   NOT_FOUND: 404,
   DRAFT_ONLY: 409,
   VERSION_CONFLICT: 409,
+  INVALID_TRANSITION: 409,
   TYPE_MISMATCH: 409,
   UNIQUE_CONFLICT: 409,
 };
@@ -51,6 +53,12 @@ export function mapReviewMutationResult(result: MutationRpcResult): MutationHttp
 
   const code = typeof envelope.code === 'string' ? envelope.code : 'UNKNOWN';
   const status = MUTATION_STATUS[code] ?? 500;
+  if (status === 500) {
+    return {
+      status: 500,
+      body: { ok: false, code: 'INTERNAL', message: '服务异常', data: null },
+    };
+  }
   return {
     status,
     body: {
@@ -85,6 +93,19 @@ export async function upsertTypeDetails(
     p_review_id: reviewId,
     p_expected_version: expectedVersion,
     p_patch: patch,
+  });
+}
+
+export async function updateReviewMetadata(
+  client: any,
+  reviewId: string,
+  expectedVersion: number,
+  metadata: Record<string, unknown>,
+): Promise<MutationRpcResult> {
+  return client.rpc('review_upsert_metadata', {
+    p_review_id: reviewId,
+    p_expected_version: expectedVersion,
+    p_metadata: metadata,
   });
 }
 
