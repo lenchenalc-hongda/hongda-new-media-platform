@@ -46,6 +46,14 @@ import {
   type CaseRpcClient,
 } from '../../src/lib/review-center/case-rpc';
 import { resolveAdminCaseId } from '../../src/lib/review-center/case-id-resolver';
+import type { createClient } from '../../src/lib/supabase/server';
+
+// Compile-time proof: the real authenticated server Supabase client is
+// structurally compatible with CaseRpcClient after the PromiseLike contract.
+type ServerSupabaseClient = NonNullable<Awaited<ReturnType<typeof createClient>>>;
+type AssertExtends<A, B> = A extends B ? true : false;
+type RealClientCompat = AssertExtends<ServerSupabaseClient, CaseRpcClient>;
+const realClientCompatProof: RealClientCompat = true;
 
 let passed = 0;
 let failed = 0;
@@ -58,6 +66,12 @@ function assert(cond: boolean, msg: string) {
     console.error('FAIL: ' + msg);
   }
 }
+
+// Promise-returning fakes remain compatible with PromiseLike.
+const promiseFakeCompatProof: CaseRpcClient = {
+  rpc: async () => ({ data: null, error: null }),
+};
+assert(typeof promiseFakeCompatProof.rpc === 'function', 'promise fake client compatible');
 
 function fakeClient(
   result: unknown,

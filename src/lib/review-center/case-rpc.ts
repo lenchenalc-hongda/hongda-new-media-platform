@@ -49,7 +49,7 @@ export interface CaseRpcResult {
 }
 
 export interface CaseRpcClient {
-  rpc(fn: string, args: Record<string, unknown>): Promise<CaseRpcResult>;
+  rpc(fn: string, args: Record<string, unknown>): PromiseLike<CaseRpcResult>;
 }
 
 function isObject(value: unknown): value is Record<string, unknown> {
