@@ -2,6 +2,8 @@
 // Routes parse/auth first, then call these functions with the authenticated
 // Supabase client. No service role is used here.
 
+import type { MetadataMutationInput } from './schemas';
+
 const MUTATION_STATUS: Record<string, number> = {
   OK: 200,
   INVALID_PATCH: 400,
@@ -28,6 +30,31 @@ export interface MutationRpcResult {
 export interface MutationHttpResult {
   status: number;
   body: Record<string, unknown>;
+}
+
+export interface MetadataRpcPayload {
+  materials: MetadataMutationInput['materials'];
+  processes: MetadataMutationInput['processes'];
+  problemDomains: MetadataMutationInput['problemDomains'];
+  problemSymptoms: MetadataMutationInput['problemSymptoms'];
+  other: MetadataMutationInput['other'];
+  reason?: string;
+}
+
+export function buildMetadataRpcPayload(
+  input: MetadataMutationInput,
+): MetadataRpcPayload {
+  const payload: MetadataRpcPayload = {
+    materials: input.materials,
+    processes: input.processes,
+    problemDomains: input.problemDomains,
+    problemSymptoms: input.problemSymptoms,
+    other: input.other,
+  };
+  if (input.reason !== undefined) {
+    payload.reason = input.reason;
+  }
+  return payload;
 }
 
 export function mapReviewMutationResult(result: MutationRpcResult): MutationHttpResult {
@@ -100,7 +127,7 @@ export async function updateReviewMetadata(
   client: any,
   reviewId: string,
   expectedVersion: number,
-  metadata: Record<string, unknown>,
+  metadata: MetadataRpcPayload,
 ): Promise<MutationRpcResult> {
   return client.rpc('review_upsert_metadata', {
     p_review_id: reviewId,

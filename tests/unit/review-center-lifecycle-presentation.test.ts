@@ -163,11 +163,29 @@ assert(JSON.stringify(sanitizeIncompleteFields('bad')) === '[]', 'incomplete non
 const success = normalizeLifecycleSuccess({
   ok: true,
   code: 'OK',
-  data: { status: 'submitted', version: 2, submitted_at: '2026-08-25T00:00:00Z', closed_at: null },
+  data: { status: 'submitted', version: 2, submittedAt: '2026-08-25T00:00:00Z', closedAt: null },
 });
 assert(success?.status === 'submitted' && success.version === 2 && success.submittedAt === '2026-08-25T00:00:00Z', 'success normalized');
+const closeSuccess = normalizeLifecycleSuccess({
+  ok: true,
+  code: 'OK',
+  data: { status: 'closed', version: 3, submittedAt: '2026-08-25T00:00:00Z', closedAt: '2026-08-25T01:00:00Z' },
+});
+assert(closeSuccess?.status === 'closed' && closeSuccess.version === 3 && closeSuccess.closedAt === '2026-08-25T01:00:00Z', 'close success normalized');
+const reopenSuccess = normalizeLifecycleSuccess({
+  ok: true,
+  code: 'OK',
+  data: { status: 'draft', version: 4, submittedAt: null, closedAt: null },
+});
+assert(reopenSuccess?.status === 'draft' && reopenSuccess.version === 4 && reopenSuccess.submittedAt === null, 'reopen success normalized');
 assert(normalizeLifecycleSuccess(null) === null, 'malformed success null');
-assert(normalizeLifecycleSuccess({ ok: true, code: 'OK', data: { status: 'submitted', version: '2', submitted_at: null, closed_at: null } }) === null, 'malformed success version string');
+assert(normalizeLifecycleSuccess({ ok: true, code: 'OK', data: { status: 'submitted', version: '2', submittedAt: null, closedAt: null } }) === null, 'malformed success version string');
+assert(normalizeLifecycleSuccess({ ok: true, code: 'OK', data: { status: 'submitted', version: 2, closedAt: null } }) === null, 'missing submittedAt rejected');
+assert(normalizeLifecycleSuccess({ ok: true, code: 'OK', data: { status: 'submitted', version: 2, submittedAt: '2026-08-25T00:00:00Z' } }) === null, 'missing closedAt rejected');
+assert(normalizeLifecycleSuccess({ ok: true, code: 'OK', data: { status: '', version: 2, submittedAt: null, closedAt: null } }) === null, 'empty status rejected');
+assert(normalizeLifecycleSuccess({ ok: true, code: 'OK', data: { status: 'submitted', version: 0, submittedAt: null, closedAt: null } }) === null, 'malformed success version 0');
+assert(normalizeLifecycleSuccess({ ok: true, code: 'OK', data: { status: 'submitted', version: 2, submittedAt: {}, closedAt: null } }) === null, 'malformed success submittedAt object');
+assert(normalizeLifecycleSuccess({ ok: true, code: 'OK', data: { status: 'submitted', version: 2, submittedAt: null, closedAt: 3 } }) === null, 'malformed success closedAt number');
 
 const forbidden = classifyLifecycleError(403, { code: 'FORBIDDEN', message: 'RAW' });
 assert(forbidden.message === '你当前无权执行此操作。' && forbidden.shouldRefreshAuthority, '403 mapping');

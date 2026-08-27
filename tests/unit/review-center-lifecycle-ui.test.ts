@@ -34,11 +34,25 @@ assert(reopenReq.url === '/api/review-center/reviews/id-1/reopen' && reopenReq.b
 const success = normalizeLifecycleSuccess({
   ok: true,
   code: 'OK',
-  data: { status: 'closed', version: 5, submitted_at: null, closed_at: '2026-08-25T00:00:00Z' },
+  data: { status: 'closed', version: 5, submittedAt: null, closedAt: '2026-08-25T00:00:00Z' },
 });
 assert(success?.status === 'closed' && success.version === 5 && success.closedAt === '2026-08-25T00:00:00Z', 'success parse');
+const submitSuccess = normalizeLifecycleSuccess({
+  ok: true,
+  code: 'OK',
+  data: { status: 'submitted', version: 6, submittedAt: '2026-08-25T00:00:00Z', closedAt: null },
+});
+assert(submitSuccess?.status === 'submitted' && submitSuccess.version === 6 && submitSuccess.submittedAt === '2026-08-25T00:00:00Z', 'submit success parse');
+const reopenSuccess = normalizeLifecycleSuccess({
+  ok: true,
+  code: 'OK',
+  data: { status: 'draft', version: 7, submittedAt: null, closedAt: null },
+});
+assert(reopenSuccess?.status === 'draft' && reopenSuccess.version === 7, 'reopen success parse');
 assert(normalizeLifecycleSuccess({ ok: true, code: 'OK', data: null }) === null, 'malformed success null data');
-assert(normalizeLifecycleSuccess({ ok: true, code: 'OK', data: { status: 'draft', version: 0, submitted_at: null, closed_at: null } }) === null, 'malformed success version 0');
+assert(normalizeLifecycleSuccess({ ok: true, code: 'OK', data: { status: 'draft', version: 0, submittedAt: null, closedAt: null } }) === null, 'malformed success version 0');
+assert(normalizeLifecycleSuccess({ ok: true, code: 'OK', data: { status: 'submitted', version: 2, closedAt: null } }) === null, 'missing submittedAt rejected');
+assert(normalizeLifecycleSuccess({ ok: true, code: 'OK', data: { status: 'submitted', version: 2, submittedAt: '2026-08-25T00:00:00Z' } }) === null, 'missing closedAt rejected');
 
 assert(classifyLifecycleError(401, {}).message === '未登录或登录已过期。', '401 message');
 assert(classifyLifecycleError(403, { code: 'FORBIDDEN', message: 'RAW' }).message === '你当前无权执行此操作。', '403 message');

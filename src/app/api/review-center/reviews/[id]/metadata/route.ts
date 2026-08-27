@@ -4,7 +4,11 @@ import { AuthError } from '@/lib/auth/types';
 import { createClient } from '@/lib/supabase/server';
 import { reviewIdSchema, metadataMutationSchema } from '@/lib/review-center/schemas';
 import { getCurrentProfile, getReviewMetadataDTO } from '@/lib/review-center/service';
-import { updateReviewMetadata, mapReviewMutationResult } from '@/lib/review-center/mutation';
+import {
+  updateReviewMetadata,
+  mapReviewMutationResult,
+  buildMetadataRpcPayload,
+} from '@/lib/review-center/mutation';
 
 export const dynamic = 'force-dynamic';
 
@@ -46,11 +50,12 @@ export async function PATCH(
   if (!profile) return jsonError('无有效档案', 403);
 
   try {
+    const metadataPayload = buildMetadataRpcPayload(parsedBody.data);
     const result = await updateReviewMetadata(
       supabase,
       parsedParams.data.id,
       parsedBody.data.expectedVersion,
-      parsedBody.data,
+      metadataPayload,
     );
     const mapped = mapReviewMutationResult(result);
     if (mapped.status !== 200) {

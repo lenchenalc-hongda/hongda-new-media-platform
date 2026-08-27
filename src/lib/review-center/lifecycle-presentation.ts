@@ -148,16 +148,16 @@ export function normalizeLifecycleSuccess(payload: unknown): LifecycleSuccessDat
     || typeof source.version !== 'number'
     || !Number.isInteger(source.version)
     || source.version < 1
-    || (typeof source.submitted_at !== 'string' && source.submitted_at !== null)
-    || (typeof source.closed_at !== 'string' && source.closed_at !== null)
+    || (typeof source.submittedAt !== 'string' && source.submittedAt !== null)
+    || (typeof source.closedAt !== 'string' && source.closedAt !== null)
   ) {
     return null;
   }
   return {
     status: source.status,
     version: source.version,
-    submittedAt: source.submitted_at,
-    closedAt: source.closed_at,
+    submittedAt: source.submittedAt,
+    closedAt: source.closedAt,
   };
 }
 
