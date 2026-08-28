@@ -32,6 +32,24 @@ export function canManageCaseRole(role: string | null | undefined): boolean {
   return role === 'admin' || role === 'manager';
 }
 
+export function staleReasonLabel(reason: string | null | undefined): string {
+  if (reason === 'SOURCE_NOT_CLOSED') return '来源复盘状态已变化';
+  if (reason === 'SOURCE_VERSION_CHANGED') return '来源复盘内容已更新';
+  return '来源复盘发生变化';
+}
+
+export function sourceReviewStatusLabel(status: string | null | undefined): string {
+  if (status === 'closed') return '已关闭';
+  if (status === 'draft') return '草稿';
+  if (status === 'submitted') return '待确认';
+  if (status === 'in_review') return '复盘中';
+  if (status === 'action_required') return '待改善';
+  if (status === 'verifying') return '验证中';
+  if (status === 'rejected') return '已退回';
+  if (status === 'cancelled') return '已取消';
+  return typeof status === 'string' && status ? status : '未知状态';
+}
+
 export function caseRiskLabel(risk: string | null | undefined): string {
   if (risk === 'RED') return '高';
   if (risk === 'YELLOW') return '中';

@@ -66,6 +66,41 @@ const mutationResult = {
   sourceReviewVersion: 11,
 };
 
+const fullAdminDetail = {
+  id: UUID_1,
+  caseNo: CASE_NO,
+  status: 'PUBLISHED',
+  version: 3,
+  title: 'case title',
+  summary: null,
+  lessonSummary: null,
+  preventionSummary: null,
+  applicabilityNotes: null,
+  reviewTypeSnapshot: 'A',
+  riskSnapshot: 'RED',
+  occurredAtSnapshot: null,
+  publishedAt: '2026-08-27T00:00:00Z',
+  hiddenAt: null,
+  hiddenReason: null,
+  sourceReviewId: UUID_2,
+  sourceReviewNo: 'REV-2026-000001',
+  sourceCurrentStatus: 'closed',
+  sourceCurrentVersion: 11,
+  caseSourceReviewVersion: 5,
+  sourceChangedSinceSnapshot: true,
+  isStale: true,
+  staleReasons: ['SOURCE_VERSION_CHANGED'],
+  currentSourceMetadata: [
+    { metadataType: 'MATERIAL', code: 'PP', label: 'PP', isPrimary: true },
+  ],
+  caseSnapshotMetadata: {
+    materials: [{ code: 'ABS', label: 'ABS', isPrimary: false }],
+    processes: [],
+    problemDomains: [],
+    problemSymptoms: [],
+  },
+};
+
 function jsonResponse(status: number, body: unknown): Response {
   return new Response(JSON.stringify(body), {
     status,
@@ -248,15 +283,7 @@ stubFetch(async (url) => {
   assert(url === '/api/review-center/cases/CASE-2026-000001/admin', 'admin detail URL exact');
   return jsonResponse(200, {
     ok: true,
-    data: {
-      id: UUID_1,
-      caseNo: CASE_NO,
-      status: 'PUBLISHED',
-      version: 3,
-      title: 'case title',
-      reviewTypeSnapshot: 'A',
-      riskSnapshot: 'RED',
-    },
+    data: fullAdminDetail,
   });
 });
 const adminDetail = await fetchCaseAdminDetail(CASE_NO);
@@ -264,9 +291,9 @@ assert(adminDetail.caseNo === CASE_NO && adminDetail.title === 'case title' && a
 
 const parsedAdmin = parseCaseAdminDetailResponse({
   ok: true,
-  data: { id: UUID_1, caseNo: CASE_NO, status: 'DRAFT', version: 1, title: 'x' },
+  data: { ...fullAdminDetail, status: 'DRAFT', version: 1 },
 });
-assert(parsedAdmin.version === 1, 'admin shell response parser');
+assert(parsedAdmin.version === 1 && parsedAdmin.sourceCurrentVersion === 11, 'admin shell response parser');
 
 stubFetch(async () => jsonResponse(200, { ok: true, data: { caseNo: CASE_NO, status: 'BAD', title: 'x', version: 1 } }));
 try {
@@ -331,9 +358,17 @@ for (const source of [candidatesSource, manageSource, dialogSource]) {
 }
 
 assert(!candidatesSource.includes('>{candidate.sourceReviewId}'), 'candidate source UUID not rendered as text');
-assert(!manageSource.includes('detail.id') && !manageSource.includes('sourceReviewId'), 'manage shell no internal UUID render');
+assert(!manageSource.includes('>{admin.id}') && !manageSource.includes('>{admin.sourceReviewId}'), 'manage shell no internal UUID text render');
 assert(!manageSource.includes('案例已创建') && !manageSource.includes('建设中') && !manageSource.includes('下一阶段开放'), 'manage shell no transient copy');
-assert(!manageSource.includes('audit') && !manageSource.includes('editor'), 'manage shell no audit/editor');
+assert(
+  !manageSource.includes('publishCase')
+    && !manageSource.includes('hideCase')
+    && !manageSource.includes('reopenCase')
+    && !manageSource.includes('fetchCaseAudit')
+    && !manageSource.includes('CaseHideDialog')
+    && !manageSource.includes('CaseAuditPanel'),
+  'manage shell no slice3b/3c features',
+);
 
 assert(dialogSource.includes('createCase') && dialogSource.includes('runExclusiveOnce'), 'dialog uses create client and exclusive guard');
 assert(dialogSource.includes('title.trim()'), 'dialog trims title before request');

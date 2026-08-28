@@ -294,11 +294,11 @@ assert(clientSource.includes('fetchCaseLibrary'), 'client preserves library read
 assert(clientSource.includes('fetchCasePublicDetail'), 'client preserves public detail read');
 assert(!libraryPageSource.includes('fetchCaseCandidates'), 'library page no candidate fetch');
 assert(!detailPageSource.includes('fetchCaseAdminDetail'), 'detail page no admin fetch');
-assert(!clientSource.includes("method: 'PATCH'"), 'client no patch');
+assert(!libraryPageSource.includes('updateCase'), 'library page no update fetch');
+assert(!detailPageSource.includes('updateCase'), 'detail page no update fetch');
 assert(!clientSource.includes("method: 'PUT'"), 'client no put');
 assert(!clientSource.includes("method: 'DELETE'"), 'client no delete');
-assert(clientSource.includes('createCase'), 'client slice2 create extension');
-assert(clientSource.includes('fetchCaseAdminDetail'), 'client slice2 admin extension');
+assert(clientSource.includes('updateCase'), 'client slice3a update extension');
 assert(!clientSource.includes('fetchCaseAudit'), 'client no audit helper');
 
 assert(!libraryPageSource.includes('sourceReviewId') && !libraryPageSource.includes('orgId') && !libraryPageSource.includes('actorId'), 'library no internal identifiers');

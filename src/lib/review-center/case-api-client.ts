@@ -210,6 +210,10 @@ function isPositiveInt(value: unknown): boolean {
   return typeof value === 'number' && Number.isInteger(value) && value > 0;
 }
 
+function isNullableString(value: unknown): value is string | null {
+  return value === null || typeof value === 'string';
+}
+
 function parseExistingCase(value: unknown): CaseCandidateItem['existingCase'] {
   if (value === null) return null;
   if (
@@ -320,19 +324,121 @@ export async function createCase(
   return parseCaseMutationResult(body);
 }
 
+function parseSnapshotMetadata(value: unknown): CaseAdminDetail['caseSnapshotMetadata'] {
+  if (
+    !isRecord(value)
+    || !Array.isArray(value.materials)
+    || !Array.isArray(value.processes)
+    || !Array.isArray(value.problemDomains)
+    || !Array.isArray(value.problemSymptoms)
+  ) {
+    throw invalidResponse();
+  }
+
+  const parseMaterial = (item: unknown) => {
+    if (!isRecord(item) || typeof item.code !== 'string' || typeof item.label !== 'string' || typeof item.isPrimary !== 'boolean') {
+      throw invalidResponse();
+    }
+    return { code: item.code, label: item.label, isPrimary: item.isPrimary };
+  };
+  const parseCode = (item: unknown) => {
+    if (!isRecord(item) || typeof item.code !== 'string' || typeof item.label !== 'string') {
+      throw invalidResponse();
+    }
+    return { code: item.code, label: item.label };
+  };
+
+  return {
+    materials: value.materials.map(parseMaterial),
+    processes: value.processes.map(parseCode),
+    problemDomains: value.problemDomains.map(parseCode),
+    problemSymptoms: value.problemSymptoms.map(parseCode),
+  };
+}
+
+function parseCurrentSourceMetadata(value: unknown): CaseAdminDetail['currentSourceMetadata'] {
+  if (!Array.isArray(value)) throw invalidResponse();
+  return value.map(item => {
+    if (
+      !isRecord(item)
+      || typeof item.code !== 'string'
+      || typeof item.label !== 'string'
+      || typeof item.isPrimary !== 'boolean'
+      || !['MATERIAL', 'PROCESS', 'PROBLEM_DOMAIN', 'PROBLEM_SYMPTOM'].includes(item.metadataType as string)
+    ) {
+      throw invalidResponse();
+    }
+    return {
+      metadataType: item.metadataType as CaseAdminDetail['currentSourceMetadata'][number]['metadataType'],
+      code: item.code,
+      label: item.label,
+      isPrimary: item.isPrimary,
+    };
+  });
+}
+
 export function parseCaseAdminDetailResponse(body: unknown): CaseAdminDetail {
   const data = readData(body);
   if (
     !isRecord(data)
+    || typeof data.id !== 'string'
+    || !UUID_PATTERN.test(data.id)
     || typeof data.caseNo !== 'string'
     || !CASE_NO_PATTERN.test(data.caseNo)
-    || typeof data.title !== 'string'
     || !['DRAFT', 'PUBLISHED', 'HIDDEN'].includes(data.status as string)
     || !isPositiveInt(data.version)
+    || typeof data.title !== 'string'
+    || !isNullableString(data.summary)
+    || !isNullableString(data.lessonSummary)
+    || !isNullableString(data.preventionSummary)
+    || !isNullableString(data.applicabilityNotes)
+    || (data.reviewTypeSnapshot !== null && !['A', 'B', 'C'].includes(data.reviewTypeSnapshot as string))
+    || (data.riskSnapshot !== null && !['RED', 'YELLOW', 'GREEN'].includes(data.riskSnapshot as string))
+    || !isNullableString(data.occurredAtSnapshot)
+    || !isNullableString(data.publishedAt)
+    || !isNullableString(data.hiddenAt)
+    || !isNullableString(data.hiddenReason)
+    || typeof data.sourceReviewId !== 'string'
+    || !UUID_PATTERN.test(data.sourceReviewId)
+    || !isNullableString(data.sourceReviewNo)
+    || !isNullableString(data.sourceCurrentStatus)
+    || (data.sourceCurrentVersion !== null && !isPositiveInt(data.sourceCurrentVersion))
+    || !isPositiveInt(data.caseSourceReviewVersion)
+    || typeof data.sourceChangedSinceSnapshot !== 'boolean'
+    || typeof data.isStale !== 'boolean'
+    || !Array.isArray(data.staleReasons)
+    || data.staleReasons.some(item => item !== 'SOURCE_NOT_CLOSED' && item !== 'SOURCE_VERSION_CHANGED')
   ) {
     throw invalidResponse();
   }
-  return data as CaseAdminDetail;
+
+  return {
+    id: data.id,
+    caseNo: data.caseNo,
+    status: data.status as CaseAdminDetail['status'],
+    version: data.version as number,
+    title: data.title,
+    summary: data.summary as string | null,
+    lessonSummary: data.lessonSummary as string | null,
+    preventionSummary: data.preventionSummary as string | null,
+    applicabilityNotes: data.applicabilityNotes as string | null,
+    reviewTypeSnapshot: data.reviewTypeSnapshot as CaseAdminDetail['reviewTypeSnapshot'],
+    riskSnapshot: data.riskSnapshot as CaseAdminDetail['riskSnapshot'],
+    occurredAtSnapshot: data.occurredAtSnapshot as string | null,
+    publishedAt: data.publishedAt as string | null,
+    hiddenAt: data.hiddenAt as string | null,
+    hiddenReason: data.hiddenReason as string | null,
+    sourceReviewId: data.sourceReviewId,
+    sourceReviewNo: data.sourceReviewNo as string | null,
+    sourceCurrentStatus: data.sourceCurrentStatus as string | null,
+    sourceCurrentVersion: data.sourceCurrentVersion as number | null,
+    caseSourceReviewVersion: data.caseSourceReviewVersion as number,
+    sourceChangedSinceSnapshot: data.sourceChangedSinceSnapshot,
+    isStale: data.isStale,
+    staleReasons: data.staleReasons as CaseAdminDetail['staleReasons'],
+    currentSourceMetadata: parseCurrentSourceMetadata(data.currentSourceMetadata),
+    caseSnapshotMetadata: parseSnapshotMetadata(data.caseSnapshotMetadata),
+  };
 }
 
 export async function fetchCaseAdminDetail(
@@ -344,6 +450,31 @@ export async function fetchCaseAdminDetail(
     options,
   );
   return parseCaseAdminDetailResponse(body);
+}
+
+export interface CaseUpdateInput {
+  expectedVersion: number;
+  patch: Record<string, unknown>;
+}
+
+export async function updateCase(
+  caseNo: string,
+  input: CaseUpdateInput,
+  options?: { signal?: AbortSignal },
+): Promise<CaseMutationResult> {
+  const { body } = await requestJson(
+    `/api/review-center/cases/${encodeURIComponent(caseNo)}`,
+    {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        expectedVersion: input.expectedVersion,
+        patch: input.patch,
+      }),
+      signal: options?.signal,
+    },
+  );
+  return parseCaseMutationResult(body);
 }
 
 export async function runExclusiveOnce<T>(
