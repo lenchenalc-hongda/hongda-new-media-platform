@@ -477,6 +477,79 @@ export async function updateCase(
   return parseCaseMutationResult(body);
 }
 
+export interface CasePublishInput {
+  expectedVersion: number;
+  expectedSourceReviewVersion: number;
+}
+
+export async function publishCase(
+  caseNo: string,
+  input: CasePublishInput,
+  options?: { signal?: AbortSignal },
+): Promise<CaseMutationResult> {
+  const { body } = await requestJson(
+    `/api/review-center/cases/${encodeURIComponent(caseNo)}/publish`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        expectedVersion: input.expectedVersion,
+        expectedSourceReviewVersion: input.expectedSourceReviewVersion,
+      }),
+      signal: options?.signal,
+    },
+  );
+  return parseCaseMutationResult(body);
+}
+
+export interface CaseHideInput {
+  expectedVersion: number;
+  reason: string;
+}
+
+export async function hideCase(
+  caseNo: string,
+  input: CaseHideInput,
+  options?: { signal?: AbortSignal },
+): Promise<CaseMutationResult> {
+  const { body } = await requestJson(
+    `/api/review-center/cases/${encodeURIComponent(caseNo)}/hide`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        expectedVersion: input.expectedVersion,
+        reason: input.reason,
+      }),
+      signal: options?.signal,
+    },
+  );
+  return parseCaseMutationResult(body);
+}
+
+export interface CaseReopenInput {
+  expectedVersion: number;
+}
+
+export async function reopenCase(
+  caseNo: string,
+  input: CaseReopenInput,
+  options?: { signal?: AbortSignal },
+): Promise<CaseMutationResult> {
+  const { body } = await requestJson(
+    `/api/review-center/cases/${encodeURIComponent(caseNo)}/reopen`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        expectedVersion: input.expectedVersion,
+      }),
+      signal: options?.signal,
+    },
+  );
+  return parseCaseMutationResult(body);
+}
+
 export async function runExclusiveOnce<T>(
   guard: { current: boolean },
   task: () => Promise<T>,

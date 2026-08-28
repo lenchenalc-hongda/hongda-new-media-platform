@@ -137,6 +137,71 @@ export function canSaveCaseStatus(status: string | null | undefined): boolean {
   return status === 'DRAFT';
 }
 
+export function canPublishCaseStatus(status: string | null | undefined): boolean {
+  return status === 'DRAFT';
+}
+
+export function canHideCaseStatus(status: string | null | undefined): boolean {
+  return status === 'DRAFT' || status === 'PUBLISHED';
+}
+
+export function canReopenCaseStatus(status: string | null | undefined): boolean {
+  return status === 'HIDDEN';
+}
+
+const CURATION_MISSING_WHITELIST = new Set([
+  'TITLE',
+  'SUMMARY',
+  'LESSON_SUMMARY',
+  'PREVENTION_SUMMARY',
+]);
+
+export function parseMissingFields(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const item of value) {
+    if (typeof item === 'string' && CURATION_MISSING_WHITELIST.has(item) && !seen.has(item)) {
+      seen.add(item);
+      result.push(item);
+    }
+  }
+  return result;
+}
+
+const METADATA_MISSING_WHITELIST = new Set([
+  'PROBLEM_DOMAIN',
+  'PROBLEM_SYMPTOM',
+  'PRIMARY_MATERIAL',
+  'PROCESS',
+  'MATERIAL_OTHER_TEXT',
+  'PROCESS_OTHER_TEXT',
+  'PROBLEM_DOMAIN_OTHER_TEXT',
+  'PROBLEM_SYMPTOM_OTHER_TEXT',
+]);
+
+export function parseMissingDimensions(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const item of value) {
+    if (typeof item === 'string' && METADATA_MISSING_WHITELIST.has(item) && !seen.has(item)) {
+      seen.add(item);
+      result.push(item);
+    }
+  }
+  return result;
+}
+
+export function normalizeHideReason(
+  value: string,
+): { ok: true; reason: string } | { ok: false; error: string } {
+  const trimmed = value.trim();
+  if (!trimmed) return { ok: false, error: '请输入隐藏原因。' };
+  if (trimmed.length > 1000) return { ok: false, error: '隐藏原因不能超过 1000 字。' };
+  return { ok: true, reason: trimmed };
+}
+
 export function confirmDiscardIfNeeded(
   dirty: boolean,
   confirm: (message: string) => boolean,

@@ -322,8 +322,8 @@ for (const source of [manageSource, editorSource, metadataSource, staleSource, m
   }
 }
 
-for (const token of ['publishCase', 'hideCase', 'reopenCase', 'fetchCaseAudit', '/publish', '/hide', '/reopen', '/audit']) {
-  assert(!manageSource.includes(token), 'manage workspace no slice3b/3c reference: ' + token);
+for (const token of ['fetchCaseAudit', '/audit', 'CaseAuditPanel', 'AuditSection']) {
+  assert(!manageSource.includes(token), 'manage workspace no audit reference: ' + token);
 }
 
 assert(!manageSource.includes('>{admin.id}') && !manageSource.includes('>{admin.sourceReviewId}'), 'manage no internal UUID text render');

@@ -5,13 +5,20 @@ import { useParams } from 'next/navigation';
 import AppLayout from '@/components/layout/AppLayout';
 import PageHeader from '@/components/layout/PageHeader';
 import ReviewCenterEmpty from '@/components/review-center/ReviewCenterEmpty';
+import ConfirmDialog from '@/components/ui/ConfirmDialog';
 import CaseCurationEditor from '@/components/review-center/case/CaseCurationEditor';
+import CaseManageActionBar from '@/components/review-center/case/CaseManageActionBar';
+import CaseHideDialog from '@/components/review-center/case/CaseHideDialog';
+import type { CaseHideContext } from '@/components/review-center/case/CaseManageActionBar';
 import CaseMetadataComparison from '@/components/review-center/case/CaseMetadataComparison';
 import CaseStaleWarning from '@/components/review-center/case/CaseStaleWarning';
 import type { CaseAdminDetail } from '@/lib/review-center/case-schemas';
 import {
   CaseApiError,
   fetchCaseAdminDetail,
+  hideCase,
+  publishCase,
+  reopenCase,
   runExclusiveOnce,
   updateCase,
 } from '@/lib/review-center/case-api-client';
@@ -21,17 +28,24 @@ import {
   caseRiskBadgeClass,
   caseRiskLabel,
   caseStatusLabel,
+  curationMissingFieldLabel,
+  metadataMissingDimensionLabel,
   sourceReviewStatusLabel,
 } from '@/lib/review-center/case-presentation';
 import {
   applyMutationResultToAdminState,
   buildCasePatch,
+  canHideCaseStatus,
+  canPublishCaseStatus,
+  canReopenCaseStatus,
   canSaveCaseStatus,
   caseEditorDirty,
   confirmDiscardIfNeeded,
   editorBaselineFromAdmin,
   editorDraftFromBaseline,
   normalizeCaseEditorDraft,
+  parseMissingDimensions,
+  parseMissingFields,
   type CaseEditorBaseline,
   type CaseEditorDraft,
   type CaseEditorField,
@@ -54,6 +68,13 @@ export default function CaseManageWorkspacePage() {
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'success'>('idle');
   const [conflictMessage, setConflictMessage] = useState('');
   const [refreshing, setRefreshing] = useState(false);
+  const [mutationKind, setMutationKind] = useState<'save' | 'publish' | 'hide' | 'reopen' | null>(null);
+  const [hideDialog, setHideDialog] = useState<CaseHideContext | null>(null);
+  const [reopenConfirmOpen, setReopenConfirmOpen] = useState(false);
+  const [actionBanner, setActionBanner] = useState<{ kind: 'success' | 'error' | 'warning'; text: string } | null>(null);
+  const [refreshWarning, setRefreshWarning] = useState('');
+  const [metadataIssue, setMetadataIssue] = useState<string[] | null>(null);
+  const [editorLockedUntilRefresh, setEditorLockedUntilRefresh] = useState(false);
   const generationRef = useRef(0);
   const abortRef = useRef<AbortController | null>(null);
   const mutationLockRef = useRef(false);
@@ -88,6 +109,10 @@ export default function CaseManageWorkspacePage() {
       setSaveMessage('');
       setSaveState('idle');
       setConflictMessage('');
+      setActionBanner(null);
+      setRefreshWarning('');
+      setMetadataIssue(null);
+      setEditorLockedUntilRefresh(false);
       setStatus('ready');
     } catch (error) {
       if (requestId !== generationRef.current) return;
@@ -100,6 +125,10 @@ export default function CaseManageWorkspacePage() {
       setSaveMessage('');
       setSaveState('idle');
       setConflictMessage('');
+      setActionBanner(null);
+      setRefreshWarning('');
+      setMetadataIssue(null);
+      setEditorLockedUntilRefresh(false);
       if (error instanceof CaseApiError && error.status === 401) {
         setErrorMessage('登录状态已失效，请重新登录。');
       } else if (error instanceof CaseApiError && error.status === 403) {
@@ -110,6 +139,41 @@ export default function CaseManageWorkspacePage() {
         setErrorMessage('案例管理信息加载失败，请稍后重试。');
       }
       setStatus('error');
+    } finally {
+      if (requestId === generationRef.current) {
+        setRefreshing(false);
+        abortRef.current = null;
+      }
+    }
+  }, [caseNo]);
+
+  const refreshAdminAfterMutation = useCallback(async () => {
+    if (!caseNo) return;
+    const requestId = ++generationRef.current;
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+    setRefreshing(true);
+    try {
+      const data = await fetchCaseAdminDetail(caseNo, { signal: controller.signal });
+      if (requestId !== generationRef.current) return;
+      const nextBaseline = editorBaselineFromAdmin(data);
+      setAdmin(data);
+      setBaseline(nextBaseline);
+      setDraft(editorDraftFromBaseline(nextBaseline));
+      setFieldErrors({});
+      setTitleError(null);
+      setSaveError('');
+      setSaveMessage('');
+      setSaveState('idle');
+      setConflictMessage('');
+      setMetadataIssue(null);
+      setEditorLockedUntilRefresh(false);
+      setRefreshWarning('');
+      setStatus('ready');
+    } catch {
+      if (requestId !== generationRef.current) return;
+      setRefreshWarning('最新详情刷新失败，请重新加载。');
     } finally {
       if (requestId === generationRef.current) {
         setRefreshing(false);
@@ -189,7 +253,7 @@ export default function CaseManageWorkspacePage() {
 
   async function handleSave() {
     if (mutationLockRef.current) return;
-    if (!admin || !canSaveCaseStatus(admin.status)) return;
+    if (!admin || !canSaveCaseStatus(admin.status) || editorLockedUntilRefresh) return;
     if (!baseline || !draft || !caseNo) return;
     const patchResult = buildCasePatch(baseline, draft);
     setTitleError(patchResult.errors.titleError);
@@ -203,6 +267,7 @@ export default function CaseManageWorkspacePage() {
     setSaveError('');
     setSaveMessage('');
     const executed = await runExclusiveOnce(mutationLockRef, async () => {
+      setMutationKind('save');
       setSaveState('saving');
       try {
         const result = await updateCase(caseNo, {
@@ -233,6 +298,172 @@ export default function CaseManageWorkspacePage() {
         setSaveState('idle');
       } finally {
         setSaveState(prev => (prev === 'success' ? 'success' : 'idle'));
+        setMutationKind(null);
+      }
+    });
+    if (executed === null) return;
+  }
+
+  async function handlePublish() {
+    if (mutationLockRef.current) return;
+    if (!admin || !canPublishCaseStatus(admin.status) || editorLockedUntilRefresh) return;
+    if (dirty) return;
+    if (!baseline || !draft || !caseNo) return;
+    if (admin.sourceCurrentVersion === null) return;
+
+    const canonical = normalizeCaseEditorDraft(draft);
+    const prevalidationErrors: Partial<Record<CaseEditorField, string>> = {};
+    let titleError: string | null = null;
+    if (!canonical.title) titleError = '请输入案例标题。';
+    if (!canonical.summary) prevalidationErrors.summary = '请输入摘要。';
+    if (!canonical.lessonSummary) prevalidationErrors.lessonSummary = '请输入核心教训。';
+    if (!canonical.preventionSummary) prevalidationErrors.preventionSummary = '请输入预防措施。';
+    setTitleError(titleError);
+    setFieldErrors(prevalidationErrors);
+    if (titleError || Object.keys(prevalidationErrors).length > 0) return;
+
+    setActionBanner(null);
+    setMetadataIssue(null);
+    setRefreshWarning('');
+    const executed = await runExclusiveOnce(mutationLockRef, async () => {
+      setMutationKind('publish');
+      try {
+        const result = await publishCase(caseNo, {
+          expectedVersion: admin.version,
+          expectedSourceReviewVersion: admin.sourceCurrentVersion as number,
+        });
+        setAdmin(prev => (prev ? { ...prev, ...applyMutationResultToAdminState(result, prev) } : prev));
+        setFieldErrors({});
+        setTitleError(null);
+        setActionBanner({ kind: 'success', text: '发布成功' });
+        await refreshAdminAfterMutation();
+      } catch (error) {
+        if (error instanceof CaseApiError && error.code === 'VERSION_CONFLICT') {
+          setActionBanner({ kind: 'warning', text: '该案例已被其他操作更新，请刷新最新状态后再继续。' });
+        } else if (error instanceof CaseApiError && error.code === 'SOURCE_VERSION_CONFLICT') {
+          setActionBanner({ kind: 'warning', text: '来源复盘已更新，请刷新来源信息后重新确认。' });
+        } else if (error instanceof CaseApiError && error.code === 'INVALID_TRANSITION') {
+          setActionBanner({ kind: 'warning', text: '案例状态已发生变化，请刷新最新状态后再继续。' });
+        } else if (error instanceof CaseApiError && error.code === 'SOURCE_NOT_CLOSED') {
+          setActionBanner({ kind: 'warning', text: '来源复盘当前不是已关闭状态，暂时不能发布案例。' });
+        } else if (error instanceof CaseApiError && error.code === 'CASE_CURATION_INCOMPLETE') {
+          const missingFields = parseMissingFields(error.safeData);
+          const nextFieldErrors: Partial<Record<CaseEditorField, string>> = {};
+          let nextTitleError: string | null = null;
+          for (const field of missingFields) {
+            if (field === 'TITLE') nextTitleError = '案例标题不能为空。';
+            if (field === 'SUMMARY') nextFieldErrors.summary = '摘要不能为空。';
+            if (field === 'LESSON_SUMMARY') nextFieldErrors.lessonSummary = '核心教训不能为空。';
+            if (field === 'PREVENTION_SUMMARY') nextFieldErrors.preventionSummary = '预防措施不能为空。';
+          }
+          setTitleError(nextTitleError);
+          setFieldErrors(nextFieldErrors);
+          setActionBanner({ kind: 'error', text: '案例整理内容仍有缺失，请检查后重试。' });
+        } else if (error instanceof CaseApiError && error.code === 'CASE_METADATA_INCOMPLETE') {
+          setMetadataIssue(parseMissingDimensions(error.safeData));
+          setActionBanner({ kind: 'error', text: '来源复盘分类信息不完整，请到来源复盘补齐后重试。' });
+        } else if (error instanceof CaseApiError && error.code === 'INVALID_DICTIONARY') {
+          setActionBanner({ kind: 'error', text: '分类字典数据异常，请检查来源复盘分类后重试。' });
+        } else if (error instanceof CaseApiError && error.status === 403) {
+          setActionBanner({ kind: 'error', text: '无权限执行该操作' });
+        } else if (error instanceof CaseApiError && error.status === 404) {
+          setActionBanner({ kind: 'error', text: '案例不存在或当前不可管理' });
+        } else {
+          setActionBanner({ kind: 'error', text: '发布失败，请稍后重试' });
+        }
+      } finally {
+        setMutationKind(null);
+      }
+    });
+    if (executed === null) return;
+  }
+
+  function handleHide(context: CaseHideContext) {
+    if (mutationLockRef.current) return;
+    if (!admin || !canHideCaseStatus(admin.status) || editorLockedUntilRefresh) return;
+    if (dirty) return;
+    setHideDialog(context);
+  }
+
+  async function confirmHide(reason: string) {
+    if (mutationLockRef.current) return;
+    if (!admin || !canHideCaseStatus(admin.status) || editorLockedUntilRefresh) return;
+    if (dirty) return;
+    if (!caseNo) return;
+    const trimmedReason = reason.trim();
+    const context = hideDialog ?? 'NORMAL_HIDE';
+    setActionBanner(null);
+    setMetadataIssue(null);
+    setRefreshWarning('');
+    const executed = await runExclusiveOnce(mutationLockRef, async () => {
+      setMutationKind('hide');
+      try {
+        const result = await hideCase(caseNo, {
+          expectedVersion: admin.version,
+          reason: trimmedReason,
+        });
+        setAdmin(prev => (prev ? { ...prev, ...applyMutationResultToAdminState(result, prev) } : prev));
+        setHideDialog(null);
+        setActionBanner({
+          kind: 'success',
+          text: context === 'RECURATE' ? '案例已隐藏。如需继续修改，请重新打开整理。' : '案例已隐藏。',
+        });
+        await refreshAdminAfterMutation();
+      } catch (error) {
+        if (error instanceof CaseApiError && error.code === 'VERSION_CONFLICT') {
+          setActionBanner({ kind: 'warning', text: '该案例已被其他操作更新，请刷新最新状态后再继续。' });
+        } else if (error instanceof CaseApiError && error.code === 'INVALID_TRANSITION') {
+          setActionBanner({ kind: 'warning', text: '案例状态已发生变化，请刷新最新状态后再继续。' });
+        } else if (error instanceof CaseApiError && error.status === 403) {
+          setActionBanner({ kind: 'error', text: '无权限执行该操作' });
+        } else if (error instanceof CaseApiError && error.status === 404) {
+          setActionBanner({ kind: 'error', text: '案例不存在或当前不可管理' });
+        } else {
+          setActionBanner({ kind: 'error', text: '隐藏失败，请稍后重试' });
+        }
+      } finally {
+        setMutationKind(null);
+      }
+    });
+    if (executed === null) return;
+  }
+
+  function handleReopen() {
+    if (mutationLockRef.current) return;
+    if (!admin || !canReopenCaseStatus(admin.status) || editorLockedUntilRefresh) return;
+    setReopenConfirmOpen(true);
+  }
+
+  async function confirmReopen() {
+    if (mutationLockRef.current) return;
+    if (!admin || !canReopenCaseStatus(admin.status) || editorLockedUntilRefresh) return;
+    if (!caseNo) return;
+    setActionBanner(null);
+    setMetadataIssue(null);
+    setRefreshWarning('');
+    const executed = await runExclusiveOnce(mutationLockRef, async () => {
+      setMutationKind('reopen');
+      try {
+        const result = await reopenCase(caseNo, { expectedVersion: admin.version });
+        setAdmin(prev => (prev ? { ...prev, ...applyMutationResultToAdminState(result, prev) } : prev));
+        setReopenConfirmOpen(false);
+        setEditorLockedUntilRefresh(true);
+        setActionBanner({ kind: 'success', text: '已重新打开整理' });
+        await refreshAdminAfterMutation();
+      } catch (error) {
+        if (error instanceof CaseApiError && error.code === 'VERSION_CONFLICT') {
+          setActionBanner({ kind: 'warning', text: '该案例已被其他操作更新，请刷新最新状态后再继续。' });
+        } else if (error instanceof CaseApiError && error.code === 'INVALID_TRANSITION') {
+          setActionBanner({ kind: 'warning', text: '案例状态已发生变化，请刷新最新状态后再继续。' });
+        } else if (error instanceof CaseApiError && error.status === 403) {
+          setActionBanner({ kind: 'error', text: '无权限执行该操作' });
+        } else if (error instanceof CaseApiError && error.status === 404) {
+          setActionBanner({ kind: 'error', text: '案例不存在或当前不可管理' });
+        } else {
+          setActionBanner({ kind: 'error', text: '重新打开失败，请稍后重试' });
+        }
+      } finally {
+        setMutationKind(null);
       }
     });
     if (executed === null) return;
@@ -241,7 +472,15 @@ export default function CaseManageWorkspacePage() {
   function handleManualRefresh() {
     if (!confirmDiscardIfNeeded(dirty, message => window.confirm(message))) return;
     setConflictMessage('');
+    setActionBanner(null);
+    setMetadataIssue(null);
+    setRefreshWarning('');
     void loadAdmin({ silent: true });
+  }
+
+  function handleSourceMetadataRefresh() {
+    if (!confirmDiscardIfNeeded(dirty, message => window.confirm(message))) return;
+    void refreshAdminAfterMutation();
   }
 
   function guardNavigation(event: React.MouseEvent) {
@@ -298,7 +537,8 @@ export default function CaseManageWorkspacePage() {
     );
   }
 
-  const editable = admin.status === 'DRAFT';
+  const editable = admin.status === 'DRAFT' && !editorLockedUntilRefresh;
+  const mutationInFlight = mutationKind !== null;
 
   return (
     <AppLayout>
@@ -392,6 +632,66 @@ export default function CaseManageWorkspacePage() {
 
       <CaseStaleWarning admin={admin} />
 
+      <div className="mb-5 rounded-lg border border-gray-200 bg-white p-4">
+        <CaseManageActionBar
+          status={admin.status}
+          isStale={admin.isStale}
+          dirty={dirty}
+          mutationInFlight={mutationInFlight}
+          stateLocked={editorLockedUntilRefresh}
+          onPublish={() => void handlePublish()}
+          onHide={handleHide}
+          onReopen={handleReopen}
+        />
+      </div>
+
+      {actionBanner && (
+        <div
+          className={
+            'mb-4 rounded-md px-4 py-3 text-sm '
+            + (actionBanner.kind === 'success'
+              ? 'bg-green-50 text-green-700'
+              : actionBanner.kind === 'warning'
+                ? 'bg-yellow-50 text-yellow-800'
+                : 'bg-red-50 text-red-700')
+          }
+        >
+          {actionBanner.text}
+        </div>
+      )}
+
+      {refreshWarning && (
+        <div className="mb-4 rounded-md bg-yellow-50 px-4 py-3 text-sm text-yellow-800">
+          {refreshWarning}
+        </div>
+      )}
+
+      {metadataIssue && metadataIssue.length > 0 && (
+        <div className="mb-4 rounded-md bg-yellow-50 px-4 py-3 text-sm text-yellow-800">
+          <p>来源复盘分类信息仍不完整：</p>
+          <ul className="mt-1 list-disc pl-5">
+            {metadataIssue.map(label => <li key={label}>{label}</li>)}
+          </ul>
+          <p className="mt-2">请到来源复盘补齐分类信息，或刷新来源信息后重试。</p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Link
+              href={`/review-center/reviews/${encodeURIComponent(admin.sourceReviewId)}`}
+              className="text-sm text-blue-600 no-underline"
+            >
+              查看来源复盘
+            </Link>
+            <button
+              type="button"
+              className="btn-secondary"
+              disabled={refreshing || mutationInFlight}
+              onClick={handleSourceMetadataRefresh}
+            >
+              {refreshing ? '刷新中...' : '刷新来源信息'}
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="mb-5 rounded-lg border border-gray-200 bg-white p-6">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
           <h3 className="font-medium text-gray-800">案例内容</h3>
@@ -400,7 +700,7 @@ export default function CaseManageWorkspacePage() {
               <button
                 type="button"
                 className="btn-secondary"
-                disabled={saveState === 'saving'}
+                disabled={mutationInFlight}
                 onClick={handleDiscard}
               >
                 取消修改
@@ -408,7 +708,7 @@ export default function CaseManageWorkspacePage() {
               <button
                 type="button"
                 className="btn-primary"
-                disabled={saveState === 'saving' || !dirty}
+                disabled={mutationInFlight || !dirty}
                 onClick={() => void handleSave()}
               >
                 {saveState === 'saving' ? '保存中...' : '保存'}
@@ -454,6 +754,25 @@ export default function CaseManageWorkspacePage() {
         <h3 className="mb-3 font-medium text-gray-800">案例分类</h3>
         <CaseMetadataComparison admin={admin} />
       </div>
+
+      {hideDialog && (
+        <CaseHideDialog
+          context={hideDialog}
+          inFlight={mutationKind === 'hide'}
+          onClose={() => setHideDialog(null)}
+          onConfirm={reason => void confirmHide(reason)}
+        />
+      )}
+
+      <ConfirmDialog
+        open={reopenConfirmOpen}
+        title="重新打开整理"
+        message="重新打开后，案例将回到草稿状态，可继续编辑；不会自动恢复公开。"
+        confirmLabel={mutationKind === 'reopen' ? '处理中...' : '确认'}
+        onConfirm={() => void confirmReopen()}
+        onCancel={() => setReopenConfirmOpen(false)}
+        confirmDisabled={mutationKind !== null}
+      />
     </AppLayout>
   );
 }

@@ -361,13 +361,11 @@ assert(!candidatesSource.includes('>{candidate.sourceReviewId}'), 'candidate sou
 assert(!manageSource.includes('>{admin.id}') && !manageSource.includes('>{admin.sourceReviewId}'), 'manage shell no internal UUID text render');
 assert(!manageSource.includes('案例已创建') && !manageSource.includes('建设中') && !manageSource.includes('下一阶段开放'), 'manage shell no transient copy');
 assert(
-  !manageSource.includes('publishCase')
-    && !manageSource.includes('hideCase')
-    && !manageSource.includes('reopenCase')
-    && !manageSource.includes('fetchCaseAudit')
-    && !manageSource.includes('CaseHideDialog')
-    && !manageSource.includes('CaseAuditPanel'),
-  'manage shell no slice3b/3c features',
+  !manageSource.includes('fetchCaseAudit')
+    && !manageSource.includes('CaseAuditPanel')
+    && !manageSource.includes('AuditSection')
+    && !manageSource.includes('/audit'),
+  'manage workspace no audit',
 );
 
 assert(dialogSource.includes('createCase') && dialogSource.includes('runExclusiveOnce'), 'dialog uses create client and exclusive guard');

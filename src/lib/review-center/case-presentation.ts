@@ -50,6 +50,26 @@ export function sourceReviewStatusLabel(status: string | null | undefined): stri
   return typeof status === 'string' && status ? status : '未知状态';
 }
 
+export function curationMissingFieldLabel(code: string | null | undefined): string {
+  if (code === 'TITLE') return '案例标题';
+  if (code === 'SUMMARY') return '摘要';
+  if (code === 'LESSON_SUMMARY') return '核心教训';
+  if (code === 'PREVENTION_SUMMARY') return '预防措施';
+  return '案例整理内容仍有缺失，请检查后重试';
+}
+
+export function metadataMissingDimensionLabel(code: string | null | undefined): string {
+  if (code === 'PROBLEM_DOMAIN') return '问题环节';
+  if (code === 'PROBLEM_SYMPTOM') return '问题现象';
+  if (code === 'PRIMARY_MATERIAL') return '主要材质';
+  if (code === 'PROCESS') return '工艺';
+  if (code === 'MATERIAL_OTHER_TEXT') return '其他材质说明';
+  if (code === 'PROCESS_OTHER_TEXT') return '其他工艺说明';
+  if (code === 'PROBLEM_DOMAIN_OTHER_TEXT') return '其他问题环节说明';
+  if (code === 'PROBLEM_SYMPTOM_OTHER_TEXT') return '其他问题现象说明';
+  return '来源复盘分类信息仍不完整，请检查后重试';
+}
+
 export function caseRiskLabel(risk: string | null | undefined): string {
   if (risk === 'RED') return '高';
   if (risk === 'YELLOW') return '中';
