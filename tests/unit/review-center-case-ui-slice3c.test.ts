@@ -141,6 +141,58 @@ console.log('\n=== Case UI Slice 3C ===');
     }
     assert(threw, 'malformed item: ' + label);
   }
+
+  const baseData = { items: [], limit: 30, offset: 0, hasMore: false };
+  const baseItem = auditItem();
+  const unknownFieldEnvelopes: Array<[Record<string, unknown>, string]> = [
+    [{ ok: true, data: baseData, unexpected: 'SENSITIVE_UNKNOWN_ROOT' }, 'root extra field rejected'],
+    [{ ok: true, data: { ...baseData, unexpected: 'SENSITIVE_UNKNOWN_DATA' } }, 'data extra field rejected'],
+    [{ ok: true, data: { ...baseData, items: [{ ...baseItem, unexpected: 'SENSITIVE_UNKNOWN_ITEM' }] } }, 'item extra field rejected'],
+    [{
+      ok: true,
+      data: {
+        ...baseData,
+        items: [{ ...baseItem, safeChangeSummary: { ...baseItem.safeChangeSummary, unexpected: 'SENSITIVE_UNKNOWN_SUMMARY' } }],
+      },
+    }, 'safeChangeSummary extra field rejected'],
+  ];
+  for (const [body, label] of unknownFieldEnvelopes) {
+    let threw = false;
+    try {
+      parseCaseAuditResponse(body);
+    } catch (error) {
+      threw = error instanceof CaseApiError && error.code === 'INVALID_RESPONSE';
+    }
+    assert(threw, 'unknown field: ' + label);
+  }
+
+  const missingSummaryKeys: Array<[string, unknown]> = [
+    ['changedFields', { ...auditItem(), safeChangeSummary: { fromStatus: null, toStatus: null, sourceReviewVersion: null, publishKind: null, status: null } }],
+    ['fromStatus', { ...auditItem(), safeChangeSummary: { changedFields: null, toStatus: null, sourceReviewVersion: null, publishKind: null, status: null } }],
+    ['toStatus', { ...auditItem(), safeChangeSummary: { changedFields: null, fromStatus: null, sourceReviewVersion: null, publishKind: null, status: null } }],
+    ['sourceReviewVersion', { ...auditItem(), safeChangeSummary: { changedFields: null, fromStatus: null, toStatus: null, publishKind: null, status: null } }],
+    ['publishKind', { ...auditItem(), safeChangeSummary: { changedFields: null, fromStatus: null, toStatus: null, sourceReviewVersion: null, status: null } }],
+    ['status', { ...auditItem(), safeChangeSummary: { changedFields: null, fromStatus: null, toStatus: null, sourceReviewVersion: null, publishKind: null } }],
+  ];
+  for (const [key, item] of missingSummaryKeys) {
+    let threw = false;
+    try {
+      parseCaseAuditResponse(auditEnvelope([item as CaseAuditItem]));
+    } catch (error) {
+      threw = error instanceof CaseApiError && error.code === 'INVALID_RESPONSE';
+    }
+    assert(threw, 'missing safeChangeSummary key: ' + key);
+  }
+
+  let privacyThrew = false;
+  try {
+    parseCaseAuditResponse({ ok: true, data: baseData, unexpected: 'SENSITIVE_UNKNOWN_ROOT' });
+  } catch (error) {
+    privacyThrew = error instanceof CaseApiError
+      && error.code === 'INVALID_RESPONSE'
+      && !error.message.includes('SENSITIVE_UNKNOWN_ROOT');
+  }
+  assert(privacyThrew, 'INVALID_RESPONSE message hides unknown field value');
 }
 
 // ---- Client: http error privacy ----

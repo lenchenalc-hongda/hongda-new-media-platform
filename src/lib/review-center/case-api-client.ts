@@ -12,6 +12,7 @@ import type {
   CaseMutationResult,
   CasePublicDetail,
 } from './case-schemas';
+import { caseAuditResponseEnvelopeSchema } from './case-schemas';
 import type { MetadataOptionDto, MetadataOptionsDto } from './types';
 
 export class CaseApiError extends Error {
@@ -183,81 +184,12 @@ function parseOption(value: unknown): MetadataOptionDto {
   };
 }
 
-const AUDIT_ACTIONS = [
-  'CASE_CREATED',
-  'CASE_UPDATED',
-  'CASE_PUBLISHED',
-  'CASE_REPUBLISHED',
-  'CASE_HIDDEN',
-  'CASE_REOPENED',
-] as const;
-const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$/;
-
-function isAuditSafeSummary(value: unknown): boolean {
-  if (!isRecord(value)) return false;
-  if (value.changedFields !== null && !Array.isArray(value.changedFields)) return false;
-  if (value.changedFields !== null && (value.changedFields as unknown[]).some(item => typeof item !== 'string')) {
-    return false;
-  }
-  if (!isNullableString(value.fromStatus)) return false;
-  if (!isNullableString(value.toStatus)) return false;
-  if (value.sourceReviewVersion !== null && !isPositiveInt(value.sourceReviewVersion)) return false;
-  if (!isNullableString(value.publishKind)) return false;
-  if (!isNullableString(value.status)) return false;
-  return true;
-}
-
-function parseAuditItem(value: unknown): CaseAuditItem {
-  if (
-    !isRecord(value)
-    || !AUDIT_ACTIONS.includes(value.action as typeof AUDIT_ACTIONS[number])
-    || (value.versionBefore !== null && !isPositiveInt(value.versionBefore))
-    || !isPositiveInt(value.versionAfter)
-    || typeof value.actorDisplayName !== 'string'
-    || typeof value.createdAt !== 'string'
-    || !ISO_DATE_PATTERN.test(value.createdAt)
-    || !isAuditSafeSummary(value.safeChangeSummary)
-  ) {
-    throw invalidResponse();
-  }
-  return {
-    action: value.action as CaseAuditItem['action'],
-    versionBefore: value.versionBefore as number | null,
-    versionAfter: value.versionAfter as number,
-    actorDisplayName: value.actorDisplayName,
-    createdAt: value.createdAt,
-    safeChangeSummary: {
-      changedFields: (value.safeChangeSummary as Record<string, unknown>).changedFields as string[] | null,
-      fromStatus: (value.safeChangeSummary as Record<string, unknown>).fromStatus as string | null,
-      toStatus: (value.safeChangeSummary as Record<string, unknown>).toStatus as string | null,
-      sourceReviewVersion: (value.safeChangeSummary as Record<string, unknown>).sourceReviewVersion as number | null,
-      publishKind: (value.safeChangeSummary as Record<string, unknown>).publishKind as string | null,
-      status: (value.safeChangeSummary as Record<string, unknown>).status as string | null,
-    },
-  };
-}
-
 export function parseCaseAuditResponse(body: unknown): CaseAuditResponseData {
-  const data = readData(body);
-  if (
-    !isRecord(data)
-    || !Array.isArray(data.items)
-    || !Number.isInteger(data.limit)
-    || (data.limit as number) < 1
-    || (data.limit as number) > 50
-    || !Number.isInteger(data.offset)
-    || (data.offset as number) < 0
-    || (data.offset as number) > 100000
-    || typeof data.hasMore !== 'boolean'
-  ) {
+  const parsed = caseAuditResponseEnvelopeSchema.safeParse(body);
+  if (!parsed.success) {
     throw invalidResponse();
   }
-  return {
-    items: data.items.map(parseAuditItem),
-    limit: data.limit as number,
-    offset: data.offset as number,
-    hasMore: data.hasMore,
-  };
+  return parsed.data.data;
 }
 
 export function buildCaseAuditQueryString(query: CaseAuditQuery): string {

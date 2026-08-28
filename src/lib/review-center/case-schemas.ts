@@ -217,6 +217,11 @@ export const caseAuditResponseDataSchema = z.object({
   hasMore: z.boolean(),
 }).strict();
 
+export const caseAuditResponseEnvelopeSchema = z.object({
+  ok: z.literal(true),
+  data: caseAuditResponseDataSchema,
+}).strict();
+
 export const caseReadEnvelopeSchema = z.object({
   ok: z.literal(true),
   data: z.unknown(),
