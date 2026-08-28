@@ -1,7 +1,12 @@
 import type {
+  CaseAdminDetail,
+  CaseCandidateItem,
+  CaseCandidateQuery,
+  CaseCandidateResponseData,
   CaseLibraryItem,
   CaseLibraryQuery,
   CaseLibraryResponseData,
+  CaseMutationResult,
   CasePublicDetail,
 } from './case-schemas';
 import type { MetadataOptionDto, MetadataOptionsDto } from './types';
@@ -37,13 +42,17 @@ function statusMessage(status: number): string {
 
 async function requestJson(
   url: string,
-  options?: { signal?: AbortSignal },
+  init?: RequestInit,
 ): Promise<{ status: number; body: unknown }> {
   let response: Response;
   try {
+    const headers = new Headers(init?.headers);
+    if (!headers.has('Accept')) headers.set('Accept', 'application/json');
     response = await fetch(url, {
-      headers: { Accept: 'application/json' },
-      signal: options?.signal,
+      method: init?.method ?? 'GET',
+      headers,
+      body: init?.body,
+      signal: init?.signal,
     });
   } catch {
     throw new CaseApiError(0, 'NETWORK_ERROR', '网络请求失败，请稍后重试');
@@ -192,4 +201,160 @@ export async function fetchCaseMetadataOptions(
 ): Promise<MetadataOptionsDto> {
   const { body } = await requestJson('/api/review-center/metadata/options', options);
   return parseMetadataOptionsResponse(body);
+}
+
+const CASE_NO_PATTERN = /^CASE-[0-9]{4}-[0-9]{6}$/;
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function isPositiveInt(value: unknown): boolean {
+  return typeof value === 'number' && Number.isInteger(value) && value > 0;
+}
+
+function parseExistingCase(value: unknown): CaseCandidateItem['existingCase'] {
+  if (value === null) return null;
+  if (
+    !isRecord(value)
+    || typeof value.id !== 'string'
+    || !UUID_PATTERN.test(value.id)
+    || typeof value.caseNo !== 'string'
+    || !CASE_NO_PATTERN.test(value.caseNo)
+    || !['DRAFT', 'PUBLISHED', 'HIDDEN'].includes(value.status as string)
+    || !isPositiveInt(value.version)
+    || typeof value.isSourceChanged !== 'boolean'
+  ) {
+    throw invalidResponse();
+  }
+  return value as CaseCandidateItem['existingCase'];
+}
+
+function parseCandidateItem(value: unknown): CaseCandidateItem {
+  if (
+    !isRecord(value)
+    || typeof value.sourceReviewId !== 'string'
+    || !UUID_PATTERN.test(value.sourceReviewId)
+    || typeof value.reviewNo !== 'string'
+    || !['A', 'B', 'C'].includes(value.reviewType as string)
+    || !isPositiveInt(value.sourceVersion)
+    || !Array.isArray(value.metadataSummary)
+  ) {
+    throw invalidResponse();
+  }
+  const existingCase = parseExistingCase(value.existingCase);
+  return { ...(value as CaseCandidateItem), existingCase };
+}
+
+export function parseCaseCandidateResponse(body: unknown): CaseCandidateResponseData {
+  const data = readData(body);
+  if (
+    !isRecord(data)
+    || !Array.isArray(data.items)
+    || !Number.isInteger(data.limit)
+    || (data.limit as number) < 1
+    || !Number.isInteger(data.offset)
+    || (data.offset as number) < 0
+    || typeof data.hasMore !== 'boolean'
+  ) {
+    throw invalidResponse();
+  }
+  return {
+    items: data.items.map(parseCandidateItem),
+    limit: data.limit as number,
+    offset: data.offset as number,
+    hasMore: data.hasMore,
+  };
+}
+
+export function buildCaseCandidateQueryString(query: CaseCandidateQuery): string {
+  const search = new URLSearchParams();
+  if (query.q) search.set('q', query.q);
+  search.set('limit', String(query.limit));
+  search.set('offset', String(query.offset));
+  return search.toString();
+}
+
+export async function fetchCaseCandidates(
+  query: CaseCandidateQuery,
+  options?: { signal?: AbortSignal },
+): Promise<CaseCandidateResponseData> {
+  const url = `/api/review-center/case-candidates?${buildCaseCandidateQueryString(query)}`;
+  const { body } = await requestJson(url, options);
+  return parseCaseCandidateResponse(body);
+}
+
+export interface CaseCreateInput {
+  sourceReviewId: string;
+  expectedReviewVersion: number;
+  title: string;
+}
+
+export function parseCaseMutationResult(body: unknown): CaseMutationResult {
+  if (
+    !isRecord(body)
+    || typeof body.id !== 'string'
+    || !UUID_PATTERN.test(body.id)
+    || typeof body.caseNo !== 'string'
+    || !CASE_NO_PATTERN.test(body.caseNo)
+    || !['DRAFT', 'PUBLISHED', 'HIDDEN'].includes(body.status as string)
+    || !isPositiveInt(body.version)
+    || !isPositiveInt(body.sourceReviewVersion)
+  ) {
+    throw invalidResponse();
+  }
+  return body as CaseMutationResult;
+}
+
+export async function createCase(
+  input: CaseCreateInput,
+  options?: { signal?: AbortSignal },
+): Promise<CaseMutationResult> {
+  const { body } = await requestJson('/api/review-center/cases', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      sourceReviewId: input.sourceReviewId,
+      expectedReviewVersion: input.expectedReviewVersion,
+      title: input.title,
+    }),
+    signal: options?.signal,
+  });
+  return parseCaseMutationResult(body);
+}
+
+export function parseCaseAdminDetailResponse(body: unknown): CaseAdminDetail {
+  const data = readData(body);
+  if (
+    !isRecord(data)
+    || typeof data.caseNo !== 'string'
+    || !CASE_NO_PATTERN.test(data.caseNo)
+    || typeof data.title !== 'string'
+    || !['DRAFT', 'PUBLISHED', 'HIDDEN'].includes(data.status as string)
+    || !isPositiveInt(data.version)
+  ) {
+    throw invalidResponse();
+  }
+  return data as CaseAdminDetail;
+}
+
+export async function fetchCaseAdminDetail(
+  caseNo: string,
+  options?: { signal?: AbortSignal },
+): Promise<CaseAdminDetail> {
+  const { body } = await requestJson(
+    `/api/review-center/cases/${encodeURIComponent(caseNo)}/admin`,
+    options,
+  );
+  return parseCaseAdminDetailResponse(body);
+}
+
+export async function runExclusiveOnce<T>(
+  guard: { current: boolean },
+  task: () => Promise<T>,
+): Promise<T | null> {
+  if (guard.current) return null;
+  guard.current = true;
+  try {
+    return await task();
+  } finally {
+    guard.current = false;
+  }
 }

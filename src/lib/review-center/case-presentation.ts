@@ -21,6 +21,17 @@ export function caseReviewTypeLabel(reviewType: string | null | undefined): stri
   return typeof reviewType === 'string' && reviewType ? reviewType : '未知类型';
 }
 
+export function caseStatusLabel(status: string | null | undefined): string {
+  if (status === 'DRAFT') return '草稿';
+  if (status === 'PUBLISHED') return '已发布';
+  if (status === 'HIDDEN') return '已隐藏';
+  return typeof status === 'string' && status ? status : '未知状态';
+}
+
+export function canManageCaseRole(role: string | null | undefined): boolean {
+  return role === 'admin' || role === 'manager';
+}
+
 export function caseRiskLabel(risk: string | null | undefined): string {
   if (risk === 'RED') return '高';
   if (risk === 'YELLOW') return '中';

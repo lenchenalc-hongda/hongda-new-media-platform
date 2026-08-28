@@ -272,13 +272,16 @@ assert(detailPageSource.includes('案例不存在或当前不可查看'), 'detai
 assert(detailPageSource.includes('分类快照') && detailPageSource.includes('核心教训') && detailPageSource.includes('预防措施') && detailPageSource.includes('适用说明'), 'detail content sections');
 assert(detailPageSource.includes('返回案例中心'), 'detail back navigation link');
 
-for (const source of [libraryPageSource, detailPageSource, clientSource, presentationSource]) {
+for (const source of [libraryPageSource, detailPageSource, presentationSource]) {
   for (const endpoint of ['/case-candidates', '/admin', '/audit', '/publish', '/hide', '/reopen']) {
     assert(!source.includes(endpoint), 'no management endpoint reference');
   }
   for (const method of ["method: 'POST'", "method: 'PATCH'", "method: 'PUT'", "method: 'DELETE'"]) {
     assert(!source.includes(method), 'no case mutation method reference');
   }
+}
+
+for (const source of [libraryPageSource, detailPageSource, clientSource, presentationSource]) {
   for (const token of ['@supabase', 'createClient', 'supabase.from(', '.rpc(']) {
     assert(!source.includes(token), 'no direct supabase reference');
   }
@@ -286,6 +289,17 @@ for (const source of [libraryPageSource, detailPageSource, clientSource, present
     assert(!source.includes(token), 'no unsafe type escape');
   }
 }
+
+assert(clientSource.includes('fetchCaseLibrary'), 'client preserves library read');
+assert(clientSource.includes('fetchCasePublicDetail'), 'client preserves public detail read');
+assert(!libraryPageSource.includes('fetchCaseCandidates'), 'library page no candidate fetch');
+assert(!detailPageSource.includes('fetchCaseAdminDetail'), 'detail page no admin fetch');
+assert(!clientSource.includes("method: 'PATCH'"), 'client no patch');
+assert(!clientSource.includes("method: 'PUT'"), 'client no put');
+assert(!clientSource.includes("method: 'DELETE'"), 'client no delete');
+assert(clientSource.includes('createCase'), 'client slice2 create extension');
+assert(clientSource.includes('fetchCaseAdminDetail'), 'client slice2 admin extension');
+assert(!clientSource.includes('fetchCaseAudit'), 'client no audit helper');
 
 assert(!libraryPageSource.includes('sourceReviewId') && !libraryPageSource.includes('orgId') && !libraryPageSource.includes('actorId'), 'library no internal identifiers');
 assert(!detailPageSource.includes('sourceReviewId') && !detailPageSource.includes('orgId') && !detailPageSource.includes('actorId'), 'detail no internal identifiers');

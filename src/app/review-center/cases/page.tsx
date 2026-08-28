@@ -13,6 +13,7 @@ import {
 } from '@/lib/review-center/case-api-client';
 import {
   buildCaseMetadataDisplay,
+  canManageCaseRole,
   caseDateToIsoDate,
   caseRiskBadgeClass,
   caseRiskLabel,
@@ -177,6 +178,7 @@ export default function CaseLibraryPage() {
   const [dateError, setDateError] = useState('');
   const [options, setOptions] = useState<MetadataOptionsDto | null>(null);
   const [optionsState, setOptionsState] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [canManage, setCanManage] = useState(false);
   const generationRef = useRef(0);
   const abortRef = useRef<AbortController | null>(null);
 
@@ -235,6 +237,21 @@ export default function CaseLibraryPage() {
     };
   }, [load, loadOptions]);
 
+  useEffect(() => {
+    let active = true;
+    fetch('/api/review-center/me')
+      .then(response => response.json().catch(() => null))
+      .then(data => {
+        if (active && data && typeof data.role === 'string') {
+          setCanManage(canManageCaseRole(data.role));
+        }
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, []);
+
   function applyFilters() {
     if (dateRangeInvalid(draftFilters)) {
       setDateError('开始日期不能晚于结束日期。');
@@ -278,6 +295,11 @@ export default function CaseLibraryPage() {
       <PageHeader
         title="案例中心"
         description="已发布并整理完成的项目复盘知识，可按工艺、材料和问题类型检索。"
+        actions={canManage ? (
+          <Link href="/review-center/cases/candidates" className="btn-primary whitespace-nowrap">
+            待整理案例
+          </Link>
+        ) : undefined}
       />
 
       <div className="mb-5 rounded-lg border border-gray-200 bg-white p-4">
