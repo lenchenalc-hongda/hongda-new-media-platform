@@ -322,9 +322,10 @@ for (const source of [manageSource, editorSource, metadataSource, staleSource, m
   }
 }
 
-for (const token of ['fetchCaseAudit', '/audit', 'CaseAuditPanel', 'AuditSection']) {
-  assert(!manageSource.includes(token), 'manage workspace no audit reference: ' + token);
-}
+assert(manageSource.includes('CaseAuditPanel'), 'manage page hosts audit panel');
+const saveHandlerSourceForAudit = manageSource.slice(saveHandlerStart, manualRefreshStart);
+assert(!saveHandlerSourceForAudit.includes('fetchCaseAudit'), 'save path does not fetch audit');
+assert(!manageSource.includes('await fetchCaseAudit'), 'manage never awaits audit in handlers');
 
 assert(!manageSource.includes('>{admin.id}') && !manageSource.includes('>{admin.sourceReviewId}'), 'manage no internal UUID text render');
 assert(metadataSource.includes('案例当前快照') && metadataSource.includes('来源复盘当前分类'), 'metadata comparison sections separated');

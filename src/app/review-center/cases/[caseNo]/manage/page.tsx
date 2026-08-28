@@ -12,6 +12,7 @@ import CaseHideDialog from '@/components/review-center/case/CaseHideDialog';
 import type { CaseHideContext } from '@/components/review-center/case/CaseManageActionBar';
 import CaseMetadataComparison from '@/components/review-center/case/CaseMetadataComparison';
 import CaseStaleWarning from '@/components/review-center/case/CaseStaleWarning';
+import CaseAuditPanel from '@/components/review-center/case/CaseAuditPanel';
 import type { CaseAdminDetail } from '@/lib/review-center/case-schemas';
 import {
   CaseApiError,
@@ -753,6 +754,14 @@ export default function CaseManageWorkspacePage() {
       <div className="mb-5">
         <h3 className="mb-3 font-medium text-gray-800">案例分类</h3>
         <CaseMetadataComparison admin={admin} />
+      </div>
+
+      <div className="mb-5">
+        <CaseAuditPanel
+          caseNo={caseNo}
+          currentCaseVersion={admin.version}
+          mutationInFlight={mutationInFlight}
+        />
       </div>
 
       {hideDialog && (

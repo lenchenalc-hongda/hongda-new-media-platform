@@ -273,9 +273,10 @@ assert(detailPageSource.includes('分类快照') && detailPageSource.includes('�
 assert(detailPageSource.includes('返回案例中心'), 'detail back navigation link');
 
 for (const source of [libraryPageSource, detailPageSource, presentationSource]) {
-  for (const endpoint of ['/case-candidates', '/admin', '/audit', '/publish', '/hide', '/reopen']) {
+  for (const endpoint of ['/case-candidates', '/admin', '/publish', '/hide', '/reopen']) {
     assert(!source.includes(endpoint), 'no management endpoint reference');
   }
+  assert(!source.includes('fetchCaseAudit'), 'public page no audit client reference');
   for (const method of ["method: 'POST'", "method: 'PATCH'", "method: 'PUT'", "method: 'DELETE'"]) {
     assert(!source.includes(method), 'no case mutation method reference');
   }
@@ -299,7 +300,7 @@ assert(!detailPageSource.includes('updateCase'), 'detail page no update fetch');
 assert(!clientSource.includes("method: 'PUT'"), 'client no put');
 assert(!clientSource.includes("method: 'DELETE'"), 'client no delete');
 assert(clientSource.includes('updateCase'), 'client slice3a update extension');
-assert(!clientSource.includes('fetchCaseAudit'), 'client no audit helper');
+assert(!libraryPageSource.includes('fetchCaseAudit') && !detailPageSource.includes('fetchCaseAudit'), 'public pages no audit helper');
 
 assert(!libraryPageSource.includes('sourceReviewId') && !libraryPageSource.includes('orgId') && !libraryPageSource.includes('actorId'), 'library no internal identifiers');
 assert(!detailPageSource.includes('sourceReviewId') && !detailPageSource.includes('orgId') && !detailPageSource.includes('actorId'), 'detail no internal identifiers');

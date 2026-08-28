@@ -1,4 +1,4 @@
-import type { CaseLibraryItem } from './case-schemas';
+import type { CaseAuditItem, CaseLibraryItem } from './case-schemas';
 import { formatReviewDate, formatReviewDateTime } from './formatters';
 
 export interface CaseMetadataDisplayGroup {
@@ -19,6 +19,21 @@ export function caseReviewTypeLabel(reviewType: string | null | undefined): stri
     return `${reviewType} 类`;
   }
   return typeof reviewType === 'string' && reviewType ? reviewType : '未知类型';
+}
+
+export function caseAuditActionLabel(action: CaseAuditItem['action'] | string | null | undefined): string {
+  if (action === 'CASE_CREATED') return '创建案例';
+  if (action === 'CASE_UPDATED') return '更新案例';
+  if (action === 'CASE_PUBLISHED') return '发布案例';
+  if (action === 'CASE_REPUBLISHED') return '再次发布';
+  if (action === 'CASE_HIDDEN') return '隐藏案例';
+  if (action === 'CASE_REOPENED') return '重新打开整理';
+  return typeof action === 'string' && action ? action : '未知操作';
+}
+
+export function caseAuditVersionLabel(item: Pick<CaseAuditItem, 'versionBefore' | 'versionAfter'>): string {
+  if (item.versionBefore === null) return `v${item.versionAfter}`;
+  return `v${item.versionBefore} → v${item.versionAfter}`;
 }
 
 export function caseStatusLabel(status: string | null | undefined): string {

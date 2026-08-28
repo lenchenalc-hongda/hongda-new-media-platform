@@ -284,12 +284,25 @@ assert(actionBarSource.includes("isStale ? 'btn-primary' : 'btn-secondary'"), 's
 assert(hideDialogSource.includes('normalizeHideReason') && hideDialogSource.includes('隐藏原因'), 'hide dialog uses validation helper');
 assert(!hideDialogSource.includes('sourceReviewId') && !hideDialogSource.includes('admin.version'), 'hide dialog no authority/UUID state');
 
-for (const source of [manageSource, actionBarSource, hideDialogSource, clientSource, manageHelperSource]) {
+for (const source of [actionBarSource, hideDialogSource, manageHelperSource]) {
   for (const token of ['fetchCaseAudit', '/audit', 'CaseAuditPanel', 'AuditSection', 'createClient', 'supabase', '.from(', '.rpc(', 'as any', 'as unknown as', '@ts-ignore', '@ts-expect-error']) {
     assert(!source.includes(token), 'no audit/supabase/unsafe cast: ' + token);
   }
 }
 
+assert(clientSource.includes('fetchCaseAudit'), 'client hosts audit fetch extension');
+const auditClientStart = clientSource.indexOf('export async function fetchCaseAudit(');
+const auditClientEnd = clientSource.indexOf('function parseOptionArray');
+const auditClientSource = clientSource.slice(auditClientStart, auditClientEnd);
+assert(auditClientSource.includes('/audit?') && auditClientSource.includes('requestJson('), 'audit client builds read URL');
+assert(!auditClientSource.includes('method: '), 'audit client block has no mutation method');
+assert(manageSource.includes('CaseAuditPanel'), 'manage page hosts audit panel');
+assert(manageSource.includes('mutationInFlight={mutationInFlight}'), 'audit panel receives mutation in-flight flag');
+const lifecycleHandlerSource = manageSource.slice(
+  manageSource.indexOf('async function handlePublish()'),
+  manageSource.indexOf('function handleManualRefresh()'),
+);
+assert(!lifecycleHandlerSource.includes('fetchCaseAudit'), 'publish/hide/reopen handlers do not fetch audit');
 assert(!manageSource.includes('admin.hiddenReason'), 'hidden reason not displayed');
 assert(!manageSource.includes("'STALE'"), 'no persistent STALE status');
 assert(!manageSource.includes('await hideCase(') || !manageSource.includes('await reopenCase(') || manageSource.indexOf('async function confirmReopen()') > manageSource.indexOf('await hideCase('), 'no one-handler hide+reopen chain');

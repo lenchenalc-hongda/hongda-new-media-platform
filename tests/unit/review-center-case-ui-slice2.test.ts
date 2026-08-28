@@ -349,7 +349,7 @@ for (const source of [candidatesSource, manageSource, dialogSource]) {
   for (const token of ['@supabase', 'createClient', 'supabase.from(', '.rpc(', 'as any', 'as unknown as', '@ts-ignore', '@ts-expect-error']) {
     assert(!source.includes(token), 'no direct supabase / unsafe cast');
   }
-  for (const endpoint of ['/audit', '/publish', '/hide', '/reopen']) {
+  for (const endpoint of ['/publish', '/hide', '/reopen']) {
     assert(!source.includes(endpoint), 'no forbidden management endpoint');
   }
   for (const method of ["method: 'PATCH'", "method: 'PUT'", "method: 'DELETE'"]) {
@@ -357,16 +357,17 @@ for (const source of [candidatesSource, manageSource, dialogSource]) {
   }
 }
 
+for (const source of [candidatesSource, dialogSource]) {
+  for (const token of ['fetchCaseAudit', '/audit', 'CaseAuditPanel', 'AuditSection']) {
+    assert(!source.includes(token), 'candidate/dialog no audit reference: ' + token);
+  }
+}
+
 assert(!candidatesSource.includes('>{candidate.sourceReviewId}'), 'candidate source UUID not rendered as text');
 assert(!manageSource.includes('>{admin.id}') && !manageSource.includes('>{admin.sourceReviewId}'), 'manage shell no internal UUID text render');
 assert(!manageSource.includes('案例已创建') && !manageSource.includes('建设中') && !manageSource.includes('下一阶段开放'), 'manage shell no transient copy');
-assert(
-  !manageSource.includes('fetchCaseAudit')
-    && !manageSource.includes('CaseAuditPanel')
-    && !manageSource.includes('AuditSection')
-    && !manageSource.includes('/audit'),
-  'manage workspace no audit',
-);
+assert(manageSource.includes('CaseAuditPanel'), 'manage workspace hosts read-only audit panel');
+assert(clientSource.includes('fetchCaseAudit'), 'audit fetch lives in shared client');
 
 assert(dialogSource.includes('createCase') && dialogSource.includes('runExclusiveOnce'), 'dialog uses create client and exclusive guard');
 assert(dialogSource.includes('title.trim()'), 'dialog trims title before request');
