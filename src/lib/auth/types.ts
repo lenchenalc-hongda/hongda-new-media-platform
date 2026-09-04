@@ -25,8 +25,37 @@ export class AuthError extends Error {
   }
 }
 
+export interface AuthModeEnv {
+  authMode: string | undefined;
+  nodeEnv: string | undefined;
+}
+
+export function resolveAuthMode({ authMode, nodeEnv }: AuthModeEnv): AuthMode {
+  if (authMode === 'supabase') return 'supabase';
+
+  if (authMode === 'mock') {
+    if (nodeEnv === 'production') {
+      throw new AuthError('AUTH_CONFIG_MISSING', '正式环境禁止 mock 认证，必须配置 AUTH_MODE=supabase');
+    }
+    return 'mock';
+  }
+
+  if (authMode !== undefined) {
+    throw new AuthError('AUTH_CONFIG_MISSING', 'AUTH_MODE 配置无效，仅支持 mock 或 supabase');
+  }
+
+  if (nodeEnv === 'production') {
+    throw new AuthError('AUTH_CONFIG_MISSING', '正式环境缺少 AUTH_MODE=supabase 配置');
+  }
+
+  return 'mock';
+}
+
 export function getAuthMode(): AuthMode {
-  return process.env.AUTH_MODE === 'supabase' ? 'supabase' : 'mock';
+  return resolveAuthMode({
+    authMode: process.env.AUTH_MODE,
+    nodeEnv: process.env.NODE_ENV,
+  });
 }
 
 export function isSupabaseConfigured(): boolean {

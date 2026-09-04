@@ -35,7 +35,7 @@
 
 - **Development**：建议先配置（本机 `pnpm dev` 可用）
 - **Preview**：建议配置（测试环境）
-- **Production**：先不要配置，或只配置 URL/anon key 但保持 `AUTH_MODE=mock`，并保持 Review Center Feature Flag 关闭
+- **Production**：必须配置 `AUTH_MODE=supabase`；缺失、`mock` 或无效值会 fail closed，不允许静默进入 mock 认证
 
 三个环境分别设置相同变量即可，值来自同一个 Supabase 项目。
 
@@ -45,7 +45,7 @@
 |---|---|---|
 | Development | `mock` 或 `supabase` | 开发期建议先 mock，需要测试真实登录再切 supabase |
 | Preview | `supabase` | 用于验证真实认证 |
-| Production | 暂不切换 | 在 Review Center 正式开放前保持 mock 或关闭 |
+| Production | `supabase` | 必填；缺失/mock/invalid 一律 fail closed |
 
 切换后必须重新部署。
 

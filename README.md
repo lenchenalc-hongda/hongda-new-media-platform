@@ -15,7 +15,7 @@ pnpm dev
 
 复制 `.env.local` 配置：
 - `OPENAI_API_KEY` - OpenAI API Key（可选，无Key时AI功能返回Mock数据）
-- `NEXT_PUBLIC_SUPABASE_URL` - Supabase URL（可选，默认使用Mock数据）
+- `NEXT_PUBLIC_SUPABASE_URL` - Supabase URL（Production/Preview 认证必需；仅本地 mock 开发可暂缺）
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY` - Supabase匿名Key
 
 ## 项目说明

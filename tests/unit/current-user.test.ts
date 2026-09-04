@@ -1,6 +1,8 @@
 // ===== Current User Bridge Unit Test =====
 import { getCurrentUserFromRequest, hasRole } from '../../src/lib/auth/current-user';
 
+process.env.AUTH_MODE = 'mock';
+
 var passed = 0;
 var failed = 0;
 function assert(cond: boolean, msg: string) {

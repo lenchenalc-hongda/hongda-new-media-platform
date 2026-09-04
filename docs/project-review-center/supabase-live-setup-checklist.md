@@ -63,8 +63,10 @@ SUPABASE_SERVICE_ROLE_KEY
 ```
 
 **Production 保持：**
-- [ ] Review Center Feature Flag 关闭（不配置或 false）
-- [ ] 暂不切换 AUTH_MODE=supabase（等旧系统迁移验收）
+- [ ] `AUTH_MODE=supabase`（Production REQUIRED）
+- [ ] Review Center 开放时配置 `NEXT_PUBLIC_FEATURE_PROJECT_REVIEW_CENTER=true`
+- [ ] 不配置 `ALLOW_LIVE_AUTH_TESTS=true`，不配置 `LIVE_TEST_*` 测试凭据
+- [ ] Production missing/mock/invalid `AUTH_MODE` 会 fail closed
 
 ## Step 5：Migration 执行方式
 
