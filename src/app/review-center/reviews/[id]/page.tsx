@@ -4,7 +4,7 @@ import { useParams } from 'next/navigation';
 import AppLayout from '@/components/layout/AppLayout';
 import PageHeader from '@/components/layout/PageHeader';
 import ReviewCenterEmpty from '@/components/review-center/ReviewCenterEmpty';
-import { reviewStatusLabel, riskLevelLabel, formatReviewDateTime, formatReviewDate } from '@/lib/review-center/formatters';
+import { reviewStatusDisplayLabel, riskLevelLabel, formatReviewDateTime, formatReviewDate } from '@/lib/review-center/formatters';
 import { applyLifecycleSuccessToDetail, type LifecycleSuccessData } from '@/lib/review-center/lifecycle-presentation';
 import type { ReviewDetail, ReviewMetadataDto } from '@/lib/review-center/types';
 import { canViewManagementAudit } from '@/lib/review-center/audit-presentation';
@@ -109,12 +109,12 @@ export default function ReviewDetailPage() {
 
   return (
     <AppLayout>
-      <PageHeader title={review.title} description={`${review.review_no} · ${review.review_type} 类 · ${reviewStatusLabel(review.status)}`} />
+      <PageHeader title={review.title} description={`${review.review_no} · ${review.review_type} 类 · ${reviewStatusDisplayLabel(review.status)}`} />
 
       <div className="bg-white border border-gray-200 rounded-lg p-6 mb-5">
         <dl className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
           <div><dt className="text-gray-400 text-xs">复盘编号</dt><dd className="mt-1">{review.review_no}</dd></div>
-          <div><dt className="text-gray-400 text-xs">状态</dt><dd className="mt-1">{reviewStatusLabel(review.status)}</dd></div>
+          <div><dt className="text-gray-400 text-xs">状态</dt><dd className="mt-1">{reviewStatusDisplayLabel(review.status)}</dd></div>
           <div><dt className="text-gray-400 text-xs">风险</dt><dd className="mt-1">{riskLevelLabel(review.risk_level)}</dd></div>
           <div><dt className="text-gray-400 text-xs">客户</dt><dd className="mt-1">{review.customer_name || '-'}</dd></div>
           <div><dt className="text-gray-400 text-xs">订单号</dt><dd className="mt-1">{review.order_no || '-'}</dd></div>

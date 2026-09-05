@@ -7,7 +7,7 @@ export default function ReviewsMinePage() {
       title="我的复盘"
       description="查看我创建和参与的复盘"
       emptyTitle="暂无复盘记录"
-      emptyDescription="你提交的项目复盘将在这里集中管理。"
+      emptyDescription="你创建或参与的项目复盘将在这里集中管理。"
       action={{ label: "新建复盘", href: "/review-center/new" }}
     />
   );

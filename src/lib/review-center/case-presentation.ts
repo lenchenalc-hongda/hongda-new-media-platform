@@ -1,5 +1,6 @@
 import type { CaseAuditItem, CaseLibraryItem } from './case-schemas';
-import { formatReviewDate, formatReviewDateTime } from './formatters';
+import type { ReviewStatus } from './types';
+import { formatReviewDate, formatReviewDateTime, reviewStatusDisplayLabel } from './formatters';
 
 export interface CaseMetadataDisplayGroup {
   code: string;
@@ -54,15 +55,8 @@ export function staleReasonLabel(reason: string | null | undefined): string {
 }
 
 export function sourceReviewStatusLabel(status: string | null | undefined): string {
-  if (status === 'closed') return '已关闭';
-  if (status === 'draft') return '草稿';
-  if (status === 'submitted') return '待确认';
-  if (status === 'in_review') return '复盘中';
-  if (status === 'action_required') return '待改善';
-  if (status === 'verifying') return '验证中';
-  if (status === 'rejected') return '已退回';
-  if (status === 'cancelled') return '已取消';
-  return typeof status === 'string' && status ? status : '未知状态';
+  if (typeof status !== 'string' || status === '') return '未知状态';
+  return reviewStatusDisplayLabel(status as ReviewStatus);
 }
 
 export function curationMissingFieldLabel(code: string | null | undefined): string {

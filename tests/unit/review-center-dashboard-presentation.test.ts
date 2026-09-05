@@ -66,13 +66,13 @@ assert(deepEqual(getPeriodKpiLabels('ALL'), {
 }), 'ALL period labels');
 
 assert(formatDashboardStatusLabel('draft') === '草稿', 'draft status label');
-assert(formatDashboardStatusLabel('submitted') === '已提交', 'submitted status label');
-assert(formatDashboardStatusLabel('in_review') === '审核中（未启用）', 'in_review status label');
+assert(formatDashboardStatusLabel('submitted') === '待确认', 'submitted status label');
+assert(formatDashboardStatusLabel('in_review') === '复盘中（未启用）', 'in_review status label');
 assert(formatDashboardStatusLabel('action_required') === '待改善（未启用）', 'action_required status label');
 assert(formatDashboardStatusLabel('verifying') === '验证中（未启用）', 'verifying status label');
 assert(formatDashboardStatusLabel('closed') === '已关闭', 'closed status label');
 assert(formatDashboardStatusLabel('archived') === '已归档（未启用）', 'archived status label');
-assert(formatDashboardStatusLabel('rejected') === '已驳回（未启用）', 'rejected status label');
+assert(formatDashboardStatusLabel('rejected') === '已退回（未启用）', 'rejected status label');
 assert(formatDashboardStatusLabel('cancelled') === '已取消（未启用）', 'cancelled status label');
 assert(formatDashboardStatusLabel('UNKNOWN') === '未知', 'UNKNOWN status label');
 assert(formatDashboardStatusLabel('FUTURE') === '未知', 'future status falls back');
@@ -96,7 +96,7 @@ assert(formatDashboardTypeLabel('X') === '未知', 'future type falls back');
 assert(formatDashboardAttentionReasonLabel('OVERDUE_ACTION') === '有逾期行动', 'OVERDUE_ACTION label');
 assert(formatDashboardAttentionReasonLabel('HIGH_RISK') === '红色风险', 'HIGH_RISK label');
 assert(formatDashboardAttentionReasonLabel('PENDING_VERIFICATION') === '有待验证行动', 'PENDING_VERIFICATION label');
-assert(formatDashboardAttentionReasonLabel('SUBMITTED_WITH_OPEN_ACTION') === '已提交但行动未闭环', 'SUBMITTED_WITH_OPEN_ACTION label');
+assert(formatDashboardAttentionReasonLabel('SUBMITTED_WITH_OPEN_ACTION') === '待确认但行动未闭环', 'SUBMITTED_WITH_OPEN_ACTION label');
 assert(formatDashboardAttentionReasonLabel('FUTURE') === '未知', 'future attention reason falls back');
 assert(!formatDashboardAttentionReasonLabel('OVERDUE_ACTION').includes('OVERDUE_ACTION'), 'raw reason enum not visible');
 

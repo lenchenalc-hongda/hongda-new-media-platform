@@ -8,7 +8,7 @@ import ReviewCenterEmpty from '@/components/review-center/ReviewCenterEmpty';
 export default function NewReviewPage() {
   const router = useRouter();
   const [canCreate, setCanCreate] = useState<boolean | null>(null);
-  const [reviewType, setReviewType] = useState('A');
+  const [reviewType, setReviewType] = useState('');
   const [title, setTitle] = useState('');
   const [occurredAt, setOccurredAt] = useState('');
   const [customerName, setCustomerName] = useState('');
@@ -88,8 +88,9 @@ export default function NewReviewPage() {
       <div className="bg-white border border-gray-200 rounded-lg p-6 max-w-3xl">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <label className="block text-xs text-gray-500 mb-1">复盘类型</label>
+            <label className="block text-xs text-gray-500 mb-1">复盘类型 <span className="text-red-500">*</span></label>
             <select value={reviewType} onChange={e => setReviewType(e.target.value)} className="input-field">
+              <option value="">请选择复盘类型</option>
               <option value="A">A 类 · 大货前异常</option>
               <option value="B">B 类 · 大货生产/品质/交付异常</option>
               <option value="C">C 类 · 前端问题延伸至大货</option>
@@ -100,7 +101,7 @@ export default function NewReviewPage() {
             <input type="datetime-local" value={occurredAt} onChange={e => setOccurredAt(e.target.value)} className="input-field" />
           </div>
           <div className="md:col-span-2">
-            <label className="block text-xs text-gray-500 mb-1">标题</label>
+            <label className="block text-xs text-gray-500 mb-1">标题 <span className="text-red-500">*</span></label>
             <input value={title} onChange={e => setTitle(e.target.value)} className="input-field" placeholder="复盘标题" />
           </div>
           <div>
@@ -137,7 +138,10 @@ export default function NewReviewPage() {
 
         <div className="mt-5 flex justify-end gap-3">
           <button disabled={submitting} onClick={() => router.push('/review-center/reviews')} className="btn-secondary">取消</button>
-          <button disabled={submitting || !title.trim()} onClick={submit} className="btn-primary">保存草稿</button>
+          <div className="text-xs text-gray-400 self-center">
+            保存草稿需填写复盘类型和标题。
+          </div>
+          <button disabled={submitting || !title.trim() || !reviewType} onClick={submit} className="btn-primary">保存草稿</button>
         </div>
       </div>
     </AppLayout>

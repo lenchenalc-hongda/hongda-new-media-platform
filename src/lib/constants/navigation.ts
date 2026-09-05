@@ -4,6 +4,8 @@ export interface PortalNavItem {
   label: string;
   path: string;
   icon: string;
+  disabled?: boolean;
+  matchExact?: boolean;
 }
 
 export interface PortalGroup {
@@ -76,13 +78,13 @@ export const PORTAL_GROUPS: PortalGroup[] = [
       { label: '全部复盘', path: '/review-center/reviews', icon: '📚' },
       { label: '新建复盘', path: '/review-center/new', icon: '➕' },
       { label: '我的复盘', path: '/review-center/reviews/mine', icon: '📋' },
-      { label: '复盘首页', path: '/review-center', icon: '🏠' },
+      { label: '复盘首页', path: '/review-center', icon: '🏠', matchExact: true },
       { label: '待我审核', path: '/review-center/approvals', icon: '✅' },
       { label: '改善任务', path: '/review-center/actions', icon: '🛠️' },
       { label: '分析中心', path: '/review-center/analytics', icon: '📊' },
       { label: '案例中心', path: '/review-center/cases', icon: '💡' },
       { label: '下载中心', path: '/review-center/downloads', icon: '📥' },
-      { label: '系统设置', path: '/review-center/settings', icon: '⚙️' },
+      { label: '系统设置', path: '/review-center/settings', icon: '⚙️', disabled: true },
     ],
   },
   {
@@ -104,6 +106,19 @@ export const PORTAL_GROUPS: PortalGroup[] = [
 
 export const ALL_NAV_ITEMS = PORTAL_GROUPS.flatMap(g => g.items);
 export const WORKSPACE_HOME = '/workspace-home';
+
+export function getActiveNavItemPath(
+  pathname: string,
+  items: PortalNavItem[],
+): string | null {
+  const candidates = items.filter(item => {
+    if (item.disabled) return false;
+    if (item.matchExact) return pathname === item.path;
+    return pathname === item.path || pathname.startsWith(`${item.path}/`);
+  });
+  if (candidates.length === 0) return null;
+  return candidates.sort((a, b) => b.path.length - a.path.length)[0].path;
+}
 
 export function getPortalForPath(path: string): string {
   if (path.startsWith('/dashboard') || path.startsWith('/accounts') || path.startsWith('/topics') ||

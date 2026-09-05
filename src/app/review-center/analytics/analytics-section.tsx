@@ -94,10 +94,6 @@ export default function AnalyticsSection() {
   return (
     <section className="mt-8" aria-label="分析中心">
       <div className="flex flex-wrap items-end justify-between gap-3 mb-4">
-        <div>
-          <h2 className="text-xl font-semibold text-gray-800">分析中心</h2>
-          <p className="text-sm text-gray-500 mt-1">查看复盘流转、改善行动和验证周期的历史变化</p>
-        </div>
         <div className="flex items-center gap-3">
           {refreshedAt && <span className="text-xs text-gray-400">{refreshedAt}</span>}
           <button

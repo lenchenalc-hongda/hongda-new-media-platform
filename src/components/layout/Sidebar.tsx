@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
-import { PORTAL_GROUPS, getPortalForPath } from '@/lib/constants/navigation';
+import { PORTAL_GROUPS, getActiveNavItemPath, getPortalForPath } from '@/lib/constants/navigation';
 import { isFeatureEnabled, FEATURES } from '@/lib/features';
 import { useCanCreateReview } from './RoleProvider';
 import { applyCreateVisibility } from '@/lib/review-center/navigation';
@@ -79,7 +79,22 @@ export default function Sidebar() {
               {isExpanded && (
                 <div className="ml-1 space-y-0.5">
                   {portal.items.map(item => {
-                    const isActive = pathname === item.path || pathname.startsWith(item.path);
+                    const activeItemPath = getActiveNavItemPath(pathname, portal.items);
+                    const isActive = activeItemPath === item.path;
+                    if (item.disabled) {
+                      return (
+                        <div
+                          key={item.path}
+                          aria-disabled="true"
+                          title="暂未开放"
+                          className="flex items-center gap-2 px-4 py-1.5 text-xs border-l-2 border-l-transparent ml-4 text-gray-300 cursor-not-allowed"
+                        >
+                          <span>{item.icon}</span>
+                          <span className="flex-1">{item.label}</span>
+                          <span className="text-[10px] text-gray-400">暂未开放</span>
+                        </div>
+                      );
+                    }
                     return (
                       <Link key={item.path} href={item.path}
                         className={cn(

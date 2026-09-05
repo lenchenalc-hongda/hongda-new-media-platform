@@ -7,7 +7,7 @@ import PageHeader from '@/components/layout/PageHeader';
 import ReviewCenterEmpty from '@/components/review-center/ReviewCenterEmpty';
 import MetadataChips from '@/components/review-center/MetadataChips';
 import MetadataEditor from '@/components/review-center/MetadataEditor';
-import { reviewStatusLabel } from '@/lib/review-center/formatters';
+import { reviewStatusDisplayLabel } from '@/lib/review-center/formatters';
 import { sanitizeMissingDimensions } from '@/lib/review-center/metadata';
 import type { ReviewDetail, ReviewMetadataDto, ReviewType, RiskLevel } from '@/lib/review-center/types';
 import {
@@ -1146,7 +1146,7 @@ export default function ReviewEditPage() {
     <AppLayout>
       <PageHeader
         title={detail.title}
-        description={`${detail.review_no} · ${detail.review_type} 类 · ${reviewStatusLabel(detail.status)} · v${currentVersion}`}
+        description={`${detail.review_no} · ${detail.review_type} 类 · ${reviewStatusDisplayLabel(detail.status)} · v${currentVersion}`}
         actions={<Link href={`/review-center/reviews/${id}`} className="btn-secondary">返回详情</Link>}
       />
 

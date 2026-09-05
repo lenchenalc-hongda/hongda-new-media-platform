@@ -12,6 +12,18 @@ export const REVIEW_STATUS_LABELS: Record<ReviewStatus, string> = {
   cancelled: '已取消',
 };
 
+export const REVIEW_STATUS_ENABLED: Record<ReviewStatus, boolean> = {
+  draft: true,
+  submitted: true,
+  in_review: false,
+  action_required: false,
+  verifying: false,
+  closed: true,
+  archived: false,
+  rejected: false,
+  cancelled: false,
+};
+
 export const RISK_LEVEL_LABELS: Record<RiskLevel, string> = {
   RED: '高',
   YELLOW: '中',
@@ -20,6 +32,11 @@ export const RISK_LEVEL_LABELS: Record<RiskLevel, string> = {
 
 export function reviewStatusLabel(status: ReviewStatus): string {
   return REVIEW_STATUS_LABELS[status] ?? status;
+}
+
+export function reviewStatusDisplayLabel(status: ReviewStatus): string {
+  const base = reviewStatusLabel(status);
+  return REVIEW_STATUS_ENABLED[status] === false ? `${base}（未启用）` : base;
 }
 
 export function riskLevelLabel(risk: RiskLevel | null): string {

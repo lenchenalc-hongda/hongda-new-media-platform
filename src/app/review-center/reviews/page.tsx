@@ -4,7 +4,7 @@ import Link from 'next/link';
 import AppLayout from '@/components/layout/AppLayout';
 import PageHeader from '@/components/layout/PageHeader';
 import ReviewCenterEmpty from '@/components/review-center/ReviewCenterEmpty';
-import { reviewStatusLabel, riskLevelLabel, formatReviewDateTime } from '@/lib/review-center/formatters';
+import { reviewStatusDisplayLabel, riskLevelLabel, formatReviewDateTime } from '@/lib/review-center/formatters';
 import type { ReviewListItem, ReviewListResponse, ReviewStatus, ReviewType, RiskLevel } from '@/lib/review-center/types';
 
 const STATUS_OPTIONS: ReviewStatus[] = [
@@ -78,7 +78,7 @@ export default function ReviewListPage() {
           <label className="block text-xs text-gray-500 mb-1">状态</label>
           <select value={status} onChange={e => { setStatus(e.target.value); setPage(1); }} className="input-field">
             <option value="">全部状态</option>
-            {STATUS_OPTIONS.map(s => <option key={s} value={s}>{reviewStatusLabel(s)}</option>)}
+            {STATUS_OPTIONS.map(s => <option key={s} value={s}>{reviewStatusDisplayLabel(s)}</option>)}
           </select>
         </div>
         <div>
@@ -148,7 +148,7 @@ export default function ReviewListPage() {
                   <td className="px-4 py-3 whitespace-nowrap">{item.review_type} 类</td>
                   <td className="px-4 py-3 max-w-[140px] break-words">{item.customer_name || '-'}</td>
                   <td className="px-4 py-3 max-w-[180px] break-words">{item.project_name || item.product_name || '-'}</td>
-                  <td className="px-4 py-3 whitespace-nowrap">{reviewStatusLabel(item.status)}</td>
+                  <td className="px-4 py-3 whitespace-nowrap">{reviewStatusDisplayLabel(item.status)}</td>
                   <td className="px-4 py-3 whitespace-nowrap">{riskLevelLabel(item.risk_level)}</td>
                   <td className="px-4 py-3 whitespace-nowrap">{formatReviewDateTime(item.occurred_at)}</td>
                   <td className="px-4 py-3 whitespace-nowrap">{formatReviewDateTime(item.updated_at)}</td>

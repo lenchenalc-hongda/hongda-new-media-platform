@@ -16,7 +16,7 @@ import {
   actionTypeLabel,
   formatActionDueDate,
 } from './action-presentation';
-import { reviewStatusLabel, riskLevelLabel } from './formatters';
+import { reviewStatusDisplayLabel, riskLevelLabel } from './formatters';
 
 const AUDIT_ACTION_CHANGED_FIELD_LABELS: Record<string, string> = {
   title: '标题',
@@ -77,7 +77,7 @@ function statusSummary(pair: unknown): string | null {
   const before = (pair as Record<string, unknown>).before;
   const after = (pair as Record<string, unknown>).after;
   if (typeof before !== 'string' || typeof after !== 'string') return null;
-  return `状态：${reviewStatusLabel(before as any)} → ${reviewStatusLabel(after as any)}`;
+  return `状态：${reviewStatusDisplayLabel(before as any)} → ${reviewStatusDisplayLabel(after as any)}`;
 }
 
 function safeChangesSummary(

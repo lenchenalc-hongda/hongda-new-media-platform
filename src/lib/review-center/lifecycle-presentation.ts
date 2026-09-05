@@ -81,11 +81,15 @@ export function isLifecycleManagedStatus(status: string): boolean {
   return LIFECYCLE_STATUSES.has(status);
 }
 
+export function canHandleSubmittedReview(role: string | null | undefined): boolean {
+  return role === 'admin' || role === 'manager';
+}
+
 export function getLifecyclePresentation(
   input: LifecyclePresentationInput,
 ): LifecyclePresentation {
   const status = input.status;
-  const adminManager = input.currentRole === 'admin' || input.currentRole === 'manager';
+  const adminManager = canHandleSubmittedReview(input.currentRole);
   const knownRole = input.currentRole != null && KNOWN_ROLES.has(input.currentRole);
   const nonViewer = knownRole && input.currentRole !== 'viewer';
   const ownerMatch = input.currentProfileId != null && input.currentProfileId === input.ownerId;

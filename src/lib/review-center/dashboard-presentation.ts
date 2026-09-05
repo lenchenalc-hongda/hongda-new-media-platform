@@ -5,6 +5,8 @@ import type {
   DashboardReviewStatus,
   DashboardRiskLevel,
 } from './dashboard';
+import type { ReviewStatus } from './types';
+import { reviewStatusDisplayLabel, REVIEW_STATUS_ENABLED } from './formatters';
 
 export const DASHBOARD_RANGE_LABELS: Record<DashboardRange, string> = {
   THIS_MONTH: '本月',
@@ -14,14 +16,14 @@ export const DASHBOARD_RANGE_LABELS: Record<DashboardRange, string> = {
 
 export const DASHBOARD_REVIEW_STATUS_LABELS: Record<DashboardReviewStatus, string> = {
   draft: '草稿',
-  submitted: '已提交',
-  in_review: '审核中（未启用）',
-  action_required: '待改善（未启用）',
-  verifying: '验证中（未启用）',
+  submitted: '待确认',
+  in_review: '复盘中',
+  action_required: '待改善',
+  verifying: '验证中',
   closed: '已关闭',
-  archived: '已归档（未启用）',
-  rejected: '已驳回（未启用）',
-  cancelled: '已取消（未启用）',
+  archived: '已归档',
+  rejected: '已退回',
+  cancelled: '已取消',
   UNKNOWN: '未知',
 };
 
@@ -46,11 +48,11 @@ export const DASHBOARD_ATTENTION_REASON_LABELS: Record<DashboardAttentionReason,
   OVERDUE_ACTION: '有逾期行动',
   HIGH_RISK: '红色风险',
   PENDING_VERIFICATION: '有待验证行动',
-  SUBMITTED_WITH_OPEN_ACTION: '已提交但行动未闭环',
+  SUBMITTED_WITH_OPEN_ACTION: '待确认但行动未闭环',
 };
 
 const DASHBOARD_METRIC_DEFINITIONS = {
-  openReviews: '当前状态为草稿或已提交的复盘',
+  openReviews: '当前状态为草稿或待确认的复盘',
   highRiskReviews: '当前开放且风险等级为红色的复盘',
   openActions: '待开始、进行中或待验证的改善行动',
   overdueActions: '已过截止日期且尚未验证或取消的改善行动',
@@ -77,9 +79,9 @@ export function formatDashboardRangeLabel(
 export function formatDashboardStatusLabel(
   status: string | null | undefined,
 ): string {
-  return typeof status === 'string' && status in DASHBOARD_REVIEW_STATUS_LABELS
-    ? DASHBOARD_REVIEW_STATUS_LABELS[status as DashboardReviewStatus]
-    : '未知';
+  if (typeof status !== 'string' || status === 'UNKNOWN') return '未知';
+  if (!(status in REVIEW_STATUS_ENABLED)) return '未知';
+  return reviewStatusDisplayLabel(status as ReviewStatus);
 }
 
 export function formatDashboardRiskLabel(
