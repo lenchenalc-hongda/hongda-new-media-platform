@@ -3,12 +3,20 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
-import { PORTAL_GROUPS, getPortalForPath } from '@/lib/constants/navigation';
+import { PORTAL_GROUPS, getActiveNavItemPath, getPortalForPath } from '@/lib/constants/navigation';
+import { isFeatureEnabled, FEATURES } from '@/lib/features';
+import { useCanCreateReview } from './RoleProvider';
+import { applyCreateVisibility } from '@/lib/review-center/navigation';
 
 export default function Sidebar() {
   const pathname = usePathname();
+  const canCreateReview = useCanCreateReview();
 
   // Determine which portal is active based on current path
+  const baseGroups = PORTAL_GROUPS.filter(g =>
+    g.id !== 'review' || isFeatureEnabled(FEATURES.PROJECT_REVIEW_CENTER)
+  );
+  const enabledGroups = applyCreateVisibility(baseGroups, canCreateReview);
   const activePortal = getPortalForPath(pathname);
   const [expandedPortal, setExpandedPortal] = useState<string>(activePortal);
 
@@ -18,6 +26,7 @@ export default function Sidebar() {
     official: 'border-l-emerald-500 bg-emerald-50 text-emerald-700',
     knowledge: 'border-l-purple-500 bg-purple-50 text-purple-700',
     admin: 'border-l-gray-500 bg-gray-100 text-gray-700',
+    review: 'border-l-orange-500 bg-orange-50 text-orange-700',
   };
 
   return (
@@ -45,7 +54,7 @@ export default function Sidebar() {
 
         <div className="h-px bg-gray-100 mx-4 my-1" />
 
-        {PORTAL_GROUPS.map(portal => {
+        {enabledGroups.map(portal => {
           const isActiveGroup = activePortal === portal.id;
           const isExpanded = expandedPortal === portal.id;
 
@@ -70,7 +79,22 @@ export default function Sidebar() {
               {isExpanded && (
                 <div className="ml-1 space-y-0.5">
                   {portal.items.map(item => {
-                    const isActive = pathname === item.path || pathname.startsWith(item.path);
+                    const activeItemPath = getActiveNavItemPath(pathname, portal.items);
+                    const isActive = activeItemPath === item.path;
+                    if (item.disabled) {
+                      return (
+                        <div
+                          key={item.path}
+                          aria-disabled="true"
+                          title="暂未开放"
+                          className="flex items-center gap-2 px-4 py-1.5 text-xs border-l-2 border-l-transparent ml-4 text-gray-300 cursor-not-allowed"
+                        >
+                          <span>{item.icon}</span>
+                          <span className="flex-1">{item.label}</span>
+                          <span className="text-[10px] text-gray-400">暂未开放</span>
+                        </div>
+                      );
+                    }
                     return (
                       <Link key={item.path} href={item.path}
                         className={cn(
@@ -93,7 +117,21 @@ export default function Sidebar() {
 
       <div className="px-4 py-2 border-t border-gray-200 text-[10px] text-gray-400 flex items-center justify-between">
         <span>宏达印业</span>
-        <Link href="/workspace-home" className="hover:text-blue-600 no-underline text-gray-400">首页</Link>
+        <div className="flex items-center gap-2">
+          <Link href="/workspace-home" className="hover:text-blue-600 no-underline text-gray-400">首页</Link>
+          <button
+            type="button"
+            onClick={async () => {
+              try {
+                await fetch('/api/auth/logout', { method: 'POST' });
+              } catch {}
+              window.location.href = '/login';
+            }}
+            className="hover:text-red-600 no-underline text-gray-400"
+          >
+            退出
+          </button>
+        </div>
       </div>
     </aside>
   );

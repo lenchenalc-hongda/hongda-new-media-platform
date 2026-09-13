@@ -2,7 +2,10 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { PORTAL_GROUPS, WORKSPACE_HOME } from '@/lib/constants/navigation';
+import { isFeatureEnabled, FEATURES } from '@/lib/features';
 import EnvStatusBadge from '@/components/system/EnvStatusBadge';
+import { useCanCreateReview } from '@/components/layout/RoleProvider';
+import { applyCreateVisibility } from '@/lib/review-center/navigation';
 
 const MOCK_METRICS = {
   pendingReview: 5,
@@ -12,6 +15,7 @@ const MOCK_METRICS = {
 };
 
 export default function WorkspaceHome() {
+  const canCreateReview = useCanCreateReview();
   const [user] = useState(() => {
     if (typeof window !== 'undefined') {
       const u = localStorage.getItem('nmc_user');
@@ -20,7 +24,11 @@ export default function WorkspaceHome() {
     return null;
   });
 
-  const totalTodos = PORTAL_GROUPS.reduce((sum, g) => sum + g.items.length, 0);
+  const baseGroups = PORTAL_GROUPS.filter(g =>
+    g.id !== 'review' || isFeatureEnabled(FEATURES.PROJECT_REVIEW_CENTER)
+  );
+  const enabledGroups = applyCreateVisibility(baseGroups, canCreateReview);
+  const totalTodos = enabledGroups.reduce((sum, g) => sum + g.items.length, 0);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -36,13 +44,25 @@ export default function WorkspaceHome() {
           </div>
           <div className="flex items-center gap-4">
             <EnvStatusBadge />
-            <div className="flex items-center gap-2 text-sm text-gray-600">
-              <span className="w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center text-xs text-blue-700 font-medium">
-                {user?.full_name?.charAt(0) || 'U'}
-              </span>
-              <span>{user?.full_name || '用户'}</span>
-            </div>
+          <div className="flex items-center gap-2 text-sm text-gray-600">
+            <span className="w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center text-xs text-blue-700 font-medium">
+              {user?.full_name?.charAt(0) || 'U'}
+            </span>
+            <span>{user?.full_name || '用户'}</span>
           </div>
+          <button
+            type="button"
+            onClick={async () => {
+              try {
+                await fetch('/api/auth/logout', { method: 'POST' });
+              } catch {}
+              window.location.href = '/login';
+            }}
+            className="text-sm text-gray-500 hover:text-red-600 transition-colors"
+          >
+            退出登录
+          </button>
+        </div>
         </div>
       </header>
 
@@ -54,24 +74,27 @@ export default function WorkspaceHome() {
             <span className="text-xs text-gray-400">共 {totalTodos} 个功能模块</span>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
-            {PORTAL_GROUPS.map(portal => {
+            {enabledGroups.map(portal => {
               const colors: Record<string, string> = {
                 blue: 'from-blue-500 to-blue-600',
                 green: 'from-emerald-500 to-emerald-600',
                 purple: 'from-purple-500 to-purple-600',
                 gray: 'from-gray-600 to-gray-700',
+                orange: 'from-orange-500 to-orange-600',
               };
               const bgColors: Record<string, string> = {
                 blue: 'bg-blue-50 border-blue-200',
                 green: 'bg-emerald-50 border-emerald-200',
                 purple: 'bg-purple-50 border-purple-200',
                 gray: 'bg-gray-50 border-gray-200',
+                orange: 'bg-orange-50 border-orange-200',
               };
               const btnColors: Record<string, string> = {
                 blue: 'text-blue-700 bg-blue-100 hover:bg-blue-200',
                 green: 'text-emerald-700 bg-emerald-100 hover:bg-emerald-200',
                 purple: 'text-purple-700 bg-purple-100 hover:bg-purple-200',
                 gray: 'text-gray-700 bg-gray-200 hover:bg-gray-300',
+                orange: 'text-orange-700 bg-orange-100 hover:bg-orange-200',
               };
               return (
                 <div key={portal.id} className={`rounded-xl border ${bgColors[portal.color]} overflow-hidden shadow-sm hover:shadow-md transition-shadow`}>

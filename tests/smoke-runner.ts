@@ -8,13 +8,13 @@ let passed = 0;
 let failed = 0;
 const failures: string[] = [];
 
-export async function fetchPage(path: string): Promise<{ status: number; text: string; ok: boolean }> {
+export async function fetchPage(path: string): Promise<{ status: number; text: string; ok: boolean; location?: string | null }> {
   try {
     const res = await fetch(`${BASE_URL}${path}`, { redirect: 'manual' });
     const text = await res.text();
-    return { status: res.status, text, ok: res.status === 200 };
+    return { status: res.status, text, ok: res.status === 200, location: res.headers.get('location') };
   } catch (err: any) {
-    return { status: 0, text: err.message, ok: false };
+    return { status: 0, text: err.message, ok: false, location: null };
   }
 }
 
@@ -39,12 +39,12 @@ export async function testPageRender(path: string, expectedContent?: string): Pr
   }
   if (result.status === 302 || result.status === 307) {
     // Redirect to login — acceptable for protected routes without auth
-    const location = result.text.match(/Location: ([^\n]+)/)?.[1] || '';
+    const location = result.location || '';
     if (location?.includes('login')) {
       pass(`GET ${path} → ${result.status} (redirect to login)`);
       return true;
     }
-    fail(`GET ${path} → ${result.status} (unexpected redirect)`);
+    fail(`GET ${path} → ${result.status} (unexpected redirect${location ? ': ' + location : ''})`);
     return false;
   }
   if (result.status === 200) {

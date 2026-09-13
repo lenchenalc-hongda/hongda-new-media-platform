@@ -66,8 +66,8 @@ console.log('\n=== 3. Speaker Role Tests (no name.includes) ===');
 var roleMap: Record<string, string> = { a1: 'sales', a2: 'host', a3: 'technician', a4: 'owner', a5: 'consultant' };
 for (var k = 0; k < accountIds.length; k++) {
   var id = accountIds[k];
-  var a = MOCK_ACCOUNTS_V2.find(function(x) { return x.id === id; });
-  assert(a!.persona_config.speaker_role === roleMap[id], id + ' speaker_role = ' + roleMap[id]);
+  var acc = MOCK_ACCOUNTS_V2.find(function(x) { return x.id === id; });
+  assert(acc!.persona_config.speaker_role === roleMap[id], id + ' speaker_role = ' + roleMap[id]);
 }
 
 // ===== 4. Scenario 8 (brand relationship) triggers disclosure =====

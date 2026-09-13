@@ -4,6 +4,8 @@
 
 import { resolveAccountGenerationContext, buildPersonaContextForTask } from '../../src/lib/ai/account-resolver';
 import { isPersonaV2Enabled, isPersonaReviewEnabled, isAutoRepairEnabled } from '../../src/lib/ai/feature-flags';
+import { detectRelationshipDisclosure, buildDisclosureAugmentedBrandContract } from '../../src/lib/ai/relationship-disclosure';
+import { XUZONG_ACCOUNT } from '../../src/lib/accounts/examples/xuzong.account';
 
 var passed = 0;
 var failed = 0;
@@ -74,7 +76,7 @@ assert(hooksCtx.prompt_text !== draftCtx.prompt_text, 'hooks和draftPrompt不同
 assert(draftCtx.prompt_text !== reviewCtx.prompt_text, 'draft和reviewPrompt不同');
 
 // Hooks should NOT contain full 7 contracts
-assertIncludes(hooksCtx.prompt_text, 'hooks', 'hooks含hooks指令');
+assertIncludes(hooksCtx.prompt_text, '开头钩子', 'hooks含开头钩子指令');
 assertIncludes(hooksCtx.identity_contract, '【账号身份】', 'hooks含身份');
 assertIncludes(hooksCtx.style_contract, '【说话方式】', 'hooks含风格');
 
@@ -96,17 +98,16 @@ assert(isAutoRepairEnabled() === true, 'PERSONA_V2_AUTO_REPAIR_ENABLED 默认 tr
 // ===== 4. Relationship disclosure — enhanced patterns =====
 console.log('\n=== 4. Enhanced Relationship Disclosure tests ===');
 
-var { detectRelationshipDisclosure } = require('../../src/lib/ai/relationship-disclosure');
 
 // New patterns that MUST trigger
 var shouldTrigger = [
   '这是不是你们自己做的机器？',
   '这台设备是宏达自产的吗？',
   '你们只是代理还是自己生产？',
-  '这是贴牌机吗？',
-  '你们和设备厂是什么关系？',
+  '这是不是贴牌机？',
+  '你们和设备厂什么关系？',
   '宏达在里面有股份吗？',
-  '视觉软件是不是你们自己开发的？',
+  '视觉软件是不是宏达自己研发的？',
 ];
 
 shouldTrigger.forEach(function(q) {
@@ -134,18 +135,16 @@ safeQuestions.forEach(function(q) {
 // ===== 5. Disclosure augmented brand contract =====
 console.log('\n=== 5. Disclosure Augmented Brand Contract ===');
 
-var { buildDisclosureAugmentedBrandContract } = require('../../src/lib/ai/relationship-disclosure');
-var xuzongAccount = require('../../src/lib/accounts/examples/xuzong.account').XUZONG_ACCOUNT;
 
 // When disclosure required
-var disclosureCtx = { disclosure_required: true, matched_signals: ['你们和设备厂是什么关系？'] };
-var brandContract = buildDisclosureAugmentedBrandContract(xuzongAccount.brand_policy, disclosureCtx);
+var disclosureCtx = { disclosure_required: true, matched_signals: ['你们和设备厂什么关系？'], manufacturing_relationship_asked: false, brand_relationship_asked: true, ownership_relationship_asked: false };
+var brandContract = buildDisclosureAugmentedBrandContract(XUZONG_ACCOUNT.brand_policy, disclosureCtx);
 assertIncludes(brandContract, '客户已经明确询问', '披露模式下包含提示');
 assertIncludes(brandContract, '不得虚构', '披露模式下包含不得虚构');
 
 // When disclosure NOT required
-var noDisclosureCtx = { disclosure_required: false, matched_signals: [] };
-var normalContract = buildDisclosureAugmentedBrandContract(xuzongAccount.brand_policy, noDisclosureCtx);
+var noDisclosureCtx = { disclosure_required: false, matched_signals: [], manufacturing_relationship_asked: false, brand_relationship_asked: false, ownership_relationship_asked: false };
+var normalContract = buildDisclosureAugmentedBrandContract(XUZONG_ACCOUNT.brand_policy, noDisclosureCtx);
 assertNotIncludes(normalContract, '客户已经明确询问', '非披露模式不包含提示');
 assertIncludes(normalContract, '客户未询问', '非披露模式包含不主动解释');
 

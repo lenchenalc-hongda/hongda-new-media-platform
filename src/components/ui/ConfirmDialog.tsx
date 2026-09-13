@@ -9,11 +9,12 @@ interface ConfirmDialogProps {
   onConfirm: () => void;
   onCancel: () => void;
   variant?: 'danger' | 'default';
+  confirmDisabled?: boolean;
 }
 
 export default function ConfirmDialog({
   open, title, message, confirmLabel = '确认', cancelLabel = '取消',
-  onConfirm, onCancel, variant = 'default'
+  onConfirm, onCancel, variant = 'default', confirmDisabled = false
 }: ConfirmDialogProps) {
   if (!open) return null;
   return (
@@ -23,7 +24,7 @@ export default function ConfirmDialog({
         <p className="text-sm text-gray-600 mb-4">{message}</p>
         <div className="flex justify-end gap-3">
           <button onClick={onCancel} className="btn-secondary">{cancelLabel}</button>
-          <button onClick={onConfirm} className={variant === 'danger' ? 'btn-danger' : 'btn-primary'}>
+          <button onClick={onConfirm} disabled={confirmDisabled} className={variant === 'danger' ? 'btn-danger' : 'btn-primary'}>
             {confirmLabel}
           </button>
         </div>

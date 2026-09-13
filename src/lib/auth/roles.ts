@@ -5,7 +5,8 @@ export type Action = 'create' | 'read' | 'update' | 'delete' | 'approve' | 'scor
 export type PageSlug =
   | 'dashboard' | 'accounts' | 'accounts_detail' | 'topics' | 'scripts'
   | 'teardowns' | 'calendar' | 'posts' | 'leads' | 'knowledge'
-  | 'reports' | 'settings';
+  | 'reports' | 'settings'
+  | 'review_center' | 'review_center_settings';
 
 // ===== Page Access Matrix =====
 // Each page defines which roles can access it, and optional sub-resource restrictions.
@@ -23,6 +24,8 @@ const PAGE_ACCESS: Record<PageSlug, { roles: Role[]; description: string; resour
   knowledge:       { roles: ['admin', 'manager', 'operator', 'viewer'], description: '知识库' },
   reports:         { roles: ['admin', 'manager', 'viewer'], description: '报表' },
   settings:        { roles: ['admin'], description: '设置' },
+  review_center:   { roles: ['admin', 'manager', 'operator', 'sales', 'viewer'], description: '项目复盘与改善中心' },
+  review_center_settings: { roles: ['admin'], description: '复盘中心系统设置' },
 };
 
 // ===== Action Permission Matrix =====
@@ -90,6 +93,7 @@ export function getRouteFromPage(page: PageSlug): string {
     topics: '/topics', scripts: '/scripts', teardowns: '/teardowns',
     calendar: '/calendar', posts: '/posts', leads: '/leads',
     knowledge: '/knowledge', reports: '/reports', settings: '/settings',
+    review_center: '/review-center', review_center_settings: '/review-center/settings',
   };
   return routeMap[page] || '/';
 }
@@ -107,6 +111,9 @@ export function getPageSlugFromRoute(pathname: string): PageSlug | null {
   };
   // Handle detail pages
   if (route.startsWith('/accounts/') && route !== '/accounts') return 'accounts_detail';
+  // Review Center: settings admin-only, everything else shared
+  if (route === '/review-center/settings') return 'review_center_settings';
+  if (route === '/review-center' || route.startsWith('/review-center/')) return 'review_center';
   return map[route] || null;
 }
 
