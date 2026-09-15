@@ -62,9 +62,19 @@ export async function resolveSupabaseCurrentUser(client: SupabaseLikeClient): Pr
 }
 
 export async function getSupabaseUserFromRequest(req: NextRequest): Promise<CurrentUser | null> {
-  const { supabase } = createMiddlewareSupabaseClient(req);
-  if (!supabase) return null;
-  return resolveSupabaseCurrentUser(supabase as unknown as SupabaseLikeClient);
+  return (await getSupabaseUserAndResponseFromRequest(req)).user;
+}
+
+export async function getSupabaseUserAndResponseFromRequest(req: NextRequest): Promise<{
+  user: CurrentUser | null;
+  response: ReturnType<typeof createMiddlewareSupabaseClient>['response'];
+}> {
+  const { supabase, response } = createMiddlewareSupabaseClient(req);
+  if (!supabase) return { user: null, response };
+  return {
+    user: await resolveSupabaseCurrentUser(supabase as unknown as SupabaseLikeClient),
+    response,
+  };
 }
 
 export async function getSupabaseUserFromServer(): Promise<CurrentUser | null> {

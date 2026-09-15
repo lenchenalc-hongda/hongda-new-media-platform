@@ -24,3 +24,8 @@ export function createMiddlewareSupabaseClient(request: NextRequest) {
   });
   return { supabase, response };
 }
+
+export function copyResponseCookies(source: NextResponse, target: NextResponse): NextResponse {
+  source.cookies.getAll().forEach(cookie => target.cookies.set(cookie));
+  return target;
+}
