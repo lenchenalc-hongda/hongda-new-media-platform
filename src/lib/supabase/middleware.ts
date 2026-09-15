@@ -7,7 +7,10 @@ import { NextResponse, type NextRequest } from 'next/server';
 export function createMiddlewareSupabaseClient(request: NextRequest) {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  if (!url || !anonKey) return { supabase: null, response: NextResponse.next({ request }) };
+  if (!url || !anonKey) {
+    const response = NextResponse.next({ request });
+    return { supabase: null, getResponse: () => response };
+  }
 
   let response = NextResponse.next({ request });
   const supabase = createServerClient(url, anonKey, {
@@ -22,5 +25,10 @@ export function createMiddlewareSupabaseClient(request: NextRequest) {
       },
     },
   });
-  return { supabase, response };
+  return { supabase, getResponse: () => response };
+}
+
+export function copyResponseCookies(source: NextResponse, target: NextResponse): NextResponse {
+  source.cookies.getAll().forEach(cookie => target.cookies.set(cookie));
+  return target;
 }

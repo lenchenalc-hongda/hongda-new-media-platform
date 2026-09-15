@@ -5,9 +5,10 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { getPageSlugFromRoute, canAccessPage } from '@/lib/auth/roles';
-import { getCurrentUserFromRequest, hasRole } from '@/lib/auth/current-user';
+import { getCurrentUserAndResponseFromRequest } from '@/lib/auth/current-user';
 import { AuthError } from '@/lib/auth/types';
 import { isFeatureEnabled, FEATURES } from '@/lib/features';
+import { copyResponseCookies } from '@/lib/supabase/middleware';
 
 const PUBLIC_ROUTES = ['/login', '/_next', '/api/auth', '/favicon.ico', '/api/ai'];
 
@@ -33,8 +34,11 @@ export async function middleware(request: NextRequest) {
 
   // Resolve trusted user through unified bridge (mock or supabase)
   let user = null;
+  let authResponse = NextResponse.next({ request });
   try {
-    user = await getCurrentUserFromRequest(request);
+    const resolved = await getCurrentUserAndResponseFromRequest(request);
+    user = resolved.user;
+    authResponse = resolved.response;
   } catch (err) {
     if (err instanceof AuthError && err.code === 'AUTH_CONFIG_MISSING') {
       const cfgUrl = new URL('/login', request.url);
@@ -43,14 +47,14 @@ export async function middleware(request: NextRequest) {
     }
     const loginUrl = new URL('/login', request.url);
     loginUrl.searchParams.set('redirect', pathname);
-    return NextResponse.redirect(loginUrl);
+    return copyResponseCookies(authResponse, NextResponse.redirect(loginUrl));
   }
 
   // Not authenticated → redirect to login
   if (!user) {
     const loginUrl = new URL('/login', request.url);
     loginUrl.searchParams.set('redirect', pathname);
-    return NextResponse.redirect(loginUrl);
+    return copyResponseCookies(authResponse, NextResponse.redirect(loginUrl));
   }
 
   // Check page-level role access (map CurrentUser -> AuthUser shape)
@@ -62,10 +66,10 @@ export async function middleware(request: NextRequest) {
     // No access → redirect to dashboard with error message
     const dashboardUrl = new URL('/dashboard', request.url);
     dashboardUrl.searchParams.set('error', '您没有访问该页面的权限');
-    return NextResponse.redirect(dashboardUrl);
+    return copyResponseCookies(authResponse, NextResponse.redirect(dashboardUrl));
   }
 
-  return NextResponse.next();
+  return authResponse;
 }
 
 export const config = {

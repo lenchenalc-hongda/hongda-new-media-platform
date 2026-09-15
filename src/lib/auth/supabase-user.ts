@@ -2,7 +2,7 @@
 // Verifies session server-side, then reads role/department from profiles.
 // Never trusts nmc_user, client role, or user_metadata for authorization.
 
-import type { NextRequest } from 'next/server';
+import type { NextRequest, NextResponse } from 'next/server';
 import { createMiddlewareSupabaseClient } from '@/lib/supabase/middleware';
 import { createClient as createServerSupabaseClient } from '@/lib/supabase/server';
 import { CurrentUser, normalizeRole } from './types';
@@ -62,9 +62,20 @@ export async function resolveSupabaseCurrentUser(client: SupabaseLikeClient): Pr
 }
 
 export async function getSupabaseUserFromRequest(req: NextRequest): Promise<CurrentUser | null> {
-  const { supabase } = createMiddlewareSupabaseClient(req);
-  if (!supabase) return null;
-  return resolveSupabaseCurrentUser(supabase as unknown as SupabaseLikeClient);
+  return (await getSupabaseUserAndResponseFromRequest(req)).user;
+}
+
+export async function getSupabaseUserAndResponseFromRequest(req: NextRequest): Promise<{
+  user: CurrentUser | null;
+  response: NextResponse;
+}> {
+  const { supabase, getResponse } = createMiddlewareSupabaseClient(req);
+  if (!supabase) return { user: null, response: getResponse() };
+  const user = await resolveSupabaseCurrentUser(supabase as unknown as SupabaseLikeClient);
+  return {
+    user,
+    response: getResponse(),
+  };
 }
 
 export async function getSupabaseUserFromServer(): Promise<CurrentUser | null> {

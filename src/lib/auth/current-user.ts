@@ -3,13 +3,14 @@
 // AUTH_MODE=mock  -> nmc_user cookie (development compatibility, NOT audit-grade)
 // AUTH_MODE=supabase -> Supabase session + profiles (trusted identity)
 
-import type { NextRequest } from 'next/server';
+import { NextResponse, type NextRequest } from 'next/server';
 import { cookies } from 'next/headers';
 import { canPerformAction } from './roles';
 import { CurrentUser, AuthError, getAuthMode, isSupabaseConfigured, type Role, type Action } from './types';
 import { getMockUserFromCookie } from './mock-user';
 import {
   getSupabaseUserFromRequest,
+  getSupabaseUserAndResponseFromRequest,
   getSupabaseUserFromServer,
   resolveSupabaseCurrentUser,
 } from './supabase-user';
@@ -23,13 +24,23 @@ export function hasRole(user: CurrentUser | null, roles: Role[]): boolean {
 
 // ===== Middleware / Route Handler entry =====
 export async function getCurrentUserFromRequest(req: NextRequest): Promise<CurrentUser | null> {
+  return (await getCurrentUserAndResponseFromRequest(req)).user;
+}
+
+export async function getCurrentUserAndResponseFromRequest(req: NextRequest): Promise<{
+  user: CurrentUser | null;
+  response: NextResponse;
+}> {
   if (getAuthMode() === 'supabase') {
     if (!isSupabaseConfigured()) {
       throw new AuthError('AUTH_CONFIG_MISSING', 'AUTH_MODE=supabase 但 Supabase 环境变量缺失');
     }
-    return getSupabaseUserFromRequest(req);
+    return getSupabaseUserAndResponseFromRequest(req);
   }
-  return getMockUserFromCookie(req.cookies.get('nmc_user')?.value);
+  return {
+    user: getMockUserFromCookie(req.cookies.get('nmc_user')?.value),
+    response: NextResponse.next({ request: req }),
+  };
 }
 
 export async function requireUserFromRequest(req: NextRequest): Promise<CurrentUser> {
