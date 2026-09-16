@@ -30,6 +30,7 @@ export interface ReviewListItem {
 }
 
 export interface ReviewListQuery {
+  scope?: 'all' | 'mine';
   page: number;
   limit: number;
   status?: ReviewStatus;

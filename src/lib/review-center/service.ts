@@ -30,6 +30,12 @@ export interface CurrentProfile {
   org_id: string;
 }
 
+const REVIEW_LIST_COLUMNS =
+  'id,review_no,review_type,title,status,risk_level,customer_name,project_name,product_name,owner_id,occurred_at,created_at,updated_at';
+const MINE_FETCH_PAGE_SIZE = 500;
+const MINE_MEMBER_ID_PAGE_SIZE = 1000;
+const MINE_MEMBER_LOOKUP_CHUNK_SIZE = 200;
+
 export async function getCurrentProfile(
   client: any,
   authUserId: string,
@@ -67,21 +73,10 @@ export async function listReviewCases(
 ): Promise<ReviewListResponse> {
   let builder = client
     .from('review_cases')
-    .select(
-      'id,review_no,review_type,title,status,risk_level,customer_name,project_name,product_name,owner_id,occurred_at,created_at,updated_at',
-      { count: 'exact' },
-    )
+    .select(REVIEW_LIST_COLUMNS, { count: 'exact' })
     .eq('org_id', orgId);
 
-  if (query.status) builder = builder.eq('status', query.status);
-  if (query.review_type) builder = builder.eq('review_type', query.review_type);
-  if (query.risk_level) builder = builder.eq('risk_level', query.risk_level);
-  const safeQ = normalizeSearchQuery(query.q);
-  if (safeQ) {
-    builder = builder.or(
-      `review_no.ilike.%${safeQ}%,title.ilike.%${safeQ}%,customer_name.ilike.%${safeQ}%,order_no.ilike.%${safeQ}%,project_name.ilike.%${safeQ}%,product_name.ilike.%${safeQ}%`,
-    );
-  }
+  builder = applyReviewListFilters(builder, query);
 
   const from = (query.page - 1) * query.limit;
   const to = from + query.limit - 1;
@@ -98,6 +93,134 @@ export async function listReviewCases(
     page: query.page,
     limit: query.limit,
     total: count ?? 0,
+  };
+}
+
+function applyReviewListFilters(builder: any, query: ReviewListQuery): any {
+  if (query.status) builder = builder.eq('status', query.status);
+  if (query.review_type) builder = builder.eq('review_type', query.review_type);
+  if (query.risk_level) builder = builder.eq('risk_level', query.risk_level);
+  const safeQ = normalizeSearchQuery(query.q);
+  if (safeQ) {
+    builder = builder.or(
+      `review_no.ilike.%${safeQ}%,title.ilike.%${safeQ}%,customer_name.ilike.%${safeQ}%,order_no.ilike.%${safeQ}%,project_name.ilike.%${safeQ}%,product_name.ilike.%${safeQ}%`,
+    );
+  }
+  return builder;
+}
+
+function compareReviewRows(left: ReviewListItem, right: ReviewListItem): number {
+  const createdDiff = Date.parse(right.created_at) - Date.parse(left.created_at);
+  if (Number.isFinite(createdDiff) && createdDiff !== 0) return createdDiff;
+  return right.id.localeCompare(left.id);
+}
+
+async function fetchMineDirectRows(
+  client: any,
+  orgId: string,
+  profileId: string,
+  query: ReviewListQuery,
+): Promise<ReviewListItem[]> {
+  const rows: ReviewListItem[] = [];
+  let offset = 0;
+  while (true) {
+    let builder = client
+      .from('review_cases')
+      .select(REVIEW_LIST_COLUMNS)
+      .eq('org_id', orgId)
+      .or(
+        `created_by.eq.${profileId},owner_id.eq.${profileId},pmo_id.eq.${profileId}`,
+      );
+    builder = applyReviewListFilters(builder, query)
+      .range(offset, offset + MINE_FETCH_PAGE_SIZE - 1)
+      .order('created_at', { ascending: false })
+      .order('id', { ascending: false });
+    const { data, error } = await builder;
+    if (error) throw new ReviewServiceError('复盘列表读取失败', 500);
+    const batch = (data || []) as ReviewListItem[];
+    rows.push(...batch);
+    if (batch.length < MINE_FETCH_PAGE_SIZE) break;
+    offset += MINE_FETCH_PAGE_SIZE;
+  }
+  return rows;
+}
+
+async function fetchMineMemberReviewIds(
+  client: any,
+  orgId: string,
+  profileId: string,
+): Promise<string[]> {
+  const reviewIds: string[] = [];
+  let offset = 0;
+  while (true) {
+    const { data, error } = await client
+      .from('review_members')
+      .select('review_id')
+      .eq('org_id', orgId)
+      .eq('profile_id', profileId)
+      .order('review_id', { ascending: true })
+      .range(offset, offset + MINE_MEMBER_ID_PAGE_SIZE - 1);
+    if (error) throw new ReviewServiceError('复盘列表读取失败', 500);
+    const batch = (data || []) as Array<{ review_id: string }>;
+    reviewIds.push(...batch.map(row => row.review_id));
+    if (batch.length < MINE_MEMBER_ID_PAGE_SIZE) break;
+    offset += MINE_MEMBER_ID_PAGE_SIZE;
+  }
+  return [...new Set(reviewIds)];
+}
+
+async function fetchMineMemberRows(
+  client: any,
+  orgId: string,
+  reviewIds: string[],
+  query: ReviewListQuery,
+): Promise<ReviewListItem[]> {
+  const rows: ReviewListItem[] = [];
+  for (let index = 0; index < reviewIds.length; index += MINE_MEMBER_LOOKUP_CHUNK_SIZE) {
+    const chunk = reviewIds.slice(index, index + MINE_MEMBER_LOOKUP_CHUNK_SIZE);
+    let builder = client
+      .from('review_cases')
+      .select(REVIEW_LIST_COLUMNS)
+      .eq('org_id', orgId)
+      .in('id', chunk);
+    builder = applyReviewListFilters(builder, query);
+    const { data, error } = await builder;
+    if (error) throw new ReviewServiceError('复盘列表读取失败', 500);
+    rows.push(...((data || []) as ReviewListItem[]));
+  }
+  return rows;
+}
+
+export async function listMyReviewCases(
+  client: any,
+  orgId: string,
+  profileId: string,
+  query: ReviewListQuery,
+): Promise<ReviewListResponse> {
+  if (!profileId) throw new ReviewServiceError('无有效档案', 403);
+
+  const [directRows, memberReviewIds] = await Promise.all([
+    fetchMineDirectRows(client, orgId, profileId, query),
+    fetchMineMemberReviewIds(client, orgId, profileId),
+  ]);
+  const memberRows = await fetchMineMemberRows(
+    client,
+    orgId,
+    memberReviewIds,
+    query,
+  );
+
+  const byId = new Map<string, ReviewListItem>();
+  for (const row of [...directRows, ...memberRows]) {
+    byId.set(row.id, row);
+  }
+  const items = [...byId.values()].sort(compareReviewRows);
+  const from = (query.page - 1) * query.limit;
+  return {
+    items: items.slice(from, from + query.limit),
+    page: query.page,
+    limit: query.limit,
+    total: items.length,
   };
 }
 

@@ -7,6 +7,7 @@ import { createDraftSchema, listQuerySchema } from '@/lib/review-center/schemas'
 import {
   createDraftReview,
   getCurrentProfile,
+  listMyReviewCases,
   listReviewCases,
   ReviewServiceError,
 } from '@/lib/review-center/service';
@@ -41,7 +42,9 @@ export async function GET(req: NextRequest) {
   if (!profile) return jsonError('无有效档案', 403);
 
   try {
-    const result = await listReviewCases(supabase, profile.org_id, parsed.data);
+    const result = parsed.data.scope === 'mine'
+      ? await listMyReviewCases(supabase, profile.org_id, profile.id, parsed.data)
+      : await listReviewCases(supabase, profile.org_id, parsed.data);
     return NextResponse.json(result);
   } catch (err) {
     if (err instanceof ReviewServiceError) return jsonError(err.message, err.status);

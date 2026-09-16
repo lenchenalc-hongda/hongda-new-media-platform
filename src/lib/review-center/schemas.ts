@@ -49,6 +49,7 @@ export const createDraftSchema = z.object({
 }).strict();
 
 export const listQuerySchema = z.object({
+  scope: z.enum(['all', 'mine']).default('all'),
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).max(100).default(20),
   status: reviewStatusSchema.optional(),
