@@ -6,6 +6,7 @@ import PageHeader from '@/components/layout/PageHeader';
 import ReviewCenterEmpty from '@/components/review-center/ReviewCenterEmpty';
 import type { CaseLibraryItem, CaseLibraryQuery } from '@/lib/review-center/case-schemas';
 import type { MetadataOptionsDto } from '@/lib/review-center/types';
+import { getMaterialDisplayLabel } from '@/lib/review-center/material-labels';
 import {
   CaseApiError,
   fetchCaseLibrary,
@@ -393,7 +394,10 @@ export default function CaseLibraryPage() {
             <>
               <TaxonomyFieldset
                 title="材质"
-                options={options?.materials ?? []}
+                options={(options?.materials ?? []).map(option => ({
+                  ...option,
+                  label: getMaterialDisplayLabel(option.code, option.label),
+                }))}
                 selected={draftFilters.materialCodes}
                 onToggle={code => toggleCode('materialCodes', code)}
               />

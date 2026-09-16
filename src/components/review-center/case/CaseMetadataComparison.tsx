@@ -1,6 +1,7 @@
 'use client';
 import type { CaseAdminDetail } from '@/lib/review-center/case-schemas';
 import { groupCurrentSourceMetadata } from '@/lib/review-center/case-manage';
+import { getMaterialDisplayLabel } from '@/lib/review-center/material-labels';
 
 interface CaseMetadataComparisonProps {
   admin: CaseAdminDetail;
@@ -46,7 +47,10 @@ export default function CaseMetadataComparison({ admin }: CaseMetadataComparison
         <div className="space-y-4">
           <Group
             title="材质"
-            tags={snapshot.materials.map(item => ({ label: item.label, primary: item.isPrimary }))}
+            tags={snapshot.materials.map(item => ({
+              label: getMaterialDisplayLabel(item.code, item.label),
+              primary: item.isPrimary,
+            }))}
           />
           <Group title="工艺" tags={snapshot.processes.map(item => ({ label: item.label }))} />
           <Group title="问题环节" tags={snapshot.problemDomains.map(item => ({ label: item.label }))} />

@@ -5,6 +5,7 @@ import type {
   ReviewMetadataDto,
   ReviewMetadataMaterialDto,
 } from './types';
+import { getMaterialDisplayLabel } from './material-labels';
 
 export const METADATA_OPTION_TYPES = [
   'MATERIAL',
@@ -23,25 +24,6 @@ export const METADATA_MISSING_DIMENSION_LABELS: Record<string, string> = {
   PROBLEM_DOMAIN: '请至少选择一个“问题环节”',
   PRIMARY_MATERIAL: '请选择“主要材质”',
   PROCESS: '当前问题环节要求至少选择一种“工艺”',
-};
-
-const MATERIAL_DISPLAY_LABELS: Record<string, string> = {
-  PP: 'PP',
-  PE: 'PE',
-  ABS: 'ABS',
-  PS: 'PS',
-  PET: 'PET',
-  PETG: 'PETG',
-  PC: 'PC',
-  PVC: 'PVC',
-  SILICONE: '硅胶',
-  METAL: '金属',
-  GLASS: '玻璃',
-  CERAMIC: '陶瓷',
-  WOOD: '木材',
-  LEATHER: '皮革',
-  PAPER: '纸类',
-  OTHER: '其他',
 };
 
 export interface MetadataOptionDbRow {
@@ -75,7 +57,7 @@ export function canReadMetadataOptions(profile: { id: string; org_id: string } |
 
 function getDisplayLabel(type: string, code: string, fallback: string): string {
   if (type === 'MATERIAL') {
-    return MATERIAL_DISPLAY_LABELS[code] ?? fallback;
+    return getMaterialDisplayLabel(code, fallback);
   }
   return fallback;
 }

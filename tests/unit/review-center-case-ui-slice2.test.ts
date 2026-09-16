@@ -40,7 +40,7 @@ const candidateNoExisting: CaseCandidateItem = {
   occurredAt: '2026-08-01T00:00:00Z',
   sourceVersion: 11,
   metadataSummary: [
-    { metadataType: 'MATERIAL', code: 'PP', label: 'PP', isPrimary: true },
+    { metadataType: 'MATERIAL', code: 'PP', label: '聚丙烯', isPrimary: true },
   ],
   existingCase: null,
 };
@@ -91,10 +91,10 @@ const fullAdminDetail = {
   isStale: true,
   staleReasons: ['SOURCE_VERSION_CHANGED'],
   currentSourceMetadata: [
-    { metadataType: 'MATERIAL', code: 'PP', label: 'PP', isPrimary: true },
+    { metadataType: 'MATERIAL', code: 'PP', label: '聚丙烯', isPrimary: true },
   ],
   caseSnapshotMetadata: {
-    materials: [{ code: 'ABS', label: 'ABS', isPrimary: false }],
+    materials: [{ code: 'ABS', label: 'ABS 塑料', isPrimary: false }],
     processes: [],
     problemDomains: [],
     problemSymptoms: [],

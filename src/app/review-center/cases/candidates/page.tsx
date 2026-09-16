@@ -8,6 +8,7 @@ import ReviewCenterEmpty from '@/components/review-center/ReviewCenterEmpty';
 import CaseCreateDialog from '@/components/review-center/case/CaseCreateDialog';
 import type { CaseCandidateItem, CaseMutationResult } from '@/lib/review-center/case-schemas';
 import { CaseApiError, fetchCaseCandidates } from '@/lib/review-center/case-api-client';
+import { getMaterialDisplayLabel } from '@/lib/review-center/material-labels';
 import {
   canManageCaseRole,
   caseRiskBadgeClass,
@@ -20,7 +21,11 @@ import {
 const PAGE_LIMIT = 30;
 
 function MetadataSummaryTags({ candidate }: { candidate: CaseCandidateItem }) {
-  const tags = candidate.metadataSummary.map(item => item.label || item.code);
+  const tags = candidate.metadataSummary.map(item => (
+    item.metadataType === 'MATERIAL'
+      ? getMaterialDisplayLabel(item.code, item.label || item.code)
+      : item.label || item.code
+  ));
   const visible = tags.slice(0, 3);
   const restCount = tags.length - visible.length;
   return (

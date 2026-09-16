@@ -1,6 +1,7 @@
 import type { CaseAuditItem, CaseLibraryItem } from './case-schemas';
 import type { ReviewStatus } from './types';
 import { formatReviewDate, formatReviewDateTime, reviewStatusDisplayLabel } from './formatters';
+import { getMaterialDisplayLabel } from './material-labels';
 
 export interface CaseMetadataDisplayGroup {
   code: string;
@@ -102,7 +103,11 @@ export function buildCaseMetadataDisplay(metadata: CaseLibraryItem['metadata']):
     .sort((a, b) => Number(b.isPrimary) - Number(a.isPrimary) || a.code.localeCompare(b.code))
     .map(item => ({
       code: item.code,
-      label: otherLabel(item.code, item.label, metadata.materialOtherText),
+      label: otherLabel(
+        item.code,
+        getMaterialDisplayLabel(item.code, item.label),
+        metadata.materialOtherText,
+      ),
       primary: item.isPrimary,
     }));
 
