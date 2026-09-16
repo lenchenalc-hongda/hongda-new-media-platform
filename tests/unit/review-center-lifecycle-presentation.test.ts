@@ -158,6 +158,17 @@ const pmoNullUnrelated = present('draft', 'operator', 'other-1', 'owner-1', null
 assert(!pmoNullUnrelated.canSubmit, 'pmo null unrelated no accidental allow');
 
 assert(JSON.stringify(sanitizeIncompleteFields(['description', 'type_details', 'unknown_secret'])) === '["description","type_details"]', 'incomplete field whitelist');
+assert(
+  JSON.stringify(sanitizeIncompleteFields([
+    'type_details',
+    'owner_id',
+    'risk_level',
+    'description',
+    'risk_level',
+    'unknown_secret',
+  ])) === '["description","risk_level","owner_id","type_details"]',
+  'incomplete fields are deduped and stably ordered',
+);
 assert(JSON.stringify(sanitizeIncompleteFields('bad')) === '[]', 'incomplete non-array safe');
 
 const success = normalizeLifecycleSuccess({
@@ -195,9 +206,23 @@ const transition = classifyLifecycleError(409, { code: 'INVALID_TRANSITION', mes
 assert(transition.message === '复盘状态已发生变化，页面将刷新为最新状态。' && transition.shouldRefreshAuthority, '409 transition mapping');
 const incomplete = classifyLifecycleError(422, {
   code: 'INCOMPLETE_REVIEW',
-  data: { missingFields: ['description', 'unknown_secret'] },
+  data: { missingFields: ['type_details', 'description', 'owner_id', 'risk_level', 'description'] },
 });
-assert(incomplete.message === '复盘内容还未填写完整，请先补充以下内容：' && JSON.stringify(incomplete.incompleteFields) === '["description"]', 'incomplete mapping');
+assert(incomplete.message === '复盘内容还未填写完整，请先补充以下内容：', 'incomplete mapping message');
+assert(
+  JSON.stringify(incomplete.incompleteFields) === '["description","risk_level","owner_id","type_details"]',
+  'incomplete mapping returns all fields in stable order',
+);
+const incompleteFallback = classifyLifecycleError(422, {
+  code: 'INCOMPLETE_REVIEW',
+  data: { missingFields: [] },
+});
+assert(
+  incompleteFallback.emptyIncompleteFallback === true
+  && incompleteFallback.incompleteFields.length === 0
+  && incompleteFallback.message.includes('系统未能识别具体缺失项'),
+  'empty incomplete list uses explicit fallback',
+);
 const invalidReason = classifyLifecycleError(422, { code: 'INVALID_REASON', message: 'RAW' });
 assert(invalidReason.message === '请填写有效的重新打开原因。' && invalidReason.keepDialogOpen, 'invalid reason mapping');
 const openActions = classifyLifecycleError(409, {

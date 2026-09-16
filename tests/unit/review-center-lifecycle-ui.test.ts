@@ -5,6 +5,7 @@ import {
   classifyLifecycleError,
   createMutationLock,
   getLifecyclePresentation,
+  INCOMPLETE_FIELD_LABELS,
   normalizeLifecycleSuccess,
 } from '../../src/lib/review-center/lifecycle-presentation';
 
@@ -60,6 +61,22 @@ assert(classifyLifecycleError(409, { code: 'VERSION_CONFLICT' }).message === '�
 assert(classifyLifecycleError(409, { code: 'INVALID_TRANSITION' }).message === '复盘状态已发生变化，页面将刷新为最新状态。', '409 transition message');
 const incomplete = classifyLifecycleError(422, { code: 'INCOMPLETE_REVIEW', data: { missingFields: ['title', 'unknown_secret'] } });
 assert(incomplete.message === '复盘内容还未填写完整，请先补充以下内容：' && JSON.stringify(incomplete.incompleteFields) === '["title"]', 'incomplete fields');
+const incompleteFallback = classifyLifecycleError(422, {
+  code: 'INCOMPLETE_REVIEW',
+  data: { missingFields: [] },
+});
+assert(
+  incompleteFallback.emptyIncompleteFallback === true
+  && incompleteFallback.message.includes('系统未能识别具体缺失项'),
+  'empty incomplete fields use fallback copy',
+);
+assert(
+  INCOMPLETE_FIELD_LABELS.description === '问题描述'
+  && INCOMPLETE_FIELD_LABELS.risk_level === '风险等级'
+  && INCOMPLETE_FIELD_LABELS.owner_id === '项目负责人'
+  && INCOMPLETE_FIELD_LABELS.type_details === '专项复盘内容',
+  'incomplete field labels match user-facing copy',
+);
 assert(classifyLifecycleError(422, { code: 'INVALID_REASON' }).keepDialogOpen === true, 'invalid reason keeps dialog');
 assert(classifyLifecycleError(500, { code: 'RAW_CODE', message: 'RAW' }).message === '操作失败，请稍后重试。', '500 generic');
 assert(classifyLifecycleError(200, null).message === '操作失败，请稍后重试。', 'malformed response generic');
@@ -101,7 +118,10 @@ for (const required of [
   '请填写重新打开原因。',
   'onLifecycleSuccess',
   'onAuthorityRefresh',
-  'incompleteFields.length > 0 && presentation.canEdit',
+  'incompleteFields.length > 0 || incompleteReviewFallback',
+  '去编辑补充',
+  '去编辑检查',
+  'incompleteReviewFallback',
   'confirmDisabled={isMutating}',
   'disabled={isMutating}',
   'role="dialog"',

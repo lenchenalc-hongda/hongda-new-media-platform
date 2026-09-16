@@ -100,19 +100,16 @@ export function parseLifecycleBody(
 
 export function sanitizeMissingFields(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
-  const seen = new Set<string>();
-  const result: string[] = [];
+  const supplied = new Set<string>();
   for (const field of value) {
     if (
       typeof field === 'string'
       && (MISSING_FIELD_WHITELIST as readonly string[]).includes(field)
-      && !seen.has(field)
     ) {
-      seen.add(field);
-      result.push(field);
+      supplied.add(field);
     }
   }
-  return result;
+  return MISSING_FIELD_WHITELIST.filter(field => supplied.has(field));
 }
 
 function isLifecycleSuccessData(value: unknown): value is {

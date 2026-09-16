@@ -42,6 +42,7 @@ export interface LifecycleUiError {
   keepDialogOpen: boolean;
   incompleteFields: string[];
   missingDimensions: string[];
+  emptyIncompleteFallback?: boolean;
 }
 
 export interface MutationLock {
@@ -167,19 +168,13 @@ export function normalizeLifecycleSuccess(payload: unknown): LifecycleSuccessDat
 
 export function sanitizeIncompleteFields(fields: unknown): string[] {
   if (!Array.isArray(fields)) return [];
-  const seen = new Set<string>();
-  const result: string[] = [];
+  const supplied = new Set<string>();
   for (const field of fields) {
-    if (
-      typeof field === 'string'
-      && Object.prototype.hasOwnProperty.call(INCOMPLETE_FIELD_LABELS, field)
-      && !seen.has(field)
-    ) {
-      seen.add(field);
-      result.push(field);
+    if (typeof field === 'string' && Object.prototype.hasOwnProperty.call(INCOMPLETE_FIELD_LABELS, field)) {
+      supplied.add(field);
     }
   }
-  return result;
+  return Object.keys(INCOMPLETE_FIELD_LABELS).filter(field => supplied.has(field));
 }
 
 export function classifyLifecycleError(
@@ -235,15 +230,19 @@ export function classifyLifecycleError(
     const data = body?.data && typeof body.data === 'object'
       ? (body.data as Record<string, unknown>)
       : null;
+    const incompleteFields = sanitizeIncompleteFields(
+      data?.missingFields ?? data?.missing_fields,
+    );
     return {
       code,
-      message: '复盘内容还未填写完整，请先补充以下内容：',
+      message: incompleteFields.length > 0
+        ? '复盘内容还未填写完整，请先补充以下内容：'
+        : '复盘内容未填写完整，但系统未能识别具体缺失项，请进入编辑页检查。',
       shouldRefreshAuthority: false,
       keepDialogOpen: false,
-      incompleteFields: sanitizeIncompleteFields(
-        data?.missingFields ?? data?.missing_fields,
-      ),
+      incompleteFields,
       missingDimensions: [],
+      emptyIncompleteFallback: incompleteFields.length === 0,
     };
   }
   if (status === 422 && code === 'METADATA_INCOMPLETE') {
