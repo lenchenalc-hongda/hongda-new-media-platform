@@ -27,8 +27,12 @@ const submitReq = buildLifecycleRequest('SUBMIT', 'id-1', 7);
 assert(submitReq.url === '/api/review-center/reviews/id-1/submit' && JSON.stringify(submitReq.body) === '{"expectedVersion":7}', 'submit url/body');
 const closeReq = buildLifecycleRequest('CLOSE', 'id-1', 8);
 assert(closeReq.url === '/api/review-center/reviews/id-1/close' && JSON.stringify(closeReq.body) === '{"expectedVersion":8}', 'close url/body');
-const returnReq = buildLifecycleRequest('RETURN', 'id-1', 9);
-assert(returnReq.url === '/api/review-center/reviews/id-1/reopen' && JSON.stringify(returnReq.body) === '{"expectedVersion":9,"reason":null}', 'return url/body');
+const returnReq = buildLifecycleRequest('RETURN', 'id-1', 9, '  退回原因  ');
+assert(
+  returnReq.url === '/api/review-center/reviews/id-1/reopen'
+  && JSON.stringify(returnReq.body) === '{"expectedVersion":9,"reason":"退回原因"}',
+  'return url/body includes reason',
+);
 const reopenReq = buildLifecycleRequest('REOPEN', 'id-1', 10, '  reason  ');
 assert(reopenReq.url === '/api/review-center/reviews/id-1/reopen' && reopenReq.body.reason === 'reason', 'reopen url/body trimmed');
 
@@ -69,6 +73,11 @@ assert(
   incompleteFallback.emptyIncompleteFallback === true
   && incompleteFallback.message.includes('系统未能识别具体缺失项'),
   'empty incomplete fields use fallback copy',
+);
+assert(
+  classifyLifecycleError(422, { code: 'INVALID_REASON' }, 'RETURN').message
+    === '请填写有效的退回原因。',
+  'return invalid reason copy',
 );
 assert(
   INCOMPLETE_FIELD_LABELS.description === '问题描述'
@@ -113,6 +122,13 @@ for (const required of [
   '确认提交',
   '确认关闭',
   '确认退回',
+  '退回原因 *',
+  '请填写退回原因。',
+  '请说明需要补充或修改的内容',
+  'classifyLifecycleError(response.status, payload, action)',
+  'handleReturnConfirm',
+  'return-dialog-title',
+  'id="return-reason"',
   '确认重新打开',
   'maxLength={1000}',
   '请填写重新打开原因。',

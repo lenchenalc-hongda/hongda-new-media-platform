@@ -131,16 +131,18 @@ assert(
   deepEqual(reopenedSubmitted, {
     fromStatus: 'submitted',
     status: { before: 'submitted', after: 'draft' },
+    reason: 'SECRET_REOPEN_REASON',
   }),
   'REVIEW_REOPENED submitted safe',
 );
-assert(!JSON.stringify(reopenedSubmitted).includes('SECRET_REOPEN_REASON'), 'REVIEW_REOPENED hides reason');
+assert(JSON.stringify(reopenedSubmitted).includes('SECRET_REOPEN_REASON'), 'REVIEW_REOPENED keeps reason');
 
 const reopenedClosed = sanitizeAuditDetails('REVIEW', 'REVIEW_REOPENED', {
   status: { before: 'closed', after: 'draft' },
   reason: 'SECRET_REOPEN_REASON',
 });
 assert(reopenedClosed.fromStatus === 'closed', 'REVIEW_REOPENED closed fromStatus');
+assert(reopenedClosed.reason === 'SECRET_REOPEN_REASON', 'REVIEW_REOPENED closed reason');
 
 const typeCreated = sanitizeAuditDetails('TYPE_DETAILS', 'TYPE_DETAILS_SAVED', {
   created: true,

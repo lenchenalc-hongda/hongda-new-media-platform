@@ -330,9 +330,13 @@ assert(closedEvent.title === '关闭了复盘' && closedEvent.summaryItems.lengt
 
 const submittedReopen = formatTimelineEvent(item({
   eventType: 'REVIEW_REOPENED',
-  details: { fromStatus: 'submitted', reason: 'should not show' },
+  details: { fromStatus: 'submitted', reason: '请补充改善说明' },
 }));
-assert(submittedReopen.title === '退回了复盘修改' && submittedReopen.summaryItems.length === 0, 'REVIEW_REOPENED submitted presentation');
+assert(
+  submittedReopen.title === '退回了复盘'
+  && submittedReopen.summaryItems[0] === '退回原因：请补充改善说明',
+  'REVIEW_REOPENED submitted presentation',
+);
 
 const closedReopenNoReason = formatTimelineEvent(item({
   eventType: 'REVIEW_REOPENED',

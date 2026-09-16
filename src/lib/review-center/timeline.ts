@@ -264,7 +264,13 @@ export function sanitizeTimelineDetails(
 
   if (eventType === 'REVIEW_REOPENED') {
     if (source.from_status === 'submitted') {
-      return { fromStatus: 'submitted' };
+      const rawReason = source.reason;
+      const reason = typeof rawReason === 'string' ? rawReason.trim() : '';
+      const details: Record<string, unknown> = { fromStatus: 'submitted' };
+      if (reason.length >= 1 && reason.length <= 1000) {
+        details.reason = reason;
+      }
+      return details;
     }
     if (source.from_status === 'closed') {
       const rawReason = source.reason;

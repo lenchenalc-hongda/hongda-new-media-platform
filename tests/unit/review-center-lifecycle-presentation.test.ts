@@ -225,6 +225,8 @@ assert(
 );
 const invalidReason = classifyLifecycleError(422, { code: 'INVALID_REASON', message: 'RAW' });
 assert(invalidReason.message === '请填写有效的重新打开原因。' && invalidReason.keepDialogOpen, 'invalid reason mapping');
+const invalidReturnReason = classifyLifecycleError(422, { code: 'INVALID_REASON' }, 'RETURN');
+assert(invalidReturnReason.message === '请填写有效的退回原因。', 'return invalid reason mapping');
 const openActions = classifyLifecycleError(409, {
   code: 'OPEN_ACTIONS_EXIST',
   message: 'RAW',
@@ -245,8 +247,12 @@ const submitReq = buildLifecycleRequest('SUBMIT', 'review-1', 2);
 assert(submitReq.url === '/api/review-center/reviews/review-1/submit' && JSON.stringify(submitReq.body) === '{"expectedVersion":2}', 'submit request');
 const closeReq = buildLifecycleRequest('CLOSE', 'review-1', 3);
 assert(closeReq.url === '/api/review-center/reviews/review-1/close' && JSON.stringify(closeReq.body) === '{"expectedVersion":3}', 'close request');
-const returnReq = buildLifecycleRequest('RETURN', 'review-1', 4);
-assert(returnReq.url === '/api/review-center/reviews/review-1/reopen' && JSON.stringify(returnReq.body) === '{"expectedVersion":4,"reason":null}', 'return request');
+const returnReq = buildLifecycleRequest('RETURN', 'review-1', 4, '  请补充说明  ');
+assert(
+  returnReq.url === '/api/review-center/reviews/review-1/reopen'
+  && JSON.stringify(returnReq.body) === '{"expectedVersion":4,"reason":"请补充说明"}',
+  'return request trims required reason',
+);
 const reopenReq = buildLifecycleRequest('REOPEN', 'review-1', 5, '  reason  ');
 assert(reopenReq.url === '/api/review-center/reviews/review-1/reopen' && reopenReq.body.reason === 'reason', 'reopen request trims reason');
 

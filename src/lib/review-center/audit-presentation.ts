@@ -232,9 +232,13 @@ export function formatAuditEvent(item: AuditLogDTO): AuditEventPresentation {
     const status = statusSummary(details.status);
     if (status) summary.push(status);
     if (details.fromStatus === 'submitted') {
-      return { ...base, title: '退回了复盘修改', summaryItems: summary };
+      const reason = typeof details.reason === 'string' ? details.reason.trim() : '';
+      if (reason) summary.push(`退回原因：${reason}`);
+      return { ...base, title: '退回了复盘', summaryItems: summary };
     }
     if (details.fromStatus === 'closed') {
+      const reason = typeof details.reason === 'string' ? details.reason.trim() : '';
+      if (reason) summary.push(`重新打开原因：${reason}`);
       return { ...base, title: '重新打开了复盘', summaryItems: summary };
     }
     return { ...base, title: '更新了复盘状态', summaryItems: summary };
