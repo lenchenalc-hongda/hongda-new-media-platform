@@ -114,7 +114,9 @@ const libraryItem: CaseLibraryItem = {
   occurredAt: null,
   publishedAt: '2026-08-27T00:00:00Z',
   metadata: {
-    materials: [],
+    materials: [
+      { code: 'PP', label: '聚丙烯', isPrimary: true },
+    ],
     processes: [],
     problemDomains: [],
     problemSymptoms: [],
@@ -132,7 +134,9 @@ const candidateItem: CaseCandidateItem = {
   risk: null,
   occurredAt: null,
   sourceVersion: 1,
-  metadataSummary: [],
+  metadataSummary: [
+    { metadataType: 'MATERIAL', code: 'ABS', label: 'ABS 塑料', isPrimary: true },
+  ],
   existingCase: null,
 };
 
@@ -160,9 +164,13 @@ const adminDetail: CaseAdminDetail = {
   sourceChangedSinceSnapshot: false,
   isStale: false,
   staleReasons: [],
-  currentSourceMetadata: [],
+  currentSourceMetadata: [
+    { metadataType: 'MATERIAL', code: 'PETG', label: 'PETG 改性聚酯', isPrimary: true },
+  ],
   caseSnapshotMetadata: {
-    materials: [],
+    materials: [
+      { code: 'SILICONE', label: '硅胶', isPrimary: false },
+    ],
     processes: [],
     problemDomains: [],
     problemSymptoms: [],
@@ -418,13 +426,20 @@ assert(libCalls[0].args.p_published_from === '2026-08-27T00:00:00+08:00' && libC
 assert(libCalls[0].args.p_limit === 30 && libCalls[0].args.p_offset === 0, 'library numeric pagination');
 
 const candCalls: any[] = [];
-await callCaseCandidates(fakeClient({ data: { ok: true, data: { items: [], limit: 30, offset: 0, hasMore: false } }, error: null }, candCalls), {
-  q: null,
-  limit: 20,
-  offset: 10,
-});
+const candidateResult = await callCaseCandidates(
+  fakeClient({
+    data: { ok: true, data: { items: [candidateItem], limit: 30, offset: 0, hasMore: false } },
+    error: null,
+  }, candCalls),
+  {
+    q: null,
+    limit: 20,
+    offset: 10,
+  },
+);
 assert(candCalls.length === 1 && candCalls[0].name === 'review_case_candidates', 'candidate rpc');
 assert(JSON.stringify(candCalls[0].args) === JSON.stringify({ p_limit: 20, p_offset: 10, p_query: null }), 'candidate args');
+assert(candidateResult.items[0].metadataSummary[0].label === 'ABS', 'candidate material label normalized');
 
 const auditCalls: any[] = [];
 await callCaseAudit(fakeClient({ data: { ok: true, data: { items: [], limit: 30, offset: 0, hasMore: false } }, error: null }, auditCalls), UUID, {
@@ -435,12 +450,21 @@ assert(auditCalls.length === 1 && auditCalls[0].name === 'review_case_audit', 'a
 assert(JSON.stringify(auditCalls[0].args) === JSON.stringify({ p_case_id: UUID, p_limit: 20, p_offset: 5 }), 'audit args');
 
 const detailCalls: any[] = [];
-await callCasePublicDetail(fakeClient({ data: { ok: true, data: libraryItem }, error: null }, detailCalls), CASE_NO);
+const detailResult = await callCasePublicDetail(
+  fakeClient({ data: { ok: true, data: libraryItem }, error: null }, detailCalls),
+  CASE_NO,
+);
 assert(detailCalls.length === 1 && detailCalls[0].name === 'review_case_detail' && detailCalls[0].args.p_case_no === CASE_NO, 'public detail rpc');
+assert(detailResult.metadata.materials[0].label === 'PP', 'public detail material label normalized');
 
 const adminCalls: any[] = [];
-await callCaseAdminDetail(fakeClient({ data: { ok: true, data: adminDetail }, error: null }, adminCalls), CASE_NO);
+const adminResult = await callCaseAdminDetail(
+  fakeClient({ data: { ok: true, data: adminDetail }, error: null }, adminCalls),
+  CASE_NO,
+);
 assert(adminCalls.length === 1 && adminCalls[0].name === 'review_case_admin_detail' && adminCalls[0].args.p_case_no === CASE_NO, 'admin detail rpc');
+assert(adminResult.currentSourceMetadata[0].label === 'PETG', 'admin current material label normalized');
+assert(adminResult.caseSnapshotMetadata.materials[0].label === '硅胶', 'admin snapshot material label normalized');
 
 // Resolver
 const resolverCalls: any[] = [];

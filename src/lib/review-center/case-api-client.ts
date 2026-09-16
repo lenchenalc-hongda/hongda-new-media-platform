@@ -14,6 +14,7 @@ import type {
 } from './case-schemas';
 import { caseAuditResponseEnvelopeSchema } from './case-schemas';
 import type { MetadataOptionDto, MetadataOptionsDto } from './types';
+import { getMaterialDisplayLabel } from './material-labels';
 
 export class CaseApiError extends Error {
   readonly status: number;
@@ -35,6 +36,13 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function invalidResponse(): CaseApiError {
   return new CaseApiError(200, 'INVALID_RESPONSE', '案例数据格式异常');
+}
+
+function normalizeMaterialLabel<T extends { code: string; label: string }>(item: T): T {
+  return {
+    ...item,
+    label: getMaterialDisplayLabel(item.code, item.label),
+  };
 }
 
 function statusMessage(status: number): string {
@@ -98,7 +106,16 @@ function assertLibraryItem(value: unknown): CaseLibraryItem {
   ) {
     throw invalidResponse();
   }
-  return value as CaseLibraryItem;
+  const item = value as CaseLibraryItem;
+  return {
+    ...item,
+    metadata: {
+      ...item.metadata,
+      materials: Array.isArray(item.metadata.materials)
+        ? item.metadata.materials.map(normalizeMaterialLabel)
+        : item.metadata.materials,
+    },
+  };
 }
 
 export function parseCaseLibraryResponse(body: unknown): CaseLibraryResponseData {
@@ -133,7 +150,7 @@ export function parseCasePublicDetailResponse(body: unknown): CasePublicDetail {
   ) {
     throw invalidResponse();
   }
-  return data as CasePublicDetail;
+  return assertLibraryItem(data);
 }
 
 export function buildCaseLibraryQueryString(query: CaseLibraryQuery): string {
@@ -218,7 +235,10 @@ export function parseMetadataOptionsResponse(body: unknown): MetadataOptionsDto 
   const data = readData(body);
   if (!isRecord(data)) throw invalidResponse();
   return {
-    materials: parseOptionArray(data.materials),
+    materials: parseOptionArray(data.materials).map(option => ({
+      ...option,
+      label: getMaterialDisplayLabel(option.code, option.label),
+    })),
     processes: parseOptionArray(data.processes),
     problemDomains: parseOptionArray(data.problemDomains),
     problemSymptoms: parseOptionArray(data.problemSymptoms),
@@ -273,7 +293,16 @@ function parseCandidateItem(value: unknown): CaseCandidateItem {
     throw invalidResponse();
   }
   const existingCase = parseExistingCase(value.existingCase);
-  return { ...(value as CaseCandidateItem), existingCase };
+  const item = value as CaseCandidateItem;
+  return {
+    ...item,
+    metadataSummary: item.metadataSummary.map(summaryItem => (
+      summaryItem.metadataType === 'MATERIAL'
+        ? normalizeMaterialLabel(summaryItem)
+        : summaryItem
+    )),
+    existingCase,
+  };
 }
 
 export function parseCaseCandidateResponse(body: unknown): CaseCandidateResponseData {
@@ -368,7 +397,11 @@ function parseSnapshotMetadata(value: unknown): CaseAdminDetail['caseSnapshotMet
     if (!isRecord(item) || typeof item.code !== 'string' || typeof item.label !== 'string' || typeof item.isPrimary !== 'boolean') {
       throw invalidResponse();
     }
-    return { code: item.code, label: item.label, isPrimary: item.isPrimary };
+    return normalizeMaterialLabel({
+      code: item.code,
+      label: item.label,
+      isPrimary: item.isPrimary,
+    });
   };
   const parseCode = (item: unknown) => {
     if (!isRecord(item) || typeof item.code !== 'string' || typeof item.label !== 'string') {
@@ -400,7 +433,9 @@ function parseCurrentSourceMetadata(value: unknown): CaseAdminDetail['currentSou
     return {
       metadataType: item.metadataType as CaseAdminDetail['currentSourceMetadata'][number]['metadataType'],
       code: item.code,
-      label: item.label,
+      label: item.metadataType === 'MATERIAL'
+        ? getMaterialDisplayLabel(item.code, item.label)
+        : item.label,
       isPrimary: item.isPrimary,
     };
   });

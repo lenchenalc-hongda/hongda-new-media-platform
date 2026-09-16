@@ -48,8 +48,8 @@ const libraryItem = {
   publishedAt: '2026-08-27T00:00:00Z',
   metadata: {
     materials: [
-      { code: 'ABS', label: 'ABS', isPrimary: false },
-      { code: 'PP', label: 'PP', isPrimary: true },
+      { code: 'ABS', label: 'ABS 塑料', isPrimary: false },
+      { code: 'PP', label: '聚丙烯', isPrimary: true },
     ],
     processes: [{ code: 'FILM_MAKING', label: '制膜' }],
     problemDomains: [{ code: 'PROCESS', label: '生产' }],
@@ -204,7 +204,7 @@ stubFetch(async () => jsonResponse(200, {
   code: 'OK',
   message: 'success',
   data: {
-    materials: [{ code: 'PP', label: 'PP', description: null, sortOrder: 1 }],
+    materials: [{ code: 'PP', label: '聚丙烯', description: null, sortOrder: 1 }],
     processes: [],
     problemDomains: [],
     problemSymptoms: [],

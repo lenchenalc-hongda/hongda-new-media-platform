@@ -7,6 +7,7 @@ import {
   runExclusiveOnce,
 } from '@/lib/review-center/case-api-client';
 import { caseReviewTypeLabel } from '@/lib/review-center/case-presentation';
+import { getMaterialDisplayLabel } from '@/lib/review-center/material-labels';
 
 interface CaseCreateDialogProps {
   candidate: CaseCandidateItem;
@@ -111,7 +112,9 @@ export default function CaseCreateDialog({
                       key={`${item.metadataType}:${item.code}`}
                       className="inline-flex items-center rounded border border-gray-200 bg-gray-50 px-1.5 py-0.5 text-xs text-gray-700"
                     >
-                      {item.label || item.code}
+                      {item.metadataType === 'MATERIAL'
+                        ? getMaterialDisplayLabel(item.code, item.label || item.code)
+                        : item.label || item.code}
                     </span>
                   ))}
                 </div>

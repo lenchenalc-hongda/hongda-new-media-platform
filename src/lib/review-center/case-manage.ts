@@ -2,6 +2,7 @@ import type {
   CaseAdminDetail,
   CaseMutationResult,
 } from './case-schemas';
+import { getMaterialDisplayLabel } from './material-labels';
 
 export interface CaseEditorDraft {
   title: string;
@@ -240,7 +241,11 @@ export function groupCurrentSourceMetadata(
 
   for (const item of items) {
     if (item.metadataType === 'MATERIAL') {
-      group.materials.push({ code: item.code, label: item.label, isPrimary: item.isPrimary });
+      group.materials.push({
+        code: item.code,
+        label: getMaterialDisplayLabel(item.code, item.label),
+        isPrimary: item.isPrimary,
+      });
     } else if (item.metadataType === 'PROCESS') {
       group.processes.push({ code: item.code, label: item.label });
     } else if (item.metadataType === 'PROBLEM_DOMAIN') {

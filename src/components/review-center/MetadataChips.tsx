@@ -1,4 +1,5 @@
 import type { ReviewMetadataDto } from '@/lib/review-center/types';
+import { getMaterialDisplayLabel } from '@/lib/review-center/material-labels';
 
 interface MetadataChipsProps {
   metadata: ReviewMetadataDto | null;
@@ -49,7 +50,7 @@ export default function MetadataChips({ metadata }: MetadataChipsProps) {
     code: material.code,
     label: material.code === 'OTHER' && materialOther
       ? `其他：${materialOther}`
-      : material.label,
+      : getMaterialDisplayLabel(material.code, material.label),
     primary: material.isPrimary,
   }));
 

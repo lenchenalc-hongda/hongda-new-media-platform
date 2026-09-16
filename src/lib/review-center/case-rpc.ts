@@ -29,6 +29,7 @@ import {
   CaseRpcUnexpectedError,
   parseCaseBusinessErrorEnvelope,
 } from './case-errors';
+import { getMaterialDisplayLabel } from './material-labels';
 
 export const CASE_RPC_NAMES = {
   create: 'review_case_create_from_review',
@@ -93,6 +94,73 @@ function parseReadResult<T>(
 
 function emptyArrayToNull(values: string[]): string[] | null {
   return values.length > 0 ? values : null;
+}
+
+function normalizeMaterialLabel<T extends { code: string; label: string }>(item: T): T {
+  return {
+    ...item,
+    label: getMaterialDisplayLabel(item.code, item.label),
+  };
+}
+
+function normalizeLibraryItem(item: CaseLibraryResponseData['items'][number]) {
+  return {
+    ...item,
+    metadata: {
+      ...item.metadata,
+      materials: item.metadata.materials.map(normalizeMaterialLabel),
+    },
+  };
+}
+
+function normalizeLibraryResponse(
+  data: CaseLibraryResponseData,
+): CaseLibraryResponseData {
+  return {
+    ...data,
+    items: data.items.map(normalizeLibraryItem),
+  };
+}
+
+function normalizePublicDetail(data: CasePublicDetail): CasePublicDetail {
+  return normalizeLibraryItem(data);
+}
+
+function normalizeCandidateItem(
+  item: CaseCandidateResponseData['items'][number],
+): CaseCandidateResponseData['items'][number] {
+  return {
+    ...item,
+    metadataSummary: item.metadataSummary.map(summaryItem => (
+      summaryItem.metadataType === 'MATERIAL'
+        ? normalizeMaterialLabel(summaryItem)
+        : summaryItem
+    )),
+  };
+}
+
+function normalizeCandidateResponse(
+  data: CaseCandidateResponseData,
+): CaseCandidateResponseData {
+  return {
+    ...data,
+    items: data.items.map(normalizeCandidateItem),
+  };
+}
+
+function normalizeAdminDetail(data: CaseAdminDetail): CaseAdminDetail {
+  return {
+    ...data,
+    currentSourceMetadata: data.currentSourceMetadata.map(item => (
+      item.metadataType === 'MATERIAL'
+        ? normalizeMaterialLabel(item)
+        : item
+    )),
+    caseSnapshotMetadata: {
+      ...data.caseSnapshotMetadata,
+      materials: data.caseSnapshotMetadata.materials.map(normalizeMaterialLabel),
+    },
+  };
 }
 
 export async function callCaseCreate(
@@ -175,7 +243,7 @@ export async function callCaseLibrary(
     p_limit: query.limit,
     p_offset: query.offset,
   });
-  return parseReadResult(caseLibraryResponseDataSchema, result);
+  return normalizeLibraryResponse(parseReadResult(caseLibraryResponseDataSchema, result));
 }
 
 export async function callCasePublicDetail(
@@ -185,7 +253,7 @@ export async function callCasePublicDetail(
   const result = await client.rpc(CASE_RPC_NAMES.detail, {
     p_case_no: caseNo,
   });
-  return parseReadResult(casePublicDetailSchema, result);
+  return normalizePublicDetail(parseReadResult(casePublicDetailSchema, result));
 }
 
 export async function callCaseCandidates(
@@ -197,7 +265,7 @@ export async function callCaseCandidates(
     p_offset: query.offset,
     p_query: query.q,
   });
-  return parseReadResult(caseCandidateResponseDataSchema, result);
+  return normalizeCandidateResponse(parseReadResult(caseCandidateResponseDataSchema, result));
 }
 
 export async function callCaseAdminDetail(
@@ -207,7 +275,7 @@ export async function callCaseAdminDetail(
   const result = await client.rpc(CASE_RPC_NAMES.adminDetail, {
     p_case_no: caseNo,
   });
-  return parseReadResult(caseAdminDetailSchema, result);
+  return normalizeAdminDetail(parseReadResult(caseAdminDetailSchema, result));
 }
 
 export async function callCaseAudit(

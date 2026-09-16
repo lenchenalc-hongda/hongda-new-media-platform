@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { MetadataOptionsDto, ReviewMetadataDto } from '@/lib/review-center/types';
+import { getMaterialDisplayLabel } from '@/lib/review-center/material-labels';
 import {
   buildMetadataMutationPayload,
   canEditMetadata,
@@ -208,7 +209,7 @@ export default function MetadataEditor({
                     checked={state.primaryMaterialCode === option.code}
                     onChange={() => setState(prev => setPrimaryMaterial(prev, option.code))}
                   />
-                  {option.label}
+                  {getMaterialDisplayLabel(option.code, option.label)}
                 </label>
               ))}
             </div>
@@ -225,7 +226,7 @@ export default function MetadataEditor({
                       checked={state.secondaryMaterialCodes.includes(option.code)}
                       onChange={() => setState(prev => toggleSecondaryMaterial(prev, option.code))}
                     />
-                    {option.label}
+                    {getMaterialDisplayLabel(option.code, option.label)}
                   </label>
                 ))}
             </div>
