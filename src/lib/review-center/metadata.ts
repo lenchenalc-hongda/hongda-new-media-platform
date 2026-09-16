@@ -25,6 +25,25 @@ export const METADATA_MISSING_DIMENSION_LABELS: Record<string, string> = {
   PROCESS: '当前问题环节要求至少选择一种“工艺”',
 };
 
+const MATERIAL_DISPLAY_LABELS: Record<string, string> = {
+  PP: 'PP',
+  PE: 'PE',
+  ABS: 'ABS',
+  PS: 'PS',
+  PET: 'PET',
+  PETG: 'PETG',
+  PC: 'PC',
+  PVC: 'PVC',
+  SILICONE: '硅胶',
+  METAL: '金属',
+  GLASS: '玻璃',
+  CERAMIC: '陶瓷',
+  WOOD: '木材',
+  LEATHER: '皮革',
+  PAPER: '纸类',
+  OTHER: '其他',
+};
+
 export interface MetadataOptionDbRow {
   org_id: string | null;
   dict_type: string;
@@ -54,10 +73,17 @@ export function canReadMetadataOptions(profile: { id: string; org_id: string } |
   return profile !== null;
 }
 
+function getDisplayLabel(type: string, code: string, fallback: string): string {
+  if (type === 'MATERIAL') {
+    return MATERIAL_DISPLAY_LABELS[code] ?? fallback;
+  }
+  return fallback;
+}
+
 function toOptionDto(row: MetadataOptionDbRow): MetadataOptionDto {
   return {
     code: row.code,
-    label: row.label,
+    label: getDisplayLabel(row.dict_type, row.code, row.label),
     description: row.description,
     sortOrder: row.sort_order,
   };
@@ -84,7 +110,10 @@ export function buildMetadataOptionsDto(rows: MetadataOptionDbRow[]): MetadataOp
 }
 
 function toCodeDto(row: ReviewMetadataItemRow): ReviewMetadataCodeDto {
-  return { code: row.code, label: row.label };
+  return {
+    code: row.code,
+    label: getDisplayLabel(row.metadata_type, row.code, row.label),
+  };
 }
 
 export function buildReviewMetadataDto(params: {
@@ -97,7 +126,11 @@ export function buildReviewMetadataDto(params: {
   const materials: ReviewMetadataMaterialDto[] = items
     .filter(item => item.metadata_type === 'MATERIAL')
     .sort((a, b) => Number(b.is_primary) - Number(a.is_primary) || a.code.localeCompare(b.code))
-    .map(item => ({ code: item.code, label: item.label, isPrimary: item.is_primary }));
+    .map(item => ({
+      code: item.code,
+      label: getDisplayLabel(item.metadata_type, item.code, item.label),
+      isPrimary: item.is_primary,
+    }));
 
   const processes = items
     .filter(item => item.metadata_type === 'PROCESS')
