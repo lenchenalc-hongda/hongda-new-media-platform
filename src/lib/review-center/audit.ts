@@ -340,7 +340,13 @@ function sanitizeReviewReopened(
     new Set(['draft']),
   );
   if (pair === null) return {};
-  return { fromStatus: pair.before, status: pair };
+  const rawReason = source.reason;
+  const reason = typeof rawReason === 'string' ? rawReason.trim() : '';
+  return {
+    fromStatus: pair.before,
+    status: pair,
+    ...(reason.length >= 1 && reason.length <= 1000 ? { reason } : {}),
+  };
 }
 
 function sanitizeTypeDetailsSaved(

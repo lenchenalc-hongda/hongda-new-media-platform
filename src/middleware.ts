@@ -10,7 +10,14 @@ import { AuthError } from '@/lib/auth/types';
 import { isFeatureEnabled, FEATURES } from '@/lib/features';
 import { copyResponseCookies } from '@/lib/supabase/middleware';
 
-const PUBLIC_ROUTES = ['/login', '/_next', '/api/auth', '/favicon.ico', '/api/ai'];
+const PUBLIC_ROUTES = [
+  '/login',
+  '/_next',
+  '/api/auth',
+  '/api/health',
+  '/favicon.ico',
+  '/api/ai',
+];
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;

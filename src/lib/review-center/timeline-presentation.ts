@@ -309,7 +309,11 @@ export function formatTimelineEvent(item: TimelineItemDTO): TimelineEventPresent
 
   if (item.eventType === 'REVIEW_REOPENED') {
     if (item.details.fromStatus === 'submitted') {
-      return { ...base, title: '退回了复盘修改', summaryItems: [] };
+      const reason = typeof item.details.reason === 'string'
+        ? item.details.reason.trim()
+        : '';
+      const summaryItems = reason ? [`退回原因：${reason}`] : [];
+      return { ...base, title: '退回了复盘', summaryItems };
     }
     if (item.details.fromStatus === 'closed') {
       const reason = typeof item.details.reason === 'string'

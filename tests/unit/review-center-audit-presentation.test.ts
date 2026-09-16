@@ -95,15 +95,18 @@ assert(closedEvent.summaryItems[0] === '状态：待确认 → 已关闭', 'REVI
 const reopenSubmitted = formatAuditEvent(item('REVIEW_REOPENED', {
   fromStatus: 'submitted',
   status: { before: 'submitted', after: 'draft' },
+  reason: '请补充改善说明',
 }));
-assert(reopenSubmitted.title === '退回了复盘修改', 'REVIEW_REOPENED submitted title');
+assert(reopenSubmitted.title === '退回了复盘', 'REVIEW_REOPENED submitted title');
+assert(reopenSubmitted.summaryItems.includes('退回原因：请补充改善说明'), 'REVIEW_REOPENED submitted reason summary');
 
 const reopenClosed = formatAuditEvent(item('REVIEW_REOPENED', {
   fromStatus: 'closed',
   status: { before: 'closed', after: 'draft' },
+  reason: '客户确认标准发生调整',
 }));
 assert(reopenClosed.title === '重新打开了复盘', 'REVIEW_REOPENED closed title');
-assert(!JSON.stringify(reopenClosed).includes('SECRET_REOPEN_REASON'), 'REVIEW_REOPENED reason never shown');
+assert(reopenClosed.summaryItems.includes('重新打开原因：客户确认标准发生调整'), 'REVIEW_REOPENED closed reason summary');
 
 const detailsCreated = formatAuditEvent(item('TYPE_DETAILS_SAVED', {
   created: true,

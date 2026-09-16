@@ -296,8 +296,8 @@ assert(deepEqual(sanitizeTimelineDetails('REVIEW_CLOSED', {
 assert(deepEqual(sanitizeTimelineDetails('REVIEW_REOPENED', {
   from_status: 'submitted',
   to_status: 'draft',
-  reason: 'should not expose',
-}), { fromStatus: 'submitted' }), 'REVIEW_REOPENED submitted hides reason');
+  reason: '  return reason  ',
+}), { fromStatus: 'submitted', reason: 'return reason' }), 'REVIEW_REOPENED submitted trims reason');
 
 assert(deepEqual(sanitizeTimelineDetails('REVIEW_REOPENED', {
   from_status: 'closed',

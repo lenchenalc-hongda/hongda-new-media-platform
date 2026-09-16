@@ -129,7 +129,10 @@ export function buildLifecycleRequest(
     return { url: `${base}/close`, body: { expectedVersion } };
   }
   if (action === 'RETURN') {
-    return { url: `${base}/reopen`, body: { expectedVersion, reason: null } };
+    return {
+      url: `${base}/reopen`,
+      body: { expectedVersion, reason: reason?.trim() || null },
+    };
   }
   if (action === 'REOPEN') {
     return {
@@ -180,6 +183,7 @@ export function sanitizeIncompleteFields(fields: unknown): string[] {
 export function classifyLifecycleError(
   status: number,
   payload: unknown,
+  action: LifecycleActionKind = 'REOPEN',
 ): LifecycleUiError {
   const body = payload && typeof payload === 'object'
     ? (payload as Record<string, unknown>)
@@ -263,7 +267,9 @@ export function classifyLifecycleError(
   if (status === 422 && code === 'INVALID_REASON') {
     return {
       code,
-      message: '请填写有效的重新打开原因。',
+      message: action === 'RETURN'
+        ? '请填写有效的退回原因。'
+        : '请填写有效的重新打开原因。',
       shouldRefreshAuthority: false,
       keepDialogOpen: true,
       incompleteFields: [],

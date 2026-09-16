@@ -33,12 +33,18 @@ async function main() {
   // ============ API Health ============
   console.log('\n=== API Health ===');
   await testApiOk('/api/health', ['status', 'app', 'services', 'timestamp']);
-  await testApiOk('/api/ai/health', ['status', 'ai_enabled', 'mock_mode', 'model']);
+  await testApiOk('/api/ai/health', [
+    'aiProvider',
+    'mockMode',
+    'configured_provider',
+    'envKeysPresent',
+    'timestamp',
+  ]);
 
   // ============ AI Endpoints (mock) ============
   console.log('\n=== AI Endpoints ===');
   // Test that AI endpoints return valid schema payloads even without API key
-  await testApiOk('/api/ai/health', ['ai_enabled', 'mock_mode']);
+  await testApiOk('/api/ai/health', ['aiProvider', 'mockMode']);
   
   // POST endpoints - test that they accept and return
   const aiEndpoints = [

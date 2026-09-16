@@ -51,6 +51,8 @@ export default function LifecycleSection({
   onAuthorityRefresh,
 }: LifecycleSectionProps) {
   const [dialog, setDialog] = useState<DialogKind>(null);
+  const [returnReason, setReturnReason] = useState('');
+  const [returnError, setReturnError] = useState<string | null>(null);
   const [reopenReason, setReopenReason] = useState('');
   const [reopenError, setReopenError] = useState<string | null>(null);
   const [mutationError, setMutationError] = useState<string | null>(null);
@@ -76,6 +78,8 @@ export default function LifecycleSection({
     generationRef.current += 1;
     lockRef.current = createMutationLock();
     setDialog(null);
+    setReturnReason('');
+    setReturnError(null);
     setReopenReason('');
     setReopenError(null);
     setMutationError(null);
@@ -87,12 +91,14 @@ export default function LifecycleSection({
 
   const closeReopenDialog = useCallback(() => {
     setDialog(null);
+    setReturnReason('');
+    setReturnError(null);
     setReopenReason('');
     setReopenError(null);
   }, []);
 
   useEffect(() => {
-    if (dialog !== 'REOPEN' || isMutating) return;
+    if ((dialog !== 'REOPEN' && dialog !== 'RETURN') || isMutating) return;
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === 'Escape') closeReopenDialog();
     }
@@ -109,6 +115,7 @@ export default function LifecycleSection({
     setIncompleteFields([]);
     setIncompleteReviewFallback(false);
     setMissingDimensions([]);
+    setReturnError(null);
     setReopenError(null);
 
     try {
@@ -141,6 +148,8 @@ export default function LifecycleSection({
           return;
         }
         setDialog(null);
+        setReturnReason('');
+        setReturnError(null);
         setReopenReason('');
         setReopenError(null);
         onLifecycleSuccess(success);
@@ -148,11 +157,15 @@ export default function LifecycleSection({
         return;
       }
 
-      const error = classifyLifecycleError(response.status, payload);
+      const error = classifyLifecycleError(response.status, payload, action);
       if (requestId !== generationRef.current) return;
 
       if (error.keepDialogOpen) {
-        setReopenError(error.message);
+        if (action === 'RETURN') {
+          setReturnError(error.message);
+        } else {
+          setReopenError(error.message);
+        }
         setMutationError(null);
         return;
       }
@@ -178,6 +191,15 @@ export default function LifecycleSection({
     }
     setReopenError(null);
     void runMutation('REOPEN', reopenReason);
+  }
+
+  function handleReturnConfirm() {
+    if (returnReason.trim() === '') {
+      setReturnError('请填写退回原因。');
+      return;
+    }
+    setReturnError(null);
+    void runMutation('RETURN', returnReason);
   }
 
   return (
@@ -253,7 +275,11 @@ export default function LifecycleSection({
           <button
             type="button"
             disabled={isMutating}
-            onClick={() => setDialog('RETURN')}
+            onClick={() => {
+              setReturnReason('');
+              setReturnError(null);
+              setDialog('RETURN');
+            }}
             className="btn-secondary"
           >
             退回修改
@@ -303,15 +329,61 @@ export default function LifecycleSection({
         onConfirm={() => void runMutation('CLOSE')}
         onCancel={() => { if (!isMutating) setDialog(null); }}
       />
-      <ConfirmDialog
-        open={dialog === 'RETURN'}
-        title="退回修改？"
-        message="复盘将恢复为“草稿”状态，负责人可继续编辑并重新提交。"
-        confirmLabel={isMutating ? '退回中…' : '确认退回'}
-        confirmDisabled={isMutating}
-        onConfirm={() => void runMutation('RETURN')}
-        onCancel={() => { if (!isMutating) setDialog(null); }}
-      />
+      {dialog === 'RETURN' && (
+        <div
+          className="fixed inset-0 bg-black/30 flex items-center justify-center z-50"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="return-dialog-title"
+          onClick={() => { if (!isMutating) closeReopenDialog(); }}
+        >
+          <div
+            className="bg-white rounded-lg p-6 max-w-md w-full mx-4"
+            onClick={event => event.stopPropagation()}
+          >
+            <h3 id="return-dialog-title" className="text-lg font-semibold text-gray-800 mb-2">退回修改</h3>
+            <p className="text-sm text-gray-600 mb-4">
+              退回后复盘将恢复为“草稿”，负责人可以继续编辑并重新提交。
+            </p>
+            <label className="block text-xs text-gray-500 mb-1" htmlFor="return-reason">
+              退回原因 *
+            </label>
+            <textarea
+              id="return-reason"
+              value={returnReason}
+              onChange={event => setReturnReason(event.target.value)}
+              maxLength={1000}
+              disabled={isMutating}
+              placeholder="请说明需要补充或修改的内容，例如：请补充问题原因和改善说明。"
+              className="w-full rounded border border-gray-300 p-2 text-sm"
+              rows={4}
+            />
+            <p className="mt-1 text-right text-xs text-gray-400">{returnReason.length} / 1000</p>
+            {returnError && (
+              <p className="mt-2 text-sm text-red-600">{returnError}</p>
+            )}
+            <div className="mt-4 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  if (!isMutating) closeReopenDialog();
+                }}
+                className="btn-secondary"
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                disabled={isMutating}
+                onClick={handleReturnConfirm}
+                className="btn-primary"
+              >
+                {isMutating ? '退回中…' : '确认退回'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {dialog === 'REOPEN' && (
         <div

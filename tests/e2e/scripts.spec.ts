@@ -54,7 +54,7 @@ async function main() {
 
   // Test API health
   console.log('\n=== API Health ===');
-  await testApiOk('/api/ai/health', ['ai_enabled', 'mock_mode']);
+  await testApiOk('/api/ai/health', ['aiProvider', 'mockMode']);
   await testApiOk('/api/health', ['status', 'services']);
 
   report();
