@@ -1,4 +1,5 @@
 // ===== Review Center Editor Mutation Lock + Authority Hardening Tests =====
+import fs from 'node:fs';
 import {
   analyzeBasicFallbackRebase,
   basicInfoDirty,
@@ -9,6 +10,7 @@ import {
   type BasicInfoDraft,
   type EditorMe,
 } from '../../src/lib/review-center/editor';
+import { getEditCompletionState } from '../../src/lib/review-center/edit-completion';
 import {
   planTypeDetailsFallbackSync,
   TYPE_DETAILS_FALLBACK_SYNC_FAILURE_MESSAGE,
@@ -238,6 +240,86 @@ const datetimeLatest = normalizeBasicInfo(makeDetail({ occurred_at: '2026-08-01T
 const datetimeAnalysis = analyzeBasicFallbackRebase(datetimeInitial, datetimeInitial, datetimeLatest);
 assert(!('occurred_at' in datetimeAnalysis.remoteChangedFields), 'equivalent datetime formats do not create remote change');
 assert(datetimeAnalysis.hasConflict === false, 'datetime display normalization does not create false conflict');
+
+const cleanCompletion = getEditCompletionState({
+  basicDirty: false,
+  metadataDirty: false,
+  typeDetailsDirty: false,
+  assignmentsDirty: false,
+  basicSaveState: 'idle',
+  metadataSaveState: 'idle',
+  typeDetailsSaveState: 'idle',
+  assignmentsSaveState: 'idle',
+  memberMutationState: 'idle',
+  blocked: false,
+});
+assert(cleanCompletion.canFinishEditing === true, 'clean editor can finish editing');
+assert(cleanCompletion.shouldWarnBeforeUnload === false, 'clean editor does not warn before unload');
+
+const dirtyCompletion = getEditCompletionState({
+  basicDirty: false,
+  metadataDirty: true,
+  typeDetailsDirty: true,
+  assignmentsDirty: false,
+  basicSaveState: 'idle',
+  metadataSaveState: 'idle',
+  typeDetailsSaveState: 'idle',
+  assignmentsSaveState: 'idle',
+  memberMutationState: 'idle',
+  blocked: false,
+});
+assert(dirtyCompletion.canFinishEditing === false, 'dirty editor cannot finish editing');
+assert(
+  dirtyCompletion.unsavedModules.includes('项目分类')
+  && dirtyCompletion.unsavedModules.includes('专项复盘内容'),
+  'completion lists every dirty module',
+);
+assert(dirtyCompletion.shouldWarnBeforeUnload === true, 'dirty editor warns before unload');
+
+const savingCompletion = getEditCompletionState({
+  basicDirty: false,
+  metadataDirty: false,
+  typeDetailsDirty: false,
+  assignmentsDirty: false,
+  basicSaveState: 'idle',
+  metadataSaveState: 'saving',
+  typeDetailsSaveState: 'idle',
+  assignmentsSaveState: 'idle',
+  memberMutationState: 'idle',
+  blocked: false,
+});
+assert(savingCompletion.canFinishEditing === false, 'saving editor cannot finish editing');
+assert(savingCompletion.pendingModules.includes('项目分类'), 'completion lists pending module');
+
+const blockedCompletion = getEditCompletionState({
+  basicDirty: false,
+  metadataDirty: false,
+  typeDetailsDirty: false,
+  assignmentsDirty: false,
+  basicSaveState: 'idle',
+  metadataSaveState: 'idle',
+  typeDetailsSaveState: 'conflict',
+  assignmentsSaveState: 'idle',
+  memberMutationState: 'idle',
+  blocked: false,
+});
+assert(blockedCompletion.canFinishEditing === false, 'conflict editor cannot finish editing');
+assert(
+  blockedCompletion.blockedModules.some(item => item.includes('专项复盘内容') && item.includes('其他人更新')),
+  'completion explains blocked module reason',
+);
+
+const editPageSource = fs.readFileSync('src/app/review-center/reviews/[id]/edit/page.tsx', 'utf8');
+assert(editPageSource.includes('完成编辑，返回详情'), 'edit page exposes explicit finish editing action');
+assert(editPageSource.includes('beforeunload'), 'edit page installs beforeunload guard');
+assert(editPageSource.includes('onDirtyChange={handleMetadataDirtyChange}'), 'metadata dirty state is lifted to page');
+assert(editPageSource.includes('onSaveStateChange={handleMetadataSaveStateChange}'), 'metadata saving state is lifted to page');
+assert(editPageSource.includes('fetchWithTimeout'), 'type details save uses timeout wrapper');
+assert(
+  editPageSource.includes('updateTypeDetailsSaveUiState')
+  && editPageSource.includes("'succeed'"),
+  'type details success transitions to saved state',
+);
 
 console.log('\nPassed: ' + passed + ', Failed: ' + failed + ' / ' + (passed + failed));
 if (failed > 0) process.exitCode = 1;

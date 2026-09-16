@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { MetadataOptionsDto, ReviewMetadataDto } from '@/lib/review-center/types';
 import { getMaterialDisplayLabel } from '@/lib/review-center/material-labels';
 import {
@@ -7,6 +7,7 @@ import {
   createMetadataEditorState,
   hasOtherCode,
   hasProcessRequirement,
+  isMetadataEditorDirty,
   setMetadataOtherText,
   setPrimaryMaterial,
   toggleProblemDomain,
@@ -14,6 +15,7 @@ import {
   toggleProcess,
   toggleSecondaryMaterial,
   type MetadataEditorState,
+  type MetadataEditorSaveState,
 } from '@/lib/review-center/metadata-editor';
 
 interface MetadataEditorProps {
@@ -27,6 +29,8 @@ interface MetadataEditorProps {
   ownerId: string;
   pmoId: string | null;
   onSaved: (version: number, metadata: ReviewMetadataDto) => void;
+  onDirtyChange?: (dirty: boolean) => void;
+  onSaveStateChange?: (state: MetadataEditorSaveState) => void;
   onCancel?: () => void;
   missingDimensions?: string[];
 }
@@ -44,6 +48,8 @@ export default function MetadataEditor({
   ownerId,
   pmoId,
   onSaved,
+  onDirtyChange,
+  onSaveStateChange,
   onCancel,
   missingDimensions = [],
 }: MetadataEditorProps) {
@@ -51,8 +57,16 @@ export default function MetadataEditor({
   const [optionsStatus, setOptionsStatus] = useState<OptionsStatus>('loading');
   const [state, setState] = useState<MetadataEditorState>(() => createMetadataEditorState(initialMetadata));
   const [reason, setReason] = useState('');
-  const [saving, setSaving] = useState(false);
+  const [saveState, setSaveState] = useState<MetadataEditorSaveState>('idle');
   const [error, setError] = useState<string | null>(null);
+  const initialState = useMemo(
+    () => createMetadataEditorState(initialMetadata),
+    [initialMetadata],
+  );
+  const dirty = useMemo(
+    () => isMetadataEditorDirty(initialState, state),
+    [initialState, state],
+  );
 
   const editable = canEditMetadata({
     status,
@@ -80,17 +94,39 @@ export default function MetadataEditor({
   }
 
   useEffect(() => {
-    setState(createMetadataEditorState(initialMetadata));
+    setState(initialState);
     setReason('');
     setError(null);
-  }, [initialMetadata]);
+  }, [initialState]);
+
+  useEffect(() => {
+    onDirtyChange?.(dirty);
+  }, [dirty, onDirtyChange]);
+
+  useEffect(() => {
+    onSaveStateChange?.(saveState);
+  }, [onSaveStateChange, saveState]);
 
   useEffect(() => {
     void loadOptions();
   }, []);
 
+  function updateState(
+    updater: (current: MetadataEditorState) => MetadataEditorState,
+  ) {
+    setState(prev => updater(prev));
+    setError(null);
+    setSaveState(prev => (
+      prev === 'saved'
+      || prev === 'validation'
+      || prev === 'error'
+        ? 'idle'
+        : prev
+    ));
+  }
+
   async function handleSave() {
-    if (!editable || optionsStatus !== 'ready') return;
+    if (!editable || optionsStatus !== 'ready' || !dirty || saveState === 'saving') return;
     if (correctionMode && reason.trim() === '') {
       setError('请填写修改原因。');
       return;
@@ -103,7 +139,7 @@ export default function MetadataEditor({
     };
     if (correctionMode) body.reason = reason.trim();
 
-    setSaving(true);
+    setSaveState('saving');
     setError(null);
     try {
       const response = await fetch(
@@ -118,14 +154,19 @@ export default function MetadataEditor({
       if (!response.ok || data?.code !== 'OK') {
         const code = typeof data?.code === 'string' ? data.code : 'UNKNOWN';
         if (code === 'VERSION_CONFLICT') {
+          setSaveState('conflict');
           setError('项目已被其他人更新，请刷新后再修改。');
         } else if (code === 'INVALID_TRANSITION') {
+          setSaveState('reload_required');
           setError('项目状态已变化，请刷新后再操作。');
         } else if (code === 'INVALID_METADATA') {
+          setSaveState('validation');
           setError('分类信息不符合要求，请检查后重新保存。');
         } else if (code === 'FORBIDDEN') {
+          setSaveState('forbidden');
           setError('你当前无权执行此操作。');
         } else {
+          setSaveState('error');
           setError('保存失败，请稍后重试。');
         }
         return;
@@ -138,14 +179,16 @@ export default function MetadataEditor({
         || result.version < 1
         || !result.metadata
       ) {
+        setSaveState('error');
         setError('保存失败，请稍后重试。');
         return;
       }
       onSaved(result.version, result.metadata);
+      setSaveState('saved');
+      setError(null);
     } catch {
+      setSaveState('error');
       setError('保存失败，请稍后重试。');
-    } finally {
-      setSaving(false);
     }
   }
 
@@ -207,7 +250,7 @@ export default function MetadataEditor({
                     type="radio"
                     name={`${reviewId}-primary-material`}
                     checked={state.primaryMaterialCode === option.code}
-                    onChange={() => setState(prev => setPrimaryMaterial(prev, option.code))}
+                    onChange={() => updateState(prev => setPrimaryMaterial(prev, option.code))}
                   />
                   {getMaterialDisplayLabel(option.code, option.label)}
                 </label>
@@ -224,7 +267,7 @@ export default function MetadataEditor({
                     <input
                       type="checkbox"
                       checked={state.secondaryMaterialCodes.includes(option.code)}
-                      onChange={() => setState(prev => toggleSecondaryMaterial(prev, option.code))}
+                      onChange={() => updateState(prev => toggleSecondaryMaterial(prev, option.code))}
                     />
                     {getMaterialDisplayLabel(option.code, option.label)}
                   </label>
@@ -238,7 +281,7 @@ export default function MetadataEditor({
             <input
               className="input-field"
               value={state.materialOtherText ?? ''}
-              onChange={event => setState(prev => setMetadataOtherText(prev, 'materialOtherText', event.target.value))}
+              onChange={event => updateState(prev => setMetadataOtherText(prev, 'materialOtherText', event.target.value))}
               maxLength={200}
             />
           </label>
@@ -253,7 +296,7 @@ export default function MetadataEditor({
               <input
                 type="checkbox"
                 checked={state.processCodes.includes(option.code)}
-                onChange={() => setState(prev => toggleProcess(prev, option.code))}
+                onChange={() => updateState(prev => toggleProcess(prev, option.code))}
               />
               {option.label}
             </label>
@@ -265,7 +308,7 @@ export default function MetadataEditor({
             <input
               className="input-field"
               value={state.processOtherText ?? ''}
-              onChange={event => setState(prev => setMetadataOtherText(prev, 'processOtherText', event.target.value))}
+              onChange={event => updateState(prev => setMetadataOtherText(prev, 'processOtherText', event.target.value))}
               maxLength={200}
             />
           </label>
@@ -280,7 +323,7 @@ export default function MetadataEditor({
               <input
                 type="checkbox"
                 checked={state.problemDomainCodes.includes(option.code)}
-                onChange={() => setState(prev => toggleProblemDomain(prev, option.code))}
+                onChange={() => updateState(prev => toggleProblemDomain(prev, option.code))}
               />
               {option.label}
             </label>
@@ -292,7 +335,7 @@ export default function MetadataEditor({
             <input
               className="input-field"
               value={state.problemDomainOtherText ?? ''}
-              onChange={event => setState(prev => setMetadataOtherText(prev, 'problemDomainOtherText', event.target.value))}
+              onChange={event => updateState(prev => setMetadataOtherText(prev, 'problemDomainOtherText', event.target.value))}
               maxLength={200}
             />
           </label>
@@ -307,7 +350,7 @@ export default function MetadataEditor({
               <input
                 type="checkbox"
                 checked={state.problemSymptomCodes.includes(option.code)}
-                onChange={() => setState(prev => toggleProblemSymptom(prev, option.code))}
+                onChange={() => updateState(prev => toggleProblemSymptom(prev, option.code))}
               />
               {option.label}
             </label>
@@ -319,7 +362,7 @@ export default function MetadataEditor({
             <input
               className="input-field"
               value={state.problemSymptomOtherText ?? ''}
-              onChange={event => setState(prev => setMetadataOtherText(prev, 'problemSymptomOtherText', event.target.value))}
+              onChange={event => updateState(prev => setMetadataOtherText(prev, 'problemSymptomOtherText', event.target.value))}
               maxLength={200}
             />
           </label>
@@ -344,9 +387,10 @@ export default function MetadataEditor({
 
       {error && <p className="text-sm text-red-600">{error}</p>}
 
-      <div className="flex justify-end gap-3">
+      <div className="flex items-center justify-end gap-3">
+        {saveState === 'saved' && <span className="text-sm text-green-600">已保存</span>}
         {onCancel && (
-          <button type="button" className="btn-secondary" onClick={onCancel} disabled={saving}>
+          <button type="button" className="btn-secondary" onClick={onCancel} disabled={saveState === 'saving'}>
             取消
           </button>
         )}
@@ -354,9 +398,9 @@ export default function MetadataEditor({
           type="button"
           className="btn-primary"
           onClick={handleSave}
-          disabled={saving || optionsStatus !== 'ready'}
+          disabled={!dirty || saveState === 'saving' || optionsStatus !== 'ready'}
         >
-          {saving ? '保存中…' : '保存分类'}
+          {saveState === 'saving' ? '保存中…' : '保存分类'}
         </button>
       </div>
     </div>

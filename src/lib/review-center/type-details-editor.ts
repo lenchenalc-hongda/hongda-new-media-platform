@@ -310,6 +310,51 @@ export function rebuildTypeDetailsBaseline(
 
 export const TYPE_DETAILS_FALLBACK_SYNC_FAILURE_MESSAGE =
   '专项内容已保存，但最新状态同步失败，请重新加载页面后继续操作。';
+export const TYPE_DETAILS_SAVE_TIMEOUT_MS = 15000;
+export const TYPE_DETAILS_SAVE_TIMEOUT_MESSAGE =
+  '保存响应超时，数据可能已提交。请刷新页面确认后再重试。';
+export const TYPE_DETAILS_SAVED_MESSAGE = '专项内容已保存';
+export const TYPE_DETAILS_SAVE_FAILURE_MESSAGE = '专项内容保存失败，请稍后重试。';
+
+export async function fetchWithTimeout(
+  input: RequestInfo | URL,
+  init: RequestInit = {},
+  timeoutMs: number = TYPE_DETAILS_SAVE_TIMEOUT_MS,
+): Promise<Response> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(input, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+export function isRequestTimeoutError(error: unknown): boolean {
+  return typeof error === 'object'
+    && error !== null
+    && 'name' in error
+    && (error as { name?: unknown }).name === 'AbortError';
+}
+
+export interface TypeDetailsSaveUiState {
+  state: 'idle' | 'saving' | 'saved' | 'validation' | 'error';
+  message: string;
+}
+
+export function updateTypeDetailsSaveUiState(
+  current: TypeDetailsSaveUiState,
+  event: 'start' | 'succeed' | 'fail' | 'timeout' | 'edit',
+): TypeDetailsSaveUiState {
+  if (event === 'start') return { state: 'saving', message: '' };
+  if (event === 'succeed') return { state: 'saved', message: TYPE_DETAILS_SAVED_MESSAGE };
+  if (event === 'fail') return { state: 'error', message: TYPE_DETAILS_SAVE_FAILURE_MESSAGE };
+  if (event === 'timeout') return { state: 'error', message: TYPE_DETAILS_SAVE_TIMEOUT_MESSAGE };
+  if (current.state === 'saved' || current.state === 'validation' || current.state === 'error') {
+    return { state: 'idle', message: '' };
+  }
+  return current;
+}
 
 export interface TypeDetailsFallbackPlan {
   version: number;

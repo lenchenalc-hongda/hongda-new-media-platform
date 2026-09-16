@@ -13,6 +13,16 @@ export interface MetadataEditorState {
   problemSymptomOtherText: string | null;
 }
 
+export type MetadataEditorSaveState =
+  | 'idle'
+  | 'saving'
+  | 'saved'
+  | 'validation'
+  | 'error'
+  | 'conflict'
+  | 'reload_required'
+  | 'forbidden';
+
 export function emptyMetadataEditorState(): MetadataEditorState {
   return {
     primaryMaterialCode: null,
@@ -45,6 +55,38 @@ export function createMetadataEditorState(
     problemDomainOtherText: metadata.problemDomainOtherText,
     problemSymptomOtherText: metadata.problemSymptomOtherText,
   };
+}
+
+function normalizedText(value: string | null | undefined): string | null {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  return trimmed === '' ? null : trimmed;
+}
+
+function normalizedCodes(values: string[]): string[] {
+  return [...new Set(values)].sort();
+}
+
+function sameCodes(left: string[], right: string[]): boolean {
+  const normalizedLeft = normalizedCodes(left);
+  const normalizedRight = normalizedCodes(right);
+  return normalizedLeft.length === normalizedRight.length
+    && normalizedLeft.every((value, index) => value === normalizedRight[index]);
+}
+
+export function isMetadataEditorDirty(
+  initial: MetadataEditorState,
+  draft: MetadataEditorState,
+): boolean {
+  return initial.primaryMaterialCode !== draft.primaryMaterialCode
+    || !sameCodes(initial.secondaryMaterialCodes, draft.secondaryMaterialCodes)
+    || !sameCodes(initial.processCodes, draft.processCodes)
+    || !sameCodes(initial.problemDomainCodes, draft.problemDomainCodes)
+    || !sameCodes(initial.problemSymptomCodes, draft.problemSymptomCodes)
+    || normalizedText(initial.materialOtherText) !== normalizedText(draft.materialOtherText)
+    || normalizedText(initial.processOtherText) !== normalizedText(draft.processOtherText)
+    || normalizedText(initial.problemDomainOtherText) !== normalizedText(draft.problemDomainOtherText)
+    || normalizedText(initial.problemSymptomOtherText) !== normalizedText(draft.problemSymptomOtherText);
 }
 
 export function setPrimaryMaterial(

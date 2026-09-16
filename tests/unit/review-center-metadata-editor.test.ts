@@ -4,6 +4,7 @@ import {
   canEditMetadata,
   createMetadataEditorState,
   hasProcessRequirement,
+  isMetadataEditorDirty,
   setPrimaryMaterial,
   toggleProblemDomain,
   toggleProcess,
@@ -57,6 +58,31 @@ assert(empty.secondaryMaterialCodes.length === 0, 'null metadata starts no secon
 const initial = createMetadataEditorState(makeMetadata());
 assert(initial.primaryMaterialCode === 'PP', 'metadata primary mapped');
 assert(initial.secondaryMaterialCodes.includes('METAL'), 'metadata secondary mapped');
+assert(isMetadataEditorDirty(initial, initial) === false, 'metadata initial load is clean');
+
+const orderedState = {
+  ...initial,
+  processCodes: ['HEAT_TRANSFER', 'FILM_MAKING'],
+  problemDomainCodes: ['PROCESS', 'MATERIAL_SURFACE'],
+};
+const reordered = {
+  ...orderedState,
+  processCodes: ['FILM_MAKING', 'HEAT_TRANSFER'],
+  problemDomainCodes: ['MATERIAL_SURFACE', 'PROCESS'],
+};
+assert(isMetadataEditorDirty(orderedState, reordered) === false, 'metadata semantically equal arrays ignore order');
+
+const changedMetadata = setPrimaryMaterial(initial, 'METAL');
+assert(isMetadataEditorDirty(initial, changedMetadata) === true, 'metadata option change becomes dirty');
+assert(
+  isMetadataEditorDirty(changedMetadata, changedMetadata) === false,
+  'metadata save success baseline becomes clean',
+);
+const changedAfterSave = toggleProcess(changedMetadata, 'FILM_MAKING');
+assert(
+  isMetadataEditorDirty(changedMetadata, changedAfterSave) === true,
+  'metadata change after save becomes dirty again',
+);
 
 const promoted = setPrimaryMaterial(initial, 'METAL');
 assert(promoted.primaryMaterialCode === 'METAL', 'promote metal to primary');
