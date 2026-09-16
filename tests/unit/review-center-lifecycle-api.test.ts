@@ -152,6 +152,24 @@ const incompleteData = incompleteSubmit.body.data as { missingFields?: unknown }
 assert(JSON.stringify(incompleteData.missingFields) === '["description","type_details"]', 'submit missingFields whitelist');
 assert(!JSON.stringify(incompleteSubmit.body).includes('unknown_secret'), 'unknown missing field hidden');
 assert(!JSON.stringify(incompleteSubmit.body).includes('RAW INCOMPLETE'), 'incomplete raw message hidden');
+const reorderedMissing = mapLifecycleRpcResult(
+  'SUBMIT',
+  business('INCOMPLETE_REVIEW', 'RAW', {
+    missing_fields: [
+      'type_details',
+      'owner_id',
+      'risk_level',
+      'description',
+      'risk_level',
+      'unknown',
+    ],
+  }),
+);
+assert(
+  JSON.stringify((reorderedMissing.body.data as Record<string, unknown>).missingFields)
+    === '["description","risk_level","owner_id","type_details"]',
+  'submit missingFields are whitelisted, deduped, and stably ordered',
+);
 
 assert(mapLifecycleRpcResult('CLOSE', business('INCOMPLETE_REVIEW')).status === 500, 'close INCOMPLETE_REVIEW fail closed 500');
 assert(mapLifecycleRpcResult('REOPEN', business('INCOMPLETE_REVIEW')).status === 500, 'reopen INCOMPLETE_REVIEW fail closed 500');
