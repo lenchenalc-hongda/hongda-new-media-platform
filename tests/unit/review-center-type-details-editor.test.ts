@@ -4,8 +4,10 @@ import {
   classifyTypeDetailsMutationResponse,
   diffTypeDetails,
   extractTypeDetailsSaveResult,
+  fetchWithTimeout,
   getReviewTypeChangeBlockReason,
   getVisibleTypeDetailFields,
+  isRequestTimeoutError,
   isTypeDetailsDirty,
   normalizeTypeDetails,
   rebuildTypeDetailsBaseline,
@@ -13,6 +15,9 @@ import {
   typeDetailsSaveBlockedByBasic,
   validateNoteRows,
   TYPE_DETAIL_GROUPS,
+  TYPE_DETAILS_SAVED_MESSAGE,
+  TYPE_DETAILS_SAVE_TIMEOUT_MESSAGE,
+  updateTypeDetailsSaveUiState,
   type TypeDetailsDraft,
 } from '../../src/lib/review-center/type-details-editor';
 
@@ -145,6 +150,43 @@ assert(savedRowResult !== null && savedRowResult.typeDetails !== null, 'authorit
 
 const baseline = rebuildTypeDetailsBaseline(null);
 assert(baseline.initial.noteRows.length === 0 && baseline.draft.noteRows.length === 0, 'success baseline resets type details draft');
+
+const savingState = updateTypeDetailsSaveUiState(
+  { state: 'idle', message: '' },
+  'start',
+);
+const savedState = updateTypeDetailsSaveUiState(savingState, 'succeed');
+assert(savingState.state === 'saving', 'type details idle -> saving');
+assert(savedState.state === 'saved' && savedState.message === TYPE_DETAILS_SAVED_MESSAGE, 'type details saving -> saved on success');
+const editedAfterSave = updateTypeDetailsSaveUiState(savedState, 'edit');
+assert(editedAfterSave.state === 'idle' && editedAfterSave.message === '', 'type details saved -> idle after edit');
+const timeoutState = updateTypeDetailsSaveUiState(savingState, 'timeout');
+assert(timeoutState.state === 'error' && timeoutState.message === TYPE_DETAILS_SAVE_TIMEOUT_MESSAGE, 'type details timeout exits saving with safe message');
+const abortError = new Error('aborted');
+abortError.name = 'AbortError';
+assert(isRequestTimeoutError(abortError) === true, 'AbortError classified as timeout');
+assert(isRequestTimeoutError(new Error('network')) === false, 'generic error is not timeout');
+
+const originalFetch = globalThis.fetch;
+(globalThis as any).fetch = (_input: RequestInfo | URL, init?: RequestInit) => (
+  new Promise<Response>((_resolve, reject) => {
+    init?.signal?.addEventListener('abort', () => {
+      const error = new Error('aborted');
+      error.name = 'AbortError';
+      reject(error);
+    });
+  })
+);
+let timeoutObserved = false;
+try {
+  await fetchWithTimeout('/timeout-check', {}, 5);
+} catch (error) {
+  timeoutObserved = isRequestTimeoutError(error);
+} finally {
+  globalThis.fetch = originalFetch;
+}
+assert(timeoutObserved === true, 'fetchWithTimeout aborts a hanging request');
+
 assert(validateNoteRows([{ key: 'a', value: '1' }]) === null, 'valid note rows accepted');
 const built = buildAdditionalNotes([{ key: 'a', value: '1' }], { complex: [1, 2] });
 assert(built !== null && built.complex !== undefined, 'complex values merged into notes object');

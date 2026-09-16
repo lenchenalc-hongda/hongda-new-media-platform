@@ -1,7 +1,7 @@
 'use client';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import AppLayout from '@/components/layout/AppLayout';
 import PageHeader from '@/components/layout/PageHeader';
 import ReviewCenterEmpty from '@/components/review-center/ReviewCenterEmpty';
@@ -9,6 +9,11 @@ import MetadataChips from '@/components/review-center/MetadataChips';
 import MetadataEditor from '@/components/review-center/MetadataEditor';
 import { reviewStatusDisplayLabel } from '@/lib/review-center/formatters';
 import { sanitizeMissingDimensions } from '@/lib/review-center/metadata';
+import type { MetadataEditorSaveState } from '@/lib/review-center/metadata-editor';
+import {
+  getEditCompletionState,
+  type MemberMutationState,
+} from '@/lib/review-center/edit-completion';
 import type { ReviewDetail, ReviewMetadataDto, ReviewType, RiskLevel } from '@/lib/review-center/types';
 import {
   buildAssignmentsRequest,
@@ -61,10 +66,13 @@ import {
   classifyTypeDetailsMutationResponse,
   diffTypeDetails,
   extractTypeDetailsSaveResult,
+  fetchWithTimeout,
+  isRequestTimeoutError,
   isTypeDetailsDirty,
   normalizeTypeDetails,
   planTypeDetailsFallbackSync,
   TYPE_DETAILS_FALLBACK_SYNC_FAILURE_MESSAGE,
+  updateTypeDetailsSaveUiState,
   type AdditionalNoteRow,
   type TypeDetailFieldKey,
   type TypeDetailsDraft,
@@ -98,6 +106,7 @@ const LONG_TYPE_FIELDS = new Set<TypeDetailFieldKey>([
 
 export default function ReviewEditPage() {
   const params = useParams();
+  const router = useRouter();
   const id = Array.isArray(params.id) ? params.id[0] : params.id;
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
@@ -105,6 +114,8 @@ export default function ReviewEditPage() {
   const [detail, setDetail] = useState<ReviewDetail | null>(null);
   const [currentVersion, setCurrentVersion] = useState<number | null>(null);
   const [metadataMissingDimensions, setMetadataMissingDimensions] = useState<string[]>([]);
+  const [metadataDirty, setMetadataDirty] = useState(false);
+  const [metadataSaveState, setMetadataSaveState] = useState<MetadataEditorSaveState>('idle');
   const [initialBasicInfo, setInitialBasicInfo] = useState<BasicInfoDraft | null>(null);
   const [draftBasicInfo, setDraftBasicInfo] = useState<BasicInfoDraft | null>(null);
   const [saveState, setSaveState] = useState<EditorMutationState>('idle');
@@ -124,7 +135,7 @@ export default function ReviewEditPage() {
   const [selectedMemberProfileId, setSelectedMemberProfileId] = useState('');
   const [selectedMemberRole, setSelectedMemberRole] = useState<MemberRole | ''>('');
   const [pendingRemoveMemberId, setPendingRemoveMemberId] = useState<string | null>(null);
-  const [memberMutationState, setMemberMutationState] = useState<'idle' | 'saving' | 'stale_candidate' | 'duplicate' | 'validation' | 'error'>('idle');
+  const [memberMutationState, setMemberMutationState] = useState<MemberMutationState>('idle');
   const [memberMutationMessage, setMemberMutationMessage] = useState('');
   const mutationLockRef = useRef<EditorMutationLock | null>(null);
   if (mutationLockRef.current === null) {
@@ -187,6 +198,8 @@ export default function ReviewEditPage() {
     setLoadError('');
     setSaveState('idle');
     setSaveMessage('');
+    setMetadataDirty(false);
+    setMetadataSaveState('idle');
     setTypeDetailsSaveState('idle');
     setTypeDetailsSaveMessage('');
     memberDirectoryGuardRef.current?.invalidate();
@@ -295,6 +308,14 @@ export default function ReviewEditPage() {
     setDetail(prev => prev ? { ...prev, version, metadata } : prev);
   }
 
+  const handleMetadataDirtyChange = useCallback((nextDirty: boolean) => {
+    setMetadataDirty(nextDirty);
+  }, []);
+
+  const handleMetadataSaveStateChange = useCallback((state: MetadataEditorSaveState) => {
+    setMetadataSaveState(state);
+  }, []);
+
   const canEdit = canEditDraft({
     role: me?.role ?? 'viewer',
     status: detail?.status ?? 'draft',
@@ -334,6 +355,20 @@ export default function ReviewEditPage() {
     && draftAssignments
     && isAssignmentsDirty(initialAssignments, draftAssignments)
   );
+  const editCompletion = getEditCompletionState({
+    basicDirty: dirty,
+    metadataDirty,
+    typeDetailsDirty,
+    assignmentsDirty,
+    basicSaveState: saveState,
+    metadataSaveState,
+    typeDetailsSaveState,
+    assignmentsSaveState,
+    memberMutationState,
+    blocked,
+  });
+  const hasUnsavedChanges = editCompletion.hasUnsavedChanges;
+  const canFinishEditing = editCompletion.canFinishEditing;
   const eligibleCandidateIds = useMemo(
     () => eligibleAssignmentIds(assignmentCandidates),
     [assignmentCandidates],
@@ -376,6 +411,35 @@ export default function ReviewEditPage() {
       memberDirectoryGuardRef.current?.invalidate();
     }
   }, [canEdit]);
+  useEffect(() => {
+    if (!editCompletion.shouldWarnBeforeUnload) return;
+    function handleBeforeUnload(event: BeforeUnloadEvent) {
+      event.preventDefault();
+      event.returnValue = '';
+    }
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [editCompletion.shouldWarnBeforeUnload]);
+
+  function handleExitToDetail() {
+    if (editCompletion.hasPendingMutation || editCompletion.blockedModules.length > 0 || blocked) {
+      window.alert(editCompletion.statusText);
+      return;
+    }
+    if (
+      hasUnsavedChanges
+      && !window.confirm('当前还有未保存内容，离开后这些修改会丢失。')
+    ) {
+      return;
+    }
+    router.push(`/review-center/reviews/${id}`);
+  }
+
+  function handleFinishEditing() {
+    if (!canFinishEditing) return;
+    router.push(`/review-center/reviews/${id}`);
+  }
+
   useEffect(() => () => {
     memberDirectoryGuardRef.current?.invalidate();
   }, []);
@@ -711,7 +775,7 @@ export default function ReviewEditPage() {
     setTypeDetailsSaveState('saving');
     setTypeDetailsSaveMessage('');
     try {
-      const response = await fetch(`/api/review-center/reviews/${encodeURIComponent(id)}/type-details`, {
+      const response = await fetchWithTimeout(`/api/review-center/reviews/${encodeURIComponent(id)}/type-details`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ expectedVersion: currentVersion, patch: diffResult.patch }),
@@ -731,6 +795,12 @@ export default function ReviewEditPage() {
       const saved = extractTypeDetailsSaveResult(data);
       if (saved) {
         applyTypeDetailsAuthority(saved.version, saved.typeDetails);
+        const successState = updateTypeDetailsSaveUiState(
+          { state: 'saving', message: '' },
+          'succeed',
+        );
+        setTypeDetailsSaveState(successState.state);
+        setTypeDetailsSaveMessage(successState.message);
       } else {
         if (!initialBasicInfo || !draftBasicInfo) {
           setSaveState('reload_required');
@@ -739,7 +809,9 @@ export default function ReviewEditPage() {
           setTypeDetailsSaveMessage(TYPE_DETAILS_FALLBACK_SYNC_FAILURE_MESSAGE);
           return;
         }
-        const syncResponse = await fetch(`/api/review-center/reviews/${encodeURIComponent(id)}`);
+        const syncResponse = await fetchWithTimeout(
+          `/api/review-center/reviews/${encodeURIComponent(id)}`,
+        );
         const syncData = await syncResponse.json();
         if (!syncResponse.ok || syncData.error || !syncData.id) {
           setSaveState('reload_required');
@@ -802,13 +874,23 @@ export default function ReviewEditPage() {
             setInitialAssignments(assignmentsFallback.initial);
             setDraftAssignments(assignmentsFallback.draft);
           }
-          setTypeDetailsSaveState('saved');
-          setTypeDetailsSaveMessage('专项内容已保存');
+          const successState = updateTypeDetailsSaveUiState(
+            { state: 'saving', message: '' },
+            'succeed',
+          );
+          setTypeDetailsSaveState(successState.state);
+          setTypeDetailsSaveMessage(successState.message);
         }
       }
-    } catch {
-      setTypeDetailsSaveState('error');
-      setTypeDetailsSaveMessage('专项内容保存失败，请稍后重试。');
+    } catch (error) {
+      const failureState = updateTypeDetailsSaveUiState(
+        { state: 'saving', message: '' },
+        isRequestTimeoutError(error)
+          ? 'timeout'
+          : 'fail',
+      );
+      setTypeDetailsSaveState(failureState.state);
+      setTypeDetailsSaveMessage(failureState.message);
     } finally {
       releaseMutation();
     }
@@ -1147,7 +1229,11 @@ export default function ReviewEditPage() {
       <PageHeader
         title={detail.title}
         description={`${detail.review_no} · ${detail.review_type} 类 · ${reviewStatusDisplayLabel(detail.status)} · v${currentVersion}`}
-        actions={<Link href={`/review-center/reviews/${id}`} className="btn-secondary">返回详情</Link>}
+        actions={(
+          <button type="button" className="btn-secondary" onClick={handleExitToDetail}>
+            返回详情
+          </button>
+        )}
       />
 
       {blocked && (
@@ -1300,7 +1386,9 @@ export default function ReviewEditPage() {
         )}
 
         <div className="mt-6 flex items-center justify-end gap-3">
-          <Link href={`/review-center/reviews/${id}`} className="btn-secondary">取消</Link>
+          <button type="button" className="btn-secondary" onClick={handleExitToDetail}>
+            取消
+          </button>
           <button
             type="button"
             disabled={!dirty || saveState === 'saving' || blocked || !!reviewTypeChangeBlockReason || activeMutation !== null || !(draftBasicInfo?.title.trim())}
@@ -1331,6 +1419,8 @@ export default function ReviewEditPage() {
             ownerId={detail.owner_id}
             pmoId={detail.pmo_id}
             onSaved={handleMetadataSaved}
+            onDirtyChange={handleMetadataDirtyChange}
+            onSaveStateChange={handleMetadataSaveStateChange}
             missingDimensions={metadataMissingDimensions}
           />
         ) : (
@@ -1543,6 +1633,43 @@ export default function ReviewEditPage() {
         )}
       </div>
       {renderMembersCard()}
+      <section className="mt-6 rounded-lg border border-gray-200 bg-white p-6">
+        <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+          <div>
+            <p className="font-medium text-gray-800">{editCompletion.statusText}</p>
+            {editCompletion.unsavedModules.length > 0 && (
+              <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-amber-700">
+                {editCompletion.unsavedModules.map(module => (
+                  <li key={module}>{module}</li>
+                ))}
+              </ul>
+            )}
+            {editCompletion.pendingModules.length > 0 && (
+              <p className="mt-2 text-sm text-gray-600">
+                正在保存：{editCompletion.pendingModules.join('、')}
+              </p>
+            )}
+            {editCompletion.blockedModules.length > 0 && (
+              <p className="mt-2 text-sm text-red-700">
+                请先处理：{editCompletion.blockedModules.join('、')}
+              </p>
+            )}
+          </div>
+          <div className="flex shrink-0 gap-3">
+            <button type="button" className="btn-secondary" onClick={handleExitToDetail}>
+              取消 / 返回详情
+            </button>
+            <button
+              type="button"
+              className="btn-primary"
+              disabled={!canFinishEditing}
+              onClick={handleFinishEditing}
+            >
+              完成编辑，返回详情
+            </button>
+          </div>
+        </div>
+      </section>
     </AppLayout>
   );
 }
