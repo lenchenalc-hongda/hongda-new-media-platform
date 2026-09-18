@@ -25,8 +25,8 @@ const actionsPage = fs.readFileSync('src/app/review-center/actions/page.tsx', 'u
 assert(actionsPage.includes('查看全部复盘'), 'actions empty CTA points to all reviews');
 assert(actionsPage.includes('改善任务需在具体复盘中创建'), 'actions empty description accurate');
 
-const minePage = fs.readFileSync('src/app/review-center/reviews/mine/page.tsx', 'utf8');
-assert(minePage.includes('你创建或参与的项目复盘将在这里集中管理。'), 'mine empty description matches page scope');
+const mineWorkspace = fs.readFileSync('src/components/review-center/ReviewListWorkspace.tsx', 'utf8');
+assert(mineWorkspace.includes('你创建、负责或参与的项目复盘将在这里集中管理。'), 'mine empty description matches page scope');
 
 const approvalsPage = fs.readFileSync('src/app/review-center/approvals/page.tsx', 'utf8');
 assert(approvalsPage.includes('当前没有需要你处理的审核事项。'), 'approvals empty description is not misleading');
