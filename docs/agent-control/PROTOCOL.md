@@ -198,6 +198,18 @@ Future trigger automation must combine that key with:
 - read-only workspace
 - no GitHub write token
 
+### MAC-2
+
+- dedicated runner label set: `self-hosted`, `macOS`, `X64`,
+  `hongda-agent-control`
+- self-hosted proof job runs only after the cloud validator returns `READY`
+- exact validated SHA checkout with `persist-credentials: false`
+- self-hosted checkout action pinned to an immutable full commit SHA
+- no Codex/model invocation
+- no package installation
+- no GitHub write permission
+- repository integrity checks fail closed on HEAD/status/diff mismatch
+
 ### AUTO-PHASE-4
 
 - isolated write-enabled automation

@@ -29,6 +29,18 @@ class GitHubApiError extends Error {
 }
 
 function printResult(result: AgentControlDryRunResult) {
+  const outputPath = process.env.GITHUB_OUTPUT;
+  if (outputPath) {
+    const outputLines = [
+      `result=${result.result}`,
+      `task_id=${result.summary?.task_id ?? 'none'}`,
+      `verified_head=${result.summary?.verified_head ?? ''}`,
+      `master_sha=${result.summary?.master_sha ?? ''}`,
+      `active_pr=${result.summary?.active_pr ?? 'null'}`,
+    ];
+    fs.appendFileSync(outputPath, `${outputLines.join('\n')}\n`);
+  }
+
   console.log(`result=${result.result}`);
   console.log(`reason=${result.reason}`);
   if (result.summary) {
