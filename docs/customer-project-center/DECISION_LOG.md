@@ -4,14 +4,13 @@
 
 ### DEC-001: External canonical customer source of truth
 
-Customer ownership and payment truth remain in the existing external source of
-truth. This repository may maintain a controlled CustomerReference/Mapping layer
-for project use.
+Customer ownership and payment truth remain in the external source of truth.
+This repository may hold a CustomerReference/Mapping layer for project use.
 
 ### DEC-002: Lead is not Customer
 
-Lead remains acquisition-side. A Customer is a formal customer entity, and
-Project is created only for a concrete commercial opportunity.
+Lead remains acquisition-side. Customer is a formal customer entity. Project is
+created only for a concrete commercial opportunity.
 
 ### DEC-003: Project means one concrete commercial opportunity
 
@@ -25,8 +24,8 @@ Collaboration does not change customer ownership.
 
 ### DEC-005: Dedicated sales WorkItem
 
-The Customer Project Center uses a dedicated sales WorkItem model and does not
-reuse legacy tasks.
+Customer Project Center uses a dedicated sales WorkItem model and does not reuse
+legacy tasks.
 
 ### DEC-006: Reports are derived
 
@@ -38,84 +37,69 @@ and deterministic metrics. Employees do not re-enter the same progress.
 AI produces drafts. Consequential business facts are not changed without an
 authorized human acceptance step.
 
-## Proposed decisions
+### DEC-008: Provisional CustomerReference
 
-### PROPOSED-001: Manual/unmatched CustomerReference lifecycle
+A prospect with a concrete opportunity may temporarily use a clearly marked
+provisional CustomerReference before an external canonical customer ID exists.
 
-Question: May an unmatched customer be represented by a marked temporary
-CustomerReference before external canonical mapping?
+Rules:
 
-Proposed direction:
+- never use a fake external customer ID;
+- canonical and provisional references are structurally distinguishable;
+- provisional mapping does not create customer ownership or payment truth;
+- before `won` or future order/payment linkage, the provisional reference must
+  be mapped to a canonical external customer;
+- merge/remap is audited.
 
-- use status `pending_review`;
-- keep the record visibly non-authoritative;
-- prevent project ownership/payment claims from being inferred;
-- require a reviewed merge/replace step when the canonical ID arrives.
+### DEC-009: No persisted Project draft state
 
-Approval status: not approved.
+Do not persist a formal Project merely for incomplete qualification.
 
-### PROPOSED-002: Project stage profiles by type
+Before a concrete opportunity exists, work remains Lead, customer-level
+follow-up, or AI draft. A formal Project starts as `active`.
 
-Question: Which exact stages belong to each project type?
+### DEC-010: Lost Project reopen policy
 
-Proposed direction:
+The same commercial opportunity may transition `lost -> active` with an audited
+reopen reason. A materially new objective, order, or opportunity creates a new
+Project.
 
-- keep common lifecycle states shared;
-- allow type-specific stage code sets;
-- use a repeat-order path for transfer film where appropriate;
-- avoid forcing equipment-style workflow onto repeat orders.
+### DEC-011: WorkItem blocked state
 
-Approval status: not approved.
+Keep explicit `blocked` status.
 
-### PROPOSED-003: Draft qualification state
+- blocked is context, not a deadline waiver;
+- blocked Work Items can still be overdue;
+- only explicit rescheduling changes `due_at`;
+- reschedule history is preserved.
 
-Question: Should `draft` be a persisted Project state before `active`?
+### DEC-012: Event payload versioning
 
-Proposed direction: yes, for incomplete qualification records that must not
-appear as active commitments.
+ProjectEvent uses an explicit `payload_schema_version`. Keep a versioned
+envelope and add stricter per-event schemas incrementally.
 
-Approval status: not approved.
+### DEC-013: Report correction model
 
-### PROPOSED-004: Reopening a lost Project
+Submitted reports are immutable. A correction creates a new snapshot/version
+linked through `supersedes_report_id`. Historical submitted content is never
+mutated in place.
 
-Question: When a lost opportunity re-engages, should the original Project be
-reopened or should a new Project be created?
+### DEC-014: Project stage strategy
 
-Proposed direction: allow a controlled `lost -> active` reopen transition for
-the same commercial opportunity, with an audited reason. Use a new Project if the
-objective changes materially.
+Common lifecycle is shared. Stage codes are type-specific and configurable.
+Exact stage lists are not frozen and must not become database enum constraints
+in the next batch. Repeat transfer-film business must not be forced through
+equipment-style stages.
 
-Approval status: not approved.
+## Deferred decisions
 
-### PROPOSED-005: Work Item blocked state
+### DEFERRED-001: Exact project stage profiles
 
-Question: Should `blocked` be an explicit WorkItem status?
-
-Proposed direction: yes, because blocked work is not the same as unstarted work
-and should not silently become overdue without context.
-
-Approval status: not approved.
-
-### PROPOSED-006: Event payload versioning
-
-Question: Should ProjectEvent use strict per-event schemas immediately?
-
-Proposed direction: start with validated event categories plus a versioned
-payload envelope, then add event-specific schemas as workflows stabilize.
-
-Approval status: not approved.
-
-### PROPOSED-007: Report correction model
-
-Question: How should an employee correct a submitted report?
-
-Proposed direction: append a correction draft, submit a new immutable snapshot,
-and link it through `supersedes_report_id`. Historical reports are not mutated.
-
-Approval status: not approved.
+Exact stage values for transfer film, transfer processing, equipment, UV, and
+other project types are deferred until pilot/workflow validation. This deferral
+does not block the v1 domain contract freeze.
 
 ## Change rule
 
-New decisions must not be silently marked approved. They remain `PROPOSED-xxx`
-until the business owner or designated PM explicitly approves them in Agent
-Control.
+New business decisions remain open until the business owner or designated PM
+approves them. Approved choices must not drift back into proposal status.

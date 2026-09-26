@@ -12,7 +12,6 @@ export const PROJECT_TYPES = [
 export type ProjectType = (typeof PROJECT_TYPES)[number];
 
 export const PROJECT_LIFECYCLE_STATUSES = [
-  'draft',
   'active',
   'paused',
   'won',
@@ -26,7 +25,6 @@ export const PROJECT_LIFECYCLE_TRANSITIONS: Record<
   ProjectLifecycleStatus,
   readonly ProjectLifecycleStatus[]
 > = {
-  draft: ['active', 'cancelled'],
   active: ['paused', 'won', 'lost', 'cancelled'],
   paused: ['active', 'lost', 'cancelled'],
   won: [],
@@ -53,26 +51,43 @@ export type RiskLevel = (typeof RISK_LEVELS)[number];
 export const PROJECT_PRIORITIES = ['low', 'medium', 'high', 'critical'] as const;
 export type ProjectPriority = (typeof PROJECT_PRIORITIES)[number];
 
-export const CUSTOMER_REFERENCE_STATUSES = [
-  'active',
-  'inactive',
-  'pending_review',
-] as const;
+export const CUSTOMER_REFERENCE_KINDS = ['canonical', 'provisional'] as const;
+export type CustomerReferenceKind = (typeof CUSTOMER_REFERENCE_KINDS)[number];
 
-export type CustomerReferenceStatus = (typeof CUSTOMER_REFERENCE_STATUSES)[number];
+export const CANONICAL_CUSTOMER_REFERENCE_STATUSES = ['active', 'inactive'] as const;
+export type CanonicalCustomerReferenceStatus =
+  (typeof CANONICAL_CUSTOMER_REFERENCE_STATUSES)[number];
 
-export interface CustomerReference {
+export interface CanonicalCustomerReference {
   id: string;
   org_id: string;
+  reference_kind: 'canonical';
   external_source: string;
   external_customer_id: string;
   display_name_snapshot: string;
   external_owner_reference: string | null;
   source_synced_at: string;
-  status: CustomerReferenceStatus;
+  status: CanonicalCustomerReferenceStatus;
   created_at: string;
   updated_at: string;
 }
+
+export interface ProvisionalCustomerReference {
+  id: string;
+  org_id: string;
+  reference_kind: 'provisional';
+  provisional_source_reference: string;
+  display_name_snapshot: string;
+  status: 'pending_review';
+  mapped_canonical_reference_id: string | null;
+  created_by_profile_id: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export type CustomerReference =
+  | CanonicalCustomerReference
+  | ProvisionalCustomerReference;
 
 export interface Project {
   id: string;
@@ -167,6 +182,7 @@ export interface ProjectEvent {
   source: ProjectEventSource;
   source_reference_id: string | null;
   raw_input: string | null;
+  payload_schema_version: number;
   payload: Record<string, unknown>;
   correction_of_event_id: string | null;
 }
@@ -198,9 +214,9 @@ export const WORK_ITEM_TRANSITIONS: Record<
   WorkItemStatus,
   readonly WorkItemStatus[]
 > = {
-  pending: ['in_progress', 'cancelled'],
+  pending: ['in_progress', 'blocked', 'completed', 'cancelled'],
   in_progress: ['blocked', 'completed', 'cancelled'],
-  blocked: ['in_progress', 'cancelled'],
+  blocked: ['in_progress', 'completed', 'cancelled'],
   completed: [],
   cancelled: [],
 };
@@ -299,10 +315,25 @@ export type DerivedReportPeriod = (typeof DERIVED_REPORT_PERIODS)[number];
 export const DERIVED_REPORT_STATUSES = [
   'draft',
   'submitted',
-  'superseded',
 ] as const;
 
 export type DerivedReportStatus = (typeof DERIVED_REPORT_STATUSES)[number];
+
+export const INGESTION_CURSOR_KINDS = [
+  'recorded_at_id',
+  'monotonic_sequence',
+] as const;
+
+export type IngestionCursor =
+  | {
+      cursor_kind: 'recorded_at_id';
+      recorded_at: string;
+      record_id: string;
+    }
+  | {
+      cursor_kind: 'monotonic_sequence';
+      sequence: number;
+    };
 
 export interface DerivedReportSnapshot {
   id: string;
@@ -314,8 +345,8 @@ export interface DerivedReportSnapshot {
   status: DerivedReportStatus;
   deterministic_metrics: Record<string, MetricValue<number>>;
   ai_narrative: string | null;
-  source_event_watermark: string | null;
-  source_work_item_watermark: string | null;
+  source_event_cursor: IngestionCursor | null;
+  source_work_item_cursor: IngestionCursor | null;
   version: number;
   supersedes_report_id: string | null;
   submitted_by_profile_id: string | null;
@@ -364,7 +395,7 @@ export function canTransitionAIDraft(
   return AI_DRAFT_TRANSITIONS[from].includes(to);
 }
 
-export function buildCustomerReferenceIdentityKey(input: {
+export function buildCanonicalCustomerReferenceIdentityKey(input: {
   org_id: string;
   external_source: string;
   external_customer_id: string;
@@ -424,8 +455,20 @@ export function projectEventCountsAsEffectiveProgress(
     'QUOTE_SENT',
     'SAMPLE_SENT',
     'CUSTOMER_CONFIRMED',
-    'STAGE_CHANGED',
     'PROJECT_WON',
+  ].includes(eventType);
+}
+
+export function projectEventCountsAsMeaningfulChange(
+  eventType: ProjectEventType,
+): boolean {
+  if (projectEventCountsAsEffectiveProgress(eventType)) return true;
+  return [
+    'WAITING_STARTED',
+    'WAITING_RESOLVED',
+    'STAGE_CHANGED',
+    'PROJECT_PAUSED',
+    'PROJECT_REOPENED',
     'PROJECT_LOST',
   ].includes(eventType);
 }
@@ -441,26 +484,42 @@ export function isValidExpectedAmountCurrency(
     && /^[A-Z]{3}$/.test(currency);
 }
 
+export function canMarkProjectWon(
+  customerReference: Pick<CustomerReference, 'reference_kind'>,
+): boolean {
+  return customerReference.reference_kind === 'canonical';
+}
+
 export function isWorkItemOverdue(
   workItem: Pick<WorkItem, 'due_at' | 'status'>,
   nowIso: string,
 ): boolean {
   if (!workItem.due_at) return false;
-  if (workItem.status !== 'pending' && workItem.status !== 'in_progress') return false;
+  if (workItem.status === 'completed' || workItem.status === 'cancelled') return false;
   return new Date(workItem.due_at).getTime() < new Date(nowIso).getTime();
 }
 
-export const CUSTOMER_PROJECT_DOMAIN_ROLES = [
+export const CUSTOMER_PROJECT_APP_ROLES = [
   'admin',
   'manager',
-  'sales_owner',
-  'sales_collaborator',
-  'unrelated_sales',
+  'sales',
   'operator',
   'viewer',
 ] as const;
 
-export type CustomerProjectDomainRole = (typeof CUSTOMER_PROJECT_DOMAIN_ROLES)[number];
+export type CustomerProjectAppRole = (typeof CUSTOMER_PROJECT_APP_ROLES)[number];
+
+export const CUSTOMER_PROJECT_RESOURCE_RELATIONS = [
+  'owner',
+  'collaborator',
+  'assignee',
+  'creator',
+  'unrelated',
+  'none',
+] as const;
+
+export type CustomerProjectResourceRelation =
+  (typeof CUSTOMER_PROJECT_RESOURCE_RELATIONS)[number];
 
 export const CUSTOMER_PROJECT_DOMAIN_RESOURCES = [
   'customer_reference',
@@ -479,8 +538,9 @@ export const CUSTOMER_PROJECT_DOMAIN_ACTIONS = [
   'read',
   'create',
   'update',
-  'delete',
   'accept',
+  'reject',
+  'expire',
   'submit',
   'manage',
 ] as const;
@@ -488,64 +548,109 @@ export const CUSTOMER_PROJECT_DOMAIN_ACTIONS = [
 export type CustomerProjectDomainAction =
   (typeof CUSTOMER_PROJECT_DOMAIN_ACTIONS)[number];
 
+function hasRelation(
+  relations: readonly CustomerProjectResourceRelation[],
+  allowed: readonly CustomerProjectResourceRelation[],
+): boolean {
+  return relations.some(relation => allowed.includes(relation));
+}
+
 export function canAccessCustomerProjectDomain(input: {
-  role: CustomerProjectDomainRole;
+  appRole: CustomerProjectAppRole;
+  relations: readonly CustomerProjectResourceRelation[];
   resource: CustomerProjectDomainResource;
   action: CustomerProjectDomainAction;
 }): boolean {
-  const { role, resource, action } = input;
+  const { appRole, relations, resource, action } = input;
 
-  if (role === 'operator' || role === 'viewer' || role === 'unrelated_sales') {
+  if (appRole === 'operator' || appRole === 'viewer') {
+    return false;
+  }
+  if (relations.includes('unrelated')) return false;
+
+  if (resource === 'settings') {
+    if (appRole === 'admin') return action === 'read' || action === 'manage';
+    if (appRole === 'manager') return action === 'read';
     return false;
   }
 
-  if (role === 'admin') return true;
+  if (resource === 'project_event') {
+    if (action !== 'read' && action !== 'create') return false;
+    return appRole === 'admin'
+      || appRole === 'manager'
+      || hasRelation(relations, ['owner', 'collaborator', 'assignee', 'creator']);
+  }
 
-  if (role === 'manager') {
-    if (resource === 'settings') return action === 'read';
-    if (resource === 'customer_reference' || resource === 'project') {
-      return action === 'read' || action === 'create' || action === 'update';
+  if (resource === 'report') {
+    if (action !== 'read' && action !== 'create' && action !== 'submit') return false;
+    return appRole === 'admin'
+      || appRole === 'manager'
+      || hasRelation(relations, ['owner', 'collaborator']);
+  }
+
+  if (resource === 'ai_draft') {
+    if (action === 'read' || action === 'create') {
+      return appRole === 'admin'
+        || appRole === 'manager'
+        || hasRelation(relations, ['owner', 'collaborator', 'creator']);
     }
-    if (resource === 'project_event') return action === 'read' || action === 'create';
-    if (resource === 'work_item') {
-      return action === 'read' || action === 'create' || action === 'update';
+    if (action === 'accept' || action === 'reject') {
+      return appRole === 'admin'
+        || appRole === 'manager'
+        || hasRelation(relations, ['owner', 'creator']);
     }
-    if (resource === 'ai_draft') {
-      return action === 'read' || action === 'create' || action === 'accept';
+    if (action === 'expire') return appRole === 'admin' || appRole === 'manager';
+    return false;
+  }
+
+  if (resource === 'work_item') {
+    if (action === 'read') {
+      return appRole === 'admin'
+        || appRole === 'manager'
+        || hasRelation(relations, ['owner', 'collaborator', 'assignee', 'creator']);
     }
-    if (resource === 'report') {
-      return action === 'read' || action === 'create' || action === 'update' || action === 'submit';
+    if (action === 'create') {
+      return appRole === 'admin'
+        || appRole === 'manager'
+        || hasRelation(relations, ['owner', 'collaborator', 'creator']);
+    }
+    if (action === 'update') {
+      return appRole === 'admin'
+        || appRole === 'manager'
+        || hasRelation(relations, ['owner', 'collaborator', 'assignee']);
     }
     return false;
   }
 
-  if (role === 'sales_owner') {
-    if (resource === 'settings') return false;
-    if (action === 'delete' || action === 'manage') return false;
-    if (resource === 'customer_reference') return action === 'read';
-    if (resource === 'project') return action === 'read' || action === 'update';
-    if (resource === 'project_event') return action === 'read' || action === 'create';
-    if (resource === 'work_item') {
-      return action === 'read' || action === 'create' || action === 'update';
+  if (resource === 'project') {
+    if (action === 'create') {
+      return appRole === 'admin'
+        || appRole === 'manager'
+        || (appRole === 'sales' && relations.includes('none'));
     }
-    if (resource === 'ai_draft') {
-      return action === 'read' || action === 'create' || action === 'accept';
+    if (action === 'read') {
+      return appRole === 'admin'
+        || appRole === 'manager'
+        || hasRelation(relations, ['owner', 'collaborator', 'assignee', 'creator']);
     }
-    if (resource === 'report') {
-      return action === 'read' || action === 'create' || action === 'update' || action === 'submit';
+    if (action === 'update') {
+      return appRole === 'admin'
+        || appRole === 'manager'
+        || hasRelation(relations, ['owner']);
     }
     return false;
   }
 
-  if (role === 'sales_collaborator') {
-    if (resource === 'settings' || resource === 'customer_reference' || resource === 'project') {
-      return action === 'read' && resource !== 'settings';
+  if (resource === 'customer_reference') {
+    if (action === 'read') {
+      return appRole === 'admin'
+        || appRole === 'manager'
+        || hasRelation(relations, ['owner', 'collaborator', 'assignee', 'creator']);
     }
-    if (resource === 'project_event') return action === 'read' || action === 'create';
-    if (resource === 'work_item') {
-      return action === 'read' || action === 'create' || action === 'update';
+    if (action === 'create' || action === 'update') {
+      return appRole === 'admin' || appRole === 'manager';
     }
-    return action === 'read' && resource === 'report';
+    return false;
   }
 
   return false;

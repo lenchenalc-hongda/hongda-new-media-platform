@@ -4,21 +4,25 @@ import {
   CUSTOMER_PROJECT_DOMAIN_ACTIONS,
   CUSTOMER_PROJECT_DOMAIN_RESOURCES,
   PROJECT_EVENT_TYPES,
+  PROJECT_LIFECYCLE_STATUSES,
   PROJECT_TYPES,
   WORK_ITEM_STATUSES,
+  buildCanonicalCustomerReferenceIdentityKey,
   canAccessCustomerProjectDomain,
+  canMarkProjectWon,
   canTransitionAIDraft,
   canTransitionProject,
   canTransitionWorkItem,
-  buildCustomerReferenceIdentityKey,
   getProjectEventCategory,
   isValidBusinessProfileForeignKey,
   isValidExpectedAmountCurrency,
   isValidProjectCollaboration,
   isWorkItemOverdue,
   projectEventCountsAsEffectiveProgress,
+  projectEventCountsAsMeaningfulChange,
+  type CustomerProjectAppRole,
   type CustomerProjectDomainAction,
-  type CustomerProjectDomainRole,
+  type CustomerProjectResourceRelation,
   type ProjectEventType,
 } from '../../src/lib/customer-projects/domain';
 import {
@@ -50,16 +54,32 @@ const OWNER_ID = '44444444-4444-4444-8444-444444444444';
 const MEMBER_ID = '55555555-5555-4555-8555-555555555555';
 const ACTOR_ID = '66666666-6666-4666-8666-666666666666';
 const NOW = '2026-09-26T03:00:00.000Z';
+const PAST = '2026-09-25T03:00:00.000Z';
+const FUTURE = '2026-09-27T03:00:00.000Z';
 
-const validCustomerReference = {
+const canonicalCustomerReference = {
   id: CUSTOMER_ID,
   org_id: ORG_ID,
+  reference_kind: 'canonical',
   external_source: 'external_erp',
   external_customer_id: 'C-10001',
   display_name_snapshot: '宏达客户示例',
   external_owner_reference: 'SALES-001',
   source_synced_at: NOW,
   status: 'active',
+  created_at: NOW,
+  updated_at: NOW,
+} as const;
+
+const provisionalCustomerReference = {
+  id: 'abababab-abab-4bab-8bab-abababababab',
+  org_id: ORG_ID,
+  reference_kind: 'provisional',
+  provisional_source_reference: 'lead_draft:LD-001',
+  display_name_snapshot: '待映射新客户',
+  status: 'pending_review',
+  mapped_canonical_reference_id: null,
+  created_by_profile_id: OWNER_ID,
   created_at: NOW,
   updated_at: NOW,
 } as const;
@@ -99,9 +119,26 @@ assert(
   !projectSchema.safeParse({ ...validProject, project_type: 'unknown' }).success,
   'unknown project type rejected',
 );
+assert(projectSchema.safeParse(validProject).success, 'valid active project schema');
 assert(
-  projectSchema.safeParse(validProject).success,
-  'valid project schema',
+  !PROJECT_LIFECYCLE_STATUSES.includes('draft' as never),
+  'persisted project draft state is not in lifecycle',
+);
+assert(
+  projectSchema.safeParse({
+    ...validProject,
+    status: 'paused',
+    next_check_at: FUTURE,
+  }).success,
+  'paused project with next check accepted',
+);
+assert(
+  !projectSchema.safeParse({
+    ...validProject,
+    status: 'paused',
+    next_check_at: null,
+  }).success,
+  'paused project requires next check',
 );
 assert(
   !projectSchema.safeParse({
@@ -119,25 +156,44 @@ assert(
   }).success,
   'project currency requires amount',
 );
+
 assert(
-  customerReferenceSchema.safeParse(validCustomerReference).success,
-  'valid customer reference schema',
+  customerReferenceSchema.safeParse(canonicalCustomerReference).success,
+  'valid canonical customer reference',
+);
+assert(
+  customerReferenceSchema.safeParse(provisionalCustomerReference).success,
+  'valid provisional customer reference',
 );
 assert(
   !customerReferenceSchema.safeParse({
-    ...validCustomerReference,
-    status: 'unknown',
+    ...provisionalCustomerReference,
+    external_customer_id: 'FAKE-001',
   }).success,
-  'invalid customer reference status rejected',
+  'provisional reference rejects canonical ID pretending to be valid',
+);
+assert(
+  !customerReferenceSchema.safeParse({
+    ...canonicalCustomerReference,
+    reference_kind: 'canonical',
+    external_customer_id: null,
+  }).success,
+  'canonical reference requires external customer ID',
+);
+assert(
+  canMarkProjectWon(canonicalCustomerReference),
+  'canonical customer reference can support won',
+);
+assert(
+  !canMarkProjectWon(provisionalCustomerReference),
+  'provisional customer reference cannot support won',
 );
 
-assert(canTransitionProject('draft', 'active'), 'project draft -> active');
 assert(canTransitionProject('active', 'paused'), 'project active -> paused');
 assert(canTransitionProject('paused', 'active'), 'project paused -> active');
-assert(canTransitionProject('lost', 'active'), 'project lost -> active proposal');
+assert(canTransitionProject('lost', 'active'), 'project lost -> active approved');
 assert(!canTransitionProject('won', 'active'), 'won project is terminal');
 assert(!canTransitionProject('cancelled', 'active'), 'cancelled project is terminal');
-assert(!canTransitionProject('draft', 'won'), 'draft cannot jump to won');
 
 for (const status of WORK_ITEM_STATUSES) {
   assert(
@@ -145,10 +201,14 @@ for (const status of WORK_ITEM_STATUSES) {
     `work item self transition rejected: ${status}`,
   );
 }
-assert(canTransitionWorkItem('pending', 'in_progress'), 'work item pending -> in_progress');
-assert(canTransitionWorkItem('in_progress', 'blocked'), 'work item in_progress -> blocked');
-assert(canTransitionWorkItem('blocked', 'in_progress'), 'work item blocked -> in_progress');
-assert(canTransitionWorkItem('in_progress', 'completed'), 'work item in_progress -> completed');
+assert(canTransitionWorkItem('pending', 'in_progress'), 'pending -> in_progress');
+assert(canTransitionWorkItem('pending', 'completed'), 'pending -> completed quick action');
+assert(canTransitionWorkItem('pending', 'blocked'), 'pending -> blocked quick action');
+assert(canTransitionWorkItem('pending', 'cancelled'), 'pending -> cancelled');
+assert(canTransitionWorkItem('in_progress', 'blocked'), 'in_progress -> blocked');
+assert(canTransitionWorkItem('in_progress', 'completed'), 'in_progress -> completed');
+assert(canTransitionWorkItem('blocked', 'in_progress'), 'blocked -> in_progress');
+assert(canTransitionWorkItem('blocked', 'completed'), 'blocked -> completed');
 assert(!canTransitionWorkItem('completed', 'in_progress'), 'completed work item terminal');
 assert(!canTransitionWorkItem('cancelled', 'pending'), 'cancelled work item terminal');
 
@@ -176,9 +236,7 @@ assert(
 assert(
   !isValidProjectCollaboration({
     ownerProfileId: OWNER_ID,
-    collaborators: [
-      { profile_id: OWNER_ID, collaborator_role: 'technical' },
-    ],
+    collaborators: [{ profile_id: OWNER_ID, collaborator_role: 'technical' }],
   }),
   'owner cannot also be collaborator',
 );
@@ -199,28 +257,52 @@ assert(
 );
 assert(
   !projectEventCountsAsEffectiveProgress('CUSTOMER_RESPONSE_RECEIVED'),
-  'customer response is not automatically effective progress',
+  'generic customer response is not effective progress',
 );
 assert(
   projectEventCountsAsEffectiveProgress('EFFECTIVE_PROGRESS_RECORDED'),
   'explicit progress event counts as effective progress',
 );
 assert(
-  projectEventCountsAsEffectiveProgress('STAGE_CHANGED'),
-  'stage change counts as effective progress',
+  !projectEventCountsAsEffectiveProgress('STAGE_CHANGED'),
+  'stage change alone is not effective progress',
 );
 assert(
-  getProjectEventCategory('CONTACT_LOGGED') === 'CONTACT',
-  'contact event category',
+  !projectEventCountsAsEffectiveProgress('PROJECT_LOST'),
+  'lost is not effective progress',
 );
 assert(
-  getProjectEventCategory('QUOTE_SENT') === 'COMMERCIAL',
-  'commercial event category',
+  !projectEventCountsAsEffectiveProgress('PROJECT_PAUSED'),
+  'paused is not effective progress',
 );
 assert(
-  getProjectEventCategory('PROJECT_WON') === 'LIFECYCLE',
-  'lifecycle event category',
+  projectEventCountsAsMeaningfulChange('STAGE_CHANGED'),
+  'stage change is a meaningful change',
 );
+assert(
+  projectEventCountsAsMeaningfulChange('PROJECT_LOST'),
+  'lost is a meaningful lifecycle change',
+);
+assert(
+  projectEventCountsAsMeaningfulChange('PROJECT_PAUSED'),
+  'paused is a meaningful lifecycle change',
+);
+assert(
+  projectEventCountsAsMeaningfulChange('WAITING_STARTED'),
+  'waiting change is meaningful',
+);
+assert(
+  !projectEventCountsAsMeaningfulChange('CONTACT_LOGGED'),
+  'ordinary contact is not a meaningful change',
+);
+assert(
+  !projectEventCountsAsMeaningfulChange('CUSTOMER_RESPONSE_RECEIVED'),
+  'generic response is not a meaningful change',
+);
+
+assert(getProjectEventCategory('CONTACT_LOGGED') === 'CONTACT', 'contact category');
+assert(getProjectEventCategory('QUOTE_SENT') === 'COMMERCIAL', 'commercial category');
+assert(getProjectEventCategory('PROJECT_WON') === 'LIFECYCLE', 'lifecycle category');
 
 const validEvent = {
   id: '77777777-7777-4777-8777-777777777777',
@@ -235,6 +317,7 @@ const validEvent = {
   source: 'user',
   source_reference_id: null,
   raw_input: '客户确认进入样品验证',
+  payload_schema_version: 1,
   payload: { progress_kind: 'sample_validation' },
   correction_of_event_id: null,
 } as const;
@@ -254,6 +337,33 @@ assert(
   }).success,
   'event requires customer or project reference',
 );
+assert(
+  !projectEventSchema.safeParse({
+    ...validEvent,
+    event_type: 'PROJECT_PAUSED',
+    event_category: 'LIFECYCLE',
+    payload: {},
+  }).success,
+  'project pause requires pause reason',
+);
+assert(
+  projectEventSchema.safeParse({
+    ...validEvent,
+    event_type: 'PROJECT_PAUSED',
+    event_category: 'LIFECYCLE',
+    payload: { pause_reason: '等待客户预算确认' },
+  }).success,
+  'project pause with reason accepted',
+);
+assert(
+  !projectEventSchema.safeParse({
+    ...validEvent,
+    event_type: 'PROJECT_REOPENED',
+    event_category: 'LIFECYCLE',
+    payload: {},
+  }).success,
+  'project reopen requires reopen reason',
+);
 
 const validWorkItem = {
   id: '88888888-8888-4888-8888-888888888888',
@@ -265,7 +375,7 @@ const validWorkItem = {
   description: null,
   assignee_profile_id: OWNER_ID,
   created_by_profile_id: OWNER_ID,
-  due_at: '2026-09-27T02:00:00.000Z',
+  due_at: PAST,
   status: 'pending',
   priority: 'high',
   blocked_reason: null,
@@ -302,15 +412,30 @@ assert(
   'completed work item requires completion metadata',
 );
 assert(
-  isWorkItemOverdue(validWorkItem, '2026-09-28T00:00:00.000Z'),
-  'pending work item can be overdue',
+  isWorkItemOverdue(validWorkItem, NOW),
+  'pending past-due work item is overdue',
 );
 assert(
-  !isWorkItemOverdue(
-    { ...validWorkItem, status: 'blocked' },
-    '2026-09-28T00:00:00.000Z',
-  ),
-  'blocked work item is not simply overdue',
+  isWorkItemOverdue({ ...validWorkItem, status: 'blocked' }, NOW),
+  'blocked past-due work item is overdue',
+);
+assert(
+  !isWorkItemOverdue({ ...validWorkItem, status: 'blocked', due_at: FUTURE }, NOW),
+  'blocked future work item is not overdue',
+);
+assert(
+  !isWorkItemOverdue({
+    ...validWorkItem,
+    status: 'completed',
+  }, NOW),
+  'completed work item is not overdue',
+);
+assert(
+  !isWorkItemOverdue({
+    ...validWorkItem,
+    status: 'cancelled',
+  }, NOW),
+  'cancelled work item is not overdue',
 );
 
 const validAIDraft = {
@@ -349,35 +474,112 @@ assert(
   }).success,
   'accepted AI draft with metadata accepted',
 );
+assert(
+  !aiDraftSchema.safeParse({
+    ...validAIDraft,
+    status: 'accepted',
+    accepted_by_profile_id: OWNER_ID,
+    accepted_at: NOW,
+    rejected_by_profile_id: OWNER_ID,
+    rejected_at: NOW,
+  }).success,
+  'accepted AI draft rejects rejection metadata',
+);
+assert(
+  !aiDraftSchema.safeParse({
+    ...validAIDraft,
+    status: 'draft',
+    accepted_by_profile_id: OWNER_ID,
+    accepted_at: NOW,
+  }).success,
+  'draft AI cannot carry acceptance metadata',
+);
+assert(
+  !aiDraftSchema.safeParse({
+    ...validAIDraft,
+    status: 'rejected',
+    rejected_by_profile_id: OWNER_ID,
+    rejected_at: NOW,
+    accepted_by_profile_id: OWNER_ID,
+    accepted_at: NOW,
+  }).success,
+  'rejected AI draft rejects acceptance metadata',
+);
 
 assert(
   metricValueSchema.safeParse({ state: 'unknown', reason: '数据尚未接入' }).success,
   'unknown report metric remains explicit',
 );
+const validDraftReport = {
+  id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+  org_id: ORG_ID,
+  period: 'daily',
+  period_start: '2026-09-26',
+  period_end: '2026-09-26',
+  timezone: 'Asia/Shanghai',
+  status: 'draft',
+  deterministic_metrics: {
+    effective_progress_events: { state: 'known', value: 2 },
+    unresolved_work_items: { state: 'unknown', reason: 'WorkItem 尚未接入' },
+  },
+  ai_narrative: null,
+  source_event_cursor: {
+    cursor_kind: 'recorded_at_id',
+    recorded_at: NOW,
+    record_id: validEvent.id,
+  },
+  source_work_item_cursor: {
+    cursor_kind: 'monotonic_sequence',
+    sequence: 42,
+  },
+  version: 1,
+  supersedes_report_id: null,
+  submitted_by_profile_id: null,
+  submitted_at: null,
+  created_at: NOW,
+  updated_at: NOW,
+} as const;
+assert(
+  derivedReportSnapshotSchema.safeParse(validDraftReport).success,
+  'draft report with explicit ingestion cursors',
+);
+assert(
+  !derivedReportSnapshotSchema.safeParse({
+    ...validDraftReport,
+    submitted_by_profile_id: OWNER_ID,
+    submitted_at: NOW,
+  }).success,
+  'draft report cannot carry submission metadata',
+);
+assert(
+  !derivedReportSnapshotSchema.safeParse({
+    ...validDraftReport,
+    status: 'submitted',
+  }).success,
+  'submitted report requires submission metadata',
+);
 assert(
   derivedReportSnapshotSchema.safeParse({
-    id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
-    org_id: ORG_ID,
-    period: 'daily',
-    period_start: '2026-09-26',
-    period_end: '2026-09-26',
-    timezone: 'Asia/Shanghai',
-    status: 'draft',
-    deterministic_metrics: {
-      effective_progress_events: { state: 'known', value: 2 },
-      unresolved_work_items: { state: 'unknown', reason: 'WorkItem 尚未接入' },
-    },
-    ai_narrative: null,
-    source_event_watermark: NOW,
-    source_work_item_watermark: null,
-    version: 1,
-    supersedes_report_id: null,
-    submitted_by_profile_id: null,
-    submitted_at: null,
-    created_at: NOW,
-    updated_at: NOW,
+    ...validDraftReport,
+    status: 'submitted',
+    submitted_by_profile_id: OWNER_ID,
+    submitted_at: NOW,
   }).success,
-  'derived report snapshot preserves unknown metrics',
+  'submitted report with metadata accepted',
+);
+assert(
+  !derivedReportSnapshotSchema.safeParse({
+    ...validDraftReport,
+    status: 'superseded',
+  }).success,
+  'superseded status removed in favor of immutable submitted snapshots',
+);
+assert(
+  derivedReportSnapshotSchema.safeParse({
+    ...validDraftReport,
+    supersedes_report_id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+  }).success,
+  'correction draft can point to an earlier report',
 );
 
 const keyBase = {
@@ -386,37 +588,31 @@ const keyBase = {
   external_customer_id: 'C-10001',
 };
 assert(
-  buildCustomerReferenceIdentityKey(keyBase)
-    !== buildCustomerReferenceIdentityKey({ ...keyBase, org_id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' }),
+  buildCanonicalCustomerReferenceIdentityKey(keyBase)
+    !== buildCanonicalCustomerReferenceIdentityKey({
+      ...keyBase,
+      org_id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+    }),
   'customer identity key changes with org',
 );
 assert(
-  buildCustomerReferenceIdentityKey(keyBase)
-    !== buildCustomerReferenceIdentityKey({ ...keyBase, external_source: 'other' }),
+  buildCanonicalCustomerReferenceIdentityKey(keyBase)
+    !== buildCanonicalCustomerReferenceIdentityKey({ ...keyBase, external_source: 'other' }),
   'customer identity key changes with source',
 );
 assert(
-  buildCustomerReferenceIdentityKey(keyBase)
-    !== buildCustomerReferenceIdentityKey({ ...keyBase, external_customer_id: 'C-10002' }),
+  buildCanonicalCustomerReferenceIdentityKey(keyBase)
+    !== buildCanonicalCustomerReferenceIdentityKey({
+      ...keyBase,
+      external_customer_id: 'C-10002',
+    }),
   'customer identity key changes with external ID',
 );
 
-assert(
-  isValidExpectedAmountCurrency(1000, 'CNY'),
-  'amount and currency pair valid',
-);
-assert(
-  !isValidExpectedAmountCurrency(1000, null),
-  'amount without currency invalid',
-);
-assert(
-  !isValidExpectedAmountCurrency(null, 'CNY'),
-  'currency without amount invalid',
-);
-assert(
-  !isValidExpectedAmountCurrency(10.5, 'CNY'),
-  'amount must use integer minor units',
-);
+assert(isValidExpectedAmountCurrency(1000, 'CNY'), 'amount and currency pair valid');
+assert(!isValidExpectedAmountCurrency(1000, null), 'amount without currency invalid');
+assert(!isValidExpectedAmountCurrency(null, 'CNY'), 'currency without amount invalid');
+assert(!isValidExpectedAmountCurrency(10.5, 'CNY'), 'amount uses integer minor units');
 
 for (const fieldName of BUSINESS_PROFILE_FK_FIELDS) {
   assert(
@@ -432,25 +628,34 @@ assert(
 const mutationActions: CustomerProjectDomainAction[] = [
   'create',
   'update',
-  'delete',
   'accept',
+  'reject',
+  'expire',
   'submit',
   'manage',
 ];
-for (const role of ['operator', 'viewer'] as CustomerProjectDomainRole[]) {
+for (const appRole of ['operator', 'viewer'] as CustomerProjectAppRole[]) {
   for (const resource of CUSTOMER_PROJECT_DOMAIN_RESOURCES) {
     for (const action of mutationActions) {
       assert(
-        !canAccessCustomerProjectDomain({ role, resource, action }),
-        `${role} has no mutation capability: ${resource}/${action}`,
+        !canAccessCustomerProjectDomain({
+          appRole,
+          relations: ['none'],
+          resource,
+          action,
+        }),
+        `${appRole} has no mutation capability: ${resource}/${action}`,
       );
     }
   }
 }
 
+const relations = (values: CustomerProjectResourceRelation[]) => values;
+
 assert(
   !canAccessCustomerProjectDomain({
-    role: 'unrelated_sales',
+    appRole: 'sales',
+    relations: relations(['unrelated']),
     resource: 'project',
     action: 'read',
   }),
@@ -458,7 +663,17 @@ assert(
 );
 assert(
   canAccessCustomerProjectDomain({
-    role: 'sales_owner',
+    appRole: 'sales',
+    relations: relations(['none']),
+    resource: 'project',
+    action: 'create',
+  }),
+  'sales can create a self-owned project opportunity',
+);
+assert(
+  canAccessCustomerProjectDomain({
+    appRole: 'sales',
+    relations: relations(['owner']),
     resource: 'project',
     action: 'update',
   }),
@@ -466,7 +681,8 @@ assert(
 );
 assert(
   !canAccessCustomerProjectDomain({
-    role: 'sales_collaborator',
+    appRole: 'sales',
+    relations: relations(['collaborator']),
     resource: 'project',
     action: 'update',
   }),
@@ -474,43 +690,75 @@ assert(
 );
 assert(
   canAccessCustomerProjectDomain({
-    role: 'sales_collaborator',
+    appRole: 'sales',
+    relations: relations(['collaborator']),
     resource: 'work_item',
     action: 'create',
   }),
   'sales collaborator can create work item',
 );
 assert(
-  !canAccessCustomerProjectDomain({
-    role: 'manager',
-    resource: 'settings',
-    action: 'manage',
+  canAccessCustomerProjectDomain({
+    appRole: 'sales',
+    relations: relations(['assignee']),
+    resource: 'work_item',
+    action: 'update',
   }),
-  'manager cannot manage settings',
+  'sales assignee can update work item',
 );
 assert(
   !canAccessCustomerProjectDomain({
-    role: 'manager',
-    resource: 'project',
-    action: 'delete',
-  }),
-  'manager cannot delete projects',
-);
-assert(
-  !canAccessCustomerProjectDomain({
-    role: 'manager',
-    resource: 'project_event',
+    appRole: 'sales',
+    relations: relations(['collaborator']),
+    resource: 'ai_draft',
     action: 'accept',
   }),
-  'manager cannot accept an event action',
+  'sales collaborator cannot accept AI draft',
 );
 assert(
   canAccessCustomerProjectDomain({
-    role: 'admin',
+    appRole: 'sales',
+    relations: relations(['owner']),
+    resource: 'ai_draft',
+    action: 'accept',
+  }),
+  'sales owner can accept AI draft',
+);
+assert(
+  !canAccessCustomerProjectDomain({
+    appRole: 'admin',
+    relations: relations(['none']),
+    resource: 'project_event',
+    action: 'update',
+  }),
+  'admin cannot mutate append-only ProjectEvent',
+);
+assert(
+  !canAccessCustomerProjectDomain({
+    appRole: 'admin',
+    relations: relations(['none']),
+    resource: 'report',
+    action: 'update',
+  }),
+  'admin cannot mutate submitted report in place',
+);
+assert(
+  canAccessCustomerProjectDomain({
+    appRole: 'admin',
+    relations: relations(['none']),
     resource: 'settings',
     action: 'manage',
   }),
   'admin can manage settings',
+);
+assert(
+  !canAccessCustomerProjectDomain({
+    appRole: 'manager',
+    relations: relations(['none']),
+    resource: 'settings',
+    action: 'manage',
+  }),
+  'manager cannot manage settings',
 );
 
 for (const eventType of PROJECT_EVENT_TYPES) {
@@ -526,10 +774,7 @@ for (const eventType of PROJECT_EVENT_TYPES) {
 }
 
 for (const action of CUSTOMER_PROJECT_DOMAIN_ACTIONS) {
-  assert(
-    typeof action === 'string',
-    `domain action available: ${action}`,
-  );
+  assert(typeof action === 'string', `domain action available: ${action}`);
 }
 
 console.log(`Customer Project Domain tests: ${passed} passed, ${failed} failed`);

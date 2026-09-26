@@ -1,17 +1,19 @@
 # Customer Project Center Domain Model v1
 
-Status: design freeze candidate for Batch 2.
+Status: domain freeze candidate after PM review `CPC-B2-REVIEW-001`.
 
-This document defines the domain contracts only. It does not authorize database
+This document defines domain contracts only. It does not authorize database
 changes, migrations, RLS policies, service-role access, API implementation, or
 Production deployment.
 
 ## Core rules
 
 - Lead is not Customer.
-- Customer official ownership and payment truth remain in the external source of truth.
-- This repository may hold a controlled Customer Reference/Mapping layer.
-- Project is one concrete commercial opportunity, not the customer relationship forever.
+- Customer official ownership and payment truth remain outside this repository.
+- This repository may hold canonical and clearly provisional CustomerReference mappings.
+- Project is one concrete commercial opportunity, not the lifetime customer relationship.
+- A formal Project starts as `active`; incomplete qualification remains Lead,
+  customer-level follow-up, or an AI draft.
 - One Project has one Project Owner and zero or more Collaborators.
 - Collaborators never change customer ownership.
 - Formal business FKs use `profiles.id`, never `auth.users.id`.
@@ -20,7 +22,9 @@ Production deployment.
 
 ## A. CustomerReference
 
-CustomerReference is a local mapping to an external canonical customer.
+CustomerReference has two structurally distinct kinds.
+
+### Canonical reference
 
 Required fields:
 
@@ -28,25 +32,45 @@ Required fields:
 | --- | --- |
 | `id` | Local UUID |
 | `org_id` | Organization UUID |
+| `reference_kind` | `canonical` |
 | `external_source` | Stable external system identifier |
-| `external_customer_id` | Canonical customer identifier in the external system |
-| `display_name_snapshot` | Display-only snapshot; refreshable without rewriting history |
-| `external_owner_reference` | Optional non-authoritative reference/snapshot only |
+| `external_customer_id` | Canonical customer ID in the external system |
+| `display_name_snapshot` | Display-only snapshot |
+| `external_owner_reference` | Optional non-authoritative snapshot/reference |
 | `source_synced_at` | Last successful source synchronization |
-| `status` | `active`, `inactive`, or `pending_review` |
+| `status` | `active` or `inactive` |
 | `created_at` / `updated_at` | Audit timestamps |
 
-Identity rule:
+Canonical identity is unique by:
 
-`org_id + external_source + external_customer_id` is the unique mapping key.
+`org_id + external_source + external_customer_id`
 
-The helper `buildCustomerReferenceIdentityKey()` serializes all three values as
-one unambiguous key. Display-name and owner-reference changes must not alter
-historical Project facts.
+### Provisional reference
 
-A temporary or unmatched customer may only become a formal CustomerReference
-through a reviewed lifecycle. The proposed lifecycle is recorded as
-`PROPOSED-001`; it must not be treated as approved business behavior.
+Required fields:
+
+| Field | Contract |
+| --- | --- |
+| `id` | Local UUID |
+| `org_id` | Organization UUID |
+| `reference_kind` | `provisional` |
+| `provisional_source_reference` | Lead/manual/import reference |
+| `display_name_snapshot` | Display name |
+| `status` | `pending_review` |
+| `mapped_canonical_reference_id` | Canonical mapping once reviewed |
+| `created_by_profile_id` | Creator profile |
+| `created_at` / `updated_at` | Audit timestamps |
+
+Provisional rules:
+
+- a provisional record must never use a fake `external_customer_id`;
+- it does not create ownership or payment truth;
+- a Project using a provisional reference cannot be marked `won`;
+- before future order/payment linkage or `won`, it must be remapped to a
+  canonical reference;
+- merge/remap is audited.
+
+The identity-key helper applies only to canonical references.
 
 ## B. Project
 
@@ -60,8 +84,8 @@ Required fields:
 | `title` | Concise commercial opportunity title |
 | `project_type` | `transfer_film`, `transfer_processing`, `equipment`, `uv`, `other` |
 | `owner_profile_id` | Exactly one owner profile |
-| `status` | Project lifecycle status |
-| `stage` | Type-specific stage code |
+| `status` | `active`, `paused`, `won`, `lost`, `cancelled` |
+| `stage` | Type-specific/configurable stage code |
 | `waiting_on` | Waiting owner or `none` |
 | `next_action_summary` | Current agreed next step |
 | `next_check_at` | Next review/check time |
@@ -77,56 +101,54 @@ Optional fields:
 - `currency`
 - `expected_close_date`
 
-`expected_amount_minor` and `currency` must either both be present or both be
-absent. They represent an expected opportunity value only, not a confirmed
-order, invoice, receipt, or payment fact.
+Rules:
 
-### Stage profiles
+- there is no persisted formal Project `draft` state;
+- a Project begins at `active` when a concrete opportunity exists;
+- `expected_amount_minor` and `currency` must both be present or both be absent;
+- expected amount means expected opportunity value only, not confirmed order or payment;
+- a paused Project requires `next_check_at`;
+- a pause lifecycle event requires an audited pause reason.
 
-Detailed stage workflow is not frozen. The proposal is:
+### Stage strategy
 
-- common lifecycle status is shared across all project types;
-- stage codes may vary by `project_type`;
-- a repeat transfer-film order must not be forced through the same stage sequence
-  as a first-time equipment project;
-- stage changes are explicit audited events, not inferred from every message.
+Common lifecycle status is shared, but stage codes are type-specific and
+configurable.
 
-See `PROPOSED-002` in the Decision Log.
+Exact stage lists are not frozen and must not become a database enum constraint
+in the next batch. Repeat transfer-film business must not be forced through
+equipment-style stages. Stage lists will be finalized after pilot/workflow
+validation.
 
 ## C. ProjectMember / Collaboration
 
-Project ownership remains a single field on Project:
-
-- `owner_profile_id`
+Project keeps the single owner in `owner_profile_id`.
 
 Collaborators are separate records:
 
-| Field | Contract |
-| --- | --- |
-| `id` | Local UUID |
-| `org_id` / `project_id` | Same organization and project |
-| `profile_id` | Collaborator profile |
-| `collaborator_role` | `technical`, `design`, `quality`, `management`, `support` |
-| `added_by_profile_id` | Actor who added the collaborator |
-| `created_at` | Audit timestamp |
+- `id`, `org_id`, `project_id`
+- `profile_id`
+- `collaborator_role`: `technical`, `design`, `quality`, `management`, `support`
+- `added_by_profile_id`
+- `created_at`
 
 Rules:
 
-- the owner cannot also be a collaborator record;
-- duplicate collaborator profile IDs are invalid;
-- collaborators may contribute Work Items and events;
-- collaboration does not change customer ownership or Project ownership.
+- owner cannot also be a collaborator record;
+- collaborator profile IDs are unique per Project;
+- collaborators may create events and Work Items;
+- collaborators cannot change customer ownership or Project core fields.
 
 ## D. FollowUp / ProjectEvent
 
-Recommendation: use **one append-only ProjectEvent ledger**, not a separate
-FollowUp table plus a second history table.
+Recommendation: one append-only ProjectEvent ledger.
 
 Tradeoffs:
 
-- one ledger keeps chronological truth, actor, source, and audit in one place;
-- a separate FollowUp table risks duplicate truth and synchronization errors;
-- the one-ledger approach requires event-specific payload validation.
+- one ledger preserves actor, source, occurrence, recording time, and audit in
+  one chronological truth;
+- separate FollowUp and history tables risk duplicate facts and drift;
+- event-type payload validation must be added incrementally.
 
 ProjectEvent fields:
 
@@ -135,59 +157,45 @@ ProjectEvent fields:
 - `event_type`, `event_category`
 - `occurred_at`, `recorded_at`
 - `actor_profile_id`
-- `source`: `user`, `accepted_ai_draft`, `integration`, or `system`
+- `source`
 - `source_reference_id`
 - `raw_input`
-- structured `payload`
+- `payload_schema_version`
+- versioned `payload`
 - `correction_of_event_id`
 
-Event categories:
+Approved payload rule:
 
-- `CONTACT`: ordinary contact such as `CONTACT_LOGGED`
-- `PROGRESS`: explicit effective-progress record
-- `WAIT`: waiting/blocker started or resolved
-- `COMMERCIAL`: quote, sample, or customer confirmation events
-- `LIFECYCLE`: stage, pause, reopen, win, or loss events
+- every event carries `payload_schema_version`;
+- an envelope is versioned immediately;
+- stricter per-event schemas are added incrementally as workflows stabilize.
 
-Deterministic progress rule:
+Progress versus meaningful change:
 
-`projectEventCountsAsEffectiveProgress()` returns true only for explicit
-progress/commercial/lifecycle events. Ordinary contact and a generic customer
-response do not automatically count as effective progress.
+`projectEventCountsAsEffectiveProgress()` returns true only for:
 
-Corrections are appended as new events referencing the corrected event. Events
-are not edited in place.
+- `EFFECTIVE_PROGRESS_RECORDED`
+- `QUOTE_SENT`
+- `SAMPLE_SENT`
+- `CUSTOMER_CONFIRMED`
+- `PROJECT_WON`
 
-A free-text note is not automatically a formal progress event. It may be stored
-as ordinary `CONTACT_LOGGED`, or it may remain an AIDraft until a human confirms
-the structured event. This prevents every message from inflating progress
-metrics.
+It returns false for:
+
+- ordinary contact;
+- generic customer response;
+- stage change alone;
+- paused, reopened, or lost lifecycle events.
+
+`projectEventCountsAsMeaningfulChange()` separately includes stage, waiting,
+reopen, pause, and loss changes for summaries without calling them progress.
+
+A free-text note does not automatically become progress. It remains ordinary
+contact or an AI draft until a human confirms the structured event.
 
 ## E. WorkItem
 
-WorkItem is a dedicated sales-domain task model. It does not reuse legacy tasks.
-
-Required fields:
-
-- `id`, `org_id`
-- optional `customer_reference_id`
-- optional `project_id`
-- `work_item_type`
-- `title`
-- `assignee_profile_id`
-- `created_by_profile_id`
-- `status`
-- `priority`
-- `version`
-- `created_at`, `updated_at`
-
-Optional or lifecycle fields:
-
-- `description`
-- `due_at`
-- `blocked_reason`
-- `completed_at`, `completed_by_profile_id`
-- `cancelled_at`, `cancelled_by_profile_id`
+WorkItem is a dedicated sales-domain task model and does not reuse legacy tasks.
 
 Types:
 
@@ -197,20 +205,40 @@ Types:
 - `FOLLOW_UP`
 - `MANAGEMENT_DECISION`
 
-Due-date changes create append-only WorkItemReschedule records with:
+Status:
 
-- previous and new due dates;
-- reason;
-- actor;
-- occurrence time;
-- WorkItem version at reschedule.
+- `pending`
+- `in_progress`
+- `blocked`
+- `completed`
+- `cancelled`
 
-AI suggestions are not WorkItems and cannot become overdue. They may only become
-formal WorkItems after an AIDraft is accepted by an authorized human.
+Fields include:
+
+- `assignee_profile_id`
+- `created_by_profile_id`
+- optional customer/project references
+- `due_at`
+- `priority`
+- `blocked_reason`
+- completion/cancellation actors and times
+- `version`
+- audit timestamps
+
+Blocked rules:
+
+- blocked is context, not a deadline waiver;
+- a blocked Work Item can still be overdue;
+- only an explicit reschedule changes `due_at`;
+- reschedule history preserves previous/new due date, reason, actor, time, and
+  Work Item version.
+
+AI suggestions are not Work Items and cannot become overdue until accepted by a
+human.
 
 ## F. AIDraft
 
-AIDraft is non-authoritative and never mutates formal business data by itself.
+AIDraft is non-authoritative.
 
 Required fields:
 
@@ -220,184 +248,191 @@ Required fields:
 - `proposal_type`
 - optional customer/project references
 - `status`
-- `created_at`, `updated_at`
+- audit timestamps
 
-Optional fields:
-
-- `confidence`
-- `source_model`
-- `source_run_id`
-
-Acceptance metadata:
-
-- `accepted_by_profile_id`, `accepted_at`
-- `rejected_by_profile_id`, `rejected_at`
-
-Acceptance may create a new ProjectEvent, WorkItem, report narrative, or proposed
-field patch. It does not silently confirm customer ownership, payment, won/lost
-status, project owner, or other consequential facts.
-
-## G. Daily / Weekly Derived Report Contract
-
-Reports are derived, not manually duplicated.
-
-Deterministic server/SQL calculations:
-
-- counts of confirmed effective-progress events;
-- created/completed/rescheduled/overdue Work Items;
-- waiting and blocker durations;
-- stage and lifecycle changes;
-- customer commitments due;
-- project-level exceptions based on explicit rules.
-
-Narrative generation:
-
-- AI may summarize deterministic metrics and confirmed events;
-- AI narrative is labelled as generated;
-- narrative cannot override metric values.
-
-Snapshot semantics:
-
-- period has explicit start, end, and timezone;
-- submitted reports are immutable snapshots;
-- corrections create a new version with `supersedes_report_id`;
-- source watermarks identify the event/WorkItem state used for calculation;
-- missing data is `unknown`, never silently interpreted as "no work".
-
-The pure `MetricValue<T>` contract encodes known versus unknown values.
-
-## H. Permissions Matrix
-
-All access is organization-scoped before resource-level checks.
-
-| Role | CustomerRef | Project | Event | WorkItem | AI Draft | Report | Settings |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| admin | CRUD | CRUD | read/create | CRUD | read/create/accept | read/submit | manage |
-| manager | read/create/update | read/create/update | read/create | read/create/update | read/create/accept | read/create/update/submit | read |
-| sales owner | read | read/update | read/create | read/create/update | read/create/accept | read/create/update/submit | none |
-| sales collaborator | read | read | read/create | read/create/update | read | read | none |
-| unrelated sales | none | none | none | none | none | none | none |
-| operator | none | none | none | none | none | none | none |
-| viewer | none | none | none | none | none | none | none |
-
-This matrix is proposed for the domain layer. It does not replace middleware,
-server-side authorization, database RLS, or resource ownership checks.
-
-## I. Audit & Concurrency
-
-Mutable core entities use:
-
-- `version`
-- expected-version writes
-- append-only audit/history
-- same-org composite references where useful
-
-Examples of the intended same-org reference pattern:
-
-- `(org_id, customer_reference_id)` references CustomerReference `(org_id, id)`
-- `(org_id, project_id)` references Project `(org_id, id)`
-- `(org_id, owner_profile_id)` references a profile in the same organization
-
-Strong audit is required for:
-
-- Project Owner changes
-- Project stage changes
-- Project lifecycle/status changes
-- expected amount/currency changes
-- next check date changes
-- Work Item due-date/reschedule changes
-- Work Item completion/cancellation
-- CustomerReference mapping changes
-- AI draft acceptance/rejection
-- report submission and supersession
-
-Low-friction activity capture remains allowed because ordinary events do not
-require a project lifecycle transition.
-
-## J. Domain State Machines
-
-These state machines are deterministic and testable. Business-specific choices
-remain proposals until approved.
-
-### Project lifecycle
-
-Proposed states:
-
-- `draft`
-- `active`
-- `paused`
-- `won`
-- `lost`
-- `cancelled`
-
-Proposed transitions:
-
-- `draft -> active | cancelled`
-- `active -> paused | won | lost | cancelled`
-- `paused -> active | lost | cancelled`
-- `lost -> active | cancelled`
-- `won` terminal
-- `cancelled` terminal
-
-### Work Item lifecycle
-
-States:
-
-- `pending`
-- `in_progress`
-- `blocked`
-- `completed`
-- `cancelled`
-
-Proposed transitions:
-
-- `pending -> in_progress | cancelled`
-- `in_progress -> blocked | completed | cancelled`
-- `blocked -> in_progress | cancelled`
-- `completed` terminal
-- `cancelled` terminal
-
-### AI Draft lifecycle
-
-States:
+Status:
 
 - `draft`
 - `accepted`
 - `rejected`
 - `expired`
 
+Metadata invariants:
+
+- draft/expired cannot carry terminal metadata;
+- accepted requires `accepted_by_profile_id` + `accepted_at` and no rejection metadata;
+- rejected requires `rejected_by_profile_id` + `rejected_at` and no acceptance metadata.
+
+Acceptance creates a confirmed event, Work Item, report narrative, or proposed
+patch. It never silently confirms customer ownership, payment, won/lost status,
+owner, or other consequential facts.
+
+## G. Daily / Weekly Derived Report Contract
+
+Reports are derived.
+
+Deterministic server/SQL calculations:
+
+- confirmed effective-progress counts;
+- meaningful lifecycle/waiting changes;
+- Work Item creation/completion/reschedule/overdue states;
+- waiting/blocker duration;
+- stage changes;
+- commitments due;
+- explicit project exceptions.
+
+Narrative:
+
+- AI may summarize deterministic metrics and confirmed events;
+- AI narrative cannot override metric values.
+
+Snapshot rules:
+
+- submitted reports are immutable;
+- a correction creates a new snapshot/version linked through `supersedes_report_id`;
+- the old submitted row is not updated to `superseded`;
+- a newer snapshot referencing an older snapshot represents supersession;
+- missing data remains `unknown`, never silently "no work".
+
+Ingestion cursors:
+
+A timestamp alone is ambiguous for late or equal-time records.
+
+The contract uses an explicit `IngestionCursor`:
+
+- `recorded_at_id` with `recorded_at + record_id`
+- or `monotonic_sequence`
+
+`source_event_cursor` and `source_work_item_cursor` use this contract.
+
+## H. Permissions Matrix
+
+The access input separates:
+
+1. base app role: `admin`, `manager`, `sales`, `operator`, `viewer`
+2. resource relation: `owner`, `collaborator`, `assignee`, `creator`,
+   `unrelated`, `none`
+
+Resource matrix:
+
+| Role/relation | CustomerRef | Project | Event | WorkItem | AI Draft | Report | Settings |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| admin | read/create/update | read/create/update | read/create | read/create/update | read/create/accept/reject/expire | read/create/submit | read/manage |
+| manager | read/create/update | read/create/update | read/create | read/create/update | read/create/accept/reject/expire | read/create/submit | read |
+| sales owner | read | read/create/update | read/create | read/create/update | read/create/accept/reject | read/create/submit | none |
+| sales collaborator | read | read | read/create | read/create/update | read | read/create/submit | none |
+| sales assignee | read | read | read/create | read/update | read | none | none |
+| sales creator | read | read | read/create | read/create | read/create/accept/reject | read/create/submit | none |
+| unrelated sales | none | none | none | none | none | none | none |
+| operator | none | none | none | none | none | none | none |
+| viewer | none | none | none | none | none | none | none |
+
+Project creation:
+
+- a sales user may create a Project when a concrete opportunity exists;
+- server enforcement later must force `owner_profile_id` and
+  `created_by_profile_id` to the authenticated profile unless manager/admin
+  explicitly assigns another owner;
+- an unrelated sales user cannot read or mutate another sales user's Project.
+
+Invariants:
+
+- ProjectEvent is append-only and cannot be updated or deleted by any role;
+- submitted report snapshots cannot be updated or deleted in place;
+- admin status does not bypass these domain invariants;
+- settings are admin-managed.
+
+## I. Audit & Concurrency
+
+Mutable entities use:
+
+- `version`
+- expected-version writes
+- append-only audit/history
+- same-org composite references
+
+Strong audit is required for:
+
+- Project Owner
+- Project stage
+- Project lifecycle/status
+- expected amount/currency
+- next check date
+- pause/reopen reason
+- Work Item due date/reschedule
+- Work Item completion/cancellation
+- CustomerReference mapping/remap
+- AI draft acceptance/rejection
+- report submission/correction
+
+Same-org reference examples:
+
+- `(org_id, customer_reference_id)` -> CustomerReference `(org_id, id)`
+- `(org_id, project_id)` -> Project `(org_id, id)`
+- `(org_id, owner_profile_id)` -> same-org profile
+
+## J. Domain State Machines
+
+### Project lifecycle
+
+States:
+
+- `active`
+- `paused`
+- `won`
+- `lost`
+- `cancelled`
+
+Transitions:
+
+- `active -> paused | won | lost | cancelled`
+- `paused -> active | lost | cancelled`
+- `lost -> active | cancelled`
+- `won` terminal
+- `cancelled` terminal
+
+Pausing requires a next check date and audited pause reason.
+
+Reopening a lost Project in place is allowed for the same commercial
+opportunity and requires an audited reopen reason. A materially new objective,
+order, or opportunity creates a new Project.
+
+### Work Item lifecycle
+
+Transitions:
+
+- `pending -> in_progress | blocked | completed | cancelled`
+- `in_progress -> blocked | completed | cancelled`
+- `blocked -> in_progress | completed | cancelled`
+- `completed` terminal
+- `cancelled` terminal
+
+### AI Draft lifecycle
+
 Transitions:
 
 - `draft -> accepted | rejected | expired`
-- terminal after acceptance, rejection, or expiration
+- accepted/rejected/expired are terminal
 
 ## OPEN_BUSINESS_DECISIONS
 
-- `PROPOSED-001`: Whether an unmatched/manual customer may use a temporary
-  CustomerReference, and what evidence/approval is required before formal mapping.
-- `PROPOSED-002`: Exact stage profiles for transfer film, transfer processing,
-  equipment, UV, and other project types.
-- `PROPOSED-003`: Whether a persisted `draft` qualification state is required
-  before a Project becomes active.
-- `PROPOSED-004`: Whether a lost opportunity is reopened in place or represented
-  by a new Project when the customer re-engages.
+None at domain-model freeze time.
 
 ## OPEN_TECHNICAL_DECISIONS
 
-- Whether event `payload` should use per-event-type Zod schemas immediately or a
-  versioned envelope first.
-- How report source watermarks should be stored consistently across event and
-  WorkItem calculations.
-- Whether WorkItem blocked state needs an explicit owner/reminder policy.
+- Decide whether report ingestion cursors use `recorded_at + id` or a monotonic
+  sequence when persistence is designed.
+- Decide which event types receive strict payload schemas first after pilot
+  validation.
+- Decide whether Work Item blocked reminders require a separate policy.
 
 ## SAFE_TO_IMPLEMENT_NEXT
 
 - Pure domain types and validators.
-- Event classification and state-transition tests.
-- A non-persistent AIDraft acceptance workflow.
-- Read-only contract adapters against the external customer source, once access
-  and authority are approved.
-- Report metric calculation specs derived from confirmed events and WorkItems.
+- Event progress/meaningful-change classification.
+- AI draft acceptance workflow without persistence.
+- Read-only external customer contract mapping after authority approval.
+- Deterministic report metric specifications.
 
 ## MUST_NOT_IMPLEMENT_YET
 
@@ -406,5 +441,6 @@ Transitions:
 - Service-role customer data access
 - Production environment changes
 - Competing customer ownership or payment truth
-- AI writes to consequential business facts without human confirmation
-- Legacy `tasks`, `leads`, `site_data`, or `/api/data` reuse as source of truth
+- AI writes to consequential business facts without confirmation
+- Exact project stage lists as database enum constraints
+- Legacy `tasks`, `leads`, `site_data`, or `/api/data` as source of truth

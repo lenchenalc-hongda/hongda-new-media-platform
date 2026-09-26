@@ -2,7 +2,7 @@ import { z } from 'zod';
 import {
   AI_DRAFT_PROPOSAL_TYPES,
   AI_DRAFT_STATUSES,
-  CUSTOMER_REFERENCE_STATUSES,
+  CANONICAL_CUSTOMER_REFERENCE_STATUSES,
   PROJECT_COLLABORATOR_ROLES,
   PROJECT_EVENT_CATEGORIES,
   PROJECT_EVENT_SOURCES,
@@ -24,18 +24,37 @@ export const isoDateTimeSchema = z.string().datetime({ offset: true });
 export const isoDateSchema = z.string().date();
 export const expectedVersionSchema = z.number().int().min(1);
 
-export const customerReferenceSchema = z.object({
+export const canonicalCustomerReferenceSchema = z.object({
   id: uuidSchema,
   org_id: uuidSchema,
+  reference_kind: z.literal('canonical'),
   external_source: z.string().trim().min(1).max(100),
   external_customer_id: z.string().trim().min(1).max(200),
   display_name_snapshot: z.string().trim().min(1).max(300),
   external_owner_reference: z.string().trim().min(1).max(300).nullable(),
   source_synced_at: isoDateTimeSchema,
-  status: z.enum(CUSTOMER_REFERENCE_STATUSES),
+  status: z.enum(CANONICAL_CUSTOMER_REFERENCE_STATUSES),
   created_at: isoDateTimeSchema,
   updated_at: isoDateTimeSchema,
 }).strict();
+
+export const provisionalCustomerReferenceSchema = z.object({
+  id: uuidSchema,
+  org_id: uuidSchema,
+  reference_kind: z.literal('provisional'),
+  provisional_source_reference: z.string().trim().min(1).max(300),
+  display_name_snapshot: z.string().trim().min(1).max(300),
+  status: z.literal('pending_review'),
+  mapped_canonical_reference_id: uuidSchema.nullable(),
+  created_by_profile_id: uuidSchema,
+  created_at: isoDateTimeSchema,
+  updated_at: isoDateTimeSchema,
+}).strict();
+
+export const customerReferenceSchema = z.discriminatedUnion('reference_kind', [
+  canonicalCustomerReferenceSchema,
+  provisionalCustomerReferenceSchema,
+]);
 
 export const projectSchema = z.object({
   id: uuidSchema,
@@ -66,6 +85,13 @@ export const projectSchema = z.object({
       message: 'expected_amount_minor and currency must be provided together',
     });
   }
+  if (project.status === 'paused' && !project.next_check_at) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['next_check_at'],
+      message: 'paused projects require next_check_at',
+    });
+  }
 });
 
 export const projectCollaboratorSchema = z.object({
@@ -91,6 +117,7 @@ export const projectEventSchema = z.object({
   source: z.enum(PROJECT_EVENT_SOURCES),
   source_reference_id: z.string().trim().min(1).max(300).nullable(),
   raw_input: z.string().trim().min(1).max(10000).nullable(),
+  payload_schema_version: z.number().int().min(1),
   payload: z.record(z.string(), z.unknown()),
   correction_of_event_id: uuidSchema.nullable(),
 }).strict().superRefine((event, context) => {
@@ -107,6 +134,32 @@ export const projectEventSchema = z.object({
       code: z.ZodIssueCode.custom,
       path: ['customer_reference_id'],
       message: 'an event must reference a customer or project',
+    });
+  }
+  if (
+    event.event_type === 'PROJECT_PAUSED'
+    && (
+      typeof event.payload.pause_reason !== 'string'
+      || event.payload.pause_reason.trim().length === 0
+    )
+  ) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['payload', 'pause_reason'],
+      message: 'pausing a project requires payload.pause_reason',
+    });
+  }
+  if (
+    event.event_type === 'PROJECT_REOPENED'
+    && (
+      typeof event.payload.reopen_reason !== 'string'
+      || event.payload.reopen_reason.trim().length === 0
+    )
+  ) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['payload', 'reopen_reason'],
+      message: 'reopening a lost project requires payload.reopen_reason',
     });
   }
 });
@@ -175,18 +228,40 @@ export const aiDraftSchema = z.object({
   created_at: isoDateTimeSchema,
   updated_at: isoDateTimeSchema,
 }).strict().superRefine((draft, context) => {
-  if (draft.status === 'accepted' && (!draft.accepted_by_profile_id || !draft.accepted_at)) {
+  const hasAcceptedMetadata =
+    draft.accepted_by_profile_id !== null || draft.accepted_at !== null;
+  const hasRejectedMetadata =
+    draft.rejected_by_profile_id !== null || draft.rejected_at !== null;
+
+  if (draft.status === 'accepted' && (
+    !draft.accepted_by_profile_id
+    || !draft.accepted_at
+    || hasRejectedMetadata
+  )) {
     context.addIssue({
       code: z.ZodIssueCode.custom,
-      path: ['accepted_by_profile_id'],
-      message: 'accepted drafts require acceptance metadata',
+      path: ['status'],
+      message: 'accepted drafts require only complete acceptance metadata',
     });
   }
-  if (draft.status === 'rejected' && (!draft.rejected_by_profile_id || !draft.rejected_at)) {
+  if (draft.status === 'rejected' && (
+    !draft.rejected_by_profile_id
+    || !draft.rejected_at
+    || hasAcceptedMetadata
+  )) {
     context.addIssue({
       code: z.ZodIssueCode.custom,
-      path: ['rejected_by_profile_id'],
-      message: 'rejected drafts require rejection metadata',
+      path: ['status'],
+      message: 'rejected drafts require only complete rejection metadata',
+    });
+  }
+  if ((draft.status === 'draft' || draft.status === 'expired') && (
+    hasAcceptedMetadata || hasRejectedMetadata
+  )) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['status'],
+      message: 'draft and expired AI drafts cannot carry terminal metadata',
     });
   }
 });
@@ -202,6 +277,18 @@ export const metricValueSchema = z.discriminatedUnion('state', [
   }).strict(),
 ]);
 
+export const ingestionCursorSchema = z.discriminatedUnion('cursor_kind', [
+  z.object({
+    cursor_kind: z.literal('recorded_at_id'),
+    recorded_at: isoDateTimeSchema,
+    record_id: uuidSchema,
+  }).strict(),
+  z.object({
+    cursor_kind: z.literal('monotonic_sequence'),
+    sequence: z.number().int().min(0),
+  }).strict(),
+]);
+
 export const derivedReportSnapshotSchema = z.object({
   id: uuidSchema,
   org_id: uuidSchema,
@@ -209,18 +296,38 @@ export const derivedReportSnapshotSchema = z.object({
   period_start: isoDateSchema,
   period_end: isoDateSchema,
   timezone: z.string().trim().min(1).max(100),
-  status: z.enum(['draft', 'submitted', 'superseded']),
+  status: z.enum(['draft', 'submitted']),
   deterministic_metrics: z.record(z.string(), metricValueSchema),
   ai_narrative: z.string().trim().min(1).max(20000).nullable(),
-  source_event_watermark: isoDateTimeSchema.nullable(),
-  source_work_item_watermark: isoDateTimeSchema.nullable(),
+  source_event_cursor: ingestionCursorSchema.nullable(),
+  source_work_item_cursor: ingestionCursorSchema.nullable(),
   version: expectedVersionSchema,
   supersedes_report_id: uuidSchema.nullable(),
   submitted_by_profile_id: uuidSchema.nullable(),
   submitted_at: isoDateTimeSchema.nullable(),
   created_at: isoDateTimeSchema,
   updated_at: isoDateTimeSchema,
-}).strict();
+}).strict().superRefine((report, context) => {
+  const hasSubmissionMetadata = report.submitted_by_profile_id !== null
+    || report.submitted_at !== null;
+
+  if (report.status === 'draft' && hasSubmissionMetadata) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['status'],
+      message: 'draft reports cannot carry submission metadata',
+    });
+  }
+  if (report.status === 'submitted' && (
+    !report.submitted_by_profile_id || !report.submitted_at
+  )) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['status'],
+      message: 'submitted reports require complete submission metadata',
+    });
+  }
+});
 
 export type CustomerReferenceInput = z.infer<typeof customerReferenceSchema>;
 export type ProjectInput = z.infer<typeof projectSchema>;
