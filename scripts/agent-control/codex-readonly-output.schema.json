@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "status",
+    "task_id",
+    "head_sha",
+    "read_only_confirmed",
+    "acceptance_sentinel",
+    "findings",
+    "risks",
+    "recommended_next_action"
+  ],
+  "properties": {
+    "status": {
+      "enum": ["PASS", "BLOCKED", "NEEDS_DECISION", "FAILED"]
+    },
+    "task_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "head_sha": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "read_only_confirmed": {
+      "type": "boolean"
+    },
+    "acceptance_sentinel": {
+      "const": "CODEX_READONLY_PROOF=PASS"
+    },
+    "findings": {
+      "type": "array",
+      "maxItems": 20,
+      "items": {
+        "type": "string",
+        "maxLength": 1000
+      }
+    },
+    "risks": {
+      "type": "array",
+      "maxItems": 20,
+      "items": {
+        "type": "string",
+        "maxLength": 1000
+      }
+    },
+    "recommended_next_action": {
+      "type": "string",
+      "maxLength": 2000
+    }
+  }
+}

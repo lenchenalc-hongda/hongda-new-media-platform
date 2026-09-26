@@ -328,6 +328,7 @@ assert(
 );
 const selfHostedSection = workflowSource.slice(
   workflowSource.indexOf('  self-hosted-proof:'),
+  workflowSource.indexOf('  mac3-readonly-codex:'),
 );
 assert(
   selfHostedSection.includes(

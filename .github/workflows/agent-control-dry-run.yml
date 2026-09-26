@@ -151,3 +151,142 @@ jobs:
           printf 'AGENTS_MD=PRESENT\n'
           printf 'TASK_ID=%s\n' "$TASK_ID"
           printf 'ROUTING_PROOF=PASS\n'
+
+  mac3-readonly-codex:
+    needs: [validate, self-hosted-proof]
+    if: >-
+      needs.validate.outputs.result == 'READY' &&
+      needs.self-hosted-proof.result == 'success' &&
+      needs.validate.outputs.task_id == 'CPC-AUTO-001-MAC-3-READONLY-CODEX'
+    runs-on: [self-hosted, macOS, X64, hongda-agent-control]
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # actions/checkout v4
+        with:
+          ref: ${{ needs.validate.outputs.verified_head }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Run read-only Codex acceptance
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ needs.validate.outputs.verified_head }}
+          TASK_ID: ${{ needs.validate.outputs.task_id }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          codex_binary="/Applications/ChatGPT.app/Contents/Resources/codex"
+          output_schema="$GITHUB_WORKSPACE/scripts/agent-control/codex-readonly-output.schema.json"
+          prompt_file="$RUNNER_TEMP/agent-control-mac3-prompt.txt"
+          result_file="$RUNNER_TEMP/agent-control-mac3-result.json"
+          event_log="$RUNNER_TEMP/agent-control-mac3-events.jsonl"
+          error_log="$RUNNER_TEMP/agent-control-mac3-error.log"
+          trap 'rm -f "$prompt_file" "$result_file" "$event_log" "$error_log"' EXIT
+
+          verify_repository_state() {
+            actual_sha="$(git rev-parse HEAD)"
+            if [ "$actual_sha" != "$EXPECTED_SHA" ]; then
+              printf 'EXPECTED_SHA=%s\n' "$EXPECTED_SHA"
+              printf 'ACTUAL_SHA=%s\n' "$actual_sha"
+              printf 'CODEX_READONLY_PROOF=FAIL\n'
+              return 1
+            fi
+            if [ ! -f AGENTS.md ]; then
+              printf 'AGENTS_MD=ABSENT\n'
+              printf 'CODEX_READONLY_PROOF=FAIL\n'
+              return 1
+            fi
+            git diff --exit-code > /dev/null
+            git diff --cached --exit-code > /dev/null
+            status_output="$(git status --porcelain)"
+            if [ -n "$status_output" ]; then
+              printf '%s\n' "$status_output"
+              printf 'CODEX_READONLY_PROOF=FAIL\n'
+              return 1
+            fi
+          }
+
+          verify_repository_state
+          if [ ! -x "$codex_binary" ]; then
+            printf 'CODEX_BINARY=%s\n' "$codex_binary"
+            printf 'CODEX_READONLY_PROOF=FAIL\n'
+            exit 1
+          fi
+
+          cat > "$prompt_file" <<EOF
+          You are performing a strictly read-only Agent Control acceptance.
+
+          Repository: $REPOSITORY
+          Task ID: $TASK_ID
+          Expected HEAD SHA: $EXPECTED_SHA
+          Repository root: $GITHUB_WORKSPACE
+
+          Perform only safe read-only inspection of tracked repository files.
+          Confirm that AGENTS.md is readable and summarize the repository/application architecture.
+          Do not modify any file, index, branch, commit, remote, or GitHub state.
+          Do not run network-write operations.
+          Do not read unrelated HOME/user files, credential files, auth files, tokens, cookies, or environment variables.
+          Do not print secrets.
+          Return JSON matching the provided output schema.
+          The acceptance_sentinel must be exactly CODEX_READONLY_PROOF=PASS.
+          EOF
+
+          codex_version="$("$codex_binary" --version 2>/dev/null || true)"
+          printf 'CODEX_BINARY=%s\n' "$codex_binary"
+          printf 'CODEX_VERSION=%s\n' "$codex_version"
+
+          set +e
+          env -i \
+            HOME="$HOME" \
+            PATH="/usr/bin:/bin:/usr/sbin:/sbin" \
+            TMPDIR="$RUNNER_TEMP" \
+            "$codex_binary" exec \
+            -C "$GITHUB_WORKSPACE" \
+            -s read-only \
+            --ask-for-approval never \
+            --ephemeral \
+            --ignore-user-config \
+            --ignore-rules \
+            --json \
+            --output-schema "$output_schema" \
+            --output-last-message "$result_file" \
+            - < "$prompt_file" > "$event_log" 2> "$error_log"
+          codex_exit_status=$?
+          set -e
+          printf 'CODEX_EXIT_STATUS=%s\n' "$codex_exit_status"
+
+          if [ "$codex_exit_status" -ne 0 ]; then
+            if grep -Eqi 'auth|login|credential|api key' "$error_log"; then
+              printf 'AUTH_NOT_AVAILABLE=YES\n'
+            else
+              printf 'AUTH_NOT_AVAILABLE=UNKNOWN\n'
+            fi
+            printf 'CODEX_READONLY_PROOF=FAIL\n'
+            exit 1
+          fi
+
+          verify_repository_state
+          if [ ! -s "$result_file" ]; then
+            printf 'CODEX_LAST_MESSAGE=ABSENT\n'
+            printf 'CODEX_READONLY_PROOF=FAIL\n'
+            exit 1
+          fi
+
+          result_bytes="$(wc -c < "$result_file" | tr -d ' ')"
+          if ! grep -Fq 'CODEX_READONLY_PROOF=PASS' "$result_file" \
+            || ! grep -Eq '"status"[[:space:]]*:[[:space:]]*"PASS"' "$result_file" \
+            || ! grep -Eq '"read_only_confirmed"[[:space:]]*:[[:space:]]*true' "$result_file" \
+            || ! grep -Eq '"head_sha"[[:space:]]*:[[:space:]]*"'"$EXPECTED_SHA"'"' "$result_file" \
+            || ! grep -Fq "\"$TASK_ID\"" "$result_file"; then
+            printf 'CODEX_RESULT_BYTES=%s\n' "$result_bytes"
+            printf 'CODEX_READONLY_PROOF=FAIL\n'
+            exit 1
+          fi
+
+          printf 'CODEX_RESULT_BYTES=%s\n' "$result_bytes"
+          printf 'EXPECTED_SHA=%s\n' "$EXPECTED_SHA"
+          printf 'ACTUAL_SHA=%s\n' "$(git rev-parse HEAD)"
+          printf 'GIT_STATUS=CLEAN\n'
+          printf 'CODEX_READONLY_PROOF=PASS\n'
