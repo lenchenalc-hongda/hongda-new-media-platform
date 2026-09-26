@@ -172,6 +172,7 @@ Future trigger automation must combine that key with:
 - edited comments do not trigger
 - a cheap pre-gate rejects obvious untrusted events before checkout or dependency
   installation
+- the cheap gate reads the runner-provided `GITHUB_EVENT_PATH`
 - the heavy validation job requires `needs.gate.outputs.trusted == 'true'`
 - permissions are limited to `contents: read`, `issues: read`, and
   `pull-requests: read`
@@ -189,6 +190,7 @@ Future trigger automation must combine that key with:
 - no Codex/model invocation, OpenAI auth, or GitHub mutation
 - real `issue_comment` execution can be verified only after this workflow exists
   on the default branch; PR verification relies on unit tests and normal CI
+- live acceptance is required after merge before AUTO-PHASE-3 begins
 
 ### AUTO-PHASE-3
 
