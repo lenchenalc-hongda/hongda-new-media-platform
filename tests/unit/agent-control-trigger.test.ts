@@ -1,0 +1,260 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import type { AgentControlState } from '../../src/lib/agent-control/control-state';
+import { parseAgentControlState } from '../../src/lib/agent-control/parser';
+import {
+  AGENT_CONTROL_REPOSITORY,
+  AGENT_CONTROL_TRIGGER_SENTINEL,
+  evaluateAgentControlDryRun,
+  hasStandaloneAgentControlTrigger,
+  isTrustedAgentControlCommentEvent,
+  type AgentControlCommentEventInput,
+  type AgentControlDryRunResultCode,
+} from '../../src/lib/agent-control/trigger';
+
+let passed = 0;
+let failed = 0;
+
+function assert(condition: boolean, message: string) {
+  if (condition) {
+    passed++;
+  } else {
+    failed++;
+    console.error('FAIL: ' + message);
+  }
+}
+
+function fixture(name: string): string {
+  return fs.readFileSync(
+    path.resolve('tests/fixtures/agent-control', name),
+    'utf8',
+  );
+}
+
+const readyState = parseAgentControlState(fixture('valid-ready.md'));
+const fixState = parseAgentControlState(fixture('valid-fix.md'));
+
+const trustedInput: AgentControlCommentEventInput = {
+  action: 'created',
+  repository: AGENT_CONTROL_REPOSITORY,
+  issueNumber: 10,
+  isPullRequest: false,
+  actorLogin: 'lenchenalc-hongda',
+  commentAuthorLogin: 'lenchenalc-hongda',
+  commentBody: `${AGENT_CONTROL_TRIGGER_SENTINEL}\n`,
+};
+
+function expectResult(
+  actual: AgentControlDryRunResultCode,
+  expected: AgentControlDryRunResultCode,
+  label: string,
+) {
+  assert(actual === expected, `${label}: expected ${expected}, got ${actual}`);
+}
+
+console.log('\n=== Agent Control Trigger ===');
+
+assert(isTrustedAgentControlCommentEvent(trustedInput), 'trusted Issue #10 event');
+assert(
+  !isTrustedAgentControlCommentEvent({ ...trustedInput, issueNumber: 9 }),
+  'wrong issue is untrusted',
+);
+assert(
+  !isTrustedAgentControlCommentEvent({ ...trustedInput, isPullRequest: true }),
+  'PR comment is untrusted',
+);
+assert(
+  !isTrustedAgentControlCommentEvent({ ...trustedInput, actorLogin: 'public-user' }),
+  'wrong actor is untrusted',
+);
+assert(
+  !isTrustedAgentControlCommentEvent({ ...trustedInput, action: 'edited' }),
+  'edited comment is untrusted',
+);
+assert(
+  !hasStandaloneAgentControlTrigger(
+    `prefix ${AGENT_CONTROL_TRIGGER_SENTINEL} suffix`,
+  ),
+  'sentinel substring is not standalone',
+);
+assert(
+  hasStandaloneAgentControlTrigger(
+    `some text\n  ${AGENT_CONTROL_TRIGGER_SENTINEL}  \nmore text`,
+  ),
+  'standalone sentinel with surrounding whitespace is trusted',
+);
+
+expectResult(
+  evaluateAgentControlDryRun({
+    triggerSource: 'issue_comment',
+    trustedTrigger: true,
+    state: readyState,
+    liveMasterSha: readyState.master_sha,
+    pullRequest: null,
+  }).result,
+  'READY',
+  'new task exact master',
+);
+expectResult(
+  evaluateAgentControlDryRun({
+    triggerSource: 'issue_comment',
+    trustedTrigger: true,
+    state: readyState,
+    liveMasterSha: 'eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',
+    pullRequest: null,
+  }).result,
+  'STALE_MASTER',
+  'new task stale master',
+);
+
+const fixStateWithLiveMaster: AgentControlState = {
+  ...fixState,
+  master_sha: 'd1a93bab48f7535406d2ecb27ece17f39858c6f8',
+};
+const matchingPr = {
+  number: fixState.active_pr!,
+  state: 'open' as const,
+  headBranch: fixState.active_branch!,
+  headSha: fixState.verified_head,
+  baseBranch: 'master',
+};
+expectResult(
+  evaluateAgentControlDryRun({
+    triggerSource: 'issue_comment',
+    trustedTrigger: true,
+    state: fixStateWithLiveMaster,
+    liveMasterSha: fixStateWithLiveMaster.master_sha,
+    pullRequest: matchingPr,
+  }).result,
+  'READY',
+  'fix task matching PR',
+);
+expectResult(
+  evaluateAgentControlDryRun({
+    triggerSource: 'issue_comment',
+    trustedTrigger: true,
+    state: fixStateWithLiveMaster,
+    liveMasterSha: fixStateWithLiveMaster.master_sha,
+    pullRequest: {
+      ...matchingPr,
+      headSha: 'ffffffffffffffffffffffffffffffffffffffff',
+    },
+  }).result,
+  'STALE_PR_HEAD',
+  'fix task stale PR head',
+);
+expectResult(
+  evaluateAgentControlDryRun({
+    triggerSource: 'issue_comment',
+    trustedTrigger: true,
+    state: fixStateWithLiveMaster,
+    liveMasterSha: fixStateWithLiveMaster.master_sha,
+    pullRequest: { ...matchingPr, state: 'closed' },
+  }).result,
+  'INVALID_PR_STATE',
+  'closed PR invalid',
+);
+expectResult(
+  evaluateAgentControlDryRun({
+    triggerSource: 'issue_comment',
+    trustedTrigger: true,
+    state: { ...fixStateWithLiveMaster, active_branch: null },
+    liveMasterSha: fixStateWithLiveMaster.master_sha,
+    pullRequest: matchingPr,
+  }).result,
+  'INVALID_PR_STATE',
+  'active PR without branch fails closed',
+);
+
+for (const status of [
+  'APPROVED_FOR_MERGE',
+  'MERGED',
+  'BLOCKED',
+  'NEEDS_DECISION',
+  'FAILED',
+  'WAITING_REVIEW',
+  'CODEX_WORKING',
+] as const) {
+  expectResult(
+    evaluateAgentControlDryRun({
+      triggerSource: 'workflow_dispatch',
+      trustedTrigger: true,
+      state: {
+        ...readyState,
+        status,
+        current_task_id: readyState.current_task_id,
+        active_pr: status === 'APPROVED_FOR_MERGE' ? 12 : null,
+      },
+      liveMasterSha: readyState.master_sha,
+      pullRequest: status === 'APPROVED_FOR_MERGE' ? matchingPr : null,
+    }).result,
+    'NOT_EXECUTABLE',
+    `${status} not executable`,
+  );
+}
+
+expectResult(
+  evaluateAgentControlDryRun({
+    triggerSource: 'issue_comment',
+    trustedTrigger: false,
+    state: readyState,
+    liveMasterSha: readyState.master_sha,
+    pullRequest: null,
+  }).result,
+  'UNTRUSTED_TRIGGER',
+  'untrusted actor cannot produce READY',
+);
+expectResult(
+  evaluateAgentControlDryRun({
+    triggerSource: 'issue_comment',
+    trustedTrigger: true,
+    state: { ...readyState, status: 'BLOCKED' },
+    liveMasterSha: readyState.master_sha,
+    pullRequest: null,
+  }).result,
+  'NOT_EXECUTABLE',
+  'fake READY in comment cannot override Issue body state',
+);
+expectResult(
+  evaluateAgentControlDryRun({
+    triggerSource: 'workflow_dispatch',
+    trustedTrigger: true,
+    state: readyState,
+    liveMasterSha: readyState.master_sha,
+    pullRequest: null,
+  }).result,
+  'READY',
+  'manual dry-run still validates state',
+);
+
+const workflowSource = fs.readFileSync(
+  '.github/workflows/agent-control-dry-run.yml',
+  'utf8',
+);
+assert(
+  workflowSource.includes('types: [created]')
+  && workflowSource.includes('workflow_dispatch:'),
+  'workflow has created issue_comment and manual triggers',
+);
+assert(
+  workflowSource.includes('contents: read')
+  && workflowSource.includes('issues: read')
+  && workflowSource.includes('pull-requests: read'),
+  'workflow uses read-only permissions',
+);
+for (const forbidden of [
+  'contents: write',
+  'issues: write',
+  'pull-requests: write',
+  'id-token: write',
+  'OPENAI_API_KEY',
+  'SUPABASE_SERVICE_ROLE_KEY',
+]) {
+  assert(
+    !workflowSource.includes(forbidden),
+    `workflow does not include ${forbidden}`,
+  );
+}
+
+console.log(`Agent Control Trigger tests: ${passed} passed, ${failed} failed`);
+if (failed > 0) process.exit(1);

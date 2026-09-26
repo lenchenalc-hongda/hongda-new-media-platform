@@ -164,10 +164,26 @@ Future trigger automation must combine that key with:
 
 ### AUTO-PHASE-2
 
-- trusted read-only issue_comment trigger
-- actor allowlist and strict state validation
-- concurrency/idempotency checks
-- no model call
+- trusted read-only `issue_comment.created` and `workflow_dispatch` trigger
+- exact repository: `lenchenalc-hongda/hongda-new-media-platform`
+- exact Issue: `#10`
+- allowlist: `lenchenalc-hongda`
+- standalone trigger sentinel: `AGENT_CONTROL_TRIGGER_V1`
+- edited comments do not trigger
+- permissions are limited to `contents: read`, `issues: read`, and
+  `pull-requests: read`
+- concurrency group: `agent-control-dry-run-${{ github.repository }}` with
+  `cancel-in-progress: false`
+- Issue #10 machine-readable state remains authoritative; trigger-comment text
+  cannot override it
+- live master and PR facts are validated against control state
+- no persistent claim or lock marker is written yet
+- idempotency key is computed but not persisted
+- dry-run results: `READY`, `NOT_EXECUTABLE`, `UNTRUSTED_TRIGGER`,
+  `INVALID_STATE`, `STALE_MASTER`, `STALE_PR_HEAD`, `INVALID_PR_STATE`
+- no Codex/model invocation, OpenAI auth, or GitHub mutation
+- real `issue_comment` execution can be verified only after this workflow exists
+  on the default branch; PR verification relies on unit tests and normal CI
 
 ### AUTO-PHASE-3
 
