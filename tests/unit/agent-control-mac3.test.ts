@@ -174,9 +174,11 @@ assert(
 );
 assert(
   codexSection.includes('"$codex_binary" login status')
+  && codexSection.includes('codex_login_status="UNAVAILABLE_OR_CONFIG_ERROR"')
   && codexSection.includes("printf 'CODEX_LOGIN_STATUS=%s\\n'")
-  && !codexSection.includes('cat "$login_log"'),
-  'Codex job checks login availability without printing authentication output',
+  && !codexSection.includes('cat "$login_log"')
+  && !codexSection.includes('tail "$login_log"'),
+  'Codex job checks login availability without overclaiming or printing auth output',
 );
 assert(
   codexSection.includes("printf 'CODEX_FAILURE_CLASS=%s\\n'")
@@ -188,9 +190,11 @@ assert(
 assert(
   !codexSection.includes('cat "$event_log"')
   && !codexSection.includes('cat "$error_log"')
+  && !codexSection.includes('cat "$failure_event_log"')
   && !codexSection.includes('tail "$event_log"')
-  && !codexSection.includes('tail "$error_log"'),
-  'Codex job never prints raw Codex event or error logs',
+  && !codexSection.includes('tail "$error_log"')
+  && !codexSection.includes('tail "$failure_event_log"'),
+  'Codex job never prints raw Codex diagnostic logs',
 );
 
 assert(
