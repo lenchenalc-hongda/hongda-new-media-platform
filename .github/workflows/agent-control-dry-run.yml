@@ -245,7 +245,7 @@ jobs:
             "$codex_binary" exec \
             -C "$GITHUB_WORKSPACE" \
             -s read-only \
-            --ask-for-approval never \
+            -c 'approval_policy="never"' \
             --ephemeral \
             --ignore-user-config \
             --ignore-rules \
