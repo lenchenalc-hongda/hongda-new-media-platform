@@ -88,11 +88,12 @@ assert(
   )
   && codexSection.includes('"$codex_binary" exec')
   && codexSection.includes('-s read-only')
-  && codexSection.includes('--ask-for-approval never')
+  && codexSection.includes('-c \'approval_policy="never"\'')
+  && !codexSection.includes('--ask-for-approval')
   && codexSection.includes('--ephemeral')
   && codexSection.includes('--ignore-user-config')
   && codexSection.includes('--ignore-rules'),
-  'Codex job uses the verified read-only noninteractive control set',
+  'Codex job uses the version-compatible read-only noninteractive control set',
 );
 assert(
   !/workspace-write|danger-full-access|dangerously-bypass/.test(codexSection),
