@@ -184,7 +184,8 @@ jobs:
           event_log="$RUNNER_TEMP/agent-control-mac3-events.jsonl"
           error_log="$RUNNER_TEMP/agent-control-mac3-error.log"
           login_log="$RUNNER_TEMP/agent-control-mac3-login.log"
-          trap 'rm -f "$prompt_file" "$result_file" "$event_log" "$error_log" "$login_log"' EXIT
+          failure_event_log="$RUNNER_TEMP/agent-control-mac3-failure-events.jsonl"
+          trap 'rm -f "$prompt_file" "$result_file" "$event_log" "$error_log" "$login_log" "$failure_event_log"' EXIT
 
           verify_repository_state() {
             actual_sha="$(git rev-parse HEAD)"
@@ -276,21 +277,23 @@ jobs:
           printf 'POST_CODEX_REPOSITORY_STATE=PASS\n'
 
           if [ "$codex_exit_status" -ne 0 ]; then
-            if grep -Eqi '401|403|unauthori|auth|login|credential|api[ _-]?key|access token|not logged in' "$event_log" "$error_log" "$login_log"; then
+            grep -E '"type"[[:space:]]*:[[:space:]]*"(error|turn\.failed)"' "$event_log" > "$failure_event_log" || true
+
+            if grep -Eqi '401|403|unauthori|auth|login|credential|api[ _-]?key|access token|not logged in' "$failure_event_log" "$error_log"; then
               codex_failure_class="AUTH"
-            elif grep -Eqi '429|rate[ _-]?limit|quota|too many requests' "$event_log" "$error_log"; then
+            elif grep -Eqi '429|rate[ _-]?limit|quota|too many requests' "$failure_event_log" "$error_log"; then
               codex_failure_class="RATE_LIMIT"
-            elif grep -Eqi 'schema|structured output|response format|invalid[ _-]?schema' "$event_log" "$error_log"; then
+            elif grep -Eqi 'schema|structured output|response format|invalid[ _-]?schema' "$failure_event_log" "$error_log"; then
               codex_failure_class="OUTPUT_SCHEMA"
-            elif grep -Eqi 'model.*(not found|unsupported|unavailable)|unsupported model' "$event_log" "$error_log"; then
+            elif grep -Eqi 'model.*(not found|unsupported|unavailable)|unsupported model' "$failure_event_log" "$error_log"; then
               codex_failure_class="MODEL"
-            elif grep -Eqi 'timed? out|timeout|connection|connect|network|dns|tls|certificate|websocket|stream.*(closed|disconnect)|transport' "$event_log" "$error_log"; then
+            elif grep -Eqi 'timed? out|timeout|connection|connect|network|dns|tls|certificate|websocket|stream.*(closed|disconnect)|transport' "$failure_event_log" "$error_log"; then
               codex_failure_class="NETWORK"
-            elif grep -Eqi 'sandbox|permission denied|operation not permitted|read-only|read only' "$event_log" "$error_log"; then
+            elif grep -Eqi 'sandbox|permission denied|operation not permitted|read-only|read only' "$failure_event_log" "$error_log"; then
               codex_failure_class="SANDBOX"
-            elif grep -Eqi 'requirements|approval_policy|configuration|config' "$event_log" "$error_log"; then
+            elif grep -Eqi 'requirements|approval_policy|configuration|config' "$failure_event_log" "$error_log"; then
               codex_failure_class="CONFIG"
-            elif grep -Eqi 'internal server|server error|status 5[0-9][0-9]' "$event_log" "$error_log"; then
+            elif grep -Eqi 'internal server|server error|status 5[0-9][0-9]' "$failure_event_log" "$error_log"; then
               codex_failure_class="SERVER"
             else
               codex_failure_class="OTHER"
