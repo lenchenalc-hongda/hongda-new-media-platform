@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import {
   AGENT_CONTROL_ISSUE_NUMBER,
   AGENT_CONTROL_REPOSITORY,
+  classifyPullRequestReadFailure,
   evaluateAgentControlDryRun,
   isTrustedAgentControlCommentEvent,
   type AgentControlDryRunResult,
@@ -16,6 +17,16 @@ import type { AgentControlState } from '../../src/lib/agent-control/control-stat
 const token = process.env.GITHUB_TOKEN;
 const eventPath = process.env.GITHUB_EVENT_PATH;
 const eventName = process.env.GITHUB_EVENT_NAME;
+
+class GitHubApiError extends Error {
+  readonly status: number;
+
+  constructor(pathname: string, status: number) {
+    super(`GitHub API ${pathname} returned ${status}`);
+    this.name = 'GitHubApiError';
+    this.status = status;
+  }
+}
 
 function printResult(result: AgentControlDryRunResult) {
   console.log(`result=${result.result}`);
@@ -55,7 +66,7 @@ async function githubGetJson<T>(pathname: string): Promise<T> {
     },
   });
   if (!response.ok) {
-    throw new Error(`GitHub API ${pathname} returned ${response.status}`);
+    throw new GitHubApiError(pathname, response.status);
   }
   return response.json() as Promise<T>;
 }
@@ -127,19 +138,34 @@ async function main() {
 
   let pullRequest: LivePullRequestFacts | null = null;
   if (state?.active_pr) {
-    const livePr = await githubGetJson<{
-      number: number;
-      state: 'open' | 'closed';
-      head: { ref: string; sha: string };
-      base: { ref: string };
-    }>(`/repos/${repository}/pulls/${state.active_pr}`);
-    pullRequest = {
-      number: livePr.number,
-      state: livePr.state,
-      headBranch: livePr.head.ref,
-      headSha: livePr.head.sha,
-      baseBranch: livePr.base.ref,
-    };
+    try {
+      const livePr = await githubGetJson<{
+        number: number;
+        state: 'open' | 'closed';
+        head: { ref: string; sha: string };
+        base: { ref: string };
+      }>(`/repos/${repository}/pulls/${state.active_pr}`);
+      pullRequest = {
+        number: livePr.number,
+        state: livePr.state,
+        headBranch: livePr.head.ref,
+        headSha: livePr.head.sha,
+        baseBranch: livePr.base.ref,
+      };
+    } catch (error) {
+      if (error instanceof GitHubApiError) {
+        const classification = classifyPullRequestReadFailure(error.status);
+        if (classification === 'INVALID_PR_STATE') {
+          printResult({
+            result: 'INVALID_PR_STATE',
+            reason: `active PR ${state.active_pr} was not found`,
+            summary: null,
+          });
+          process.exit(1);
+        }
+      }
+      throw error;
+    }
   }
 
   const evaluated = evaluateAgentControlDryRun({

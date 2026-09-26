@@ -5,6 +5,7 @@ import { parseAgentControlState } from '../../src/lib/agent-control/parser';
 import {
   AGENT_CONTROL_REPOSITORY,
   AGENT_CONTROL_TRIGGER_SENTINEL,
+  classifyPullRequestReadFailure,
   evaluateAgentControlDryRun,
   hasStandaloneAgentControlTrigger,
   isTrustedAgentControlCommentEvent,
@@ -66,6 +67,20 @@ assert(
 assert(
   !isTrustedAgentControlCommentEvent({ ...trustedInput, actorLogin: 'public-user' }),
   'wrong actor is untrusted',
+);
+assert(
+  !isTrustedAgentControlCommentEvent({
+    ...trustedInput,
+    commentAuthorLogin: 'public-user',
+  }),
+  'non-allowlisted comment author is untrusted',
+);
+assert(
+  !isTrustedAgentControlCommentEvent({
+    ...trustedInput,
+    repository: 'another-owner/another-repo',
+  }),
+  'cross-repository event is untrusted',
 );
 assert(
   !isTrustedAgentControlCommentEvent({ ...trustedInput, action: 'edited' }),
@@ -165,6 +180,25 @@ expectResult(
   'INVALID_PR_STATE',
   'active PR without branch fails closed',
 );
+expectResult(
+  evaluateAgentControlDryRun({
+    triggerSource: 'issue_comment',
+    trustedTrigger: true,
+    state: fixStateWithLiveMaster,
+    liveMasterSha: fixStateWithLiveMaster.master_sha,
+    pullRequest: null,
+  }).result,
+  'INVALID_PR_STATE',
+  'missing active PR produces deterministic invalid PR state',
+);
+assert(
+  classifyPullRequestReadFailure(404) === 'INVALID_PR_STATE',
+  'PR 404 classified as INVALID_PR_STATE',
+);
+assert(
+  classifyPullRequestReadFailure(500) === 'RUNTIME_ERROR',
+  'PR server failure classified as RUNTIME_ERROR',
+);
 
 for (const status of [
   'APPROVED_FOR_MERGE',
@@ -241,6 +275,41 @@ assert(
   && workflowSource.includes('issues: read')
   && workflowSource.includes('pull-requests: read'),
   'workflow uses read-only permissions',
+);
+assert(
+  workflowSource.includes('needs: gate')
+  && workflowSource.includes("needs.gate.outputs.trusted == 'true'"),
+  'heavy validate job depends on trusted gate output',
+);
+const gateSection = workflowSource.slice(
+  workflowSource.indexOf('  gate:'),
+  workflowSource.indexOf('  validate:'),
+);
+const validateSection = workflowSource.slice(
+  workflowSource.indexOf('  validate:'),
+);
+assert(
+  !gateSection.includes('actions/checkout')
+  && !gateSection.includes('pnpm install')
+  && !gateSection.includes('pnpm exec'),
+  'gate job does not perform checkout or dependency installation',
+);
+assert(
+  gateSection.includes("github.event.issue.number == 10")
+  && gateSection.includes("github.event.issue.pull_request == null")
+  && gateSection.includes(
+    "github.event.sender.login == 'lenchenalc-hongda'",
+  )
+  && gateSection.includes(
+    "github.event.comment.user.login == 'lenchenalc-hongda'",
+  )
+  && gateSection.includes('AGENT_CONTROL_TRIGGER_V1'),
+  'cheap gate checks repository, issue, PR, actor, and sentinel metadata',
+);
+assert(
+  validateSection.includes('actions/checkout@v4')
+  && validateSection.includes('pnpm install --frozen-lockfile'),
+  'only trusted validate job performs checkout and install',
 );
 for (const forbidden of [
   'contents: write',

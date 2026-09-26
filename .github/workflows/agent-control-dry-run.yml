@@ -15,8 +15,55 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  gate:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (
+        github.repository == 'lenchenalc-hongda/hongda-new-media-platform' &&
+        github.event.issue.number == 10 &&
+        github.event.issue.pull_request == null &&
+        github.event.sender.login == 'lenchenalc-hongda' &&
+        github.event.comment.user.login == 'lenchenalc-hongda' &&
+        contains(github.event.comment.body, 'AGENT_CONTROL_TRIGGER_V1')
+      )
+    runs-on: ubuntu-latest
+    permissions: {}
+    outputs:
+      trusted: ${{ steps.check.outputs.trusted }}
+    steps:
+      - name: Check trusted trigger
+        id: check
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_PATH: ${{ github.event_path }}
+        run: |
+          set -euo pipefail
+          trusted=false
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            trusted=true
+          elif [ "$EVENT_NAME" = "issue_comment" ]; then
+            action="$(jq -r '.action // ""' "$EVENT_PATH")"
+            repository="$(jq -r '.repository.full_name // ""' "$EVENT_PATH")"
+            issue_number="$(jq -r '.issue.number // 0' "$EVENT_PATH")"
+            is_pull_request="$(jq -r 'if .issue.pull_request then "true" else "false" end' "$EVENT_PATH")"
+            actor="$(jq -r '.sender.login // ""' "$EVENT_PATH")"
+            comment_author="$(jq -r '.comment.user.login // ""' "$EVENT_PATH")"
+            comment_body="$(jq -r '.comment.body // ""' "$EVENT_PATH")"
+            if [ "$action" = "created" ] \
+              && [ "$repository" = "lenchenalc-hongda/hongda-new-media-platform" ] \
+              && [ "$issue_number" = "10" ] \
+              && [ "$is_pull_request" = "false" ] \
+              && [ "$actor" = "lenchenalc-hongda" ] \
+              && [ "$comment_author" = "lenchenalc-hongda" ] \
+              && printf '%s\n' "$comment_body" | grep -Fxq "AGENT_CONTROL_TRIGGER_V1"; then
+              trusted=true
+            fi
+          fi
+          echo "trusted=$trusted" >> "$GITHUB_OUTPUT"
+
   validate:
-    if: github.repository == 'lenchenalc-hongda/hongda-new-media-platform'
+    needs: gate
+    if: needs.gate.outputs.trusted == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:

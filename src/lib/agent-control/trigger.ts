@@ -91,6 +91,12 @@ export interface AgentControlDryRunResult {
   summary: AgentControlDryRunSummary | null;
 }
 
+export function classifyPullRequestReadFailure(
+  status: number,
+): 'INVALID_PR_STATE' | 'RUNTIME_ERROR' {
+  return status === 404 ? 'INVALID_PR_STATE' : 'RUNTIME_ERROR';
+}
+
 function result(
   code: AgentControlDryRunResultCode,
   reason: string,

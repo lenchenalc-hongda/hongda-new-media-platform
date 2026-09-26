@@ -170,6 +170,9 @@ Future trigger automation must combine that key with:
 - allowlist: `lenchenalc-hongda`
 - standalone trigger sentinel: `AGENT_CONTROL_TRIGGER_V1`
 - edited comments do not trigger
+- a cheap pre-gate rejects obvious untrusted events before checkout or dependency
+  installation
+- the heavy validation job requires `needs.gate.outputs.trusted == 'true'`
 - permissions are limited to `contents: read`, `issues: read`, and
   `pull-requests: read`
 - concurrency group: `agent-control-dry-run-${{ github.repository }}` with
@@ -177,6 +180,8 @@ Future trigger automation must combine that key with:
 - Issue #10 machine-readable state remains authoritative; trigger-comment text
   cannot override it
 - live master and PR facts are validated against control state
+- missing active PR metadata is `INVALID_PR_STATE`, while transport/auth/rate
+  limit failures remain `RUNTIME_ERROR`
 - no persistent claim or lock marker is written yet
 - idempotency key is computed but not persisted
 - dry-run results: `READY`, `NOT_EXECUTABLE`, `UNTRUSTED_TRIGGER`,
