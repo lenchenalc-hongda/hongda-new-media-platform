@@ -249,7 +249,7 @@ jobs:
           if [ "$login_exit_status" -eq 0 ]; then
             codex_login_status="AVAILABLE"
           else
-            codex_login_status="UNAVAILABLE"
+            codex_login_status="UNAVAILABLE_OR_CONFIG_ERROR"
           fi
           printf 'CODEX_LOGIN_STATUS=%s\n' "$codex_login_status"
 
@@ -311,10 +311,12 @@ jobs:
             printf 'CODEX_EVENT_LOG_BYTES=%s\n' "$event_log_bytes"
             printf 'CODEX_ERROR_LOG_BYTES=%s\n' "$error_log_bytes"
 
-            if [ "$codex_login_status" = "UNAVAILABLE" ] || [ "$codex_failure_class" = "AUTH" ]; then
+            if [ "$codex_failure_class" = "AUTH" ]; then
               printf 'AUTH_NOT_AVAILABLE=YES\n'
-            else
+            elif [ "$codex_login_status" = "AVAILABLE" ]; then
               printf 'AUTH_NOT_AVAILABLE=NO\n'
+            else
+              printf 'AUTH_NOT_AVAILABLE=UNKNOWN\n'
             fi
             printf 'CODEX_READONLY_PROOF=FAIL\n'
             exit 1
