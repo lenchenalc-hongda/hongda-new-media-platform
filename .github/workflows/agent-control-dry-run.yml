@@ -183,7 +183,9 @@ jobs:
           result_file="$RUNNER_TEMP/agent-control-mac3-result.json"
           event_log="$RUNNER_TEMP/agent-control-mac3-events.jsonl"
           error_log="$RUNNER_TEMP/agent-control-mac3-error.log"
-          trap 'rm -f "$prompt_file" "$result_file" "$event_log" "$error_log"' EXIT
+          login_log="$RUNNER_TEMP/agent-control-mac3-login.log"
+          failure_event_log="$RUNNER_TEMP/agent-control-mac3-failure-events.jsonl"
+          trap 'rm -f "$prompt_file" "$result_file" "$event_log" "$error_log" "$login_log" "$failure_event_log"' EXIT
 
           verify_repository_state() {
             actual_sha="$(git rev-parse HEAD)"
@@ -241,6 +243,20 @@ jobs:
           env -i \
             HOME="$HOME" \
             PATH="/usr/bin:/bin:/usr/sbin:/sbin" \
+            "$codex_binary" login status > "$login_log" 2>&1
+          login_exit_status=$?
+          set -e
+          if [ "$login_exit_status" -eq 0 ]; then
+            codex_login_status="AVAILABLE"
+          else
+            codex_login_status="UNAVAILABLE_OR_CONFIG_ERROR"
+          fi
+          printf 'CODEX_LOGIN_STATUS=%s\n' "$codex_login_status"
+
+          set +e
+          env -i \
+            HOME="$HOME" \
+            PATH="/usr/bin:/bin:/usr/sbin:/sbin" \
             TMPDIR="$RUNNER_TEMP" \
             "$codex_binary" exec \
             -C "$GITHUB_WORKSPACE" \
@@ -257,9 +273,48 @@ jobs:
           set -e
           printf 'CODEX_EXIT_STATUS=%s\n' "$codex_exit_status"
 
+          verify_repository_state
+          printf 'POST_CODEX_REPOSITORY_STATE=PASS\n'
+
           if [ "$codex_exit_status" -ne 0 ]; then
-            if grep -Eqi 'auth|login|credential|api key' "$error_log"; then
+            grep -E '"type"[[:space:]]*:[[:space:]]*"(error|turn\.failed)"' "$event_log" > "$failure_event_log" || true
+
+            if grep -Eqi '401|403|unauthori|auth|login|credential|api[ _-]?key|access token|not logged in' "$failure_event_log" "$error_log"; then
+              codex_failure_class="AUTH"
+            elif grep -Eqi '429|rate[ _-]?limit|quota|too many requests' "$failure_event_log" "$error_log"; then
+              codex_failure_class="RATE_LIMIT"
+            elif grep -Eqi 'schema|structured output|response format|invalid[ _-]?schema' "$failure_event_log" "$error_log"; then
+              codex_failure_class="OUTPUT_SCHEMA"
+            elif grep -Eqi 'model.*(not found|unsupported|unavailable)|unsupported model' "$failure_event_log" "$error_log"; then
+              codex_failure_class="MODEL"
+            elif grep -Eqi 'timed? out|timeout|connection|connect|network|dns|tls|certificate|websocket|stream.*(closed|disconnect)|transport' "$failure_event_log" "$error_log"; then
+              codex_failure_class="NETWORK"
+            elif grep -Eqi 'sandbox|permission denied|operation not permitted|read-only|read only' "$failure_event_log" "$error_log"; then
+              codex_failure_class="SANDBOX"
+            elif grep -Eqi 'requirements|approval_policy|configuration|config' "$failure_event_log" "$error_log"; then
+              codex_failure_class="CONFIG"
+            elif grep -Eqi 'internal server|server error|status 5[0-9][0-9]' "$failure_event_log" "$error_log"; then
+              codex_failure_class="SERVER"
+            else
+              codex_failure_class="OTHER"
+            fi
+
+            last_event_type="$(grep -Eo '"type"[[:space:]]*:[[:space:]]*"[^"]+"' "$event_log" | tail -n 1 | sed -E 's/.*"([^"]+)"$/\1/' || true)"
+            if [ -z "$last_event_type" ]; then
+              last_event_type="NONE"
+            fi
+
+            event_log_bytes="$(wc -c < "$event_log" | tr -d ' ')"
+            error_log_bytes="$(wc -c < "$error_log" | tr -d ' ')"
+            printf 'CODEX_FAILURE_CLASS=%s\n' "$codex_failure_class"
+            printf 'CODEX_LAST_EVENT_TYPE=%s\n' "$last_event_type"
+            printf 'CODEX_EVENT_LOG_BYTES=%s\n' "$event_log_bytes"
+            printf 'CODEX_ERROR_LOG_BYTES=%s\n' "$error_log_bytes"
+
+            if [ "$codex_failure_class" = "AUTH" ]; then
               printf 'AUTH_NOT_AVAILABLE=YES\n'
+            elif [ "$codex_login_status" = "AVAILABLE" ]; then
+              printf 'AUTH_NOT_AVAILABLE=NO\n'
             else
               printf 'AUTH_NOT_AVAILABLE=UNKNOWN\n'
             fi
@@ -267,7 +322,6 @@ jobs:
             exit 1
           fi
 
-          verify_repository_state
           if [ ! -s "$result_file" ]; then
             printf 'CODEX_LAST_MESSAGE=ABSENT\n'
             printf 'CODEX_READONLY_PROOF=FAIL\n'

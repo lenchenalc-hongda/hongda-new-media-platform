@@ -207,8 +207,10 @@ Future trigger automation must combine that key with:
 - uses a fixed default-branch prompt and strict output schema
 - requires exact top-level `task_id` and `acceptance_sentinel` key/value matches
 - strips GitHub and application credentials from the Codex process environment
-- performs before/after HEAD, status, and diff verification
-- emits only bounded proof fields and never prints the credential or full environment
+- checks `codex login status` in the same minimal environment and emits only availability, never auth output
+- classifies failed Codex runs into bounded failure categories and emits only the last event type, never raw event/error logs
+- performs before/after HEAD, status, and diff verification even when Codex exits non-zero
+- emits only bounded proof fields and never prints the credential, raw diagnostic logs, or full environment
 
 ### MAC-2
 
