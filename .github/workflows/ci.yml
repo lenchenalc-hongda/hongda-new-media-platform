@@ -34,6 +34,9 @@ jobs:
       - name: Customer Project Center domain tests
         run: pnpm exec tsx tests/unit/customer-project-domain.test.ts
 
+      - name: Agent Control tests
+        run: pnpm exec tsx tests/unit/agent-control.test.ts
+
       - name: Check server-only imports
         run: bash scripts/check-server-imports.sh
 
