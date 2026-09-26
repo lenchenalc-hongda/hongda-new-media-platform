@@ -6,9 +6,10 @@ import {
   PROJECT_EVENT_TYPES,
   PROJECT_LIFECYCLE_STATUSES,
   PROJECT_TYPES,
+  REPORT_METRIC_SEMANTICS,
   WORK_ITEM_STATUSES,
   buildCanonicalCustomerReferenceIdentityKey,
-  canAccessCustomerProjectDomain,
+  canAccessCustomerProjectDomain as canAccessCustomerProjectDomainRaw,
   canMarkProjectWon,
   canTransitionAIDraft,
   canTransitionProject,
@@ -45,6 +46,16 @@ function assert(condition: boolean, message: string) {
     failed++;
     console.error('FAIL: ' + message);
   }
+}
+
+function canAccessCustomerProjectDomain(
+  input: Omit<Parameters<typeof canAccessCustomerProjectDomainRaw>[0], 'sameOrg'>
+    & { sameOrg?: boolean },
+): boolean {
+  return canAccessCustomerProjectDomainRaw({
+    ...input,
+    sameOrg: input.sameOrg ?? true,
+  });
 }
 
 const ORG_ID = '11111111-1111-4111-8111-111111111111';
@@ -340,6 +351,59 @@ assert(
 assert(
   !projectEventSchema.safeParse({
     ...validEvent,
+    source: 'user',
+    actor_profile_id: null,
+  }).success,
+  'user event requires human actor',
+);
+assert(
+  projectEventSchema.safeParse({
+    ...validEvent,
+    source: 'integration',
+    actor_profile_id: null,
+    source_reference_id: 'erp:event:1001',
+  }).success,
+  'integration event can use nullable actor with source reference',
+);
+assert(
+  !projectEventSchema.safeParse({
+    ...validEvent,
+    source: 'integration',
+    actor_profile_id: null,
+    source_reference_id: null,
+  }).success,
+  'integration event requires source reference',
+);
+assert(
+  projectEventSchema.safeParse({
+    ...validEvent,
+    source: 'system',
+    actor_profile_id: null,
+    source_reference_id: null,
+  }).success,
+  'system event does not require fake human actor',
+);
+assert(
+  projectEventSchema.safeParse({
+    ...validEvent,
+    source: 'accepted_ai_draft',
+    actor_profile_id: ACTOR_ID,
+    source_reference_id: 'ai-draft:abc',
+  }).success,
+  'accepted AI event requires human actor and source reference',
+);
+assert(
+  !projectEventSchema.safeParse({
+    ...validEvent,
+    source: 'accepted_ai_draft',
+    actor_profile_id: ACTOR_ID,
+    source_reference_id: null,
+  }).success,
+  'accepted AI event requires source reference',
+);
+assert(
+  !projectEventSchema.safeParse({
+    ...validEvent,
     event_type: 'PROJECT_PAUSED',
     event_category: 'LIFECYCLE',
     payload: {},
@@ -513,6 +577,7 @@ assert(
 const validDraftReport = {
   id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
   org_id: ORG_ID,
+  subject_profile_id: OWNER_ID,
   period: 'daily',
   period_start: '2026-09-26',
   period_end: '2026-09-26',
@@ -580,6 +645,21 @@ assert(
     supersedes_report_id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
   }).success,
   'correction draft can point to an earlier report',
+);
+assert(
+  REPORT_METRIC_SEMANTICS.actionCountIsNotUniqueCustomerCount
+  && REPORT_METRIC_SEMANTICS.actionCountIsNotUniqueProjectCount,
+  'action counts are not unique entity counts',
+);
+assert(
+  REPORT_METRIC_SEMANTICS.quoteCountIsNotConfirmedOrderCount
+  && REPORT_METRIC_SEMANTICS.expectedAmountIsNotConfirmedOrderOrPayment,
+  'commercial signals are not confirmed order/payment facts',
+);
+assert(
+  REPORT_METRIC_SEMANTICS.mixedCurrenciesRequireApprovedFxPolicy
+  && REPORT_METRIC_SEMANTICS.missingDataIsUnknownNotZeroOrNoWork,
+  'currency and missing-data safety semantics',
 );
 
 const keyBase = {
@@ -759,6 +839,136 @@ assert(
     action: 'manage',
   }),
   'manager cannot manage settings',
+);
+assert(
+  !canAccessCustomerProjectDomain({
+    appRole: 'admin',
+    sameOrg: false,
+    relations: relations(['none']),
+    resource: 'project',
+    action: 'read',
+  }),
+  'admin cross-org access denied',
+);
+assert(
+  !canAccessCustomerProjectDomain({
+    appRole: 'manager',
+    sameOrg: false,
+    relations: relations(['none']),
+    resource: 'project',
+    action: 'read',
+  }),
+  'manager cross-org access denied',
+);
+assert(
+  !canAccessCustomerProjectDomain({
+    appRole: 'sales',
+    sameOrg: false,
+    relations: relations(['owner']),
+    resource: 'project',
+    action: 'update',
+  }),
+  'sales owner cross-org access denied',
+);
+assert(
+  canAccessCustomerProjectDomain({
+    appRole: 'sales',
+    relations: relations(['none']),
+    resource: 'customer_reference',
+    action: 'create',
+    customerReferenceKind: 'provisional',
+  }),
+  'sales can create provisional customer reference',
+);
+assert(
+  !canAccessCustomerProjectDomain({
+    appRole: 'sales',
+    relations: relations(['none']),
+    resource: 'customer_reference',
+    action: 'create',
+    customerReferenceKind: 'canonical',
+  }),
+  'sales cannot create canonical customer mapping',
+);
+assert(
+  !canAccessCustomerProjectDomain({
+    appRole: 'sales',
+    relations: relations(['creator']),
+    resource: 'customer_reference',
+    action: 'update',
+    customerReferenceKind: 'canonical',
+  }),
+  'sales cannot update canonical customer mapping',
+);
+assert(
+  canAccessCustomerProjectDomain({
+    appRole: 'sales',
+    relations: relations(['creator']),
+    resource: 'customer_reference',
+    action: 'update',
+    customerReferenceKind: 'provisional',
+  }),
+  'sales creator can update provisional customer reference',
+);
+assert(
+  canAccessCustomerProjectDomain({
+    appRole: 'sales',
+    relations: relations(['subject']),
+    resource: 'report',
+    action: 'update',
+    reportStatus: 'draft',
+  }),
+  'sales report subject can update draft report',
+);
+assert(
+  !canAccessCustomerProjectDomain({
+    appRole: 'sales',
+    relations: relations(['subject']),
+    resource: 'report',
+    action: 'update',
+    reportStatus: 'submitted',
+  }),
+  'sales report subject cannot update submitted report',
+);
+assert(
+  !canAccessCustomerProjectDomain({
+    appRole: 'sales',
+    relations: relations(['collaborator']),
+    resource: 'report',
+    action: 'submit',
+    reportStatus: 'draft',
+  }),
+  'project collaborator cannot submit another employee report',
+);
+assert(
+  canAccessCustomerProjectDomain({
+    appRole: 'manager',
+    relations: relations(['none']),
+    resource: 'report',
+    action: 'update',
+    reportStatus: 'draft',
+  }),
+  'manager can correct draft report',
+);
+assert(
+  !canAccessCustomerProjectDomain({
+    appRole: 'manager',
+    relations: relations(['none']),
+    resource: 'report',
+    action: 'update',
+    reportStatus: 'submitted',
+  }),
+  'manager cannot update submitted report',
+);
+assert(
+  !canAccessCustomerProjectDomain({
+    appRole: 'admin',
+    relations: relations(['none']),
+    resource: 'report',
+    action: 'update',
+    reportStatus: 'submitted',
+  }),
+  'admin cannot update submitted report',
 );
 
 for (const eventType of PROJECT_EVENT_TYPES) {

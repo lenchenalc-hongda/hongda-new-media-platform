@@ -113,7 +113,7 @@ export const projectEventSchema = z.object({
   event_category: z.enum(PROJECT_EVENT_CATEGORIES),
   occurred_at: isoDateTimeSchema,
   recorded_at: isoDateTimeSchema,
-  actor_profile_id: uuidSchema,
+  actor_profile_id: uuidSchema.nullable(),
   source: z.enum(PROJECT_EVENT_SOURCES),
   source_reference_id: z.string().trim().min(1).max(300).nullable(),
   raw_input: z.string().trim().min(1).max(10000).nullable(),
@@ -160,6 +160,29 @@ export const projectEventSchema = z.object({
       code: z.ZodIssueCode.custom,
       path: ['payload', 'reopen_reason'],
       message: 'reopening a lost project requires payload.reopen_reason',
+    });
+  }
+  if (event.source === 'user' && !event.actor_profile_id) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['actor_profile_id'],
+      message: 'user events require actor_profile_id',
+    });
+  }
+  if (event.source === 'accepted_ai_draft' && (
+    !event.actor_profile_id || !event.source_reference_id
+  )) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['actor_profile_id'],
+      message: 'accepted AI events require human actor and source reference',
+    });
+  }
+  if (event.source === 'integration' && !event.source_reference_id) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['source_reference_id'],
+      message: 'integration events require source_reference_id',
     });
   }
 });
@@ -292,6 +315,7 @@ export const ingestionCursorSchema = z.discriminatedUnion('cursor_kind', [
 export const derivedReportSnapshotSchema = z.object({
   id: uuidSchema,
   org_id: uuidSchema,
+  subject_profile_id: uuidSchema,
   period: z.enum(['daily', 'weekly']),
   period_start: isoDateSchema,
   period_end: isoDateSchema,

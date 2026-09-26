@@ -164,6 +164,17 @@ ProjectEvent fields:
 - versioned `payload`
 - `correction_of_event_id`
 
+Actor rules:
+
+- `actor_profile_id` is nullable in the domain contract;
+- `source = user` requires a human `actor_profile_id`;
+- `source = accepted_ai_draft` requires a human `actor_profile_id` and
+  `source_reference_id`;
+- `source = integration` may have a null actor and requires a stable source
+  reference;
+- `source = system` may have a null actor;
+- system/integration events must never invent a fake `profiles.id`.
+
 Approved payload rule:
 
 - every event carries `payload_schema_version`;
@@ -271,6 +282,14 @@ owner, or other consequential facts.
 
 Reports are derived.
 
+Each report belongs to one `subject_profile_id`. In v1:
+
+- daily/weekly reports are personal;
+- the subject confirms or corrects their own draft report;
+- management may read team reports;
+- a project collaborator relation alone does not grant report ownership;
+- team/department report persistence is deferred.
+
 Deterministic server/SQL calculations:
 
 - confirmed effective-progress counts;
@@ -294,6 +313,15 @@ Snapshot rules:
 - a newer snapshot referencing an older snapshot represents supersession;
 - missing data remains `unknown`, never silently "no work".
 
+Metric semantics:
+
+- action/event count is not unique customer count;
+- action/event count is not unique project count;
+- quote count is not confirmed order count;
+- expected opportunity amount is not confirmed order amount or payment;
+- mixed currencies must not be aggregated without an approved FX policy;
+- missing/incomplete data remains `unknown`, not zero or "no work".
+
 Ingestion cursors:
 
 A timestamp alone is ambiguous for late or equal-time records.
@@ -311,7 +339,8 @@ The access input separates:
 
 1. base app role: `admin`, `manager`, `sales`, `operator`, `viewer`
 2. resource relation: `owner`, `collaborator`, `assignee`, `creator`,
-   `unrelated`, `none`
+   `subject`, `unrelated`, `none`
+3. same-organization boolean; `sameOrg = false` denies every role/resource/action
 
 Resource matrix:
 
@@ -319,10 +348,10 @@ Resource matrix:
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | admin | read/create/update | read/create/update | read/create | read/create/update | read/create/accept/reject/expire | read/create/submit | read/manage |
 | manager | read/create/update | read/create/update | read/create | read/create/update | read/create/accept/reject/expire | read/create/submit | read |
-| sales owner | read | read/create/update | read/create | read/create/update | read/create/accept/reject | read/create/submit | none |
-| sales collaborator | read | read | read/create | read/create/update | read | read/create/submit | none |
+| sales owner | read | read/create/update | read/create | read/create/update | read/create/accept/reject | subject: read/update/submit | none |
+| sales collaborator | read | read | read/create | read/create/update | read | subject: read/update/submit | none |
 | sales assignee | read | read | read/create | read/update | read | none | none |
-| sales creator | read | read | read/create | read/create | read/create/accept/reject | read/create/submit | none |
+| sales creator | read | read | read/create | read/create | read/create/accept/reject | subject: read/update/submit | none |
 | unrelated sales | none | none | none | none | none | none | none |
 | operator | none | none | none | none | none | none | none |
 | viewer | none | none | none | none | none | none | none |
@@ -334,6 +363,21 @@ Project creation:
   `created_by_profile_id` to the authenticated profile unless manager/admin
   explicitly assigns another owner;
 - an unrelated sales user cannot read or mutate another sales user's Project.
+
+CustomerReference creation:
+
+- sales may create a provisional reference for a concrete opportunity;
+- sales cannot create or update canonical mapping authority;
+- provisional creation sets `created_by_profile_id` to the authenticated profile
+  at server enforcement.
+
+Report behavior:
+
+- draft: subject employee may read/update/submit their own report;
+- draft: manager/admin may read and correct/submit where authorized;
+- submitted: no role can update/delete content in place;
+- correction creates a new draft snapshot with `supersedes_report_id`;
+- project collaborator relation alone does not grant subject report access.
 
 Invariants:
 

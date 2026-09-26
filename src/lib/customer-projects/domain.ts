@@ -178,7 +178,7 @@ export interface ProjectEvent {
   event_category: ProjectEventCategory;
   occurred_at: string;
   recorded_at: string;
-  actor_profile_id: string;
+  actor_profile_id: string | null;
   source: ProjectEventSource;
   source_reference_id: string | null;
   raw_input: string | null;
@@ -338,6 +338,7 @@ export type IngestionCursor =
 export interface DerivedReportSnapshot {
   id: string;
   org_id: string;
+  subject_profile_id: string;
   period: DerivedReportPeriod;
   period_start: string;
   period_end: string;
@@ -355,6 +356,15 @@ export interface DerivedReportSnapshot {
   updated_at: string;
 }
 
+export const REPORT_METRIC_SEMANTICS = {
+  actionCountIsNotUniqueCustomerCount: true,
+  actionCountIsNotUniqueProjectCount: true,
+  quoteCountIsNotConfirmedOrderCount: true,
+  expectedAmountIsNotConfirmedOrderOrPayment: true,
+  mixedCurrenciesRequireApprovedFxPolicy: true,
+  missingDataIsUnknownNotZeroOrNoWork: true,
+} as const;
+
 export const BUSINESS_PROFILE_FK_FIELDS = [
   'owner_profile_id',
   'created_by_profile_id',
@@ -366,6 +376,7 @@ export const BUSINESS_PROFILE_FK_FIELDS = [
   'accepted_by_profile_id',
   'rejected_by_profile_id',
   'submitted_by_profile_id',
+  'subject_profile_id',
 ] as const;
 
 export function isValidBusinessProfileForeignKey(fieldName: string): boolean {
@@ -514,6 +525,7 @@ export const CUSTOMER_PROJECT_RESOURCE_RELATIONS = [
   'collaborator',
   'assignee',
   'creator',
+  'subject',
   'unrelated',
   'none',
 ] as const;
@@ -557,12 +569,24 @@ function hasRelation(
 
 export function canAccessCustomerProjectDomain(input: {
   appRole: CustomerProjectAppRole;
+  sameOrg: boolean;
   relations: readonly CustomerProjectResourceRelation[];
   resource: CustomerProjectDomainResource;
   action: CustomerProjectDomainAction;
+  reportStatus?: DerivedReportStatus;
+  customerReferenceKind?: CustomerReferenceKind;
 }): boolean {
-  const { appRole, relations, resource, action } = input;
+  const {
+    appRole,
+    sameOrg,
+    relations,
+    resource,
+    action,
+    reportStatus,
+    customerReferenceKind,
+  } = input;
 
+  if (!sameOrg) return false;
   if (appRole === 'operator' || appRole === 'viewer') {
     return false;
   }
@@ -582,10 +606,16 @@ export function canAccessCustomerProjectDomain(input: {
   }
 
   if (resource === 'report') {
-    if (action !== 'read' && action !== 'create' && action !== 'submit') return false;
-    return appRole === 'admin'
-      || appRole === 'manager'
-      || hasRelation(relations, ['owner', 'collaborator']);
+    const isReportSubject = relations.includes('subject');
+    const isManager = appRole === 'admin' || appRole === 'manager';
+
+    if (action === 'read' || action === 'create') {
+      return isManager || isReportSubject;
+    }
+    if (action === 'update' || action === 'submit') {
+      return reportStatus === 'draft' && (isManager || isReportSubject);
+    }
+    return false;
   }
 
   if (resource === 'ai_draft') {
@@ -648,6 +678,10 @@ export function canAccessCustomerProjectDomain(input: {
         || hasRelation(relations, ['owner', 'collaborator', 'assignee', 'creator']);
     }
     if (action === 'create' || action === 'update') {
+      if (appRole === 'sales' && customerReferenceKind === 'provisional') {
+        if (action === 'create') return relations.includes('none');
+        return hasRelation(relations, ['creator']);
+      }
       return appRole === 'admin' || appRole === 'manager';
     }
     return false;
