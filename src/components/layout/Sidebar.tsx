@@ -3,19 +3,29 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
-import { PORTAL_GROUPS, getActiveNavItemPath, getPortalForPath } from '@/lib/constants/navigation';
+import {
+  getActiveNavItemPath,
+  getPortalForPath,
+  getVisiblePortalGroups,
+} from '@/lib/constants/navigation';
 import { isFeatureEnabled, FEATURES } from '@/lib/features';
-import { useCanCreateReview } from './RoleProvider';
+import {
+  useCanAccessCustomerProjectCenter,
+  useCanCreateReview,
+} from './RoleProvider';
 import { applyCreateVisibility } from '@/lib/review-center/navigation';
 
 export default function Sidebar() {
   const pathname = usePathname();
   const canCreateReview = useCanCreateReview();
+  const canAccessCustomerProjectCenter = useCanAccessCustomerProjectCenter();
 
   // Determine which portal is active based on current path
-  const baseGroups = PORTAL_GROUPS.filter(g =>
-    g.id !== 'review' || isFeatureEnabled(FEATURES.PROJECT_REVIEW_CENTER)
-  );
+  const baseGroups = getVisiblePortalGroups({
+    projectReviewCenterEnabled: isFeatureEnabled(FEATURES.PROJECT_REVIEW_CENTER),
+    customerProjectCenterEnabled: isFeatureEnabled(FEATURES.CUSTOMER_PROJECT_CENTER),
+    canAccessCustomerProjectCenter,
+  });
   const enabledGroups = applyCreateVisibility(baseGroups, canCreateReview);
   const activePortal = getPortalForPath(pathname);
   const [expandedPortal, setExpandedPortal] = useState<string>(activePortal);
@@ -27,6 +37,7 @@ export default function Sidebar() {
     knowledge: 'border-l-purple-500 bg-purple-50 text-purple-700',
     admin: 'border-l-gray-500 bg-gray-100 text-gray-700',
     review: 'border-l-orange-500 bg-orange-50 text-orange-700',
+    sales: 'border-l-cyan-500 bg-cyan-50 text-cyan-700',
   };
 
   return (

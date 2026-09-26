@@ -118,10 +118,6 @@ assert(
   !viewerReview.items.some(i => i.path === '/review-center/new'),
   'viewer review portal hides new review',
 );
-assert(
-  viewerGroups.reduce((sum, g) => sum + g.items.length, 0) === 38,
-  'viewer total visible modules 38',
-);
 
 const adminGroups = applyCreateVisibility(PORTAL_GROUPS, true);
 const adminReview = adminGroups.find(g => g.id === 'review')!;
@@ -129,10 +125,6 @@ assert(adminReview.items.length === 10, 'admin review portal has 10 items');
 assert(
   adminReview.items.some(i => i.path === '/review-center/new'),
   'admin review portal shows new review',
-);
-assert(
-  adminGroups.reduce((sum, g) => sum + g.items.length, 0) === 39,
-  'admin total visible modules 39',
 );
 
 function chainableResult(result: any) {

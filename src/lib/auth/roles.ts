@@ -6,7 +6,8 @@ export type PageSlug =
   | 'dashboard' | 'accounts' | 'accounts_detail' | 'topics' | 'scripts'
   | 'teardowns' | 'calendar' | 'posts' | 'leads' | 'knowledge'
   | 'reports' | 'settings'
-  | 'review_center' | 'review_center_settings';
+  | 'review_center' | 'review_center_settings'
+  | 'customer_project_center' | 'customer_project_center_settings';
 
 // ===== Page Access Matrix =====
 // Each page defines which roles can access it, and optional sub-resource restrictions.
@@ -26,6 +27,8 @@ const PAGE_ACCESS: Record<PageSlug, { roles: Role[]; description: string; resour
   settings:        { roles: ['admin'], description: '设置' },
   review_center:   { roles: ['admin', 'manager', 'operator', 'sales', 'viewer'], description: '项目复盘与改善中心' },
   review_center_settings: { roles: ['admin'], description: '复盘中心系统设置' },
+  customer_project_center: { roles: ['admin', 'manager', 'sales'], description: '客户项目中心' },
+  customer_project_center_settings: { roles: ['admin'], description: '客户项目中心设置' },
 };
 
 // ===== Action Permission Matrix =====
@@ -52,10 +55,14 @@ export interface AuthUser {
 }
 
 // ===== Check page access =====
-export function canAccessPage(user: AuthUser, page: PageSlug): boolean {
+export function canRoleAccessPage(role: Role, page: PageSlug): boolean {
   const access = PAGE_ACCESS[page];
   if (!access) return false;
-  return access.roles.includes(user.role);
+  return access.roles.includes(role);
+}
+
+export function canAccessPage(user: AuthUser, page: PageSlug): boolean {
+  return canRoleAccessPage(user.role, page);
 }
 
 // ===== Check action permission =====
@@ -94,6 +101,8 @@ export function getRouteFromPage(page: PageSlug): string {
     calendar: '/calendar', posts: '/posts', leads: '/leads',
     knowledge: '/knowledge', reports: '/reports', settings: '/settings',
     review_center: '/review-center', review_center_settings: '/review-center/settings',
+    customer_project_center: '/customer-projects',
+    customer_project_center_settings: '/customer-projects/settings',
   };
   return routeMap[page] || '/';
 }
@@ -114,6 +123,10 @@ export function getPageSlugFromRoute(pathname: string): PageSlug | null {
   // Review Center: settings admin-only, everything else shared
   if (route === '/review-center/settings') return 'review_center_settings';
   if (route === '/review-center' || route.startsWith('/review-center/')) return 'review_center';
+  if (route === '/customer-projects/settings') return 'customer_project_center_settings';
+  if (route === '/customer-projects' || route.startsWith('/customer-projects/')) {
+    return 'customer_project_center';
+  }
   return map[route] || null;
 }
 

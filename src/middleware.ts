@@ -34,6 +34,13 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(featureOffUrl);
   }
 
+  // Feature flag: customer project center must be explicitly enabled
+  if (pathname.startsWith('/customer-projects') && !isFeatureEnabled(FEATURES.CUSTOMER_PROJECT_CENTER)) {
+    const featureOffUrl = new URL('/dashboard', request.url);
+    featureOffUrl.searchParams.set('error', '客户项目中心尚未开放');
+    return NextResponse.redirect(featureOffUrl);
+  }
+
   // Skip static assets and API routes that don't need auth
   if (pathname.startsWith('/_next') || pathname === '/favicon.ico') {
     return NextResponse.next();
