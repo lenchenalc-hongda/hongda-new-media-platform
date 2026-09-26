@@ -160,6 +160,38 @@ assert(
   && passesExactIdentityChecks(trueIdentity),
   'wrong top-level task ID with expected ID in findings is rejected',
 );
+const postInvokeVerify = codexSection.indexOf(
+  "printf 'POST_CODEX_REPOSITORY_STATE=PASS\\n'",
+);
+const failureBranch = codexSection.indexOf(
+  'if [ "$codex_exit_status" -ne 0 ]; then',
+);
+assert(
+  postInvokeVerify >= 0
+  && failureBranch >= 0
+  && postInvokeVerify < failureBranch,
+  'Codex job verifies repository integrity before handling non-zero exit',
+);
+assert(
+  codexSection.includes('"$codex_binary" login status')
+  && codexSection.includes("printf 'CODEX_LOGIN_STATUS=%s\\n'")
+  && !codexSection.includes('cat "$login_log"'),
+  'Codex job checks login availability without printing authentication output',
+);
+assert(
+  codexSection.includes("printf 'CODEX_FAILURE_CLASS=%s\\n'")
+  && codexSection.includes("printf 'CODEX_LAST_EVENT_TYPE=%s\\n'")
+  && codexSection.includes('"$event_log" "$error_log" "$login_log"'),
+  'Codex job emits bounded failure classification from captured diagnostics',
+);
+assert(
+  !codexSection.includes('cat "$event_log"')
+  && !codexSection.includes('cat "$error_log"')
+  && !codexSection.includes('tail "$event_log"')
+  && !codexSection.includes('tail "$error_log"'),
+  'Codex job never prints raw Codex event or error logs',
+);
+
 assert(
   codexSection.includes('timeout-minutes: 15')
   && !/retry|for i in|while true/.test(codexSection),
