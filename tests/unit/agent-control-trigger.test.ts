@@ -350,6 +350,12 @@ assert(
   'self-hosted proof checks out the exact validated SHA without persisted credentials',
 );
 assert(
+  /actions\/checkout@[0-9a-f]{40}(?:\s+#[^\n]*)?/.test(selfHostedSection)
+  && !selfHostedSection.includes('actions/checkout@v4')
+  && !/actions\/checkout@[^0-9\s]/.test(selfHostedSection),
+  'self-hosted checkout is pinned to an immutable commit SHA',
+);
+assert(
   selfHostedSection.includes('git diff --exit-code')
   && selfHostedSection.includes('git diff --cached --exit-code')
   && selfHostedSection.includes('git status --porcelain')
