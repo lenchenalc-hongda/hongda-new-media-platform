@@ -35,20 +35,20 @@ jobs:
         id: check
         env:
           EVENT_NAME: ${{ github.event_name }}
-          EVENT_PATH: ${{ github.event_path }}
         run: |
           set -euo pipefail
+          event_path="${GITHUB_EVENT_PATH:?GITHUB_EVENT_PATH is required}"
           trusted=false
           if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
             trusted=true
           elif [ "$EVENT_NAME" = "issue_comment" ]; then
-            action="$(jq -r '.action // ""' "$EVENT_PATH")"
-            repository="$(jq -r '.repository.full_name // ""' "$EVENT_PATH")"
-            issue_number="$(jq -r '.issue.number // 0' "$EVENT_PATH")"
-            is_pull_request="$(jq -r 'if .issue.pull_request then "true" else "false" end' "$EVENT_PATH")"
-            actor="$(jq -r '.sender.login // ""' "$EVENT_PATH")"
-            comment_author="$(jq -r '.comment.user.login // ""' "$EVENT_PATH")"
-            comment_body="$(jq -r '.comment.body // ""' "$EVENT_PATH")"
+            action="$(jq -r '.action // ""' "$event_path")"
+            repository="$(jq -r '.repository.full_name // ""' "$event_path")"
+            issue_number="$(jq -r '.issue.number // 0' "$event_path")"
+            is_pull_request="$(jq -r 'if .issue.pull_request then "true" else "false" end' "$event_path")"
+            actor="$(jq -r '.sender.login // ""' "$event_path")"
+            comment_author="$(jq -r '.comment.user.login // ""' "$event_path")"
+            comment_body="$(jq -r '.comment.body // ""' "$event_path")"
             if [ "$action" = "created" ] \
               && [ "$repository" = "lenchenalc-hongda/hongda-new-media-platform" ] \
               && [ "$issue_number" = "10" ] \

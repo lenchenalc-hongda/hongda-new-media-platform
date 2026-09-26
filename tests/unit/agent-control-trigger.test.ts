@@ -295,6 +295,11 @@ assert(
   'gate job does not perform checkout or dependency installation',
 );
 assert(
+  !workflowSource.includes('EVENT_PATH: ${{ github.event_path }}')
+  && gateSection.includes('GITHUB_EVENT_PATH'),
+  'gate uses runner-provided GITHUB_EVENT_PATH without a custom override',
+);
+assert(
   gateSection.includes("github.event.issue.number == 10")
   && gateSection.includes("github.event.issue.pull_request == null")
   && gateSection.includes(
