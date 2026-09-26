@@ -7,7 +7,10 @@ import {
 } from '../../src/lib/auth/roles';
 import {
   PORTAL_GROUPS,
+  WORKSPACE_PORTAL_STYLES,
   getPortalForPath,
+  getVisiblePortalGroups,
+  isPortalItemEnabled,
 } from '../../src/lib/constants/navigation';
 import { FEATURES, parseFeatureFlag } from '../../src/lib/features';
 
@@ -31,6 +34,17 @@ function user(role: AuthUser['role']): AuthUser {
     role,
     org_id: 'org-1',
   };
+}
+
+function canSeeSalesPortal(
+  customerProjectCenterEnabled: boolean,
+  role: AuthUser['role'],
+): boolean {
+  return getVisiblePortalGroups({
+    projectReviewCenterEnabled: true,
+    customerProjectCenterEnabled,
+    canAccessCustomerProjectCenter: canAccessPage(user(role), 'customer_project_center'),
+  }).some(group => group.id === 'sales');
 }
 
 console.log('\n=== Customer Project Center Foundation ===');
@@ -66,6 +80,13 @@ assert(
   'only admin can access customer project settings',
 );
 
+assert(!canSeeSalesPortal(false, 'admin'), 'feature off hides sales portal from admin');
+assert(canSeeSalesPortal(true, 'admin'), 'feature on shows sales portal to admin');
+assert(canSeeSalesPortal(true, 'manager'), 'feature on shows sales portal to manager');
+assert(canSeeSalesPortal(true, 'sales'), 'feature on shows sales portal to sales');
+assert(!canSeeSalesPortal(true, 'operator'), 'feature on hides sales portal from operator');
+assert(!canSeeSalesPortal(true, 'viewer'), 'feature on hides sales portal from viewer');
+
 assert(
   getRouteFromPage('customer_project_center') === '/customer-projects',
   'customer project route mapping',
@@ -99,7 +120,24 @@ for (const path of [
     salesPortal?.items.find(item => item.path === path)?.disabled === true,
     `disabled portal item: ${path}`,
   );
+  assert(
+    !isPortalItemEnabled(salesPortal!.items.find(item => item.path === path)!),
+    `disabled portal item is not link-enabled: ${path}`,
+  );
 }
+
+assert(
+  WORKSPACE_PORTAL_STYLES.cyan?.gradient === 'from-cyan-500 to-cyan-600',
+  'workspace home has cyan gradient',
+);
+assert(
+  WORKSPACE_PORTAL_STYLES.cyan?.background === 'bg-cyan-50 border-cyan-200',
+  'workspace home has cyan background',
+);
+assert(
+  WORKSPACE_PORTAL_STYLES.cyan?.button === 'text-cyan-700 bg-cyan-100 hover:bg-cyan-200',
+  'workspace home has cyan button',
+);
 
 assert(parseFeatureFlag('true') === true, 'customer flag true parsing');
 assert(parseFeatureFlag('1') === true, 'customer flag 1 parsing');
@@ -131,6 +169,23 @@ for (const text of [
 assert(
   !/(成交20万|今天8个客户|3个逾期)/.test(pageSource),
   'foundation page contains no mock business metrics',
+);
+assert(
+  pageSource.includes("from '@/components/ui/EmptyState'")
+  && !pageSource.includes('ReviewCenterEmpty'),
+  'foundation page uses generic EmptyState instead of Review Center UI',
+);
+
+const workspaceHomeSource = fs.readFileSync('src/app/workspace-home/page.tsx', 'utf8');
+assert(
+  workspaceHomeSource.includes('getVisiblePortalGroups({')
+  && workspaceHomeSource.includes('canAccessCustomerProjectCenter'),
+  'workspace home uses shared feature and role visibility',
+);
+assert(
+  workspaceHomeSource.includes('!isPortalItemEnabled(item)')
+  && workspaceHomeSource.includes('aria-disabled="true"'),
+  'workspace home renders disabled portal items without links',
 );
 
 const envExample = fs.readFileSync('.env.example', 'utf8');

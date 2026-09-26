@@ -1,7 +1,7 @@
 'use client';
 import AppLayout from '@/components/layout/AppLayout';
 import PageHeader from '@/components/layout/PageHeader';
-import ReviewCenterEmpty from '@/components/review-center/ReviewCenterEmpty';
+import EmptyState from '@/components/ui/EmptyState';
 
 function FoundationCard({
   title,
@@ -31,7 +31,7 @@ export default function CustomerProjectsPage() {
 
       <div className="space-y-5">
         <FoundationCard title="今日工作">
-          <ReviewCenterEmpty
+          <EmptyState
             title="当前尚未接入项目任务数据。"
             description="未来这里展示客户承诺、今日到期、逾期事项、等待内部和重点项目。"
           />
@@ -50,14 +50,14 @@ export default function CustomerProjectsPage() {
         </FoundationCard>
 
         <FoundationCard title="需要关注">
-          <ReviewCenterEmpty
+          <EmptyState
             title="暂无可展示的项目异常。"
             description="未来这里关注长期停滞、等待内部、客户承诺到期和重点项目风险。"
           />
         </FoundationCard>
 
         <FoundationCard title="今天的业务摘要">
-          <ReviewCenterEmpty
+          <EmptyState
             title="业务数据接入后自动生成，不要求员工重复填写日报。"
           />
         </FoundationCard>

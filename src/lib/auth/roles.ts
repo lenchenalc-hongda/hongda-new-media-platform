@@ -55,10 +55,14 @@ export interface AuthUser {
 }
 
 // ===== Check page access =====
-export function canAccessPage(user: AuthUser, page: PageSlug): boolean {
+export function canRoleAccessPage(role: Role, page: PageSlug): boolean {
   const access = PAGE_ACCESS[page];
   if (!access) return false;
-  return access.roles.includes(user.role);
+  return access.roles.includes(role);
+}
+
+export function canAccessPage(user: AuthUser, page: PageSlug): boolean {
+  return canRoleAccessPage(user.role, page);
 }
 
 // ===== Check action permission =====

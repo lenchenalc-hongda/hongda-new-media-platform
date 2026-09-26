@@ -17,6 +17,48 @@ export interface PortalGroup {
   items: PortalNavItem[];
 }
 
+export interface PortalVisibilityOptions {
+  projectReviewCenterEnabled: boolean;
+  customerProjectCenterEnabled: boolean;
+  canAccessCustomerProjectCenter: boolean;
+}
+
+export const WORKSPACE_PORTAL_STYLES: Record<
+  string,
+  { gradient: string; background: string; button: string }
+> = {
+  blue: {
+    gradient: 'from-blue-500 to-blue-600',
+    background: 'bg-blue-50 border-blue-200',
+    button: 'text-blue-700 bg-blue-100 hover:bg-blue-200',
+  },
+  green: {
+    gradient: 'from-emerald-500 to-emerald-600',
+    background: 'bg-emerald-50 border-emerald-200',
+    button: 'text-emerald-700 bg-emerald-100 hover:bg-emerald-200',
+  },
+  purple: {
+    gradient: 'from-purple-500 to-purple-600',
+    background: 'bg-purple-50 border-purple-200',
+    button: 'text-purple-700 bg-purple-100 hover:bg-purple-200',
+  },
+  gray: {
+    gradient: 'from-gray-600 to-gray-700',
+    background: 'bg-gray-50 border-gray-200',
+    button: 'text-gray-700 bg-gray-200 hover:bg-gray-300',
+  },
+  orange: {
+    gradient: 'from-orange-500 to-orange-600',
+    background: 'bg-orange-50 border-orange-200',
+    button: 'text-orange-700 bg-orange-100 hover:bg-orange-200',
+  },
+  cyan: {
+    gradient: 'from-cyan-500 to-cyan-600',
+    background: 'bg-cyan-50 border-cyan-200',
+    button: 'text-cyan-700 bg-cyan-100 hover:bg-cyan-200',
+  },
+};
+
 export const PORTAL_GROUPS: PortalGroup[] = [
   {
     id: 'media',
@@ -123,6 +165,24 @@ export const PORTAL_GROUPS: PortalGroup[] = [
 
 export const ALL_NAV_ITEMS = PORTAL_GROUPS.flatMap(g => g.items);
 export const WORKSPACE_HOME = '/workspace-home';
+
+export function getVisiblePortalGroups({
+  projectReviewCenterEnabled,
+  customerProjectCenterEnabled,
+  canAccessCustomerProjectCenter,
+}: PortalVisibilityOptions): PortalGroup[] {
+  return PORTAL_GROUPS.filter(group => {
+    if (group.id === 'review') return projectReviewCenterEnabled;
+    if (group.id === 'sales') {
+      return customerProjectCenterEnabled && canAccessCustomerProjectCenter;
+    }
+    return true;
+  });
+}
+
+export function isPortalItemEnabled(item: PortalNavItem): boolean {
+  return item.disabled !== true;
+}
 
 export function getActiveNavItemPath(
   pathname: string,

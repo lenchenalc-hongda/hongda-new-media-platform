@@ -3,24 +3,28 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
-import { PORTAL_GROUPS, getActiveNavItemPath, getPortalForPath } from '@/lib/constants/navigation';
+import {
+  getActiveNavItemPath,
+  getPortalForPath,
+  getVisiblePortalGroups,
+} from '@/lib/constants/navigation';
 import { isFeatureEnabled, FEATURES } from '@/lib/features';
-import { useCanCreateReview } from './RoleProvider';
+import {
+  useCanAccessCustomerProjectCenter,
+  useCanCreateReview,
+} from './RoleProvider';
 import { applyCreateVisibility } from '@/lib/review-center/navigation';
 
 export default function Sidebar() {
   const pathname = usePathname();
   const canCreateReview = useCanCreateReview();
+  const canAccessCustomerProjectCenter = useCanAccessCustomerProjectCenter();
 
   // Determine which portal is active based on current path
-  const baseGroups = PORTAL_GROUPS.filter(group => {
-    if (group.id === 'review') {
-      return isFeatureEnabled(FEATURES.PROJECT_REVIEW_CENTER);
-    }
-    if (group.id === 'sales') {
-      return isFeatureEnabled(FEATURES.CUSTOMER_PROJECT_CENTER);
-    }
-    return true;
+  const baseGroups = getVisiblePortalGroups({
+    projectReviewCenterEnabled: isFeatureEnabled(FEATURES.PROJECT_REVIEW_CENTER),
+    customerProjectCenterEnabled: isFeatureEnabled(FEATURES.CUSTOMER_PROJECT_CENTER),
+    canAccessCustomerProjectCenter,
   });
   const enabledGroups = applyCreateVisibility(baseGroups, canCreateReview);
   const activePortal = getPortalForPath(pathname);

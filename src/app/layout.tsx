@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { RoleProvider } from '@/components/layout/RoleProvider';
 import { getCurrentUserReadOnly } from '@/lib/auth/current-user';
+import { canRoleAccessPage } from '@/lib/auth/roles';
 import { canCreateReview } from '@/lib/review-center/permissions';
 import './globals.css';
 
@@ -11,15 +12,27 @@ export const metadata: Metadata = {
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   let canCreate = false;
+  let canAccessCustomerProjectCenter = false;
   try {
     const user = await getCurrentUserReadOnly();
-    if (user) canCreate = canCreateReview(user.role);
+    if (user) {
+      canCreate = canCreateReview(user.role);
+      canAccessCustomerProjectCenter = canRoleAccessPage(
+        user.role,
+        'customer_project_center',
+      );
+    }
   } catch {}
 
   return (
     <html lang="zh-CN" suppressHydrationWarning>
       <body>
-        <RoleProvider canCreateReview={canCreate}>{children}</RoleProvider>
+        <RoleProvider
+          canCreateReview={canCreate}
+          canAccessCustomerProjectCenter={canAccessCustomerProjectCenter}
+        >
+          {children}
+        </RoleProvider>
       </body>
     </html>
   );
