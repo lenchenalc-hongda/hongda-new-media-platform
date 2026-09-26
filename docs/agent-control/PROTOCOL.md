@@ -198,6 +198,18 @@ Future trigger automation must combine that key with:
 - read-only workspace
 - no GitHub write token
 
+### MAC-3
+
+- runs only for the explicitly authorized MAC-3 task after validated READY and routing proof
+- uses the same dedicated self-hosted label set
+- runs the installed bundled Codex binary with `codex exec`
+- enforces `-s read-only`, `--ask-for-approval never`, and `--ephemeral`
+- uses a fixed default-branch prompt and strict output schema
+- requires exact top-level `task_id` and `acceptance_sentinel` key/value matches
+- strips GitHub and application credentials from the Codex process environment
+- performs before/after HEAD, status, and diff verification
+- emits only bounded proof fields and never prints the credential or full environment
+
 ### MAC-2
 
 - dedicated runner label set: `self-hosted`, `macOS`, `X64`,
