@@ -265,6 +265,16 @@ const workflowSource = fs.readFileSync(
   '.github/workflows/agent-control-dry-run.yml',
   'utf8',
 );
+const dryRunSource = fs.readFileSync(
+  'scripts/agent-control/github-dry-run.ts',
+  'utf8',
+);
+assert(
+  dryRunSource.includes('GITHUB_OUTPUT')
+  && dryRunSource.includes('result=${result.result}')
+  && dryRunSource.includes('verified_head='),
+  'dry-run adapter exports safe job outputs',
+);
 assert(
   workflowSource.includes('types: [created]')
   && workflowSource.includes('workflow_dispatch:'),
@@ -315,6 +325,52 @@ assert(
   validateSection.includes('actions/checkout@v4')
   && validateSection.includes('pnpm install --frozen-lockfile'),
   'only trusted validate job performs checkout and install',
+);
+const selfHostedSection = workflowSource.slice(
+  workflowSource.indexOf('  self-hosted-proof:'),
+);
+assert(
+  selfHostedSection.includes(
+    'runs-on: [self-hosted, macOS, X64, hongda-agent-control]',
+  ),
+  'self-hosted proof uses the dedicated runner label set',
+);
+assert(
+  selfHostedSection.includes('needs: validate')
+  && selfHostedSection.includes(
+    "needs.validate.outputs.result == 'READY'",
+  ),
+  'self-hosted proof runs only after validated READY',
+);
+assert(
+  selfHostedSection.includes(
+    'ref: ${{ needs.validate.outputs.verified_head }}',
+  )
+  && selfHostedSection.includes('persist-credentials: false'),
+  'self-hosted proof checks out the exact validated SHA without persisted credentials',
+);
+assert(
+  selfHostedSection.includes('git diff --exit-code')
+  && selfHostedSection.includes('git diff --cached --exit-code')
+  && selfHostedSection.includes('git status --porcelain')
+  && selfHostedSection.includes('ROUTING_PROOF=PASS'),
+  'self-hosted proof performs repository integrity checks',
+);
+assert(
+  selfHostedSection.includes('timeout-minutes:')
+  && !selfHostedSection.includes('pnpm install')
+  && !/\bcodex\b/i.test(selfHostedSection)
+  && !/openai|supabase|openai_api_key|service_role|wechat|douyin/i.test(
+    selfHostedSection,
+  ),
+  'self-hosted proof has a timeout and no model/install/application secrets',
+);
+assert(
+  !selfHostedSection.includes('issues: write')
+  && !selfHostedSection.includes('pull-requests: write')
+  && !selfHostedSection.includes('contents: write')
+  && !selfHostedSection.includes('id-token: write'),
+  'self-hosted proof has no GitHub write permission',
 );
 for (const forbidden of [
   'contents: write',

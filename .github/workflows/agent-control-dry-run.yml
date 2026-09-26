@@ -66,6 +66,12 @@ jobs:
     if: needs.gate.outputs.trusted == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    outputs:
+      result: ${{ steps.validate.outputs.result }}
+      task_id: ${{ steps.validate.outputs.task_id }}
+      verified_head: ${{ steps.validate.outputs.verified_head }}
+      master_sha: ${{ steps.validate.outputs.master_sha }}
+      active_pr: ${{ steps.validate.outputs.active_pr }}
     steps:
       - uses: actions/checkout@v4
 
@@ -83,6 +89,65 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Validate Agent Control state
+        id: validate
         run: pnpm exec tsx scripts/agent-control/github-dry-run.ts
         env:
           GITHUB_TOKEN: ${{ github.token }}
+
+  self-hosted-proof:
+    needs: validate
+    if: needs.validate.outputs.result == 'READY'
+    runs-on: [self-hosted, macOS, X64, hongda-agent-control]
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.validate.outputs.verified_head }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Prove trusted self-hosted routing
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ needs.validate.outputs.verified_head }}
+          TASK_ID: ${{ needs.validate.outputs.task_id }}
+          REPOSITORY: ${{ github.repository }}
+          RUNNER_NAME: ${{ runner.name }}
+          RUNNER_OS: ${{ runner.os }}
+          RUNNER_ARCH: ${{ runner.arch }}
+        run: |
+          set -euo pipefail
+          actual_sha="$(git rev-parse HEAD)"
+          if [ "$actual_sha" != "$EXPECTED_SHA" ]; then
+            printf 'EXPECTED_SHA=%s\n' "$EXPECTED_SHA"
+            printf 'ACTUAL_SHA=%s\n' "$actual_sha"
+            printf 'ROUTING_PROOF=FAIL\n'
+            exit 1
+          fi
+          if [ ! -f AGENTS.md ]; then
+            printf 'AGENTS_MD=ABSENT\n'
+            printf 'ROUTING_PROOF=FAIL\n'
+            exit 1
+          fi
+          git diff --exit-code
+          git diff --cached --exit-code
+          status_output="$(git status --porcelain)"
+          if [ -n "$status_output" ]; then
+            printf '%s\n' "$status_output"
+            printf 'ROUTING_PROOF=FAIL\n'
+            exit 1
+          fi
+          branch_name="$(git symbolic-ref --short -q HEAD || printf 'DETACHED')"
+          printf 'RUNNER_NAME=%s\n' "$RUNNER_NAME"
+          printf 'RUNNER_OS=%s\n' "$RUNNER_OS"
+          printf 'RUNNER_ARCH=%s\n' "$RUNNER_ARCH"
+          printf 'REPOSITORY=%s\n' "$REPOSITORY"
+          printf 'CHECKED_OUT_SHA=%s\n' "$actual_sha"
+          printf 'BRANCH=%s\n' "$branch_name"
+          printf 'PWD=%s\n' "$(pwd -P)"
+          printf 'GIT_STATUS=CLEAN\n'
+          printf 'AGENTS_MD=PRESENT\n'
+          printf 'TASK_ID=%s\n' "$TASK_ID"
+          printf 'ROUTING_PROOF=PASS\n'
