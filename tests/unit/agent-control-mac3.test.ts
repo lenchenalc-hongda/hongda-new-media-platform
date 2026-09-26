@@ -29,6 +29,23 @@ const schema = JSON.parse(
   properties?: Record<string, { const?: string }>;
 };
 
+const expectedTaskId = 'CPC-AUTO-001-MAC-3-READONLY-CODEX';
+const expectedHeadSha = 'c04252f7e2b394c26534da3acb8364ee01ec3689';
+
+function passesExactIdentityChecks(payload: string): boolean {
+  return new RegExp(
+    `"task_id"\\s*:\\s*"${expectedTaskId}"`,
+  ).test(payload)
+    && new RegExp(
+      '"acceptance_sentinel"\\s*:\\s*"CODEX_READONLY_PROOF=PASS"',
+    ).test(payload)
+    && new RegExp(
+      `"head_sha"\\s*:\\s*"${expectedHeadSha}"`,
+    ).test(payload)
+    && /"status"\s*:\s*"PASS"/.test(payload)
+    && /"read_only_confirmed"\s*:\s*true/.test(payload);
+}
+
 console.log('\n=== Agent Control MAC-3 ===');
 
 assert(
@@ -101,6 +118,40 @@ assert(
   && codexSection.includes('git diff --cached --exit-code')
   && codexSection.includes('git status --porcelain'),
   'Codex job validates clean HEAD/status/diff',
+);
+assert(
+  codexSection.includes('"task_id"[[:space:]]*:[[:space:]]*"')
+  && codexSection.includes('"$TASK_ID"')
+  && codexSection.includes(
+    '"acceptance_sentinel"[[:space:]]*:[[:space:]]*"CODEX_READONLY_PROOF=PASS"',
+  )
+  && !codexSection.includes('grep -Fq "\\"$TASK_ID\\""'),
+  'Codex job checks exact top-level task identity and sentinel keys',
+);
+const falsePositive = JSON.stringify({
+  status: 'PASS',
+  task_id: 'WRONG-TASK-ID',
+  head_sha: expectedHeadSha,
+  read_only_confirmed: true,
+  acceptance_sentinel: 'CODEX_READONLY_PROOF=PASS',
+  findings: [expectedTaskId],
+  risks: [],
+  recommended_next_action: 'none',
+});
+const trueIdentity = JSON.stringify({
+  status: 'PASS',
+  task_id: expectedTaskId,
+  head_sha: expectedHeadSha,
+  read_only_confirmed: true,
+  acceptance_sentinel: 'CODEX_READONLY_PROOF=PASS',
+  findings: [],
+  risks: [],
+  recommended_next_action: 'none',
+});
+assert(
+  !passesExactIdentityChecks(falsePositive)
+  && passesExactIdentityChecks(trueIdentity),
+  'wrong top-level task ID with expected ID in findings is rejected',
 );
 assert(
   codexSection.includes('timeout-minutes: 15')

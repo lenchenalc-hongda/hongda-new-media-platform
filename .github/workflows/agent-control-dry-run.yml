@@ -275,11 +275,11 @@ jobs:
           fi
 
           result_bytes="$(wc -c < "$result_file" | tr -d ' ')"
-          if ! grep -Fq 'CODEX_READONLY_PROOF=PASS' "$result_file" \
-            || ! grep -Eq '"status"[[:space:]]*:[[:space:]]*"PASS"' "$result_file" \
+          if ! grep -Eq '"status"[[:space:]]*:[[:space:]]*"PASS"' "$result_file" \
             || ! grep -Eq '"read_only_confirmed"[[:space:]]*:[[:space:]]*true' "$result_file" \
             || ! grep -Eq '"head_sha"[[:space:]]*:[[:space:]]*"'"$EXPECTED_SHA"'"' "$result_file" \
-            || ! grep -Fq "\"$TASK_ID\"" "$result_file"; then
+            || ! grep -Eq '"task_id"[[:space:]]*:[[:space:]]*"'"$TASK_ID"'"' "$result_file" \
+            || ! grep -Eq '"acceptance_sentinel"[[:space:]]*:[[:space:]]*"CODEX_READONLY_PROOF=PASS"' "$result_file"; then
             printf 'CODEX_RESULT_BYTES=%s\n' "$result_bytes"
             printf 'CODEX_READONLY_PROOF=FAIL\n'
             exit 1
