@@ -157,7 +157,7 @@ jobs:
     if: >-
       needs.validate.outputs.result == 'READY' &&
       needs.self-hosted-proof.result == 'success' &&
-      needs.validate.outputs.task_id == 'CPC-AUTO-001-MAC-3-READONLY-CODEX'
+      needs.validate.outputs.task_id == 'CPC-AUTO-001-MAC-3-ACCEPT-001'
     runs-on: [self-hosted, macOS, X64, hongda-agent-control]
     timeout-minutes: 15
     permissions:

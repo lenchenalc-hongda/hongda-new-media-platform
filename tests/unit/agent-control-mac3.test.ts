@@ -51,9 +51,15 @@ console.log('\n=== Agent Control MAC-3 ===');
 assert(
   codexSection.includes('needs: [validate, self-hosted-proof]')
   && codexSection.includes(
-    "needs.validate.outputs.task_id == 'CPC-AUTO-001-MAC-3-READONLY-CODEX'",
+    "needs.validate.outputs.task_id == 'CPC-AUTO-001-MAC-3-ACCEPT-001'",
   ),
   'Codex job depends on trusted validation and routing proof',
+);
+assert(
+  !codexSection.includes('CPC-AUTO-001-MAC-3-READONLY-CODEX')
+  && !codexSection.includes('CPC-AUTO-001-MAC-3-EXACT-IDENTITY-001')
+  && !codexSection.includes('CPC-AUTO-001-MAC-3-ACCEPT-GATE-001'),
+  'Codex job gate blocks implementation and fix task IDs',
 );
 assert(
   codexSection.includes(
