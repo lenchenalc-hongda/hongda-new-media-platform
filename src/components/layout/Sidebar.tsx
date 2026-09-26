@@ -13,9 +13,15 @@ export default function Sidebar() {
   const canCreateReview = useCanCreateReview();
 
   // Determine which portal is active based on current path
-  const baseGroups = PORTAL_GROUPS.filter(g =>
-    g.id !== 'review' || isFeatureEnabled(FEATURES.PROJECT_REVIEW_CENTER)
-  );
+  const baseGroups = PORTAL_GROUPS.filter(group => {
+    if (group.id === 'review') {
+      return isFeatureEnabled(FEATURES.PROJECT_REVIEW_CENTER);
+    }
+    if (group.id === 'sales') {
+      return isFeatureEnabled(FEATURES.CUSTOMER_PROJECT_CENTER);
+    }
+    return true;
+  });
   const enabledGroups = applyCreateVisibility(baseGroups, canCreateReview);
   const activePortal = getPortalForPath(pathname);
   const [expandedPortal, setExpandedPortal] = useState<string>(activePortal);
@@ -27,6 +33,7 @@ export default function Sidebar() {
     knowledge: 'border-l-purple-500 bg-purple-50 text-purple-700',
     admin: 'border-l-gray-500 bg-gray-100 text-gray-700',
     review: 'border-l-orange-500 bg-orange-50 text-orange-700',
+    sales: 'border-l-cyan-500 bg-cyan-50 text-cyan-700',
   };
 
   return (

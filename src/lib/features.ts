@@ -10,6 +10,9 @@ const FEATURE_FLAGS: Record<string, boolean> = {
   project_review_center: parseFeatureFlag(
     process.env.NEXT_PUBLIC_FEATURE_PROJECT_REVIEW_CENTER,
   ),
+  customer_project_center: parseFeatureFlag(
+    process.env.NEXT_PUBLIC_FEATURE_CUSTOMER_PROJECT_CENTER,
+  ),
 };
 
 export function isFeatureEnabled(name: string): boolean {
@@ -18,4 +21,5 @@ export function isFeatureEnabled(name: string): boolean {
 
 export const FEATURES = {
   PROJECT_REVIEW_CENTER: 'project_review_center',
+  CUSTOMER_PROJECT_CENTER: 'customer_project_center',
 } as const;

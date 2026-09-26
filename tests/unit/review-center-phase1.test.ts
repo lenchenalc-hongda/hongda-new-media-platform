@@ -119,8 +119,8 @@ assert(
   'viewer review portal hides new review',
 );
 assert(
-  viewerGroups.reduce((sum, g) => sum + g.items.length, 0) === 38,
-  'viewer total visible modules 38',
+  viewerGroups.reduce((sum, g) => sum + g.items.length, 0) === 46,
+  'viewer total navigation entries 46',
 );
 
 const adminGroups = applyCreateVisibility(PORTAL_GROUPS, true);
@@ -131,8 +131,8 @@ assert(
   'admin review portal shows new review',
 );
 assert(
-  adminGroups.reduce((sum, g) => sum + g.items.length, 0) === 39,
-  'admin total visible modules 39',
+  adminGroups.reduce((sum, g) => sum + g.items.length, 0) === 47,
+  'admin total navigation entries 47',
 );
 
 function chainableResult(result: any) {

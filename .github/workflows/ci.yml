@@ -28,6 +28,9 @@ jobs:
       - name: TypeScript check
         run: pnpm exec tsc --noEmit
 
+      - name: Customer Project Center foundation tests
+        run: pnpm exec tsx tests/unit/customer-project-center-foundation.test.ts
+
       - name: Check server-only imports
         run: bash scripts/check-server-imports.sh
 

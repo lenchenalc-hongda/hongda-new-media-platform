@@ -88,6 +88,23 @@ export const PORTAL_GROUPS: PortalGroup[] = [
     ],
   },
   {
+    id: 'sales',
+    label: '客户项目',
+    description: '客户、项目、跟进与销售工作管理',
+    icon: '🤝',
+    color: 'cyan',
+    items: [
+      { label: '我的工作台', path: '/customer-projects', icon: '🏠', matchExact: true },
+      { label: '客户', path: '/customer-projects/customers', icon: '👥', disabled: true },
+      { label: '项目', path: '/customer-projects/projects', icon: '📁', disabled: true },
+      { label: '我的任务', path: '/customer-projects/tasks', icon: '✅', disabled: true },
+      { label: '我的日报', path: '/customer-projects/daily', icon: '📝', disabled: true },
+      { label: '我的周报', path: '/customer-projects/weekly', icon: '📊', disabled: true },
+      { label: '团队看板', path: '/customer-projects/team', icon: '📈', disabled: true },
+      { label: '设置', path: '/customer-projects/settings', icon: '⚙️', disabled: true },
+    ],
+  },
+  {
     id: 'admin',
     label: '管理',
     description: '系统配置与用户管理',
@@ -126,6 +143,7 @@ export function getPortalForPath(path: string): string {
       path.startsWith('/posts') || path.startsWith('/leads') || path.startsWith('/reports')) return 'media';
   if (path.startsWith('/oa')) return 'official';
   if (path.startsWith('/knowledge')) return 'knowledge';
+  if (path.startsWith('/customer-projects')) return 'sales';
   if (path.startsWith('/settings')) return 'admin';
   if (path.startsWith('/review-center')) return 'review';
   return 'media';
