@@ -371,6 +371,21 @@ CustomerReference creation:
 - provisional creation sets `created_by_profile_id` to the authenticated profile
   at server enforcement.
 
+CustomerReference mutation intents:
+
+- `create_provisional`
+- `update_provisional_details`
+- `map_to_canonical`
+- `update_canonical`
+
+Authority:
+
+- sales may create provisional records and update non-authoritative provisional details;
+- sales cannot map/remap provisional to canonical or update canonical authority;
+- manager/admin may perform canonical mapping where audited;
+- operator/viewer denied;
+- cross-org denied for everyone.
+
 Report behavior:
 
 - draft: subject employee may read/update/submit their own report;
@@ -385,6 +400,12 @@ Invariants:
 - submitted report snapshots cannot be updated or deleted in place;
 - admin status does not bypass these domain invariants;
 - settings are admin-managed.
+
+Relation scope:
+
+- `unrelated` blocks sales access to another sales user's resources;
+- admin/manager same-org access remains governed by their org-scoped matrix rather
+  than by project ownership relation.
 
 ## I. Audit & Concurrency
 

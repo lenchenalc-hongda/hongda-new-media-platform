@@ -9,8 +9,9 @@ import {
   REPORT_METRIC_SEMANTICS,
   WORK_ITEM_STATUSES,
   buildCanonicalCustomerReferenceIdentityKey,
-  canAccessCustomerProjectDomain as canAccessCustomerProjectDomainRaw,
+  canAccessCustomerProjectDomain,
   canMarkProjectWon,
+  canMutateCustomerReference,
   canTransitionAIDraft,
   canTransitionProject,
   canTransitionWorkItem,
@@ -46,16 +47,6 @@ function assert(condition: boolean, message: string) {
     failed++;
     console.error('FAIL: ' + message);
   }
-}
-
-function canAccessCustomerProjectDomain(
-  input: Omit<Parameters<typeof canAccessCustomerProjectDomainRaw>[0], 'sameOrg'>
-    & { sameOrg?: boolean },
-): boolean {
-  return canAccessCustomerProjectDomainRaw({
-    ...input,
-    sameOrg: input.sameOrg ?? true,
-  });
 }
 
 const ORG_ID = '11111111-1111-4111-8111-111111111111';
@@ -720,6 +711,7 @@ for (const appRole of ['operator', 'viewer'] as CustomerProjectAppRole[]) {
       assert(
         !canAccessCustomerProjectDomain({
           appRole,
+          sameOrg: true,
           relations: ['none'],
           resource,
           action,
@@ -734,6 +726,7 @@ const relations = (values: CustomerProjectResourceRelation[]) => values;
 
 assert(
   !canAccessCustomerProjectDomain({
+    sameOrg: true,
     appRole: 'sales',
     relations: relations(['unrelated']),
     resource: 'project',
@@ -743,6 +736,27 @@ assert(
 );
 assert(
   canAccessCustomerProjectDomain({
+    sameOrg: true,
+    appRole: 'admin',
+    relations: relations(['unrelated']),
+    resource: 'project',
+    action: 'read',
+  }),
+  'admin same-org unrelated relation does not block org-scoped access',
+);
+assert(
+  canAccessCustomerProjectDomain({
+    sameOrg: true,
+    appRole: 'manager',
+    relations: relations(['unrelated']),
+    resource: 'project',
+    action: 'read',
+  }),
+  'manager same-org unrelated relation does not block org-scoped access',
+);
+assert(
+  canAccessCustomerProjectDomain({
+    sameOrg: true,
     appRole: 'sales',
     relations: relations(['none']),
     resource: 'project',
@@ -752,6 +766,7 @@ assert(
 );
 assert(
   canAccessCustomerProjectDomain({
+    sameOrg: true,
     appRole: 'sales',
     relations: relations(['owner']),
     resource: 'project',
@@ -761,6 +776,7 @@ assert(
 );
 assert(
   !canAccessCustomerProjectDomain({
+    sameOrg: true,
     appRole: 'sales',
     relations: relations(['collaborator']),
     resource: 'project',
@@ -770,6 +786,7 @@ assert(
 );
 assert(
   canAccessCustomerProjectDomain({
+    sameOrg: true,
     appRole: 'sales',
     relations: relations(['collaborator']),
     resource: 'work_item',
@@ -779,6 +796,7 @@ assert(
 );
 assert(
   canAccessCustomerProjectDomain({
+    sameOrg: true,
     appRole: 'sales',
     relations: relations(['assignee']),
     resource: 'work_item',
@@ -788,6 +806,7 @@ assert(
 );
 assert(
   !canAccessCustomerProjectDomain({
+    sameOrg: true,
     appRole: 'sales',
     relations: relations(['collaborator']),
     resource: 'ai_draft',
@@ -797,6 +816,7 @@ assert(
 );
 assert(
   canAccessCustomerProjectDomain({
+    sameOrg: true,
     appRole: 'sales',
     relations: relations(['owner']),
     resource: 'ai_draft',
@@ -806,6 +826,7 @@ assert(
 );
 assert(
   !canAccessCustomerProjectDomain({
+    sameOrg: true,
     appRole: 'admin',
     relations: relations(['none']),
     resource: 'project_event',
@@ -815,6 +836,7 @@ assert(
 );
 assert(
   !canAccessCustomerProjectDomain({
+    sameOrg: true,
     appRole: 'admin',
     relations: relations(['none']),
     resource: 'report',
@@ -824,6 +846,7 @@ assert(
 );
 assert(
   canAccessCustomerProjectDomain({
+    sameOrg: true,
     appRole: 'admin',
     relations: relations(['none']),
     resource: 'settings',
@@ -833,6 +856,7 @@ assert(
 );
 assert(
   !canAccessCustomerProjectDomain({
+    sameOrg: true,
     appRole: 'manager',
     relations: relations(['none']),
     resource: 'settings',
@@ -872,6 +896,7 @@ assert(
 );
 assert(
   canAccessCustomerProjectDomain({
+    sameOrg: true,
     appRole: 'sales',
     relations: relations(['none']),
     resource: 'customer_reference',
@@ -882,6 +907,7 @@ assert(
 );
 assert(
   !canAccessCustomerProjectDomain({
+    sameOrg: true,
     appRole: 'sales',
     relations: relations(['none']),
     resource: 'customer_reference',
@@ -892,6 +918,7 @@ assert(
 );
 assert(
   !canAccessCustomerProjectDomain({
+    sameOrg: true,
     appRole: 'sales',
     relations: relations(['creator']),
     resource: 'customer_reference',
@@ -901,17 +928,44 @@ assert(
   'sales cannot update canonical customer mapping',
 );
 assert(
-  canAccessCustomerProjectDomain({
+  canMutateCustomerReference({
+    sameOrg: true,
     appRole: 'sales',
     relations: relations(['creator']),
-    resource: 'customer_reference',
-    action: 'update',
-    customerReferenceKind: 'provisional',
+    intent: 'update_provisional_details',
   }),
   'sales creator can update provisional customer reference',
 );
 assert(
+  !canMutateCustomerReference({
+    sameOrg: true,
+    appRole: 'sales',
+    relations: relations(['creator']),
+    intent: 'map_to_canonical',
+  }),
+  'sales cannot self-map provisional customer reference to canonical',
+);
+assert(
+  canMutateCustomerReference({
+    sameOrg: true,
+    appRole: 'manager',
+    relations: relations(['none']),
+    intent: 'map_to_canonical',
+  }),
+  'manager can perform audited canonical mapping',
+);
+assert(
+  !canMutateCustomerReference({
+    sameOrg: false,
+    appRole: 'admin',
+    relations: relations(['none']),
+    intent: 'map_to_canonical',
+  }),
+  'cross-org canonical mapping denied',
+);
+assert(
   canAccessCustomerProjectDomain({
+    sameOrg: true,
     appRole: 'sales',
     relations: relations(['subject']),
     resource: 'report',
@@ -922,6 +976,7 @@ assert(
 );
 assert(
   !canAccessCustomerProjectDomain({
+    sameOrg: true,
     appRole: 'sales',
     relations: relations(['subject']),
     resource: 'report',
@@ -932,6 +987,7 @@ assert(
 );
 assert(
   !canAccessCustomerProjectDomain({
+    sameOrg: true,
     appRole: 'sales',
     relations: relations(['collaborator']),
     resource: 'report',
@@ -942,6 +998,7 @@ assert(
 );
 assert(
   canAccessCustomerProjectDomain({
+    sameOrg: true,
     appRole: 'manager',
     relations: relations(['none']),
     resource: 'report',
@@ -952,6 +1009,7 @@ assert(
 );
 assert(
   !canAccessCustomerProjectDomain({
+    sameOrg: true,
     appRole: 'manager',
     relations: relations(['none']),
     resource: 'report',
@@ -962,6 +1020,7 @@ assert(
 );
 assert(
   !canAccessCustomerProjectDomain({
+    sameOrg: true,
     appRole: 'admin',
     relations: relations(['none']),
     resource: 'report',

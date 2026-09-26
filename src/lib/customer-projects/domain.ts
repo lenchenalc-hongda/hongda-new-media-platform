@@ -560,6 +560,16 @@ export const CUSTOMER_PROJECT_DOMAIN_ACTIONS = [
 export type CustomerProjectDomainAction =
   (typeof CUSTOMER_PROJECT_DOMAIN_ACTIONS)[number];
 
+export const CUSTOMER_REFERENCE_MUTATION_INTENTS = [
+  'create_provisional',
+  'update_provisional_details',
+  'map_to_canonical',
+  'update_canonical',
+] as const;
+
+export type CustomerReferenceMutationIntent =
+  (typeof CUSTOMER_REFERENCE_MUTATION_INTENTS)[number];
+
 function hasRelation(
   relations: readonly CustomerProjectResourceRelation[],
   allowed: readonly CustomerProjectResourceRelation[],
@@ -590,7 +600,7 @@ export function canAccessCustomerProjectDomain(input: {
   if (appRole === 'operator' || appRole === 'viewer') {
     return false;
   }
-  if (relations.includes('unrelated')) return false;
+  if (appRole === 'sales' && relations.includes('unrelated')) return false;
 
   if (resource === 'settings') {
     if (appRole === 'admin') return action === 'read' || action === 'manage';
@@ -678,14 +688,35 @@ export function canAccessCustomerProjectDomain(input: {
         || hasRelation(relations, ['owner', 'collaborator', 'assignee', 'creator']);
     }
     if (action === 'create' || action === 'update') {
-      if (appRole === 'sales' && customerReferenceKind === 'provisional') {
-        if (action === 'create') return relations.includes('none');
-        return hasRelation(relations, ['creator']);
-      }
+      if (
+        appRole === 'sales'
+        && action === 'create'
+        && customerReferenceKind === 'provisional'
+      ) return relations.includes('none');
       return appRole === 'admin' || appRole === 'manager';
     }
     return false;
   }
 
+  return false;
+}
+
+export function canMutateCustomerReference(input: {
+  appRole: CustomerProjectAppRole;
+  sameOrg: boolean;
+  relations: readonly CustomerProjectResourceRelation[];
+  intent: CustomerReferenceMutationIntent;
+}): boolean {
+  const { appRole, sameOrg, relations, intent } = input;
+
+  if (!sameOrg) return false;
+  if (appRole === 'operator' || appRole === 'viewer') return false;
+  if (appRole === 'admin' || appRole === 'manager') return true;
+  if (appRole !== 'sales' || relations.includes('unrelated')) return false;
+
+  if (intent === 'create_provisional') return relations.includes('none');
+  if (intent === 'update_provisional_details') {
+    return hasRelation(relations, ['creator']);
+  }
   return false;
 }

@@ -31,6 +31,9 @@ jobs:
       - name: Customer Project Center foundation tests
         run: pnpm exec tsx tests/unit/customer-project-center-foundation.test.ts
 
+      - name: Customer Project Center domain tests
+        run: pnpm exec tsx tests/unit/customer-project-domain.test.ts
+
       - name: Check server-only imports
         run: bash scripts/check-server-imports.sh
 
