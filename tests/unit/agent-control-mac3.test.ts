@@ -181,8 +181,9 @@ assert(
 assert(
   codexSection.includes("printf 'CODEX_FAILURE_CLASS=%s\\n'")
   && codexSection.includes("printf 'CODEX_LAST_EVENT_TYPE=%s\\n'")
-  && codexSection.includes('"$event_log" "$error_log" "$login_log"'),
-  'Codex job emits bounded failure classification from captured diagnostics',
+  && codexSection.includes('"$failure_event_log" "$error_log"')
+  && !codexSection.includes('"$failure_event_log" "$error_log" "$login_log"'),
+  'Codex job classifies only fatal events and stderr, not successful login text',
 );
 assert(
   !codexSection.includes('cat "$event_log"')
