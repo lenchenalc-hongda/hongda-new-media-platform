@@ -197,7 +197,14 @@ assert(
 assert(
   publishStep.includes('REMOTE_HEAD_MUST_MATCH_EXPECTED')
   && publishStep.includes('MAC5_STAGED_FILE_MODE=UNSAFE')
-  && publishStep.includes('git -c core.hooksPath=/dev/null push origin')
+  && publishStep.includes('http.version=HTTP/1.1')
+  && publishStep.includes('MAC5_GIT_TRANSPORT_RETRY=LS_REMOTE')
+  && publishStep.includes('MAC5_GIT_TRANSPORT_RETRY=PUSH_VERIFY')
+  && publishStep.includes('MAC5_PUSH=CONFIRMED_AFTER_TRANSPORT_ERROR')
+  && publishStep.includes('--http1.1')
+  && publishStep.includes('--connect-timeout 20')
+  && publishStep.includes('--max-time 60')
+  && publishStep.includes('push_mac5_commit')
   && !publishStep.includes('--force')
   && !/git push[^\n]*(master|main)|gh pr merge|\/merge"/.test(publishStep)
   && publishStep.includes('/issues/$ACTIVE_PR/comments'),
