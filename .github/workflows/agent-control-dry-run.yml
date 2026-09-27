@@ -752,7 +752,707 @@ jobs:
           trap 'rm -f "$task_file" "$prompt_file" "$result_file" "$event_log" "$error_log" "$login_log" "$changed_paths_file" "$result_compact"' EXIT
           MAC5_MAX_CHANGED_PATHS=40
 
-          if [ "$MAX_FIX_ROUNDS" != "3" ] || ! printf '%s\n' "$FIX_ROUND" | grep -Eq '^[1-3]$'; then
+          if ! printf '%s\n' "$TASK_ID" | grep -Eq '^[A-Za-z0-9][A-Za-z0-9._-]{0,127}
+          if ! printf '%s\n' "$ACTIVE_PR" | grep -Eq '^[1-9][0-9]*$'; then
+            printf 'MAC5_ACTIVE_PR=INVALID\n'
+            exit 1
+          fi
+          if ! printf '%s\n' "$ACTIVE_BRANCH" | grep -Eq '^codex/[A-Za-z0-9._/-]+$'; then
+            printf 'MAC5_ACTIVE_BRANCH=INVALID\n'
+            exit 1
+          fi
+          if printf '%s\n' "$ACTIVE_BRANCH" | grep -Eq '(^|/)\.\.(/|$)'; then
+            printf 'MAC5_ACTIVE_BRANCH=INVALID\n'
+            exit 1
+          fi
+          if [ -z "$TASK_BODY_B64" ]; then
+            printf 'MAC5_TASK_PAYLOAD=ABSENT\n'
+            exit 1
+          fi
+          printf '%s' "$TASK_BODY_B64" | /usr/bin/base64 -D > "$task_file"
+          task_bytes="$(wc -c < "$task_file" | tr -d ' ')"
+          if [ "$task_bytes" -le 0 ] || [ "$task_bytes" -gt 20000 ]; then
+            printf 'MAC5_TASK_BYTES=INVALID\n'
+            exit 1
+          fi
+          grep -Fxq 'AGENT_CONTROL_FIX_TASK_V1' "$task_file"
+          grep -Fxq "TASK_ID = $TASK_ID" "$task_file"
+          grep -Fxq 'TASK_STATUS = FIX_REQUIRED' "$task_file"
+          grep -Fxq "EXPECTED_HEAD = $EXPECTED_SHA" "$task_file"
+          grep -Fxq "FIX_ROUND = $FIX_ROUND / $MAX_FIX_ROUNDS" "$task_file"
+
+          actual_sha="$(git rev-parse HEAD)"
+          if [ "$actual_sha" != "$EXPECTED_SHA" ]; then
+            printf 'MAC5_HEAD_PROOF=FAIL\n'
+            exit 1
+          fi
+          git diff --exit-code > /dev/null
+          git diff --cached --exit-code > /dev/null
+          if [ -n "$(git status --porcelain)" ]; then
+            printf 'MAC5_INITIAL_STATUS=CLEAN_REQUIRED\n'
+            exit 1
+          fi
+          if [ ! -x "$codex_binary" ]; then
+            printf 'CODEX_BINARY=ABSENT\n'
+            exit 1
+          fi
+
+          git_dir="$(git rev-parse --git-dir)"
+          git_control_hash() {
+            {
+              shasum -a 256 "$git_dir/HEAD"
+              shasum -a 256 "$git_dir/config"
+              if [ -f "$git_dir/info/exclude" ]; then shasum -a 256 "$git_dir/info/exclude"; else printf 'INFO_EXCLUDE_ABSENT\n'; fi
+              if [ -f "$git_dir/info/attributes" ]; then shasum -a 256 "$git_dir/info/attributes"; else printf 'INFO_ATTRIBUTES_ABSENT\n'; fi
+              if [ -d "$git_dir/hooks" ]; then
+                find "$git_dir/hooks" -type f -exec shasum -a 256 {} \; 2>/dev/null | LC_ALL=C sort
+              else
+                printf 'HOOKS_DIR_ABSENT\n'
+              fi
+              { git show-ref || true; } | LC_ALL=C sort
+              git config --local --list | LC_ALL=C sort
+            } | shasum -a 256 | awk '{print $1}'
+          }
+          git_control_before="$(git_control_hash)"
+
+          cat > "$prompt_file" <<EOF
+          You are executing one trusted MAC-5 FIX_REQUIRED task on an existing Draft/Open PR.
+
+          Repository: $REPOSITORY
+          Task ID: $TASK_ID
+          Expected HEAD SHA: $EXPECTED_SHA
+          Active PR: #$ACTIVE_PR
+          Active branch: $ACTIVE_BRANCH
+          Fix round: $FIX_ROUND / $MAX_FIX_ROUNDS
+          Trusted task comment ID: $TASK_COMMENT_ID
+
+          Implement only the trusted fix task below.
+          Work only inside the checked-out repository.
+          Do not stage, commit, push, switch/create branches, call GitHub write APIs, or modify git metadata.
+          Do not read unrelated HOME/user credential files, auth files, tokens, cookies, or environment variables.
+          Do not print secrets.
+
+          The trusted wrapper will reject changes to control/infrastructure/sensitive paths including:
+          .github/, AGENTS.md, .gitignore, .env*, package/lock files, tsconfig.json,
+          vercel.json, next.config.*, docs/agent-control/, scripts/,
+          src/lib/agent-control/, tests/unit/agent-control*, supabase/, and all *.sql files.
+
+          Keep the fix narrow. More than 40 changed paths is rejected.
+          Run focused repository-local tests when useful, but do not make network writes.
+
+          === TRUSTED FIX TASK ===
+          EOF
+          cat "$task_file" >> "$prompt_file"
+          cat >> "$prompt_file" <<EOF
+
+          === REQUIRED STRUCTURED RESULT ===
+          Return JSON matching the provided output schema.
+          status must be PASS only when the requested fix is implemented.
+          task_id must exactly equal $TASK_ID.
+          base_sha must exactly equal $EXPECTED_SHA.
+          fix_round must exactly equal "$FIX_ROUND/$MAX_FIX_ROUNDS".
+          workspace_write_confirmed must be true.
+          acceptance_sentinel must exactly equal CODEX_FIX_PROOF=PASS.
+          EOF
+
+          codex_version="$("$codex_binary" --version 2>/dev/null || true)"
+          printf 'CODEX_VERSION=%s\n' "$codex_version"
+
+          set +e
+          env -i \
+            HOME="$HOME" \
+            PATH="/usr/bin:/bin:/usr/sbin:/sbin" \
+            "$codex_binary" login status > "$login_log" 2>&1
+          login_exit_status=$?
+          set -e
+          if [ "$login_exit_status" -eq 0 ]; then
+            printf 'CODEX_LOGIN_STATUS=AVAILABLE\n'
+          else
+            printf 'CODEX_LOGIN_STATUS=UNAVAILABLE_OR_CONFIG_ERROR\n'
+            exit 1
+          fi
+
+          set +e
+          env -i \
+            HOME="$HOME" \
+            PATH="/usr/bin:/bin:/usr/sbin:/sbin" \
+            TMPDIR="$RUNNER_TEMP" \
+            "$codex_binary" exec \
+            -C "$GITHUB_WORKSPACE" \
+            -s workspace-write \
+            -c 'approval_policy="never"' \
+            --ephemeral \
+            --ignore-user-config \
+            --ignore-rules \
+            --json \
+            --output-schema "$output_schema" \
+            --output-last-message "$result_file" \
+            - < "$prompt_file" > "$event_log" 2> "$error_log"
+          codex_exit_status=$?
+          set -e
+          printf 'CODEX_EXIT_STATUS=%s\n' "$codex_exit_status"
+          if [ "$codex_exit_status" -ne 0 ]; then
+            printf 'CODEX_FIX_PROOF=FAIL\n'
+            exit 1
+          fi
+
+          if [ "$(git rev-parse HEAD)" != "$EXPECTED_SHA" ]; then
+            printf 'MAC5_POST_CODEX_HEAD=CHANGED\n'
+            exit 1
+          fi
+          git_control_after="$(git_control_hash)"
+          if [ "$git_control_after" != "$git_control_before" ]; then
+            printf 'MAC5_GIT_CONTROL_STATE=CHANGED\n'
+            exit 1
+          fi
+          git diff --cached --exit-code > /dev/null
+
+          {
+            git diff --name-only --no-renames
+            git ls-files --others --exclude-standard
+          } | sed '/^$/d' | LC_ALL=C sort -u > "$changed_paths_file"
+
+          changed_count="$(wc -l < "$changed_paths_file" | tr -d ' ')"
+          if [ "$changed_count" -le 0 ]; then
+            printf 'MAC5_CHANGED_PATHS=NONE\n'
+            exit 1
+          fi
+          if [ "$changed_count" -gt "$MAC5_MAX_CHANGED_PATHS" ]; then
+            printf 'MAC5_CHANGED_PATHS=TOO_MANY\n'
+            exit 1
+          fi
+          if git diff --summary | grep -Eq 'mode change|120000|160000|create mode 100755'; then
+            printf 'MAC5_FILE_MODE=UNSAFE\n'
+            exit 1
+          fi
+
+          while IFS= read -r path; do
+            if [ -z "$path" ] || printf '%s\n' "$path" | grep -Eq '(^|/)\.\.(/|$)'; then
+              printf 'MAC5_PROTECTED_PATH=INVALID\n'
+              exit 1
+            fi
+            case "$path" in
+              .github/*|AGENTS.md|.gitignore|.npmrc|package.json|pnpm-lock.yaml|package-lock.json|yarn.lock|bun.lockb|tsconfig.json|vercel.json|next.config.js|next.config.mjs|next.config.ts|next.config.cjs|eslint.config.js|eslint.config.mjs|eslint.config.ts|postcss.config.js|postcss.config.mjs|tailwind.config.js|tailwind.config.ts|.env*|docs/agent-control/*|scripts/*|src/lib/agent-control/*|tests/unit/agent-control*|supabase/*|*.sql)
+                printf 'MAC5_PROTECTED_PATH=%s\n' "$path"
+                exit 1
+                ;;
+            esac
+            if [ -L "$path" ]; then
+              printf 'MAC5_PROTECTED_PATH=SYMLINK\n'
+              exit 1
+            fi
+            if [ -f "$path" ] && [ -x "$path" ]; then
+              printf 'MAC5_FILE_MODE=EXECUTABLE\n'
+              exit 1
+            fi
+          done < "$changed_paths_file"
+
+          if [ ! -s "$result_file" ]; then
+            printf 'MAC5_RESULT=ABSENT\n'
+            exit 1
+          fi
+          tr -d '\r\n' < "$result_file" > "$result_compact"
+          result_bytes="$(wc -c < "$result_file" | tr -d ' ')"
+          if ! grep -Eq '"status"[[:space:]]*:[[:space:]]*"PASS"' "$result_compact" \
+            || ! grep -Eq '"task_id"[[:space:]]*:[[:space:]]*"'"$TASK_ID"'"' "$result_compact" \
+            || ! grep -Eq '"base_sha"[[:space:]]*:[[:space:]]*"'"$EXPECTED_SHA"'"' "$result_compact" \
+            || ! grep -Eq '"fix_round"[[:space:]]*:[[:space:]]*"'"$FIX_ROUND/$MAX_FIX_ROUNDS"'"' "$result_compact" \
+            || ! grep -Eq '"workspace_write_confirmed"[[:space:]]*:[[:space:]]*true' "$result_compact" \
+            || ! grep -Eq '"acceptance_sentinel"[[:space:]]*:[[:space:]]*"CODEX_FIX_PROOF=PASS"' "$result_compact"; then
+            printf 'CODEX_RESULT_BYTES=%s\n' "$result_bytes"
+            printf 'CODEX_FIX_PROOF=FAIL\n'
+            exit 1
+          fi
+
+          printf 'CODEX_RESULT_BYTES=%s\n' "$result_bytes"
+          printf 'EXPECTED_SHA=%s\n' "$EXPECTED_SHA"
+          printf 'ACTUAL_SHA=%s\n' "$(git rev-parse HEAD)"
+          printf 'MAC5_CHANGED_PATHS_COUNT=%s\n' "$changed_count"
+          printf 'MAC5_GIT_CONTROL_STATE=UNCHANGED\n'
+          printf 'CODEX_FIX_PROOF=PASS\n'
+
+      - name: Mint scoped GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ vars.AGENT_CONTROL_APP_CLIENT_ID }}
+          private-key: ${{ secrets.AGENT_CONTROL_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+
+      - name: Publish MAC-5 fix
+        shell: bash
+        env:
+          GH_APP_TOKEN: ${{ steps.app-token.outputs.token }}
+          APP_SLUG: ${{ steps.app-token.outputs.app-slug }}
+          EXPECTED_SHA: ${{ needs.validate.outputs.verified_head }}
+          TASK_ID: ${{ needs.validate.outputs.task_id }}
+          ACTIVE_PR: ${{ needs.validate.outputs.active_pr }}
+          ACTIVE_BRANCH: ${{ needs.validate.outputs.active_branch }}
+          FIX_ROUND: ${{ needs.validate.outputs.fix_round }}
+          MAX_FIX_ROUNDS: ${{ needs.validate.outputs.max_fix_rounds }}
+          REPOSITORY: ${{ github.repository }}
+          PATH: /usr/bin:/bin:/usr/sbin:/sbin
+        run: |
+          set -euo pipefail
+          askpass_file="$(mktemp "$RUNNER_TEMP/agent-control-mac5-askpass.XXXXXX")"
+          curl_config="$(mktemp "$RUNNER_TEMP/agent-control-mac5-curl.XXXXXX")"
+          response_file="$(mktemp "$RUNNER_TEMP/agent-control-mac5-response.XXXXXX")"
+          staged_paths_file="$(mktemp "$RUNNER_TEMP/agent-control-mac5-staged.XXXXXX")"
+          trap 'rm -f "$askpass_file" "$curl_config" "$response_file" "$staged_paths_file"' EXIT
+
+          if [ "$ACTIVE_BRANCH" = "master" ] || [ "$ACTIVE_BRANCH" = "main" ]; then
+            printf 'MAC5_PROTECTED_BRANCH_GUARD=FAIL\n'
+            exit 1
+          fi
+          if ! printf '%s\n' "$ACTIVE_BRANCH" | grep -Eq '^codex/[A-Za-z0-9._/-]+$'; then
+            printf 'MAC5_ACTIVE_BRANCH=INVALID\n'
+            exit 1
+          fi
+          if [ "$(git rev-parse HEAD)" != "$EXPECTED_SHA" ]; then
+            printf 'MAC5_PUBLISH_BASE_SHA=FAIL\n'
+            exit 1
+          fi
+          git diff --cached --exit-code > /dev/null
+          if [ -z "$(git status --porcelain)" ]; then
+            printf 'MAC5_PUBLISH_WORKTREE=NO_CHANGES\n'
+            exit 1
+          fi
+
+          : > "$askpass_file"
+          cat > "$askpass_file" <<'EOF'
+          #!/bin/sh
+          case "$1" in
+            *Username*) printf '%s\n' 'x-access-token' ;;
+            *Password*) printf '%s\n' "$GH_APP_TOKEN" ;;
+            *) exit 1 ;;
+          esac
+          EOF
+          chmod 700 "$askpass_file"
+
+          remote_sha="$(GIT_ASKPASS="$askpass_file" GIT_TERMINAL_PROMPT=0 git ls-remote --heads origin "refs/heads/$ACTIVE_BRANCH" | awk '{print $1}')"
+          if [ "$remote_sha" != "$EXPECTED_SHA" ]; then
+            printf 'REMOTE_HEAD_MUST_MATCH_EXPECTED=FAIL\n'
+            exit 1
+          fi
+          printf 'REMOTE_HEAD_MUST_MATCH_EXPECTED=PASS\n'
+
+          git -c core.hooksPath=/dev/null switch -c "$ACTIVE_BRANCH"
+          git add -A
+          git diff --cached --check
+          if git diff --cached --summary | grep -Eq 'mode change|120000|160000|create mode 100755'; then
+            printf 'MAC5_STAGED_FILE_MODE=UNSAFE\n'
+            exit 1
+          fi
+          git diff --cached --name-only --no-renames | LC_ALL=C sort -u > "$staged_paths_file"
+          staged_count="$(wc -l < "$staged_paths_file" | tr -d ' ')"
+          if [ "$staged_count" -le 0 ] || [ "$staged_count" -gt 40 ]; then
+            printf 'MAC5_STAGED_PATHS=INVALID\n'
+            exit 1
+          fi
+          while IFS= read -r path; do
+            case "$path" in
+              .github/*|AGENTS.md|.gitignore|.npmrc|package.json|pnpm-lock.yaml|package-lock.json|yarn.lock|bun.lockb|tsconfig.json|vercel.json|next.config.js|next.config.mjs|next.config.ts|next.config.cjs|eslint.config.js|eslint.config.mjs|eslint.config.ts|postcss.config.js|postcss.config.mjs|tailwind.config.js|tailwind.config.ts|.env*|docs/agent-control/*|scripts/*|src/lib/agent-control/*|tests/unit/agent-control*|supabase/*|*.sql)
+                printf 'MAC5_STAGED_PROTECTED_PATH=%s\n' "$path"
+                exit 1
+                ;;
+            esac
+          done < "$staged_paths_file"
+
+          bot_name="${APP_SLUG:-hongda-agent-control}[bot]"
+          git config user.name "$bot_name"
+          git config user.email "${APP_SLUG:-hongda-agent-control}[bot]@users.noreply.github.com"
+          git -c core.hooksPath=/dev/null commit -m "fix(agent-control): $TASK_ID round $FIX_ROUND"
+          commit_sha="$(git rev-parse HEAD)"
+          if [ -n "$(git status --porcelain)" ]; then
+            printf 'MAC5_POST_COMMIT_STATUS=DIRTY\n'
+            exit 1
+          fi
+
+          remote_sha_before_push="$(GIT_ASKPASS="$askpass_file" GIT_TERMINAL_PROMPT=0 git ls-remote --heads origin "refs/heads/$ACTIVE_BRANCH" | awk '{print $1}')"
+          if [ "$remote_sha_before_push" != "$EXPECTED_SHA" ]; then
+            printf 'REMOTE_HEAD_MUST_MATCH_EXPECTED=FAIL_BEFORE_PUSH\n'
+            exit 1
+          fi
+
+          GIT_ASKPASS="$askpass_file" GIT_TERMINAL_PROMPT=0 git -c core.hooksPath=/dev/null push origin "HEAD:refs/heads/$ACTIVE_BRANCH"
+
+          {
+            printf 'header = "Authorization: Bearer %s"\n' "$GH_APP_TOKEN"
+            printf 'header = "Accept: application/vnd.github+json"\n'
+            printf 'header = "X-GitHub-Api-Version: 2022-11-28"\n'
+          } > "$curl_config"
+          chmod 600 "$curl_config"
+
+          completion_body="TASK_ID = $TASK_ID\nTASK_STATUS = PASS\nFIX_ROUND = $FIX_ROUND / $MAX_FIX_ROUNDS\nBASE_HEAD_SHA = $EXPECTED_SHA\nHEAD_SHA = $commit_sha\nPR_NUMBER = $ACTIVE_PR\nBRANCH = $ACTIVE_BRANCH\nFILES_CHANGED_COUNT = $staged_count\nCODEX_FIX_PROOF = PASS\nGITHUB_WRITE_IDENTITY = GitHub App installation token\nDATABASE_CHANGED = NO\nMIGRATION_CREATED = NO\nRLS_CHANGED = NO\nPRODUCTION_CHANGED = NO\nAUTO_MERGE = false\nAUTO_PRODUCTION = false\nREADY_FOR_PM_REVIEW = YES"
+          payload="$(printf '{"body":"%s"}' "$completion_body")"
+
+          http_code="$(curl --silent --show-error \
+            --config "$curl_config" \
+            --output "$response_file" \
+            --write-out '%{http_code}' \
+            --request POST \
+            "https://api.github.com/repos/$REPOSITORY/issues/$ACTIVE_PR/comments" \
+            --data "$payload")"
+          if [ "$http_code" != "201" ]; then
+            printf 'MAC5_COMPLETION_COMMENT=FAIL_HTTP_%s\n' "$http_code"
+            exit 1
+          fi
+
+          printf 'MAC5_ACTIVE_PR=%s\n' "$ACTIVE_PR"
+          printf 'MAC5_BRANCH=%s\n' "$ACTIVE_BRANCH"
+          printf 'MAC5_NEW_HEAD=%s\n' "$commit_sha"
+          printf 'MAC5_COMPLETION_COMMENT=PASS\n'
+          printf 'MAC5_PUBLISH_PROOF=PASS\n'
+; then
+            printf 'MAC5_TASK_ID=INVALID\n'
+            exit 1
+          fi
+          if [ "$MAX_FIX_ROUNDS" != "3" ] || ! printf '%s\n' "$FIX_ROUND" | grep -Eq '^[1-3]
+          if ! printf '%s\n' "$ACTIVE_PR" | grep -Eq '^[1-9][0-9]*$'; then
+            printf 'MAC5_ACTIVE_PR=INVALID\n'
+            exit 1
+          fi
+          if ! printf '%s\n' "$ACTIVE_BRANCH" | grep -Eq '^codex/[A-Za-z0-9._/-]+$'; then
+            printf 'MAC5_ACTIVE_BRANCH=INVALID\n'
+            exit 1
+          fi
+          if printf '%s\n' "$ACTIVE_BRANCH" | grep -Eq '(^|/)\.\.(/|$)'; then
+            printf 'MAC5_ACTIVE_BRANCH=INVALID\n'
+            exit 1
+          fi
+          if [ -z "$TASK_BODY_B64" ]; then
+            printf 'MAC5_TASK_PAYLOAD=ABSENT\n'
+            exit 1
+          fi
+          printf '%s' "$TASK_BODY_B64" | /usr/bin/base64 -D > "$task_file"
+          task_bytes="$(wc -c < "$task_file" | tr -d ' ')"
+          if [ "$task_bytes" -le 0 ] || [ "$task_bytes" -gt 20000 ]; then
+            printf 'MAC5_TASK_BYTES=INVALID\n'
+            exit 1
+          fi
+          grep -Fxq 'AGENT_CONTROL_FIX_TASK_V1' "$task_file"
+          grep -Fxq "TASK_ID = $TASK_ID" "$task_file"
+          grep -Fxq 'TASK_STATUS = FIX_REQUIRED' "$task_file"
+          grep -Fxq "EXPECTED_HEAD = $EXPECTED_SHA" "$task_file"
+          grep -Fxq "FIX_ROUND = $FIX_ROUND / $MAX_FIX_ROUNDS" "$task_file"
+
+          actual_sha="$(git rev-parse HEAD)"
+          if [ "$actual_sha" != "$EXPECTED_SHA" ]; then
+            printf 'MAC5_HEAD_PROOF=FAIL\n'
+            exit 1
+          fi
+          git diff --exit-code > /dev/null
+          git diff --cached --exit-code > /dev/null
+          if [ -n "$(git status --porcelain)" ]; then
+            printf 'MAC5_INITIAL_STATUS=CLEAN_REQUIRED\n'
+            exit 1
+          fi
+          if [ ! -x "$codex_binary" ]; then
+            printf 'CODEX_BINARY=ABSENT\n'
+            exit 1
+          fi
+
+          git_dir="$(git rev-parse --git-dir)"
+          git_control_hash() {
+            {
+              shasum -a 256 "$git_dir/HEAD"
+              shasum -a 256 "$git_dir/config"
+              if [ -f "$git_dir/info/exclude" ]; then shasum -a 256 "$git_dir/info/exclude"; else printf 'INFO_EXCLUDE_ABSENT\n'; fi
+              if [ -f "$git_dir/info/attributes" ]; then shasum -a 256 "$git_dir/info/attributes"; else printf 'INFO_ATTRIBUTES_ABSENT\n'; fi
+              if [ -d "$git_dir/hooks" ]; then
+                find "$git_dir/hooks" -type f -exec shasum -a 256 {} \; 2>/dev/null | LC_ALL=C sort
+              else
+                printf 'HOOKS_DIR_ABSENT\n'
+              fi
+              { git show-ref || true; } | LC_ALL=C sort
+              git config --local --list | LC_ALL=C sort
+            } | shasum -a 256 | awk '{print $1}'
+          }
+          git_control_before="$(git_control_hash)"
+
+          cat > "$prompt_file" <<EOF
+          You are executing one trusted MAC-5 FIX_REQUIRED task on an existing Draft/Open PR.
+
+          Repository: $REPOSITORY
+          Task ID: $TASK_ID
+          Expected HEAD SHA: $EXPECTED_SHA
+          Active PR: #$ACTIVE_PR
+          Active branch: $ACTIVE_BRANCH
+          Fix round: $FIX_ROUND / $MAX_FIX_ROUNDS
+          Trusted task comment ID: $TASK_COMMENT_ID
+
+          Implement only the trusted fix task below.
+          Work only inside the checked-out repository.
+          Do not stage, commit, push, switch/create branches, call GitHub write APIs, or modify git metadata.
+          Do not read unrelated HOME/user credential files, auth files, tokens, cookies, or environment variables.
+          Do not print secrets.
+
+          The trusted wrapper will reject changes to control/infrastructure/sensitive paths including:
+          .github/, AGENTS.md, .gitignore, .env*, package/lock files, tsconfig.json,
+          vercel.json, next.config.*, docs/agent-control/, scripts/,
+          src/lib/agent-control/, tests/unit/agent-control*, supabase/, and all *.sql files.
+
+          Keep the fix narrow. More than 40 changed paths is rejected.
+          Run focused repository-local tests when useful, but do not make network writes.
+
+          === TRUSTED FIX TASK ===
+          EOF
+          cat "$task_file" >> "$prompt_file"
+          cat >> "$prompt_file" <<EOF
+
+          === REQUIRED STRUCTURED RESULT ===
+          Return JSON matching the provided output schema.
+          status must be PASS only when the requested fix is implemented.
+          task_id must exactly equal $TASK_ID.
+          base_sha must exactly equal $EXPECTED_SHA.
+          fix_round must exactly equal "$FIX_ROUND/$MAX_FIX_ROUNDS".
+          workspace_write_confirmed must be true.
+          acceptance_sentinel must exactly equal CODEX_FIX_PROOF=PASS.
+          EOF
+
+          codex_version="$("$codex_binary" --version 2>/dev/null || true)"
+          printf 'CODEX_VERSION=%s\n' "$codex_version"
+
+          set +e
+          env -i \
+            HOME="$HOME" \
+            PATH="/usr/bin:/bin:/usr/sbin:/sbin" \
+            "$codex_binary" login status > "$login_log" 2>&1
+          login_exit_status=$?
+          set -e
+          if [ "$login_exit_status" -eq 0 ]; then
+            printf 'CODEX_LOGIN_STATUS=AVAILABLE\n'
+          else
+            printf 'CODEX_LOGIN_STATUS=UNAVAILABLE_OR_CONFIG_ERROR\n'
+            exit 1
+          fi
+
+          set +e
+          env -i \
+            HOME="$HOME" \
+            PATH="/usr/bin:/bin:/usr/sbin:/sbin" \
+            TMPDIR="$RUNNER_TEMP" \
+            "$codex_binary" exec \
+            -C "$GITHUB_WORKSPACE" \
+            -s workspace-write \
+            -c 'approval_policy="never"' \
+            --ephemeral \
+            --ignore-user-config \
+            --ignore-rules \
+            --json \
+            --output-schema "$output_schema" \
+            --output-last-message "$result_file" \
+            - < "$prompt_file" > "$event_log" 2> "$error_log"
+          codex_exit_status=$?
+          set -e
+          printf 'CODEX_EXIT_STATUS=%s\n' "$codex_exit_status"
+          if [ "$codex_exit_status" -ne 0 ]; then
+            printf 'CODEX_FIX_PROOF=FAIL\n'
+            exit 1
+          fi
+
+          if [ "$(git rev-parse HEAD)" != "$EXPECTED_SHA" ]; then
+            printf 'MAC5_POST_CODEX_HEAD=CHANGED\n'
+            exit 1
+          fi
+          git_control_after="$(git_control_hash)"
+          if [ "$git_control_after" != "$git_control_before" ]; then
+            printf 'MAC5_GIT_CONTROL_STATE=CHANGED\n'
+            exit 1
+          fi
+          git diff --cached --exit-code > /dev/null
+
+          {
+            git diff --name-only --no-renames
+            git ls-files --others --exclude-standard
+          } | sed '/^$/d' | LC_ALL=C sort -u > "$changed_paths_file"
+
+          changed_count="$(wc -l < "$changed_paths_file" | tr -d ' ')"
+          if [ "$changed_count" -le 0 ]; then
+            printf 'MAC5_CHANGED_PATHS=NONE\n'
+            exit 1
+          fi
+          if [ "$changed_count" -gt "$MAC5_MAX_CHANGED_PATHS" ]; then
+            printf 'MAC5_CHANGED_PATHS=TOO_MANY\n'
+            exit 1
+          fi
+          if git diff --summary | grep -Eq 'mode change|120000|160000|create mode 100755'; then
+            printf 'MAC5_FILE_MODE=UNSAFE\n'
+            exit 1
+          fi
+
+          while IFS= read -r path; do
+            if [ -z "$path" ] || printf '%s\n' "$path" | grep -Eq '(^|/)\.\.(/|$)'; then
+              printf 'MAC5_PROTECTED_PATH=INVALID\n'
+              exit 1
+            fi
+            case "$path" in
+              .github/*|AGENTS.md|.gitignore|.npmrc|package.json|pnpm-lock.yaml|package-lock.json|yarn.lock|bun.lockb|tsconfig.json|vercel.json|next.config.js|next.config.mjs|next.config.ts|next.config.cjs|eslint.config.js|eslint.config.mjs|eslint.config.ts|postcss.config.js|postcss.config.mjs|tailwind.config.js|tailwind.config.ts|.env*|docs/agent-control/*|scripts/*|src/lib/agent-control/*|tests/unit/agent-control*|supabase/*|*.sql)
+                printf 'MAC5_PROTECTED_PATH=%s\n' "$path"
+                exit 1
+                ;;
+            esac
+            if [ -e "$path" ] && [ -L "$path" ]; then
+              printf 'MAC5_PROTECTED_PATH=SYMLINK\n'
+              exit 1
+            fi
+          done < "$changed_paths_file"
+
+          if [ ! -s "$result_file" ]; then
+            printf 'MAC5_RESULT=ABSENT\n'
+            exit 1
+          fi
+          tr -d '\r\n' < "$result_file" > "$result_compact"
+          result_bytes="$(wc -c < "$result_file" | tr -d ' ')"
+          if ! grep -Eq '"status"[[:space:]]*:[[:space:]]*"PASS"' "$result_compact" \
+            || ! grep -Eq '"task_id"[[:space:]]*:[[:space:]]*"'"$TASK_ID"'"' "$result_compact" \
+            || ! grep -Eq '"base_sha"[[:space:]]*:[[:space:]]*"'"$EXPECTED_SHA"'"' "$result_compact" \
+            || ! grep -Eq '"fix_round"[[:space:]]*:[[:space:]]*"'"$FIX_ROUND/$MAX_FIX_ROUNDS"'"' "$result_compact" \
+            || ! grep -Eq '"workspace_write_confirmed"[[:space:]]*:[[:space:]]*true' "$result_compact" \
+            || ! grep -Eq '"acceptance_sentinel"[[:space:]]*:[[:space:]]*"CODEX_FIX_PROOF=PASS"' "$result_compact"; then
+            printf 'CODEX_RESULT_BYTES=%s\n' "$result_bytes"
+            printf 'CODEX_FIX_PROOF=FAIL\n'
+            exit 1
+          fi
+
+          printf 'CODEX_RESULT_BYTES=%s\n' "$result_bytes"
+          printf 'EXPECTED_SHA=%s\n' "$EXPECTED_SHA"
+          printf 'ACTUAL_SHA=%s\n' "$(git rev-parse HEAD)"
+          printf 'MAC5_CHANGED_PATHS_COUNT=%s\n' "$changed_count"
+          printf 'MAC5_GIT_CONTROL_STATE=UNCHANGED\n'
+          printf 'CODEX_FIX_PROOF=PASS\n'
+
+      - name: Mint scoped GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ vars.AGENT_CONTROL_APP_CLIENT_ID }}
+          private-key: ${{ secrets.AGENT_CONTROL_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+
+      - name: Publish MAC-5 fix
+        shell: bash
+        env:
+          GH_APP_TOKEN: ${{ steps.app-token.outputs.token }}
+          APP_SLUG: ${{ steps.app-token.outputs.app-slug }}
+          EXPECTED_SHA: ${{ needs.validate.outputs.verified_head }}
+          TASK_ID: ${{ needs.validate.outputs.task_id }}
+          ACTIVE_PR: ${{ needs.validate.outputs.active_pr }}
+          ACTIVE_BRANCH: ${{ needs.validate.outputs.active_branch }}
+          FIX_ROUND: ${{ needs.validate.outputs.fix_round }}
+          MAX_FIX_ROUNDS: ${{ needs.validate.outputs.max_fix_rounds }}
+          REPOSITORY: ${{ github.repository }}
+          PATH: /usr/bin:/bin:/usr/sbin:/sbin
+        run: |
+          set -euo pipefail
+          askpass_file="$(mktemp "$RUNNER_TEMP/agent-control-mac5-askpass.XXXXXX")"
+          curl_config="$(mktemp "$RUNNER_TEMP/agent-control-mac5-curl.XXXXXX")"
+          response_file="$(mktemp "$RUNNER_TEMP/agent-control-mac5-response.XXXXXX")"
+          staged_paths_file="$(mktemp "$RUNNER_TEMP/agent-control-mac5-staged.XXXXXX")"
+          trap 'rm -f "$askpass_file" "$curl_config" "$response_file" "$staged_paths_file"' EXIT
+
+          if [ "$ACTIVE_BRANCH" = "master" ] || [ "$ACTIVE_BRANCH" = "main" ]; then
+            printf 'MAC5_PROTECTED_BRANCH_GUARD=FAIL\n'
+            exit 1
+          fi
+          if ! printf '%s\n' "$ACTIVE_BRANCH" | grep -Eq '^codex/[A-Za-z0-9._/-]+$'; then
+            printf 'MAC5_ACTIVE_BRANCH=INVALID\n'
+            exit 1
+          fi
+          if [ "$(git rev-parse HEAD)" != "$EXPECTED_SHA" ]; then
+            printf 'MAC5_PUBLISH_BASE_SHA=FAIL\n'
+            exit 1
+          fi
+          git diff --cached --exit-code > /dev/null
+          if [ -z "$(git status --porcelain)" ]; then
+            printf 'MAC5_PUBLISH_WORKTREE=NO_CHANGES\n'
+            exit 1
+          fi
+
+          : > "$askpass_file"
+          cat > "$askpass_file" <<'EOF'
+          #!/bin/sh
+          case "$1" in
+            *Username*) printf '%s\n' 'x-access-token' ;;
+            *Password*) printf '%s\n' "$GH_APP_TOKEN" ;;
+            *) exit 1 ;;
+          esac
+          EOF
+          chmod 700 "$askpass_file"
+
+          remote_sha="$(GIT_ASKPASS="$askpass_file" GIT_TERMINAL_PROMPT=0 git ls-remote --heads origin "refs/heads/$ACTIVE_BRANCH" | awk '{print $1}')"
+          if [ "$remote_sha" != "$EXPECTED_SHA" ]; then
+            printf 'REMOTE_HEAD_MUST_MATCH_EXPECTED=FAIL\n'
+            exit 1
+          fi
+          printf 'REMOTE_HEAD_MUST_MATCH_EXPECTED=PASS\n'
+
+          git -c core.hooksPath=/dev/null switch -c "$ACTIVE_BRANCH"
+          git add -A
+          git diff --cached --check
+          git diff --cached --name-only --no-renames | LC_ALL=C sort -u > "$staged_paths_file"
+          staged_count="$(wc -l < "$staged_paths_file" | tr -d ' ')"
+          if [ "$staged_count" -le 0 ] || [ "$staged_count" -gt 40 ]; then
+            printf 'MAC5_STAGED_PATHS=INVALID\n'
+            exit 1
+          fi
+          while IFS= read -r path; do
+            case "$path" in
+              .github/*|AGENTS.md|.gitignore|.npmrc|package.json|pnpm-lock.yaml|package-lock.json|yarn.lock|bun.lockb|tsconfig.json|vercel.json|next.config.js|next.config.mjs|next.config.ts|next.config.cjs|eslint.config.js|eslint.config.mjs|eslint.config.ts|postcss.config.js|postcss.config.mjs|tailwind.config.js|tailwind.config.ts|.env*|docs/agent-control/*|scripts/*|src/lib/agent-control/*|tests/unit/agent-control*|supabase/*|*.sql)
+                printf 'MAC5_STAGED_PROTECTED_PATH=%s\n' "$path"
+                exit 1
+                ;;
+            esac
+          done < "$staged_paths_file"
+
+          bot_name="${APP_SLUG:-hongda-agent-control}[bot]"
+          git config user.name "$bot_name"
+          git config user.email "${APP_SLUG:-hongda-agent-control}[bot]@users.noreply.github.com"
+          git -c core.hooksPath=/dev/null commit -m "fix(agent-control): $TASK_ID round $FIX_ROUND"
+          commit_sha="$(git rev-parse HEAD)"
+          if [ -n "$(git status --porcelain)" ]; then
+            printf 'MAC5_POST_COMMIT_STATUS=DIRTY\n'
+            exit 1
+          fi
+
+          remote_sha_before_push="$(GIT_ASKPASS="$askpass_file" GIT_TERMINAL_PROMPT=0 git ls-remote --heads origin "refs/heads/$ACTIVE_BRANCH" | awk '{print $1}')"
+          if [ "$remote_sha_before_push" != "$EXPECTED_SHA" ]; then
+            printf 'REMOTE_HEAD_MUST_MATCH_EXPECTED=FAIL_BEFORE_PUSH\n'
+            exit 1
+          fi
+
+          GIT_ASKPASS="$askpass_file" GIT_TERMINAL_PROMPT=0 git -c core.hooksPath=/dev/null push origin "HEAD:refs/heads/$ACTIVE_BRANCH"
+
+          {
+            printf 'header = "Authorization: Bearer %s"\n' "$GH_APP_TOKEN"
+            printf 'header = "Accept: application/vnd.github+json"\n'
+            printf 'header = "X-GitHub-Api-Version: 2022-11-28"\n'
+          } > "$curl_config"
+          chmod 600 "$curl_config"
+
+          completion_body="TASK_ID = $TASK_ID\nTASK_STATUS = PASS\nFIX_ROUND = $FIX_ROUND / $MAX_FIX_ROUNDS\nBASE_HEAD_SHA = $EXPECTED_SHA\nHEAD_SHA = $commit_sha\nPR_NUMBER = $ACTIVE_PR\nBRANCH = $ACTIVE_BRANCH\nFILES_CHANGED_COUNT = $staged_count\nCODEX_FIX_PROOF = PASS\nGITHUB_WRITE_IDENTITY = GitHub App installation token\nDATABASE_CHANGED = NO\nMIGRATION_CREATED = NO\nRLS_CHANGED = NO\nPRODUCTION_CHANGED = NO\nAUTO_MERGE = false\nAUTO_PRODUCTION = false\nREADY_FOR_PM_REVIEW = YES"
+          payload="$(printf '{"body":"%s"}' "$completion_body")"
+
+          http_code="$(curl --silent --show-error \
+            --config "$curl_config" \
+            --output "$response_file" \
+            --write-out '%{http_code}' \
+            --request POST \
+            "https://api.github.com/repos/$REPOSITORY/issues/$ACTIVE_PR/comments" \
+            --data "$payload")"
+          if [ "$http_code" != "201" ]; then
+            printf 'MAC5_COMPLETION_COMMENT=FAIL_HTTP_%s\n' "$http_code"
+            exit 1
+          fi
+
+          printf 'MAC5_ACTIVE_PR=%s\n' "$ACTIVE_PR"
+          printf 'MAC5_BRANCH=%s\n' "$ACTIVE_BRANCH"
+          printf 'MAC5_NEW_HEAD=%s\n' "$commit_sha"
+          printf 'MAC5_COMPLETION_COMMENT=PASS\n'
+          printf 'MAC5_PUBLISH_PROOF=PASS\n'
+; then
             printf 'MAC5_FIX_ROUND=INVALID\n'
             exit 1
           fi
@@ -935,7 +1635,7 @@ jobs:
               exit 1
             fi
             case "$path" in
-              .github/*|AGENTS.md|.gitignore|.npmrc|package.json|pnpm-lock.yaml|package-lock.json|yarn.lock|bun.lockb|tsconfig.json|vercel.json|next.config.js|next.config.mjs|next.config.ts|.env|.env.*|docs/agent-control/*|scripts/*|src/lib/agent-control/*|tests/unit/agent-control*|supabase/*|*.sql)
+              .github/*|AGENTS.md|.gitignore|.npmrc|package.json|pnpm-lock.yaml|package-lock.json|yarn.lock|bun.lockb|tsconfig.json|vercel.json|next.config.js|next.config.mjs|next.config.ts|next.config.cjs|eslint.config.js|eslint.config.mjs|eslint.config.ts|postcss.config.js|postcss.config.mjs|tailwind.config.js|tailwind.config.ts|.env*|docs/agent-control/*|scripts/*|src/lib/agent-control/*|tests/unit/agent-control*|supabase/*|*.sql)
                 printf 'MAC5_PROTECTED_PATH=%s\n' "$path"
                 exit 1
                 ;;
@@ -1047,7 +1747,7 @@ jobs:
           fi
           while IFS= read -r path; do
             case "$path" in
-              .github/*|AGENTS.md|.gitignore|.npmrc|package.json|pnpm-lock.yaml|package-lock.json|yarn.lock|bun.lockb|tsconfig.json|vercel.json|next.config.js|next.config.mjs|next.config.ts|.env|.env.*|docs/agent-control/*|scripts/*|src/lib/agent-control/*|tests/unit/agent-control*|supabase/*|*.sql)
+              .github/*|AGENTS.md|.gitignore|.npmrc|package.json|pnpm-lock.yaml|package-lock.json|yarn.lock|bun.lockb|tsconfig.json|vercel.json|next.config.js|next.config.mjs|next.config.ts|next.config.cjs|eslint.config.js|eslint.config.mjs|eslint.config.ts|postcss.config.js|postcss.config.mjs|tailwind.config.js|tailwind.config.ts|.env*|docs/agent-control/*|scripts/*|src/lib/agent-control/*|tests/unit/agent-control*|supabase/*|*.sql)
                 printf 'MAC5_STAGED_PROTECTED_PATH=%s\n' "$path"
                 exit 1
                 ;;
