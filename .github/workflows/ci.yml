@@ -49,6 +49,9 @@ jobs:
       - name: Agent Control MAC-5 tests
         run: pnpm exec tsx tests/unit/agent-control-mac5.test.ts
 
+      - name: Agent Control READY bootstrap tests
+        run: pnpm exec tsx tests/unit/agent-control-ready-bootstrap.test.ts
+
       - name: Check server-only imports
         run: bash scripts/check-server-imports.sh
 
