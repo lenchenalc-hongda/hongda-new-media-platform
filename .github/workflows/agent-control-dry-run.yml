@@ -1452,15 +1452,22 @@ jobs:
         run: |
           set -euo pipefail
           acceptance_path="docs/agent-control/acceptance/ready-bootstrap.md"
+          json_encoder="$GITHUB_WORKSPACE/scripts/agent-control/ready-bootstrap-json.rb"
+          publish_guard="$GITHUB_WORKSPACE/scripts/agent-control/ready-bootstrap-publish-guard.rb"
           branch="codex/agent-control-ready-bootstrap-$(printf '%s' "$TASK_ID" | tr '[:upper:]' '[:lower:]')-$(printf '%s' "$EXPECTED_SHA" | cut -c1-12)"
           askpass_file="$(mktemp "$RUNNER_TEMP/agent-control-ready-askpass.XXXXXX")"
           curl_config="$(mktemp "$RUNNER_TEMP/agent-control-ready-curl.XXXXXX")"
           response_file="$(mktemp "$RUNNER_TEMP/agent-control-ready-response.XXXXXX")"
           pr_body_file="$(mktemp "$RUNNER_TEMP/agent-control-ready-pr-body.XXXXXX")"
-          trap 'rm -f "$askpass_file" "$curl_config" "$response_file" "$pr_body_file"' EXIT
+          completion_body_file="$(mktemp "$RUNNER_TEMP/agent-control-ready-completion-body.XXXXXX")"
+          trap 'rm -f "$askpass_file" "$curl_config" "$response_file" "$pr_body_file" "$completion_body_file"' EXIT
 
           if ! printf '%s\n' "$branch" | grep -Eq '^codex/agent-control-ready-bootstrap-[a-z0-9._-]+-[0-9a-f]{12}$'; then
             printf 'READY_BOOTSTRAP_BRANCH=INVALID\n'
+            exit 1
+          fi
+          if [ ! -f "$json_encoder" ] || [ ! -f "$publish_guard" ]; then
+            printf 'READY_BOOTSTRAP_PUBLISH_HELPER=ABSENT\n'
             exit 1
           fi
           if [ "$(git rev-parse HEAD)" != "$EXPECTED_SHA" ]; then
@@ -1524,6 +1531,29 @@ jobs:
             return 1
           }
 
+          validate_json_payload() {
+            local payload="$1"
+            local label="$2"
+            if ! printf '%s' "$payload" | /usr/bin/ruby -rjson -e 'JSON.parse(STDIN.read)'; then
+              printf 'READY_BOOTSTRAP_JSON_PAYLOAD=%s_INVALID\n' "$label"
+              return 1
+            fi
+          }
+
+          assert_remote_master() {
+            local phase="$1"
+            local remote_master
+            if ! remote_master="$(git_remote_head "refs/heads/master")"; then
+              printf 'READY_BOOTSTRAP_REMOTE_MASTER_%s=READ_FAIL\n' "$phase"
+              return 1
+            fi
+            if ! /usr/bin/ruby "$publish_guard" "$EXPECTED_SHA" "$remote_master"; then
+              printf 'READY_BOOTSTRAP_REMOTE_MASTER_%s=MISMATCH\n' "$phase"
+              return 1
+            fi
+            printf 'READY_BOOTSTRAP_REMOTE_MASTER_%s=PASS\n' "$phase"
+          }
+
           set +e
           remote_sha="$(git_remote_head "refs/heads/$branch")"
           remote_status=$?
@@ -1557,6 +1587,8 @@ jobs:
             exit 1
           fi
           printf 'READY_BOOTSTRAP_OPEN_PR=NONE\n'
+
+          assert_remote_master BEFORE_PUBLISH
 
           git -c core.hooksPath=/dev/null switch -c "$branch"
           git add -- "$acceptance_path"
@@ -1615,6 +1647,8 @@ jobs:
             exit 1
           fi
 
+          assert_remote_master BEFORE_PR
+
           cat > "$pr_body_file" <<EOF
           READY bootstrap acceptance for Agent Control.
 
@@ -1634,8 +1668,8 @@ jobs:
           AUTO_PRODUCTION = false
           READY_FOR_PM_REVIEW = YES
           EOF
-          pr_body="$(awk '{printf "%s\\n", $0}' "$pr_body_file")"
-          pr_payload="$(printf '{"title":"Agent Control READY task bootstrap acceptance","head":"%s","base":"master","draft":true,"body":"%s"}' "$branch" "$pr_body")"
+          pr_payload="$(/usr/bin/ruby "$json_encoder" draft-pr "Agent Control READY task bootstrap acceptance" "$branch" master "$pr_body_file")"
+          validate_json_payload "$pr_payload" DRAFT_PR
 
           pr_code="$(curl --silent --show-error \
             --http1.1 \
@@ -1657,8 +1691,10 @@ jobs:
             exit 1
           fi
 
-          completion_body="TASK_ID = $TASK_ID\nTASK_STATUS = PASS\nBRANCH = $branch\nBASE_MASTER_SHA = $EXPECTED_SHA\nHEAD_SHA = $commit_sha\nPR_NUMBER = $pr_number\nFILES_CHANGED = $acceptance_path\nCODEX_READY_BOOTSTRAP_PROOF = PASS\nGITHUB_WRITE_IDENTITY = GitHub App installation token\nDATABASE_CHANGED = NO\nMIGRATION_CREATED = NO\nRLS_CHANGED = NO\nPRODUCTION_CHANGED = NO\nAUTO_MERGE = false\nAUTO_PRODUCTION = false\nREADY_FOR_PM_REVIEW = YES"
-          completion_payload="$(printf '{"body":"%s"}' "$completion_body")"
+          printf 'TASK_ID = %s\nTASK_STATUS = PASS\nBRANCH = %s\nBASE_MASTER_SHA = %s\nHEAD_SHA = %s\nPR_NUMBER = %s\nFILES_CHANGED = %s\nCODEX_READY_BOOTSTRAP_PROOF = PASS\nGITHUB_WRITE_IDENTITY = GitHub App installation token\nDATABASE_CHANGED = NO\nMIGRATION_CREATED = NO\nRLS_CHANGED = NO\nPRODUCTION_CHANGED = NO\nAUTO_MERGE = false\nAUTO_PRODUCTION = false\nREADY_FOR_PM_REVIEW = YES\n' \
+            "$TASK_ID" "$branch" "$EXPECTED_SHA" "$commit_sha" "$pr_number" "$acceptance_path" > "$completion_body_file"
+          completion_payload="$(/usr/bin/ruby "$json_encoder" comment "$completion_body_file")"
+          validate_json_payload "$completion_payload" COMPLETION_COMMENT
           comment_code="$(curl --silent --show-error \
             --http1.1 \
             --connect-timeout 20 \

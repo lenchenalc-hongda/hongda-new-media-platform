@@ -1,4 +1,7 @@
+import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import {
   READY_BOOTSTRAP_ACCEPTANCE_PATH,
   READY_BOOTSTRAP_ACCEPTANCE_TASK_ID,
@@ -213,6 +216,98 @@ assert(
   'wrong bootstrap path is rejected',
 );
 
+const jsonEncoderPath = path.resolve(
+  'scripts/agent-control/ready-bootstrap-json.rb',
+);
+const publishGuardPath = path.resolve(
+  'scripts/agent-control/ready-bootstrap-publish-guard.rb',
+);
+const temporaryDirectory = fs.mkdtempSync(
+  path.join(os.tmpdir(), 'agent-control-ready-bootstrap-'),
+);
+const multilineBodyPath = path.join(temporaryDirectory, 'body.md');
+const multilineBody = [
+  'READY bootstrap acceptance for Agent Control.',
+  '',
+  'TASK_ID = ' + READY_BOOTSTRAP_ACCEPTANCE_TASK_ID,
+  'BASE_MASTER_SHA = ' + baseMasterSha,
+  '',
+  'Multi-line body must survive JSON encoding.',
+].join('\n');
+fs.writeFileSync(multilineBodyPath, multilineBody, 'utf8');
+
+try {
+  const draftPrPayload = execFileSync(
+    'ruby',
+    [
+      jsonEncoderPath,
+      'draft-pr',
+      'Agent Control READY task bootstrap acceptance',
+      'codex/test-ready-branch',
+      'master',
+      multilineBodyPath,
+    ],
+    { encoding: 'utf8' },
+  );
+  const parsedDraftPrPayload = JSON.parse(draftPrPayload) as {
+    body: string;
+    draft: boolean;
+    base: string;
+  };
+  assert(
+    parsedDraftPrPayload.body === multilineBody
+      && parsedDraftPrPayload.draft === true
+      && parsedDraftPrPayload.base === 'master',
+    'actual draft PR payload builder produces parseable JSON with exact multi-line body',
+  );
+
+  const commentPayload = execFileSync(
+    'ruby',
+    [jsonEncoderPath, 'comment', multilineBodyPath],
+    { encoding: 'utf8' },
+  );
+  assert(
+    (JSON.parse(commentPayload) as { body: string }).body === multilineBody,
+    'actual completion comment payload builder produces parseable JSON with exact multi-line body',
+  );
+
+  assert(
+    (() => {
+      try {
+        execFileSync('ruby', [publishGuardPath, baseMasterSha, baseMasterSha]);
+        return true;
+      } catch {
+        return false;
+      }
+    })(),
+    'publish guard accepts matching remote master SHA',
+  );
+  assert(
+    (() => {
+      try {
+        execFileSync('ruby', [publishGuardPath, baseMasterSha, 'b'.repeat(40)]);
+        return false;
+      } catch {
+        return true;
+      }
+    })(),
+    'publish guard rejects changed remote master SHA',
+  );
+  assert(
+    (() => {
+      try {
+        execFileSync('ruby', [publishGuardPath, baseMasterSha, 'not-a-sha']);
+        return false;
+      } catch {
+        return true;
+      }
+    })(),
+    'publish guard rejects malformed remote master reads',
+  );
+} finally {
+  fs.rmSync(temporaryDirectory, { recursive: true, force: true });
+}
+
 const workflowSource = fs.readFileSync(
   '.github/workflows/agent-control-dry-run.yml',
   'utf8',
@@ -278,12 +373,42 @@ assert(
   && publishStep.includes('READY_BOOTSTRAP_OPEN_PR=EXISTS')
   && publishStep.includes('READY_BOOTSTRAP_PUSH=UNVERIFIED')
   && publishStep.includes('/pulls?state=open&head=')
-  && publishStep.includes('"draft":true')
+  && publishStep.includes('"$json_encoder" draft-pr')
   && publishStep.includes('/issues/$pr_number/comments')
   && !publishStep.includes('--force')
   && !/git push[^\n]*(master|main)|gh pr merge|\/merge"/.test(publishStep)
   && !/issues\/10|AGENT_CONTROL_STATE_START/.test(publishStep),
   'publisher rejects duplicate branch/task, creates only a Draft PR, posts completion, and cannot merge or mutate Issue #10',
+);
+
+assert(
+  publishStep.includes('ready-bootstrap-json.rb')
+  && publishStep.includes('ready-bootstrap-publish-guard.rb')
+  && publishStep.includes('validate_json_payload "$pr_payload" DRAFT_PR')
+  && publishStep.includes('validate_json_payload "$completion_payload" COMPLETION_COMMENT')
+  && !publishStep.includes('pr_body="$(awk')
+  && !publishStep.includes('pr_payload="$(printf'),
+  'publisher uses executable JSON encoding for real outgoing payloads',
+);
+
+const beforePublishIndex = publishStep.indexOf(
+  'assert_remote_master BEFORE_PUBLISH',
+);
+const switchIndex = publishStep.indexOf(
+  'git -c core.hooksPath=/dev/null switch -c "$branch"',
+);
+const beforePrIndex = publishStep.indexOf('assert_remote_master BEFORE_PR');
+const createPrIndex = publishStep.indexOf(
+  '"https://api.github.com/repos/$REPOSITORY/pulls"',
+);
+assert(
+  beforePublishIndex >= 0
+  && switchIndex > beforePublishIndex
+  && beforePrIndex > switchIndex
+  && createPrIndex > beforePrIndex
+  && (publishStep.match(/assert_remote_master BEFORE_PUBLISH/g) ?? []).length === 1
+  && (publishStep.match(/assert_remote_master BEFORE_PR/g) ?? []).length === 1,
+  'publisher rechecks remote master immediately before branch publication and before PR POST',
 );
 
 const dryRunSource = fs.readFileSync(
