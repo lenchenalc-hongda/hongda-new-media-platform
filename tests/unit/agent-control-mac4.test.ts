@@ -17,7 +17,11 @@ const workflowSource = fs.readFileSync(
   'utf8',
 );
 const mac4Start = workflowSource.indexOf('  mac4-controlled-write:');
-const mac4Section = workflowSource.slice(mac4Start);
+const mac5Start = workflowSource.indexOf('  mac5-fix-existing-pr:');
+const mac4Section = workflowSource.slice(
+  mac4Start,
+  mac5Start >= 0 ? mac5Start : undefined,
+);
 const codexStepStart = mac4Section.indexOf(
   '      - name: Run workspace-write Codex acceptance',
 );

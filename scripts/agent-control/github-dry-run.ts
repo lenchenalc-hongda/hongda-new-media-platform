@@ -13,6 +13,10 @@ import {
   parseAgentControlState,
 } from '../../src/lib/agent-control/parser';
 import type { AgentControlState } from '../../src/lib/agent-control/control-state';
+import {
+  selectTrustedMac5FixTask,
+  type Mac5IssueComment,
+} from '../../src/lib/agent-control/mac5';
 
 const token = process.env.GITHUB_TOKEN;
 const eventPath = process.env.GITHUB_EVENT_PATH;
@@ -28,7 +32,10 @@ class GitHubApiError extends Error {
   }
 }
 
-function printResult(result: AgentControlDryRunResult) {
+function printResult(
+  result: AgentControlDryRunResult,
+  extraOutputs: Record<string, string> = {},
+) {
   const outputPath = process.env.GITHUB_OUTPUT;
   if (outputPath) {
     const outputLines = [
@@ -37,6 +44,11 @@ function printResult(result: AgentControlDryRunResult) {
       `verified_head=${result.summary?.verified_head ?? ''}`,
       `master_sha=${result.summary?.master_sha ?? ''}`,
       `active_pr=${result.summary?.active_pr ?? 'null'}`,
+      `active_branch=${result.summary?.active_branch ?? ''}`,
+      `status=${result.summary?.status ?? ''}`,
+      `fix_round=${result.summary?.fix_round ?? 0}`,
+      `max_fix_rounds=${result.summary?.max_fix_rounds ?? 0}`,
+      ...Object.entries(extraOutputs).map(([key, value]) => `${key}=${value}`),
     ];
     fs.appendFileSync(outputPath, `${outputLines.join('\n')}\n`);
   }
@@ -47,6 +59,7 @@ function printResult(result: AgentControlDryRunResult) {
     console.log(`status=${result.summary.status}`);
     console.log(`task_id=${result.summary.task_id}`);
     console.log(`active_pr=${result.summary.active_pr ?? 'null'}`);
+    console.log(`active_branch=${result.summary.active_branch ?? 'null'}`);
     console.log(`verified_head=${result.summary.verified_head}`);
     console.log(`master_sha=${result.summary.master_sha}`);
     console.log(
@@ -81,6 +94,34 @@ async function githubGetJson<T>(pathname: string): Promise<T> {
     throw new GitHubApiError(pathname, response.status);
   }
   return response.json() as Promise<T>;
+}
+
+async function githubGetIssueComments(
+  repository: string,
+  issueNumber: number,
+): Promise<Mac5IssueComment[]> {
+  const comments: Mac5IssueComment[] = [];
+  for (let page = 1; page <= 5; page++) {
+    const batch = await githubGetJson<Array<{
+      id: number;
+      body: string | null;
+      created_at?: string | null;
+      user: { login: string };
+    }>>(
+      `/repos/${repository}/issues/${issueNumber}/comments?per_page=100&page=${page}`,
+    );
+    comments.push(...batch.map(comment => ({
+      id: comment.id,
+      authorLogin: comment.user.login,
+      body: comment.body ?? '',
+      createdAt: comment.created_at ?? null,
+    })));
+    if (batch.length < 100) break;
+    if (page === 5) {
+      throw new Error('active PR has more than 500 comments; MAC-5 task selection fails closed');
+    }
+  }
+  return comments;
 }
 
 async function main() {
@@ -187,7 +228,42 @@ async function main() {
     liveMasterSha: master.commit.sha,
     pullRequest,
   });
-  printResult(evaluated);
+
+  const extraOutputs: Record<string, string> = {};
+  if (evaluated.result === 'READY' && state?.status === 'FIX_REQUIRED') {
+    if (!state.active_pr || !state.active_branch) {
+      printResult({
+        result: 'INVALID_STATE',
+        reason: 'FIX_REQUIRED requires an active PR and branch for MAC-5',
+        summary: evaluated.summary,
+      });
+      process.exit(1);
+    }
+
+    const comments = await githubGetIssueComments(repository, state.active_pr);
+    const task = selectTrustedMac5FixTask(comments, {
+      taskId: state.current_task_id ?? '',
+      expectedHead: state.verified_head,
+      fixRound: state.fix_round,
+      maxFixRounds: state.max_fix_rounds,
+    });
+
+    if (!task) {
+      printResult({
+        result: 'INVALID_STATE',
+        reason: 'trusted MAC-5 fix task comment not found or does not match control state',
+        summary: evaluated.summary,
+      });
+      process.exit(1);
+    }
+
+    extraOutputs.task_comment_id = String(task.commentId);
+    extraOutputs.task_body_b64 = Buffer.from(task.body, 'utf8').toString('base64');
+    console.log(`mac5_task_comment_id=${task.commentId}`);
+    console.log('mac5_task_payload=AVAILABLE');
+  }
+
+  printResult(evaluated, extraOutputs);
 
   if (
     evaluated.result === 'INVALID_STATE'

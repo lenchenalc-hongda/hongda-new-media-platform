@@ -251,11 +251,27 @@ Future trigger automation must combine that key with:
 - `workspace-write` sandbox
 - no merge and no Production
 
-### AUTO-PHASE-5
+### AUTO-PHASE-5 / MAC-5
 
-- ChatGPT Work PR activity trigger, configured account-side
-- bounded automatic FIX_REQUIRED loop
-- human merge gate remains mandatory
+- MAC-5 repository automation handles only existing-PR `FIX_REQUIRED` states; it does not create new feature PRs from `READY_FOR_CODEX`
+- Issue #10 remains the routing source and must name the active PR, active branch, exact verified head, task ID, and fix round
+- maximum automatic fix rounds is exactly 3; a fourth round is not executable
+- the active PR must be open, based on `master`, and its live head/branch must exactly match Issue #10 before Codex runs
+- the newest trusted PM fix task must be a PR conversation comment authored by `lenchenalc-hongda` with standalone marker `AGENT_CONTROL_FIX_TASK_V1`
+- the trusted task comment must contain exact `TASK_ID`, `TASK_STATUS = FIX_REQUIRED`, `EXPECTED_HEAD`, and `FIX_ROUND = n / 3` values matching control state
+- task comments larger than 20 KB or comments from any other author are rejected
+- Codex receives the trusted task text but no GitHub token, GitHub App key/token, application secret, database secret, or Production credential
+- Codex remains `workspace-write`, approval policy `never`, ephemeral, with user config/rules ignored and a minimal process environment
+- before any GitHub write credential is minted, the wrapper requires unchanged HEAD/git control metadata, no staged changes, a non-empty diff, no symlink/submodule/mode escalation, and at most 40 changed paths
+- protected paths are fail-closed: `.github/`, root Agent Control/tooling/config files, `docs/agent-control/`, `scripts/`, `src/lib/agent-control/`, Agent Control tests, `supabase/`, every `*.sql` file, `.env*`, package manifests/lockfiles, `tsconfig.json`, `vercel.json`, and `next.config.*`
+- after local checks pass, the same repository-scoped GitHub App identity from MAC-4 may mint only `contents: write` + `pull-requests: write`
+- publisher must re-read the remote active branch and require it still equals the verified head both before commit publication and immediately before push
+- publisher may only fast-forward the existing `codex/...` active PR branch; force push, master/main push, branch creation for new work, PR creation, merge, and Issue #10 mutation are prohibited
+- publisher posts one structured Completion Contract to the active PR and stops
+- normal CI and PM review determine whether the result becomes another bounded `FIX_REQUIRED`, `APPROVED_FOR_MERGE`, `NEEDS_DECISION`, or `BLOCKED`
+- `AUTO_MERGE=false` and `AUTO_PRODUCTION=false` remain mandatory
+- ChatGPT Work PR activity triggering remains account-side configuration; repository code cannot enable it
+- until that account-side trigger is configured and verified, PM review is not claimed to be automatic even though the repo-side fix loop is ready
 
 ## Auth boundaries
 
