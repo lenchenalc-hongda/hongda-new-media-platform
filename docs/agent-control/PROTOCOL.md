@@ -275,6 +275,55 @@ Future trigger automation must combine that key with:
 - ChatGPT Work PR activity triggering remains account-side configuration; repository code cannot enable it
 - until that account-side trigger is configured and verified, PM review is not claimed to be automatic even though the repo-side fix loop is ready
 
+### CPC-AUTO-002 / READY bootstrap
+
+- the READY bootstrap path is separate from MAC-5 and runs only for the dedicated canary task
+  `CPC-AUTO-002-READY-BOOTSTRAP-ACCEPT-001`
+- the trusted task source is the newest Issue #10 comment by the allowlisted owner with
+  standalone marker `AGENT_CONTROL_NEW_TASK_V1`
+- the task comment must contain `TASK_ID = <control state task>` and
+  `BASE_MASTER_SHA = <control state master_sha>` with no duplicate key values
+- machine state must be `READY_FOR_CODEX`, `active_pr = null`,
+  `active_branch = null`, `fix_round = 0`, and
+  `verified_head = master_sha = live master`
+- the first live acceptance may change exactly one fixed canary file:
+  `docs/agent-control/acceptance/ready-bootstrap.md`
+- arbitrary task prose is never forwarded into the write-enabled process; Codex receives only
+  the task ID, base SHA, fixed path, and fixed content contract
+- Codex runs on the existing isolated Mac runner with workspace write, approval policy `never`,
+  ephemeral mode, ignored user config/rules, and no GitHub App, database, Production, or
+  application credential
+- the wrapper verifies unchanged HEAD, unchanged git control metadata, no staged changes,
+  exactly one new regular file, exact content, and structured output before minting credentials
+- the GitHub App token is least-privilege and is minted only after Codex and local checks pass
+- the publisher rejects an existing deterministic branch or open PR for that branch, creates only
+  one `codex/agent-control-ready-bootstrap-<task>-<sha12>` branch, pushes without force, and opens
+  one Draft PR
+- publisher posts one bounded Completion Contract to the new Draft PR and never writes Issue #10
+- `AUTO_MERGE=false` and `AUTO_PRODUCTION=false` remain mandatory
+
+#### Work v2 PR-opened race
+
+The bootstrap starts from Issue #10 state with `active_pr = null`. The PR-opened event therefore
+occurs before Issue #10 can contain the new PR number or head. Work v2 Path A must not be claimed
+to have bound the new PR automatically from that event.
+
+After the Draft PR exists, account-side PM automation may bind it only after the owner/PM updates
+Issue #10 control state to the exact `active_pr`, `active_branch`, and `verified_head` written in
+the PR Completion Contract, while keeping `master_sha` pinned to the live base. Until that
+account-side binding is configured and verified, review remains manual.
+
+#### DeepSeek runner proof
+
+A separate later task must prove an isolated DeepSeek runner before any provider migration:
+
+- model identity is recorded without exposing credentials
+- structured output and patch-tool behavior are verified
+- provider failures have bounded classifications
+- no personal API key is copied into GitHub, repository files, logs, or Codex process
+  environment
+- the current automated Codex provider/auth configuration is unchanged until that proof passes
+
 ## Auth boundaries
 
 - Phase 1 uses no model, GitHub write, or OpenAI credential.

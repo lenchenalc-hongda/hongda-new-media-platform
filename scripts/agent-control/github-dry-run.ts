@@ -17,6 +17,10 @@ import {
   selectTrustedMac5FixTask,
   type Mac5IssueComment,
 } from '../../src/lib/agent-control/mac5';
+import {
+  READY_BOOTSTRAP_ACCEPTANCE_TASK_ID,
+  selectTrustedReadyBootstrapTask,
+} from '../../src/lib/agent-control/ready-bootstrap';
 
 const token = process.env.GITHUB_TOKEN;
 const eventPath = process.env.GITHUB_EVENT_PATH;
@@ -118,7 +122,7 @@ async function githubGetIssueComments(
     })));
     if (batch.length < 100) break;
     if (page === 5) {
-      throw new Error('active PR has more than 500 comments; MAC-5 task selection fails closed');
+      throw new Error('Agent Control task history has more than 500 comments');
     }
   }
   return comments;
@@ -230,6 +234,48 @@ async function main() {
   });
 
   const extraOutputs: Record<string, string> = {};
+  if (
+    evaluated.result === 'READY'
+    && state?.status === 'READY_FOR_CODEX'
+    && state.current_task_id === READY_BOOTSTRAP_ACCEPTANCE_TASK_ID
+  ) {
+    if (
+      state.active_pr !== null
+      || state.active_branch !== null
+      || state.fix_round !== 0
+    ) {
+      printResult({
+        result: 'INVALID_STATE',
+        reason: 'READY_FOR_CODEX bootstrap requires no active PR, no branch, and fix_round 0',
+        summary: evaluated.summary,
+      });
+      process.exit(1);
+    }
+
+    const comments = await githubGetIssueComments(
+      repository,
+      AGENT_CONTROL_ISSUE_NUMBER,
+    );
+    const task = selectTrustedReadyBootstrapTask(comments, {
+      taskId: state.current_task_id,
+      baseMasterSha: state.master_sha,
+    });
+
+    if (!task) {
+      printResult({
+        result: 'INVALID_STATE',
+        reason: 'trusted READY bootstrap task comment not found or does not match control state',
+        summary: evaluated.summary,
+      });
+      process.exit(1);
+    }
+
+    extraOutputs.task_comment_id = String(task.commentId);
+    extraOutputs.task_body_b64 = Buffer.from(task.body, 'utf8').toString('base64');
+    console.log(`ready_bootstrap_task_comment_id=${task.commentId}`);
+    console.log('ready_bootstrap_task_payload=AVAILABLE');
+  }
+
   if (evaluated.result === 'READY' && state?.status === 'FIX_REQUIRED') {
     if (!state.active_pr || !state.active_branch) {
       printResult({
