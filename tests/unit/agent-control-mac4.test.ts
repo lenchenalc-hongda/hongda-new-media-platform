@@ -86,7 +86,7 @@ assert(
   )
   && codexStep.includes('"$codex_binary" exec')
   && codexStep.includes('-s workspace-write')
-  && codexStep.includes('-c \\'approval_policy="never"\\'')
+  && codexStep.includes(`-c 'approval_policy="never"'`)
   && codexStep.includes('--ephemeral')
   && codexStep.includes('--ignore-user-config')
   && codexStep.includes('--ignore-rules')
@@ -198,5 +198,5 @@ assert(
   'MAC-4 schema avoids compatibility-sensitive constraints',
 );
 
-console.log(\`Agent Control MAC-4 tests: ${passed} passed, ${failed} failed\`);
+console.log(`Agent Control MAC-4 tests: ${passed} passed, ${failed} failed`);
 if (failed > 0) process.exit(1);
