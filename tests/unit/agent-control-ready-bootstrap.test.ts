@@ -549,7 +549,7 @@ const protocolSource = fs.readFileSync(
 assert(
   protocolSource.includes('Work v2 PR-opened race')
   && protocolSource.includes('active_pr = null')
-  && protocolSource.includes('exact `active_pr`, `active_branch`, and `verified_head`'),
+  && /exact `active_pr`, `active_branch`,\s+and `verified_head`/.test(protocolSource),
   'protocol documents the PR-opened binding race and the account-side update required',
 );
 assert(
