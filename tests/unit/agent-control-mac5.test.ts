@@ -44,6 +44,18 @@ assert(
 );
 
 assert(
+  isTrustedMac5FixTaskComment(
+    {
+      id: 6,
+      authorLogin: 'lenchenalc-hongda',
+      body: trustedBody.replace(/\n/g, '\r\n'),
+    },
+    expected,
+  ),
+  'trusted GitHub web comment using CRLF line endings is accepted',
+);
+
+assert(
   !isTrustedMac5FixTaskComment(
     { id: 2, authorLogin: 'random-user', body: trustedBody },
     expected,
@@ -171,7 +183,8 @@ assert(
 );
 
 assert(
-  codexStep.includes('MAC5_GIT_CONTROL_STATE=UNCHANGED')
+  codexStep.includes("/usr/bin/base64 -D | /usr/bin/tr -d '\\r'")
+  && codexStep.includes('MAC5_GIT_CONTROL_STATE=UNCHANGED')
   && codexStep.includes('MAC5_TASK_ID=INVALID')
   && codexStep.includes('MAC5_FILE_MODE=EXECUTABLE')
   && codexStep.includes('MAC5_MAX_CHANGED_PATHS=40')

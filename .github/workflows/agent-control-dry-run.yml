@@ -777,7 +777,7 @@ jobs:
             exit 1
           fi
 
-          printf '%s' "$TASK_BODY_B64" | /usr/bin/base64 -D > "$task_file"
+          printf '%s' "$TASK_BODY_B64" | /usr/bin/base64 -D | /usr/bin/tr -d '\r' > "$task_file"
           task_bytes="$(wc -c < "$task_file" | tr -d ' ')"
           if [ "$task_bytes" -le 0 ] || [ "$task_bytes" -gt 20000 ]; then
             printf 'MAC5_TASK_BYTES=INVALID\n'
