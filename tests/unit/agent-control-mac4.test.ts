@@ -150,7 +150,7 @@ assert(
     'branch_name="codex/agent-control-mac4-accept-${EXPECTED_SHA:0:12}"',
   )
   && publishStep.includes('MAC4_PROTECTED_BRANCH_GUARD=FAIL')
-  && publishStep.includes('git push origin "HEAD:refs/heads/$branch_name"')
+  && publishStep.includes('git -c core.hooksPath=/dev/null push origin "HEAD:refs/heads/$branch_name"')
   && publishStep.includes('"draft":true')
   && !/git push[^\n]*(master|main)|\/merge"|gh pr merge|issues\//.test(
     publishStep,
