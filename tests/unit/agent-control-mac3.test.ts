@@ -25,7 +25,6 @@ const schema = JSON.parse(
     'utf8',
   ),
 ) as {
-  required?: string[];
   type?: string;
   additionalProperties?: boolean;
   required?: string[];
