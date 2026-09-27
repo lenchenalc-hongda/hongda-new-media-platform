@@ -26,7 +26,16 @@ const schema = JSON.parse(
   ),
 ) as {
   required?: string[];
-  properties?: Record<string, { const?: string }>;
+  type?: string;
+  additionalProperties?: boolean;
+  required?: string[];
+  properties?: Record<string, {
+    type?: string;
+    enum?: string[];
+    items?: { type?: string };
+    [key: string]: unknown;
+  }>;
+  [key: string]: unknown;
 };
 
 const expectedTaskId = 'CPC-AUTO-001-MAC-3-READONLY-CODEX';
@@ -219,13 +228,44 @@ assert(
 );
 
 assert(
-  schema.required?.includes('acceptance_sentinel') === true
+  schema.type === 'object'
+  && schema.additionalProperties === false
+  && schema.required?.length === 8
+  && schema.required?.includes('acceptance_sentinel') === true
   && schema.required?.includes('read_only_confirmed') === true,
-  'output schema requires deterministic read-only proof fields',
+  'output schema keeps a strict required root object',
 );
 assert(
-  schema.properties?.acceptance_sentinel?.const === 'CODEX_READONLY_PROOF=PASS',
-  'output schema fixes the acceptance sentinel',
+  schema.properties?.status?.type === 'string'
+  && schema.properties?.status?.enum?.includes('PASS') === true
+  && schema.properties?.task_id?.type === 'string'
+  && schema.properties?.head_sha?.type === 'string'
+  && schema.properties?.acceptance_sentinel?.type === 'string'
+  && schema.properties?.findings?.type === 'array'
+  && schema.properties?.findings?.items?.type === 'string'
+  && schema.properties?.risks?.type === 'array'
+  && schema.properties?.recommended_next_action?.type === 'string',
+  'output schema uses the portable Structured Outputs type subset',
+);
+const serializedSchema = JSON.stringify(schema);
+assert(
+  !serializedSchema.includes('"$schema"')
+  && !serializedSchema.includes('"const"')
+  && !serializedSchema.includes('"minLength"')
+  && !serializedSchema.includes('"maxLength"')
+  && !serializedSchema.includes('"pattern"')
+  && !serializedSchema.includes('"minItems"')
+  && !serializedSchema.includes('"maxItems"'),
+  'output schema avoids nonessential compatibility-sensitive constraints',
+);
+assert(
+  codexSection.includes(
+    '"acceptance_sentinel"[[:space:]]*:[[:space:]]*"CODEX_READONLY_PROOF=PASS"',
+  )
+  && codexSection.includes('"head_sha"[[:space:]]*:[[:space:]]*"')
+  && codexSection.includes('"task_id"[[:space:]]*:[[:space:]]*"')
+  && codexSection.includes('"read_only_confirmed"[[:space:]]*:[[:space:]]*true'),
+  'exact acceptance identity remains enforced after model output',
 );
 
 console.log(`Agent Control MAC-3 tests: ${passed} passed, ${failed} failed`);
