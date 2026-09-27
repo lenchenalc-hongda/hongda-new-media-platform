@@ -225,6 +225,25 @@ Future trigger automation must combine that key with:
 - no GitHub write permission
 - repository integrity checks fail closed on HEAD/status/diff mismatch
 
+### MAC-4
+
+- first write-enabled phase is a fixed canary acceptance only; arbitrary PM task prose is not yet forwarded to Codex
+- owner-approved runner user model remains the current `lenchen` macOS user with the existing isolated runner workdir
+- Codex runs with `workspace-write`, approval policy `never`, ephemeral mode, ignored user config/rules, and a minimal environment
+- Codex receives no GitHub App private key, installation token, `GITHUB_TOKEN`, PAT, application secret, DB secret, or Production credential
+- the fixed canary permits exactly one path: `docs/agent-control/mac4-acceptance.md`
+- HEAD, refs, local git config, staged state, worktree shape, exact file contents, and structured output are verified before any GitHub write credential is minted
+- GitHub write identity is a repository-scoped GitHub App installation token
+- repository variable: `AGENT_CONTROL_APP_CLIENT_ID`
+- repository secret: `AGENT_CONTROL_APP_PRIVATE_KEY`
+- token creation uses immutable-pinned `actions/create-github-app-token` and explicitly requests only `contents: write` and `pull-requests: write`
+- the installation token is minted only after Codex exits and passes all local checks; it is used only by the trusted default-branch wrapper
+- wrapper may push only deterministic `codex/agent-control-mac4-accept-<sha>` branches and create a Draft PR
+- wrapper never pushes `master`/`main`, never merges, never writes Issue #10, and never touches Production/DB/RLS
+- branch existence is the first persistent idempotency guard for the live canary; an existing deterministic branch fails closed
+- `AUTO_MERGE=false` and `AUTO_PRODUCTION=false` remain mandatory
+- dynamic task execution and bounded automatic fix loops remain deferred to MAC-5
+
 ### AUTO-PHASE-4
 
 - isolated write-enabled automation
