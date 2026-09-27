@@ -117,6 +117,9 @@ async function githubGetIssueComments(
       createdAt: comment.created_at ?? null,
     })));
     if (batch.length < 100) break;
+    if (page === 5) {
+      throw new Error('active PR has more than 500 comments; MAC-5 task selection fails closed');
+    }
   }
   return comments;
 }
