@@ -577,15 +577,15 @@ jobs:
           EXPECTED_SHA: ${{ needs.validate.outputs.verified_head }}
           TASK_ID: ${{ needs.validate.outputs.task_id }}
           REPOSITORY: ${{ github.repository }}
+          PATH: /usr/bin:/bin:/usr/sbin:/sbin
         run: |
           set -euo pipefail
           allowed_path="docs/agent-control/mac4-acceptance.md"
           branch_name="codex/agent-control-mac4-accept-${EXPECTED_SHA:0:12}"
-          askpass_file="$RUNNER_TEMP/agent-control-mac4-askpass.sh"
-          curl_config="$RUNNER_TEMP/agent-control-mac4-curl.conf"
-          pr_response="$RUNNER_TEMP/agent-control-mac4-pr.json"
-          expected_file="$RUNNER_TEMP/agent-control-mac4-publish-expected.md"
-          trap 'rm -f "$askpass_file" "$curl_config" "$pr_response" "$expected_file"' EXIT
+          askpass_file="$(mktemp "$RUNNER_TEMP/agent-control-mac4-askpass.XXXXXX")"
+          curl_config="$(mktemp "$RUNNER_TEMP/agent-control-mac4-curl.XXXXXX")"
+          pr_response="$(mktemp "$RUNNER_TEMP/agent-control-mac4-pr.XXXXXX")"
+          trap 'rm -f "$askpass_file" "$curl_config" "$pr_response"' EXIT
 
           if ! printf '%s\n' "$branch_name" | grep -Eq '^codex/agent-control-mac4-accept-[0-9a-f]{12}$'; then
             printf 'MAC4_BRANCH_NAME=INVALID\n'
@@ -606,18 +606,18 @@ jobs:
             exit 1
           fi
 
-          cat > "$expected_file" <<EOF
-          # MAC-4 Controlled Write Acceptance
-
-          TASK_ID: $TASK_ID
-          BASE_SHA: $EXPECTED_SHA
-          CODEX_WORKSPACE_WRITE_PROOF: PASS
-          EOF
-          if ! cmp -s "$expected_file" "$allowed_path"; then
+          if [ ! -f "$allowed_path" ] || [ -L "$allowed_path" ] || [ -x "$allowed_path" ]; then
+            printf 'MAC4_PUBLISH_FILE_TYPE=FAIL\n'
+            exit 1
+          fi
+          expected_content_hash="$(printf '# MAC-4 Controlled Write Acceptance\n\nTASK_ID: %s\nBASE_SHA: %s\nCODEX_WORKSPACE_WRITE_PROOF: PASS\n' "$TASK_ID" "$EXPECTED_SHA" | shasum -a 256 | awk '{print $1}')"
+          actual_content_hash="$(shasum -a 256 "$allowed_path" | awk '{print $1}')"
+          if [ "$actual_content_hash" != "$expected_content_hash" ]; then
             printf 'MAC4_PUBLISH_CONTENT=FAIL\n'
             exit 1
           fi
 
+          : > "$askpass_file"
           cat > "$askpass_file" <<'EOF'
           #!/bin/sh
           case "$1" in
@@ -633,7 +633,7 @@ jobs:
             exit 1
           fi
 
-          git switch -c "$branch_name"
+          git -c core.hooksPath=/dev/null switch -c "$branch_name"
           git add -- "$allowed_path"
           git diff --cached --check
           staged_paths="$(git diff --cached --name-only)"
@@ -645,14 +645,14 @@ jobs:
           bot_name="${APP_SLUG:-hongda-agent-control}[bot]"
           git config user.name "$bot_name"
           git config user.email "${APP_SLUG:-hongda-agent-control}[bot]@users.noreply.github.com"
-          git commit -m "chore(agent-control): prove MAC-4 controlled write"
+          git -c core.hooksPath=/dev/null commit -m "chore(agent-control): prove MAC-4 controlled write"
           commit_sha="$(git rev-parse HEAD)"
           if [ -n "$(git status --porcelain)" ]; then
             printf 'MAC4_POST_COMMIT_STATUS=DIRTY\n'
             exit 1
           fi
 
-          GIT_ASKPASS="$askpass_file" GIT_TERMINAL_PROMPT=0 git push origin "HEAD:refs/heads/$branch_name"
+          GIT_ASKPASS="$askpass_file" GIT_TERMINAL_PROMPT=0 git -c core.hooksPath=/dev/null push origin "HEAD:refs/heads/$branch_name"
 
           {
             printf 'header = "Authorization: Bearer %s"\n' "$GH_APP_TOKEN"
