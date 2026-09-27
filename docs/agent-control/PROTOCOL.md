@@ -204,7 +204,8 @@ Future trigger automation must combine that key with:
 - uses the same dedicated self-hosted label set
 - runs the installed bundled Codex binary with `codex exec`
 - enforces `-s read-only`, `-c 'approval_policy="never"'`, and `--ephemeral`
-- uses a fixed default-branch prompt and strict output schema
+- uses a fixed default-branch prompt and a portable strict Structured Outputs schema
+- keeps the model-facing schema to the required common subset; exact acceptance identity is enforced again after generation
 - requires exact top-level `task_id` and `acceptance_sentinel` key/value matches
 - strips GitHub and application credentials from the Codex process environment
 - checks `codex login status` in the same minimal environment and emits only availability, never auth output
