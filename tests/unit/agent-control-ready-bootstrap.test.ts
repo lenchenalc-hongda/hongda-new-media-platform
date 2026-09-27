@@ -391,6 +391,32 @@ assert(
   'publisher uses executable JSON encoding for real outgoing payloads',
 );
 
+const untrackedRepo = fs.mkdtempSync(
+  path.join(os.tmpdir(), 'agent-control-ready-untracked-'),
+);
+try {
+  execFileSync('git', ['init', '-q', untrackedRepo]);
+  const canaryFile = path.join(untrackedRepo, READY_BOOTSTRAP_ACCEPTANCE_PATH);
+  fs.mkdirSync(path.dirname(canaryFile), { recursive: true });
+  fs.writeFileSync(canaryFile, 'canary\\n', 'utf8');
+  const status = execFileSync(
+    'git',
+    ['-C', untrackedRepo, 'status', '--porcelain=v1', '--untracked-files=all'],
+    { encoding: 'utf8' },
+  );
+  assert(
+    status.trimEnd() === `?? ${READY_BOOTSTRAP_ACCEPTANCE_PATH}`,
+    'real git status expands a newly created nested directory to the exact canary file',
+  );
+  assert(
+    publishStep.includes('git status --porcelain=v1 --untracked-files=all | wc -l')
+      && publishStep.includes('status_entry="$(git status --porcelain=v1 --untracked-files=all)"'),
+    'READY publisher counts and checks the exact expanded untracked path',
+  );
+} finally {
+  fs.rmSync(untrackedRepo, { recursive: true, force: true });
+}
+
 const beforePublishIndex = publishStep.indexOf(
   'assert_remote_master BEFORE_PUBLISH',
 );

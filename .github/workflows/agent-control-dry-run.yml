@@ -1479,11 +1479,11 @@ jobs:
             printf 'READY_BOOTSTRAP_PUBLISH_WORKTREE=NO_CHANGES\n'
             exit 1
           fi
-          if [ "$(git status --porcelain | wc -l | tr -d ' ')" != "1" ]; then
+          if [ "$(git status --porcelain=v1 --untracked-files=all | wc -l | tr -d ' ')" != "1" ]; then
             printf 'READY_BOOTSTRAP_PUBLISH_STATUS=INVALID\n'
             exit 1
           fi
-          status_entry="$(git status --porcelain)"
+          status_entry="$(git status --porcelain=v1 --untracked-files=all)"
           case "$status_entry" in
             " M $acceptance_path"|"?? $acceptance_path") ;;
             *)
