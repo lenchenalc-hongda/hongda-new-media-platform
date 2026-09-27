@@ -76,6 +76,14 @@ assert(
 );
 
 assert(
+  !isTrustedMac5FixTaskComment(
+    { id: 5, authorLogin: 'lenchenalc-hongda', body: trustedBody },
+    { ...expected, taskId: 'bad"task' },
+  ),
+  'unsafe task id is rejected before it can reach shell/JSON publication',
+);
+
+assert(
   selectTrustedMac5FixTask(
     [
       { id: 10, authorLogin: 'lenchenalc-hongda', body: trustedBody },
@@ -105,6 +113,9 @@ for (const denied of [
   'supabase/migrations/001_initial_schema.sql',
   'docs/project-review-center/readonly-impact-audit-001.sql',
   '.env.local',
+  '.envrc',
+  'next.config.cjs',
+  'eslint.config.mjs',
   'package.json',
   'pnpm-lock.yaml',
   'vercel.json',
@@ -161,6 +172,8 @@ assert(
 
 assert(
   codexStep.includes('MAC5_GIT_CONTROL_STATE=UNCHANGED')
+  && codexStep.includes('MAC5_TASK_ID=INVALID')
+  && codexStep.includes('MAC5_FILE_MODE=EXECUTABLE')
   && codexStep.includes('MAC5_MAX_CHANGED_PATHS=40')
   && codexStep.includes('MAC5_PROTECTED_PATH')
   && codexStep.includes('supabase/*')
@@ -183,6 +196,7 @@ assert(
 
 assert(
   publishStep.includes('REMOTE_HEAD_MUST_MATCH_EXPECTED')
+  && publishStep.includes('MAC5_STAGED_FILE_MODE=UNSAFE')
   && publishStep.includes('git -c core.hooksPath=/dev/null push origin')
   && !publishStep.includes('--force')
   && !/git push[^\n]*(master|main)|gh pr merge|\/merge"/.test(publishStep)
@@ -193,6 +207,19 @@ assert(
 assert(
   !/issues\/10|AGENT_CONTROL_STATE_START/.test(publishStep),
   'runtime publisher does not mutate Issue #10 control state',
+);
+
+
+const dryRunSource = fs.readFileSync(
+  'scripts/agent-control/github-dry-run.ts',
+  'utf8',
+);
+assert(
+  dryRunSource.includes('selectTrustedMac5FixTask')
+  && dryRunSource.includes('task_body_b64')
+  && dryRunSource.includes('more than 500 comments')
+  && dryRunSource.includes('mac5_task_payload=AVAILABLE'),
+  'cloud validator selects one bounded trusted PM task and fails closed on oversized histories',
 );
 
 const ciSource = fs.readFileSync('.github/workflows/ci.yml', 'utf8');
