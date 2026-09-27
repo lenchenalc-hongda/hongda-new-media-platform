@@ -2,6 +2,7 @@ export const MAC5_FIX_TASK_SENTINEL = 'AGENT_CONTROL_FIX_TASK_V1';
 export const MAC5_TRUSTED_TASK_AUTHORS = ['lenchenalc-hongda'] as const;
 export const MAC5_MAX_TASK_BODY_BYTES = 20_000;
 export const MAC5_MAX_CHANGED_PATHS = 40;
+export const MAC5_SAFE_TASK_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
 
 export interface Mac5IssueComment {
   id: number;
@@ -48,6 +49,10 @@ export function isTrustedMac5FixTaskComment(
   comment: Mac5IssueComment,
   expected: Mac5ExpectedFixTask,
 ): boolean {
+  if (!MAC5_SAFE_TASK_ID.test(expected.taskId)) {
+    return false;
+  }
+
   if (!MAC5_TRUSTED_TASK_AUTHORS.includes(
     comment.authorLogin as (typeof MAC5_TRUSTED_TASK_AUTHORS)[number],
   )) {
@@ -110,6 +115,14 @@ const DENIED_EXACT_PATHS = new Set([
   'next.config.js',
   'next.config.mjs',
   'next.config.ts',
+  'next.config.cjs',
+  'eslint.config.js',
+  'eslint.config.mjs',
+  'eslint.config.ts',
+  'postcss.config.js',
+  'postcss.config.mjs',
+  'tailwind.config.js',
+  'tailwind.config.ts',
 ]);
 
 const DENIED_PREFIXES = [
@@ -124,7 +137,7 @@ export function isMac5ProtectedPath(path: string): boolean {
   if (!path || path.startsWith('/') || path.includes('\\')) return true;
   if (path === '..' || path.startsWith('../') || path.includes('/../')) return true;
   if (DENIED_EXACT_PATHS.has(path)) return true;
-  if (path === '.env' || path.startsWith('.env.')) return true;
+  if (path.startsWith('.env')) return true;
   if (path.toLowerCase().endsWith('.sql')) return true;
   if (path.startsWith('tests/unit/agent-control')) return true;
   return DENIED_PREFIXES.some(prefix => path.startsWith(prefix));
