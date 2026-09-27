@@ -34,6 +34,8 @@ function check(value: unknown, name: string) {
 
 check(parseReadyGeneralTask(comment(), expected)?.allowedPaths[0] === path, 'valid exact task');
 check(parseReadyGeneralTask(comment(lines.join('\r\n')), expected)?.objective === objective, 'CRLF task');
+check(parseReadyGeneralTask(comment(lines.join('\n') + '\n\n'), expected) === null, 'extra blank line');
+check(parseReadyGeneralTask(comment(lines.join('\n') + '\n '), expected) === null, 'trailing whitespace line');
 check(parseReadyGeneralTask(comment(lines.join('\n'), 'untrusted-user'), expected) === null, 'untrusted author');
 check(parseReadyGeneralTask(comment(lines.join('\n')), { taskId, baseMasterSha: 'b'.repeat(40) }) === null, 'stale base');
 check(parseReadyGeneralTask(comment([...lines, `TASK_ID = ${taskId}`].join('\n')), expected) === null, 'duplicate field');
