@@ -267,6 +267,8 @@ Future trigger automation must combine that key with:
 - after local checks pass, the same repository-scoped GitHub App identity from MAC-4 may mint only `contents: write` + `pull-requests: write`
 - publisher must re-read the remote active branch and require it still equals the verified head both before commit publication and immediately before push
 - publisher may only fast-forward the existing `codex/...` active PR branch; force push, master/main push, branch creation for new work, PR creation, merge, and Issue #10 mutation are prohibited
+- manual GitHub publisher transport is pinned to HTTP/1.1; remote-head reads get at most one bounded retry, and an ambiguous failed push is checked against the remote commit before any single retry so an already-successful push is never blindly repeated
+- Completion Contract POST also uses HTTP/1.1 with bounded connect/total timeouts; POST is not automatically retried to avoid duplicate comments after ambiguous responses
 - publisher posts one structured Completion Contract to the active PR and stops
 - normal CI and PM review determine whether the result becomes another bounded `FIX_REQUIRED`, `APPROVED_FOR_MERGE`, `NEEDS_DECISION`, or `BLOCKED`
 - `AUTO_MERGE=false` and `AUTO_PRODUCTION=false` remain mandatory

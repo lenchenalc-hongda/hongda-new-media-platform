@@ -1039,7 +1039,32 @@ jobs:
           EOF
           chmod 700 "$askpass_file"
 
-          remote_sha="$(GIT_ASKPASS="$askpass_file" GIT_TERMINAL_PROMPT=0 git ls-remote --heads origin "refs/heads/$ACTIVE_BRANCH" | awk '{print $1}')"
+          git_remote_head() {
+            local ref="$1"
+            local attempt
+            local output
+            local status
+            for attempt in 1 2; do
+              set +e
+              output="$(GIT_ASKPASS="$askpass_file" GIT_TERMINAL_PROMPT=0 git -c http.version=HTTP/1.1 ls-remote --heads origin "$ref" 2>&1)"
+              status=$?
+              set -e
+              if [ "$status" -eq 0 ]; then
+                printf '%s\n' "$output" | awk '{print $1}'
+                return 0
+              fi
+              if [ "$attempt" -eq 1 ]; then
+                printf 'MAC5_GIT_TRANSPORT_RETRY=LS_REMOTE\n' >&2
+                sleep 2
+              fi
+            done
+            return 1
+          }
+
+          if ! remote_sha="$(git_remote_head "refs/heads/$ACTIVE_BRANCH")"; then
+            printf 'MAC5_REMOTE_HEAD_READ=TRANSPORT_FAIL\n'
+            exit 1
+          fi
           if [ "$remote_sha" != "$EXPECTED_SHA" ]; then
             printf 'REMOTE_HEAD_MUST_MATCH_EXPECTED=FAIL\n'
             exit 1
@@ -1078,13 +1103,51 @@ jobs:
             exit 1
           fi
 
-          remote_sha_before_push="$(GIT_ASKPASS="$askpass_file" GIT_TERMINAL_PROMPT=0 git ls-remote --heads origin "refs/heads/$ACTIVE_BRANCH" | awk '{print $1}')"
+          if ! remote_sha_before_push="$(git_remote_head "refs/heads/$ACTIVE_BRANCH")"; then
+            printf 'MAC5_REMOTE_HEAD_READ=TRANSPORT_FAIL_BEFORE_PUSH\n'
+            exit 1
+          fi
           if [ "$remote_sha_before_push" != "$EXPECTED_SHA" ]; then
             printf 'REMOTE_HEAD_MUST_MATCH_EXPECTED=FAIL_BEFORE_PUSH\n'
             exit 1
           fi
 
-          GIT_ASKPASS="$askpass_file" GIT_TERMINAL_PROMPT=0 git -c core.hooksPath=/dev/null push origin "HEAD:refs/heads/$ACTIVE_BRANCH"
+          push_mac5_commit() {
+            GIT_ASKPASS="$askpass_file" GIT_TERMINAL_PROMPT=0 git               -c http.version=HTTP/1.1               -c core.hooksPath=/dev/null               push origin "HEAD:refs/heads/$ACTIVE_BRANCH"
+          }
+
+          set +e
+          push_mac5_commit
+          push_status=$?
+          set -e
+          if [ "$push_status" -ne 0 ]; then
+            printf 'MAC5_GIT_TRANSPORT_RETRY=PUSH_VERIFY\n'
+            if ! remote_after_push_error="$(git_remote_head "refs/heads/$ACTIVE_BRANCH")"; then
+              printf 'MAC5_PUSH=UNVERIFIED_TRANSPORT_FAIL\n'
+              exit 1
+            fi
+            if [ "$remote_after_push_error" = "$commit_sha" ]; then
+              printf 'MAC5_PUSH=CONFIRMED_AFTER_TRANSPORT_ERROR\n'
+            elif [ "$remote_after_push_error" = "$EXPECTED_SHA" ]; then
+              set +e
+              push_mac5_commit
+              push_retry_status=$?
+              set -e
+              if [ "$push_retry_status" -ne 0 ]; then
+                if ! remote_after_retry="$(git_remote_head "refs/heads/$ACTIVE_BRANCH")"; then
+                  printf 'MAC5_PUSH=RETRY_UNVERIFIED\n'
+                  exit 1
+                fi
+                if [ "$remote_after_retry" != "$commit_sha" ]; then
+                  printf 'MAC5_PUSH=RETRY_FAIL\n'
+                  exit 1
+                fi
+              fi
+            else
+              printf 'MAC5_PUSH=REMOTE_HEAD_CHANGED\n'
+              exit 1
+            fi
+          fi
 
           {
             printf 'header = "Authorization: Bearer %s"\n' "$GH_APP_TOKEN"
@@ -1097,6 +1160,9 @@ jobs:
           payload="$(printf '{"body":"%s"}' "$completion_body")"
 
           http_code="$(curl --silent --show-error \
+            --http1.1 \
+            --connect-timeout 20 \
+            --max-time 60 \
             --config "$curl_config" \
             --output "$response_file" \
             --write-out '%{http_code}' \
