@@ -2,12 +2,20 @@
 
 require 'json'
 
+class UniqueKeyHash < Hash
+  def []=(key, value)
+    raise JSON::ParserError, 'duplicate JSON key' if key?(key)
+
+    super
+  end
+end
+
 file, task_id, base_sha, path = ARGV
 exit 2 unless [file, task_id, base_sha, path].all?
 exit 2 unless File.file?(file) && File.size(file).between?(1, 8192)
 
 begin
-  result = JSON.parse(File.read(file, encoding: 'UTF-8'))
+  result = JSON.parse(File.read(file, encoding: 'UTF-8'), object_class: UniqueKeyHash)
 rescue JSON::ParserError, ArgumentError
   exit 2
 end

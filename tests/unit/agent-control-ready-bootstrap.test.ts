@@ -379,6 +379,9 @@ try {
     'structured result rejects a different path');
   assert(!verifyResult(JSON.stringify({ ...validResult, extra: 'PASS' })),
     'structured result rejects extra fields');
+  assert(!verifyResult(JSON.stringify(validResult).replace(
+    '"status":"PASS"', '"status":"FAILED","status":"PASS"',
+  )), 'structured result rejects duplicate JSON keys');
   assert(!verifyResult(JSON.stringify(validResult) + '\n{}'),
     'structured result rejects trailing JSON');
 } finally {
@@ -413,7 +416,10 @@ assert(
     && codexStep.includes('READY_BOOTSTRAP_RECIPE=INVALID')
     && codexStep.includes('ready-bootstrap-result.rb')
     && codexStep.includes('READY_BOOTSTRAP_PARENT_DIRECTORY=INVALID')
-    && publishStep.includes('READY_BOOTSTRAP_PUBLISH_CONTENT=INVALID'),
+    && publishStep.includes('READY_BOOTSTRAP_PUBLISH_CONTENT=INVALID')
+    && codexStep.includes('READY_BOOTSTRAP_PATH_ALREADY_EXISTS')
+    && publishStep.includes('READY_BOOTSTRAP_PUBLISH_PATH_ALREADY_TRACKED')
+    && !publishStep.includes('" M $acceptance_path"'),
   'second recipe is gated and checked before credentials and again during publishing',
 );
 
@@ -501,6 +507,17 @@ try {
     { encoding: 'utf8' });
   assert(twoFileStatus.trimEnd().split('\n').length === 2,
     'real git status exposes multiple nested untracked files for rejection',
+  );
+  execFileSync('git', ['-C', untrackedRepo, 'add', '--', READY_DOCS_PILOT_ACCEPTANCE_PATH]);
+  assert(
+    (() => {
+      try {
+        execFileSync('git', ['-C', untrackedRepo, 'ls-files', '--error-unmatch', '--',
+          READY_DOCS_PILOT_ACCEPTANCE_PATH]);
+        return true;
+      } catch { return false; }
+    })(),
+    'real Git detects a tracked acceptance file for rejection before Codex runs',
   );
   assert(
     publishStep.includes('git status --porcelain=v1 --untracked-files=all | wc -l')

@@ -1276,6 +1276,10 @@ jobs:
             printf 'READY_BOOTSTRAP_INITIAL_STATUS=CLEAN_REQUIRED\n'
             exit 1
           fi
+          if git ls-files --error-unmatch -- "$acceptance_path" > /dev/null 2>&1 || [ -e "$acceptance_path" ] || [ -L "$acceptance_path" ]; then
+            printf 'READY_BOOTSTRAP_PATH_ALREADY_EXISTS\n'
+            exit 1
+          fi
           if [ ! -x "$codex_binary" ]; then
             printf 'CODEX_BINARY=ABSENT\n'
             exit 1
@@ -1321,7 +1325,7 @@ jobs:
           Trusted task comment ID: $TASK_COMMENT_ID
 
           Perform only this bounded canary action:
-          - Create or replace exactly one regular file: $acceptance_path
+          - Create exactly one new regular file: $acceptance_path
           - Write exactly this content, including the final newline:
 
           # $acceptance_title
@@ -1495,6 +1499,10 @@ jobs:
             printf 'READY_BOOTSTRAP_PUBLISH_BASE_SHA=FAIL\n'
             exit 1
           fi
+          if git ls-files --error-unmatch -- "$acceptance_path" > /dev/null 2>&1; then
+            printf 'READY_BOOTSTRAP_PUBLISH_PATH_ALREADY_TRACKED\n'
+            exit 1
+          fi
           git diff --cached --exit-code > /dev/null
           if [ -z "$(git status --porcelain)" ]; then
             printf 'READY_BOOTSTRAP_PUBLISH_WORKTREE=NO_CHANGES\n'
@@ -1506,7 +1514,7 @@ jobs:
           fi
           status_entry="$(git status --porcelain=v1 --untracked-files=all)"
           case "$status_entry" in
-            " M $acceptance_path"|"?? $acceptance_path") ;;
+            "?? $acceptance_path") ;;
             *)
               printf 'READY_BOOTSTRAP_PUBLISH_PATH=INVALID\n'
               exit 1

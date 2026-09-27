@@ -298,9 +298,10 @@ Future trigger automation must combine that key with:
 - Codex runs on the existing isolated Mac runner with workspace write, approval policy `never`,
   ephemeral mode, ignored user config/rules, and no GitHub App, database, Production, or
   application credential
-- the wrapper verifies unchanged HEAD, unchanged git control metadata, no staged changes,
-  exactly one regular file at the selected path, non-symlink parent directories, exact content,
-  and parsed structured output before minting credentials
+- the wrapper rejects a path already present in the base, then verifies unchanged HEAD,
+  unchanged git control metadata, no staged changes, exactly one new regular file at the
+  selected path, non-symlink parent directories, exact content, and parsed structured output
+  with no duplicate JSON keys before minting credentials
 - the GitHub App token is least-privilege and is minted only after Codex and local checks pass
 - the publisher rejects an existing deterministic branch or open PR for that branch, creates only
   one `codex/agent-control-ready-bootstrap-<task>-<sha12>` branch, pushes without force, and opens
