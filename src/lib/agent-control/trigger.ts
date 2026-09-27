@@ -78,6 +78,7 @@ export interface AgentControlDryRunSummary {
   status: AgentControlState['status'];
   task_id: string;
   active_pr: number | null;
+  active_branch: string | null;
   verified_head: string;
   master_sha: string;
   fix_round: number;
@@ -110,6 +111,7 @@ function result(
           status: state.status,
           task_id: state.current_task_id ?? 'none',
           active_pr: state.active_pr,
+          active_branch: state.active_branch,
           verified_head: state.verified_head,
           master_sha: state.master_sha,
           fix_round: state.fix_round,
