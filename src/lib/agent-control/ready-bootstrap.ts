@@ -1,12 +1,16 @@
 export const READY_BOOTSTRAP_TASK_SENTINEL = 'AGENT_CONTROL_NEW_TASK_V1';
 export const READY_BOOTSTRAP_ACCEPTANCE_TASK_ID =
   'CPC-AUTO-002-READY-BOOTSTRAP-ACCEPT-001';
+export const READY_DOCS_PILOT_ACCEPTANCE_TASK_ID =
+  'CPC-AUTO-003-READY-DOCS-PILOT-ACCEPT-001';
 export const READY_BOOTSTRAP_TRUSTED_TASK_AUTHORS = [
   'lenchenalc-hongda',
 ] as const;
 export const READY_BOOTSTRAP_MAX_TASK_BODY_BYTES = 20_000;
 export const READY_BOOTSTRAP_ACCEPTANCE_PATH =
   'docs/agent-control/acceptance/ready-bootstrap.md';
+export const READY_DOCS_PILOT_ACCEPTANCE_PATH =
+  'docs/agent-control/acceptance/ready-docs-pilot.md';
 export const READY_BOOTSTRAP_SAFE_TASK_ID =
   /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
 
@@ -37,17 +41,38 @@ export interface ReadyBootstrapPathPolicyResult {
     | 'WRONG_PATH';
 }
 
+/** Repository-owned recipes. Issue comments may select a recipe, never define edits. */
+export function readyTaskRecipe(taskId: string): {
+  path: string;
+  title: string;
+  result: string;
+} | null {
+  switch (taskId) {
+    case READY_BOOTSTRAP_ACCEPTANCE_TASK_ID:
+      return {
+        path: READY_BOOTSTRAP_ACCEPTANCE_PATH,
+        title: 'Agent Control READY Bootstrap Acceptance',
+        result: 'READY_BOOTSTRAP_PASS',
+      };
+    case READY_DOCS_PILOT_ACCEPTANCE_TASK_ID:
+      return {
+        path: READY_DOCS_PILOT_ACCEPTANCE_PATH,
+        title: 'Agent Control READY Docs Pilot Acceptance',
+        result: 'READY_DOCS_PILOT_PASS',
+      };
+    default:
+      return null;
+  }
+}
+
 function standaloneLine(body: string, expected: string): boolean {
   return body.split(/\r?\n/).some(line => line.trim() === expected);
 }
 
 function singleValue(body: string, key: string): string | null {
-  const prefix = key + ' = ';
-  const values = body
-    .split(/\r?\n/)
-    .map(line => line.trim())
-    .filter(line => line.startsWith(prefix))
-    .map(line => line.slice(prefix.length).trim());
+  const values = body.split(/\r?\n/).map(line => line.trim())
+    .filter(line => new RegExp(`^${key}\\s*=`).test(line))
+    .map(line => line.slice(line.indexOf('=') + 1).trim());
   return values.length === 1 ? values[0] : null;
 }
 
@@ -58,6 +83,8 @@ export function isTrustedReadyBootstrapTaskComment(
   if (!READY_BOOTSTRAP_SAFE_TASK_ID.test(expected.taskId)) {
     return false;
   }
+
+  if (!readyTaskRecipe(expected.taskId)) return false;
 
   if (!READY_BOOTSTRAP_TRUSTED_TASK_AUTHORS.includes(
     comment.authorLogin as (typeof READY_BOOTSTRAP_TRUSTED_TASK_AUTHORS)[number],
@@ -82,13 +109,12 @@ export function selectTrustedReadyBootstrapTask(
   comments: ReadyBootstrapIssueComment[],
   expected: ReadyBootstrapExpectedTask,
 ): ReadyBootstrapTaskSelection | null {
-  const matches = comments
-    .filter(comment => isTrustedReadyBootstrapTaskComment(comment, expected))
-    .sort((a, b) => b.id - a.id);
-
-  return matches.length > 0
-    ? { commentId: matches[0].id, body: matches[0].body }
-    : null;
+  const newest = [...comments]
+    .filter(comment => comment.authorLogin === READY_BOOTSTRAP_TRUSTED_TASK_AUTHORS[0]
+      && standaloneLine(comment.body, READY_BOOTSTRAP_TASK_SENTINEL))
+    .sort((a, b) => b.id - a.id)[0];
+  return newest && isTrustedReadyBootstrapTaskComment(newest, expected)
+    ? { commentId: newest.id, body: newest.body } : null;
 }
 
 export function buildReadyBootstrapBranchName(
@@ -109,7 +135,8 @@ export function buildReadyBootstrapAcceptanceContent(
   taskId: string,
   baseMasterSha: string,
 ): string {
-  if (!READY_BOOTSTRAP_SAFE_TASK_ID.test(taskId)) {
+  const recipe = readyTaskRecipe(taskId);
+  if (!recipe) {
     throw new Error('unsafe READY bootstrap task id');
   }
   if (!/^[0-9a-f]{40}$/.test(baseMasterSha)) {
@@ -117,17 +144,18 @@ export function buildReadyBootstrapAcceptanceContent(
   }
 
   return [
-    '# Agent Control READY Bootstrap Acceptance',
+    `# ${recipe.title}`,
     '',
     `- TASK_ID: ${taskId}`,
     `- BASE_MASTER_SHA: ${baseMasterSha}`,
-    '- RESULT: READY_BOOTSTRAP_PASS',
+    `- RESULT: ${recipe.result}`,
     '',
   ].join('\n');
 }
 
 export function evaluateReadyBootstrapChangedPaths(
   paths: string[],
+  expectedPath: string = READY_BOOTSTRAP_ACCEPTANCE_PATH,
 ): ReadyBootstrapPathPolicyResult {
   const uniquePaths = [...new Set(paths)].sort();
 
@@ -137,7 +165,7 @@ export function evaluateReadyBootstrapChangedPaths(
   if (uniquePaths.length !== 1) {
     return { ok: false, uniquePaths, reason: 'MULTIPLE_PATHS' };
   }
-  if (uniquePaths[0] !== READY_BOOTSTRAP_ACCEPTANCE_PATH) {
+  if (uniquePaths[0] !== expectedPath) {
     return { ok: false, uniquePaths, reason: 'WRONG_PATH' };
   }
 

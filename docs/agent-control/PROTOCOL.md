@@ -275,10 +275,15 @@ Future trigger automation must combine that key with:
 - ChatGPT Work PR activity triggering remains account-side configuration; repository code cannot enable it
 - until that account-side trigger is configured and verified, PM review is not claimed to be automatic even though the repo-side fix loop is ready
 
-### CPC-AUTO-002 / READY bootstrap
+### CPC-AUTO-002 / READY bootstrap and bounded docs pilot
 
-- the READY bootstrap path is separate from MAC-5 and runs only for the dedicated canary task
-  `CPC-AUTO-002-READY-BOOTSTRAP-ACCEPT-001`
+- the READY path is separate from MAC-5 and accepts only version-controlled recipes:
+  `CPC-AUTO-002-READY-BOOTSTRAP-ACCEPT-001` →
+  `docs/agent-control/acceptance/ready-bootstrap.md`, or
+  `CPC-AUTO-003-READY-DOCS-PILOT-ACCEPT-001` →
+  `docs/agent-control/acceptance/ready-docs-pilot.md`
+- each recipe fixes the title, task/base lines, result marker, and exact file bytes;
+  an Issue comment cannot supply arbitrary repository content or paths
 - the trusted task source is the newest Issue #10 comment by the allowlisted owner with
   standalone marker `AGENT_CONTROL_NEW_TASK_V1`
 - the task comment must contain `TASK_ID = <control state task>` and
@@ -294,24 +299,27 @@ Future trigger automation must combine that key with:
   ephemeral mode, ignored user config/rules, and no GitHub App, database, Production, or
   application credential
 - the wrapper verifies unchanged HEAD, unchanged git control metadata, no staged changes,
-  exactly one new regular file, exact content, and structured output before minting credentials
+  exactly one regular file at the selected path, non-symlink parent directories, exact content,
+  and parsed structured output before minting credentials
 - the GitHub App token is least-privilege and is minted only after Codex and local checks pass
 - the publisher rejects an existing deterministic branch or open PR for that branch, creates only
   one `codex/agent-control-ready-bootstrap-<task>-<sha12>` branch, pushes without force, and opens
   one Draft PR
-- publisher posts one bounded Completion Contract to the new Draft PR and never writes Issue #10
+- publisher repeats path, file type, and exact content checks, and posts one bounded Completion
+  Contract to the new Draft PR; it never writes Issue #10
 - `AUTO_MERGE=false` and `AUTO_PRODUCTION=false` remain mandatory
 
 #### Work v2 PR-opened race
 
-The bootstrap starts from Issue #10 state with `active_pr = null`. The PR-opened event therefore
-occurs before Issue #10 can contain the new PR number or head. Work v2 Path A must not be claimed
-to have bound the new PR automatically from that event.
+The READY path starts from Issue #10 state with `active_pr = null`. The PR-opened event therefore
+occurs before Issue #10 can contain the new PR number or head. The account-side PM v2 binding
+was configured after the first canary PR closed, so a later fresh bot PR is required as proof.
 
-After the Draft PR exists, account-side PM automation may bind it only after the owner/PM updates
-Issue #10 control state to the exact `active_pr`, `active_branch`, and `verified_head` written in
-the PR Completion Contract, while keeping `master_sha` pinned to the live base. Until that
-account-side binding is configured and verified, review remains manual.
+Account-side PM automation may bind only a trusted bot PR with verified task, branch, live head,
+diff, and Completion Contract. It must update Issue #10 to the exact `active_pr`, `active_branch`,
+and `verified_head`, then review that same head. A PR-opened event can precede the Completion
+Contract or CI result; an event or follow-up check must prove that review reached an outcome.
+Configuration alone is not live acceptance.
 
 #### DeepSeek runner proof
 

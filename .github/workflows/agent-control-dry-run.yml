@@ -78,6 +78,8 @@ jobs:
       max_fix_rounds: ${{ steps.validate.outputs.max_fix_rounds }}
       task_comment_id: ${{ steps.validate.outputs.task_comment_id }}
       task_body_b64: ${{ steps.validate.outputs.task_body_b64 }}
+      ready_path: ${{ steps.validate.outputs.ready_path }}
+      ready_content_b64: ${{ steps.validate.outputs.ready_content_b64 }}
     steps:
       - uses: actions/checkout@v4
 
@@ -1191,7 +1193,8 @@ jobs:
       needs.validate.outputs.active_branch == '' &&
       needs.validate.outputs.fix_round == '0' &&
       needs.validate.outputs.max_fix_rounds == '3' &&
-      needs.validate.outputs.task_id == 'CPC-AUTO-002-READY-BOOTSTRAP-ACCEPT-001' &&
+      (needs.validate.outputs.task_id == 'CPC-AUTO-002-READY-BOOTSTRAP-ACCEPT-001' ||
+       needs.validate.outputs.task_id == 'CPC-AUTO-003-READY-DOCS-PILOT-ACCEPT-001') &&
       needs.validate.outputs.task_comment_id != ''
     runs-on: [self-hosted, macOS, X64, hongda-agent-control]
     timeout-minutes: 30
@@ -1211,11 +1214,13 @@ jobs:
           TASK_ID: ${{ needs.validate.outputs.task_id }}
           TASK_COMMENT_ID: ${{ needs.validate.outputs.task_comment_id }}
           TASK_BODY_B64: ${{ needs.validate.outputs.task_body_b64 }}
+          READY_PATH: ${{ needs.validate.outputs.ready_path }}
+          READY_CONTENT_B64: ${{ needs.validate.outputs.ready_content_b64 }}
           REPOSITORY: ${{ github.repository }}
         run: |
           set -euo pipefail
           codex_binary="/Applications/ChatGPT.app/Contents/Resources/codex"
-          acceptance_path="docs/agent-control/acceptance/ready-bootstrap.md"
+          acceptance_path="$READY_PATH"
           output_schema="$GITHUB_WORKSPACE/scripts/agent-control/codex-ready-bootstrap-output.schema.json"
           task_file="$(mktemp "$RUNNER_TEMP/agent-control-ready-task.XXXXXX")"
           expected_file="$(mktemp "$RUNNER_TEMP/agent-control-ready-expected.XXXXXX")"
@@ -1225,17 +1230,21 @@ jobs:
           error_log="$(mktemp "$RUNNER_TEMP/agent-control-ready-error.XXXXXX")"
           login_log="$(mktemp "$RUNNER_TEMP/agent-control-ready-login.XXXXXX")"
           changed_paths_file="$(mktemp "$RUNNER_TEMP/agent-control-ready-paths.XXXXXX")"
-          result_compact="$(mktemp "$RUNNER_TEMP/agent-control-ready-result-compact.XXXXXX")"
-          trap 'rm -f "$task_file" "$expected_file" "$prompt_file" "$result_file" "$event_log" "$error_log" "$login_log" "$changed_paths_file" "$result_compact"' EXIT
+          trap 'rm -f "$task_file" "$expected_file" "$prompt_file" "$result_file" "$event_log" "$error_log" "$login_log" "$changed_paths_file"' EXIT
 
           if ! printf '%s\n' "$TASK_ID" | grep -Eq '^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$'; then
             printf 'READY_BOOTSTRAP_TASK_ID=INVALID\n'
             exit 1
           fi
-          if [ "$TASK_ID" != "CPC-AUTO-002-READY-BOOTSTRAP-ACCEPT-001" ]; then
-            printf 'READY_BOOTSTRAP_TASK_ID=NOT_ALLOWED\n'
-            exit 1
-          fi
+          case "$TASK_ID:$acceptance_path" in
+            CPC-AUTO-002-READY-BOOTSTRAP-ACCEPT-001:docs/agent-control/acceptance/ready-bootstrap.md)
+              acceptance_title="Agent Control READY Bootstrap Acceptance"
+              acceptance_result="READY_BOOTSTRAP_PASS" ;;
+            CPC-AUTO-003-READY-DOCS-PILOT-ACCEPT-001:docs/agent-control/acceptance/ready-docs-pilot.md)
+              acceptance_title="Agent Control READY Docs Pilot Acceptance"
+              acceptance_result="READY_DOCS_PILOT_PASS" ;;
+            *) printf 'READY_BOOTSTRAP_TASK_ID_OR_PATH=NOT_ALLOWED\n'; exit 1 ;;
+          esac
           if ! printf '%s\n' "$EXPECTED_SHA" | grep -Eq '^[0-9a-f]{40}$'; then
             printf 'READY_BOOTSTRAP_BASE_SHA=INVALID\n'
             exit 1
@@ -1291,12 +1300,17 @@ jobs:
           git_control_before="$(git_control_hash)"
 
           cat > "$expected_file" <<EOF
-          # Agent Control READY Bootstrap Acceptance
+          # $acceptance_title
 
           - TASK_ID: $TASK_ID
           - BASE_MASTER_SHA: $EXPECTED_SHA
-          - RESULT: READY_BOOTSTRAP_PASS
+          - RESULT: $acceptance_result
           EOF
+
+          if ! printf '%s' "$READY_CONTENT_B64" | /usr/bin/base64 -D | cmp -s - "$expected_file"; then
+            printf 'READY_BOOTSTRAP_RECIPE=INVALID\n'
+            exit 1
+          fi
 
           cat > "$prompt_file" <<EOF
           You are executing the fixed Agent Control READY bootstrap acceptance.
@@ -1310,11 +1324,11 @@ jobs:
           - Create or replace exactly one regular file: $acceptance_path
           - Write exactly this content, including the final newline:
 
-          # Agent Control READY Bootstrap Acceptance
+          # $acceptance_title
 
           - TASK_ID: $TASK_ID
           - BASE_MASTER_SHA: $EXPECTED_SHA
-          - RESULT: READY_BOOTSTRAP_PASS
+          - RESULT: $acceptance_result
 
           Do not change any other path.
           Do not stage, commit, push, switch/create branches, call GitHub, or modify git metadata.
@@ -1396,6 +1410,12 @@ jobs:
             printf 'READY_BOOTSTRAP_WRONG_PATH\n'
             exit 1
           fi
+          for directory in docs docs/agent-control docs/agent-control/acceptance; do
+            if [ -L "$directory" ] || [ ! -d "$directory" ]; then
+              printf 'READY_BOOTSTRAP_PARENT_DIRECTORY=INVALID\n'
+              exit 1
+            fi
+          done
           if [ ! -f "$acceptance_path" ] || [ -L "$acceptance_path" ] || [ -x "$acceptance_path" ]; then
             printf 'READY_BOOTSTRAP_FILE_TYPE=INVALID\n'
             exit 1
@@ -1413,14 +1433,9 @@ jobs:
             printf 'READY_BOOTSTRAP_RESULT=ABSENT\n'
             exit 1
           fi
-          tr -d '\r\n' < "$result_file" > "$result_compact"
           result_bytes="$(wc -c < "$result_file" | tr -d ' ')"
-          if ! grep -Eq '"status"[[:space:]]*:[[:space:]]*"PASS"' "$result_compact" \
-            || ! grep -Eq '"task_id"[[:space:]]*:[[:space:]]*"'"$TASK_ID"'"' "$result_compact" \
-            || ! grep -Eq '"base_master_sha"[[:space:]]*:[[:space:]]*"'"$EXPECTED_SHA"'"' "$result_compact" \
-            || ! grep -Eq '"file_path"[[:space:]]*:[[:space:]]*"'"$acceptance_path"'"' "$result_compact" \
-            || ! grep -Eq '"workspace_write_confirmed"[[:space:]]*:[[:space:]]*true' "$result_compact" \
-            || ! grep -Eq '"acceptance_sentinel"[[:space:]]*:[[:space:]]*"CODEX_READY_BOOTSTRAP_PROOF=PASS"' "$result_compact"; then
+          if ! /usr/bin/ruby "$GITHUB_WORKSPACE/scripts/agent-control/ready-bootstrap-result.rb" \
+            "$result_file" "$TASK_ID" "$EXPECTED_SHA" "$acceptance_path"; then
             printf 'READY_BOOTSTRAP_RESULT_BYTES=%s\n' "$result_bytes"
             printf 'CODEX_READY_BOOTSTRAP_PROOF=FAIL\n'
             exit 1
@@ -1447,11 +1462,17 @@ jobs:
           APP_SLUG: ${{ steps.app-token.outputs.app-slug }}
           EXPECTED_SHA: ${{ needs.validate.outputs.verified_head }}
           TASK_ID: ${{ needs.validate.outputs.task_id }}
+          READY_PATH: ${{ needs.validate.outputs.ready_path }}
+          READY_CONTENT_B64: ${{ needs.validate.outputs.ready_content_b64 }}
           REPOSITORY: ${{ github.repository }}
           PATH: /usr/bin:/bin:/usr/sbin:/sbin
         run: |
           set -euo pipefail
-          acceptance_path="docs/agent-control/acceptance/ready-bootstrap.md"
+          acceptance_path="$READY_PATH"
+          case "$TASK_ID:$acceptance_path" in
+            CPC-AUTO-002-READY-BOOTSTRAP-ACCEPT-001:docs/agent-control/acceptance/ready-bootstrap.md|CPC-AUTO-003-READY-DOCS-PILOT-ACCEPT-001:docs/agent-control/acceptance/ready-docs-pilot.md) ;;
+            *) printf 'READY_BOOTSTRAP_PUBLISH_RECIPE=INVALID\n'; exit 1 ;;
+          esac
           json_encoder="$GITHUB_WORKSPACE/scripts/agent-control/ready-bootstrap-json.rb"
           publish_guard="$GITHUB_WORKSPACE/scripts/agent-control/ready-bootstrap-publish-guard.rb"
           branch="codex/agent-control-ready-bootstrap-$(printf '%s' "$TASK_ID" | tr '[:upper:]' '[:lower:]')-$(printf '%s' "$EXPECTED_SHA" | cut -c1-12)"
@@ -1491,6 +1512,20 @@ jobs:
               exit 1
               ;;
           esac
+          for directory in docs docs/agent-control docs/agent-control/acceptance; do
+            if [ -L "$directory" ] || [ ! -d "$directory" ]; then
+              printf 'READY_BOOTSTRAP_PUBLISH_PARENT_DIRECTORY=INVALID\n'
+              exit 1
+            fi
+          done
+          if [ ! -f "$acceptance_path" ] || [ -L "$acceptance_path" ] || [ -x "$acceptance_path" ]; then
+            printf 'READY_BOOTSTRAP_PUBLISH_FILE_TYPE=INVALID\n'
+            exit 1
+          fi
+          if ! printf '%s' "$READY_CONTENT_B64" | /usr/bin/base64 -D | cmp -s - "$acceptance_path"; then
+            printf 'READY_BOOTSTRAP_PUBLISH_CONTENT=INVALID\n'
+            exit 1
+          fi
 
           : > "$askpass_file"
           cat > "$askpass_file" <<'EOF'

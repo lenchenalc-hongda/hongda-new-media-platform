@@ -5,11 +5,14 @@ import path from 'node:path';
 import {
   READY_BOOTSTRAP_ACCEPTANCE_PATH,
   READY_BOOTSTRAP_ACCEPTANCE_TASK_ID,
+  READY_DOCS_PILOT_ACCEPTANCE_TASK_ID,
+  READY_DOCS_PILOT_ACCEPTANCE_PATH,
   buildReadyBootstrapAcceptanceContent,
   buildReadyBootstrapBranchName,
   evaluateReadyBootstrapChangedPaths,
   isTrustedReadyBootstrapTaskComment,
   selectTrustedReadyBootstrapTask,
+  readyTaskRecipe,
 } from '../../src/lib/agent-control/ready-bootstrap';
 import { isTrustedAgentControlCommentEvent } from '../../src/lib/agent-control/trigger';
 
@@ -109,6 +112,41 @@ assert(
 
 assert(
   !isTrustedReadyBootstrapTaskComment(
+    { id: 6, authorLogin: 'lenchenalc-hongda', body: trustedBody + '\nTASK_STATUS=FAILED' },
+    expected,
+  ),
+  'duplicate task status with alternate spacing is rejected',
+);
+
+assert(
+  readyTaskRecipe(READY_DOCS_PILOT_ACCEPTANCE_TASK_ID)?.path === READY_DOCS_PILOT_ACCEPTANCE_PATH
+    && readyTaskRecipe('CPC-UNAPPROVED-001') === null,
+  'repository recipe allowlist admits only approved task identities',
+);
+assert(
+  isTrustedReadyBootstrapTaskComment(
+    { id: 9, authorLogin: 'lenchenalc-hongda', body: trustedBody.replaceAll(
+      READY_BOOTSTRAP_ACCEPTANCE_TASK_ID, READY_DOCS_PILOT_ACCEPTANCE_TASK_ID,
+    ) },
+    { taskId: READY_DOCS_PILOT_ACCEPTANCE_TASK_ID, baseMasterSha },
+  ),
+  'second pilot task requires a matching trusted owner comment',
+);
+
+assert(
+  buildReadyBootstrapAcceptanceContent(READY_DOCS_PILOT_ACCEPTANCE_TASK_ID, baseMasterSha) === [
+    '# Agent Control READY Docs Pilot Acceptance',
+    '',
+    `- TASK_ID: ${READY_DOCS_PILOT_ACCEPTANCE_TASK_ID}`,
+    `- BASE_MASTER_SHA: ${baseMasterSha}`,
+    '- RESULT: READY_DOCS_PILOT_PASS',
+    '',
+  ].join('\n'),
+  'second task has deterministic, repository-owned file content',
+);
+
+assert(
+  !isTrustedReadyBootstrapTaskComment(
     {
       id: 7,
       authorLogin: 'lenchenalc-hongda',
@@ -141,6 +179,17 @@ assert(
     expected,
   )?.commentId === 12,
   'latest trusted READY task comment wins',
+);
+
+assert(
+  selectTrustedReadyBootstrapTask(
+    [
+      { id: 12, authorLogin: 'lenchenalc-hongda', body: trustedBody },
+      { id: 13, authorLogin: 'lenchenalc-hongda', body: trustedBody.replace('READY_FOR_CODEX', 'FAILED') },
+    ],
+    expected,
+  ) === null,
+  'newest owner task supersedes an older matching task and fails closed',
 );
 
 assert(
@@ -215,6 +264,11 @@ assert(
   ]).reason === 'WRONG_PATH',
   'wrong bootstrap path is rejected',
 );
+assert(
+  evaluateReadyBootstrapChangedPaths([READY_DOCS_PILOT_ACCEPTANCE_PATH], READY_DOCS_PILOT_ACCEPTANCE_PATH).ok
+    && evaluateReadyBootstrapChangedPaths([READY_BOOTSTRAP_ACCEPTANCE_PATH], READY_DOCS_PILOT_ACCEPTANCE_PATH).reason === 'WRONG_PATH',
+  'second task allows its exact path and rejects the original canary path',
+);
 
 const jsonEncoderPath = path.resolve(
   'scripts/agent-control/ready-bootstrap-json.rb',
@@ -222,6 +276,7 @@ const jsonEncoderPath = path.resolve(
 const publishGuardPath = path.resolve(
   'scripts/agent-control/ready-bootstrap-publish-guard.rb',
 );
+const resultGuardPath = path.resolve('scripts/agent-control/ready-bootstrap-result.rb');
 const temporaryDirectory = fs.mkdtempSync(
   path.join(os.tmpdir(), 'agent-control-ready-bootstrap-'),
 );
@@ -304,6 +359,28 @@ try {
     })(),
     'publish guard rejects malformed remote master reads',
   );
+  const resultPath = path.join(temporaryDirectory, 'result.json');
+  const validResult = {
+    status: 'PASS', task_id: READY_DOCS_PILOT_ACCEPTANCE_TASK_ID,
+    base_master_sha: baseMasterSha, file_path: READY_DOCS_PILOT_ACCEPTANCE_PATH,
+    workspace_write_confirmed: true,
+    acceptance_sentinel: 'CODEX_READY_BOOTSTRAP_PROOF=PASS',
+  };
+  const verifyResult = (value: string) => {
+    fs.writeFileSync(resultPath, value);
+    try {
+      execFileSync('ruby', [resultGuardPath, resultPath, READY_DOCS_PILOT_ACCEPTANCE_TASK_ID,
+        baseMasterSha, READY_DOCS_PILOT_ACCEPTANCE_PATH]);
+      return true;
+    } catch { return false; }
+  };
+  assert(verifyResult(JSON.stringify(validResult)), 'structured result accepts exact pilot proof');
+  assert(!verifyResult(JSON.stringify({ ...validResult, file_path: '../escape.md' })),
+    'structured result rejects a different path');
+  assert(!verifyResult(JSON.stringify({ ...validResult, extra: 'PASS' })),
+    'structured result rejects extra fields');
+  assert(!verifyResult(JSON.stringify(validResult) + '\n{}'),
+    'structured result rejects trailing JSON');
 } finally {
   fs.rmSync(temporaryDirectory, { recursive: true, force: true });
 }
@@ -329,6 +406,15 @@ assert(
   && job.includes("needs.validate.outputs.fix_round == '0'")
   && job.includes("needs.validate.outputs.task_id == 'CPC-AUTO-002-READY-BOOTSTRAP-ACCEPT-001'"),
   'READY bootstrap job is narrowly gated to the canary state',
+);
+
+assert(
+  job.includes("needs.validate.outputs.task_id == 'CPC-AUTO-003-READY-DOCS-PILOT-ACCEPT-001'")
+    && codexStep.includes('READY_BOOTSTRAP_RECIPE=INVALID')
+    && codexStep.includes('ready-bootstrap-result.rb')
+    && codexStep.includes('READY_BOOTSTRAP_PARENT_DIRECTORY=INVALID')
+    && publishStep.includes('READY_BOOTSTRAP_PUBLISH_CONTENT=INVALID'),
+  'second recipe is gated and checked before credentials and again during publishing',
 );
 
 assert(
@@ -407,6 +493,14 @@ try {
   assert(
     status.trimEnd() === `?? ${READY_BOOTSTRAP_ACCEPTANCE_PATH}`,
     'real git status expands a newly created nested directory to the exact canary file',
+  );
+  const pilotFile = path.join(untrackedRepo, READY_DOCS_PILOT_ACCEPTANCE_PATH);
+  fs.writeFileSync(pilotFile, 'pilot\n', 'utf8');
+  const twoFileStatus = execFileSync('git',
+    ['-C', untrackedRepo, 'status', '--porcelain=v1', '--untracked-files=all'],
+    { encoding: 'utf8' });
+  assert(twoFileStatus.trimEnd().split('\n').length === 2,
+    'real git status exposes multiple nested untracked files for rejection',
   );
   assert(
     publishStep.includes('git status --porcelain=v1 --untracked-files=all | wc -l')
