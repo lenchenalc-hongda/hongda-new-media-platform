@@ -43,6 +43,9 @@ jobs:
       - name: Agent Control MAC-3 tests
         run: pnpm exec tsx tests/unit/agent-control-mac3.test.ts
 
+      - name: Agent Control MAC-4 tests
+        run: pnpm exec tsx tests/unit/agent-control-mac4.test.ts
+
       - name: Check server-only imports
         run: bash scripts/check-server-imports.sh
 

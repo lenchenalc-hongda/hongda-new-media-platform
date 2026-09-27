@@ -344,3 +344,353 @@ jobs:
           printf 'ACTUAL_SHA=%s\n' "$(git rev-parse HEAD)"
           printf 'GIT_STATUS=CLEAN\n'
           printf 'CODEX_READONLY_PROOF=PASS\n'
+
+
+  mac4-controlled-write:
+    needs: [validate, self-hosted-proof]
+    if: >-
+      github.actor == 'lenchenalc-hongda' &&
+      needs.validate.outputs.result == 'READY' &&
+      needs.self-hosted-proof.result == 'success' &&
+      needs.validate.outputs.task_id == 'CPC-AUTO-001-MAC-4-ACCEPT-001'
+    runs-on: [self-hosted, macOS, X64, hongda-agent-control]
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # actions/checkout v4
+        with:
+          ref: ${{ needs.validate.outputs.verified_head }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Run workspace-write Codex acceptance
+        id: codex-write
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ needs.validate.outputs.verified_head }}
+          TASK_ID: ${{ needs.validate.outputs.task_id }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          codex_binary="/Applications/ChatGPT.app/Contents/Resources/codex"
+          allowed_path="docs/agent-control/mac4-acceptance.md"
+          output_schema="$GITHUB_WORKSPACE/scripts/agent-control/codex-mac4-output.schema.json"
+          prompt_file="$(mktemp "$RUNNER_TEMP/agent-control-mac4-prompt.XXXXXX")"
+          result_file="$(mktemp "$RUNNER_TEMP/agent-control-mac4-result.XXXXXX")"
+          event_log="$(mktemp "$RUNNER_TEMP/agent-control-mac4-events.XXXXXX")"
+          error_log="$(mktemp "$RUNNER_TEMP/agent-control-mac4-error.XXXXXX")"
+          login_log="$(mktemp "$RUNNER_TEMP/agent-control-mac4-login.XXXXXX")"
+          result_compact=""
+          trap 'rm -f "$prompt_file" "$result_file" "$event_log" "$error_log" "$login_log" ${result_compact:-}' EXIT
+
+          git_dir="$(git rev-parse --git-dir)"
+          git_control_hash() {
+            {
+              shasum -a 256 "$git_dir/HEAD"
+              shasum -a 256 "$git_dir/config"
+              if [ -f "$git_dir/info/exclude" ]; then
+                shasum -a 256 "$git_dir/info/exclude"
+              else
+                printf 'INFO_EXCLUDE_ABSENT\n'
+              fi
+              if [ -f "$git_dir/info/attributes" ]; then
+                shasum -a 256 "$git_dir/info/attributes"
+              else
+                printf 'INFO_ATTRIBUTES_ABSENT\n'
+              fi
+              if [ -d "$git_dir/hooks" ]; then
+                find "$git_dir/hooks" -type f -exec shasum -a 256 {} \; 2>/dev/null | LC_ALL=C sort
+              else
+                printf 'HOOKS_DIR_ABSENT\n'
+              fi
+              { git show-ref || true; } | LC_ALL=C sort
+              git config --local --list | LC_ALL=C sort
+            } | shasum -a 256 | awk '{print $1}'
+          }
+
+          actual_sha="$(git rev-parse HEAD)"
+          if [ "$actual_sha" != "$EXPECTED_SHA" ]; then
+            printf 'MAC4_HEAD_PROOF=FAIL\n'
+            exit 1
+          fi
+          git diff --exit-code > /dev/null
+          git diff --cached --exit-code > /dev/null
+          if [ -n "$(git status --porcelain)" ]; then
+            printf 'MAC4_INITIAL_STATUS=CLEAN_REQUIRED\n'
+            exit 1
+          fi
+          if [ -e "$allowed_path" ]; then
+            printf 'MAC4_ALLOWED_PATH=ALREADY_EXISTS\n'
+            exit 1
+          fi
+          if [ ! -x "$codex_binary" ]; then
+            printf 'CODEX_BINARY=ABSENT\n'
+            exit 1
+          fi
+
+          git_control_before="$(git_control_hash)"
+          expected_content_hash="$(printf '# MAC-4 Controlled Write Acceptance\n\nTASK_ID: %s\nBASE_SHA: %s\nCODEX_WORKSPACE_WRITE_PROOF: PASS\n' "$TASK_ID" "$EXPECTED_SHA" | shasum -a 256 | awk '{print $1}')"
+
+          cat > "$prompt_file" <<EOF
+          You are performing the fixed MAC-4 controlled workspace-write acceptance.
+
+          Repository: $REPOSITORY
+          Task ID: $TASK_ID
+          Expected base SHA: $EXPECTED_SHA
+          Repository root: $GITHUB_WORKSPACE
+
+          Create exactly one new file:
+          $allowed_path
+
+          Its complete contents must be exactly:
+
+          # MAC-4 Controlled Write Acceptance
+
+          TASK_ID: $TASK_ID
+          BASE_SHA: $EXPECTED_SHA
+          CODEX_WORKSPACE_WRITE_PROOF: PASS
+
+          Do not modify any other file.
+          Do not stage files.
+          Do not create or switch branches.
+          Do not commit.
+          Do not push.
+          Do not call GitHub or any external write API.
+          Do not read unrelated HOME/user files, credential files, auth files, tokens, cookies, or environment variables.
+          Do not print secrets.
+
+          Return JSON matching the provided output schema.
+          status must be PASS.
+          task_id must exactly equal $TASK_ID.
+          base_sha must exactly equal $EXPECTED_SHA.
+          workspace_write_confirmed must be true.
+          changed_paths must contain exactly "$allowed_path".
+          acceptance_sentinel must exactly equal CODEX_WORKSPACE_WRITE_PROOF=PASS.
+          EOF
+
+          codex_version="$("$codex_binary" --version 2>/dev/null || true)"
+          printf 'CODEX_VERSION=%s\n' "$codex_version"
+
+          set +e
+          env -i \
+            HOME="$HOME" \
+            PATH="/usr/bin:/bin:/usr/sbin:/sbin" \
+            "$codex_binary" login status > "$login_log" 2>&1
+          login_exit_status=$?
+          set -e
+          if [ "$login_exit_status" -eq 0 ]; then
+            printf 'CODEX_LOGIN_STATUS=AVAILABLE\n'
+          else
+            printf 'CODEX_LOGIN_STATUS=UNAVAILABLE_OR_CONFIG_ERROR\n'
+            exit 1
+          fi
+
+          set +e
+          env -i \
+            HOME="$HOME" \
+            PATH="/usr/bin:/bin:/usr/sbin:/sbin" \
+            TMPDIR="$RUNNER_TEMP" \
+            "$codex_binary" exec \
+            -C "$GITHUB_WORKSPACE" \
+            -s workspace-write \
+            -c 'approval_policy="never"' \
+            --ephemeral \
+            --ignore-user-config \
+            --ignore-rules \
+            --json \
+            --output-schema "$output_schema" \
+            --output-last-message "$result_file" \
+            - < "$prompt_file" > "$event_log" 2> "$error_log"
+          codex_exit_status=$?
+          set -e
+          printf 'CODEX_EXIT_STATUS=%s\n' "$codex_exit_status"
+          if [ "$codex_exit_status" -ne 0 ]; then
+            printf 'CODEX_WORKSPACE_WRITE_PROOF=FAIL\n'
+            exit 1
+          fi
+
+          if [ "$(git rev-parse HEAD)" != "$EXPECTED_SHA" ]; then
+            printf 'MAC4_POST_CODEX_HEAD=CHANGED\n'
+            exit 1
+          fi
+          git_control_after="$(git_control_hash)"
+          if [ "$git_control_after" != "$git_control_before" ]; then
+            printf 'MAC4_GIT_CONTROL_STATE=CHANGED\n'
+            exit 1
+          fi
+          git diff --cached --exit-code > /dev/null
+          status_output="$(git status --porcelain=v1 --untracked-files=all)"
+          if [ "$status_output" != "?? $allowed_path" ]; then
+            printf 'MAC4_WORKTREE_SHAPE=FAIL\n'
+            exit 1
+          fi
+          if [ ! -f "$allowed_path" ] || [ -L "$allowed_path" ] || [ -x "$allowed_path" ]; then
+            printf 'MAC4_ALLOWED_FILE_TYPE=FAIL\n'
+            exit 1
+          fi
+          actual_content_hash="$(shasum -a 256 "$allowed_path" | awk '{print $1}')"
+          if [ "$actual_content_hash" != "$expected_content_hash" ]; then
+            printf 'MAC4_ALLOWED_FILE_CONTENT=FAIL\n'
+            exit 1
+          fi
+          if [ ! -s "$result_file" ]; then
+            printf 'MAC4_RESULT=ABSENT\n'
+            exit 1
+          fi
+
+          result_bytes="$(wc -c < "$result_file" | tr -d ' ')"
+          result_compact="$(mktemp "$RUNNER_TEMP/agent-control-mac4-result-compact.XXXXXX")"
+          tr -d '\r\n' < "$result_file" > "$result_compact"
+          if ! grep -Eq '"status"[[:space:]]*:[[:space:]]*"PASS"' "$result_compact" \
+            || ! grep -Eq '"task_id"[[:space:]]*:[[:space:]]*"'"$TASK_ID"'"' "$result_compact" \
+            || ! grep -Eq '"base_sha"[[:space:]]*:[[:space:]]*"'"$EXPECTED_SHA"'"' "$result_compact" \
+            || ! grep -Eq '"workspace_write_confirmed"[[:space:]]*:[[:space:]]*true' "$result_compact" \
+            || ! grep -Eq '"acceptance_sentinel"[[:space:]]*:[[:space:]]*"CODEX_WORKSPACE_WRITE_PROOF=PASS"' "$result_compact" \
+            || ! grep -Eq '"changed_paths"[[:space:]]*:[[:space:]]*\[[[:space:]]*"docs/agent-control/mac4-acceptance\.md"[[:space:]]*\]' "$result_compact"; then
+            printf 'CODEX_RESULT_BYTES=%s\n' "$result_bytes"
+            printf 'CODEX_WORKSPACE_WRITE_PROOF=FAIL\n'
+            exit 1
+          fi
+
+          printf 'CODEX_RESULT_BYTES=%s\n' "$result_bytes"
+          printf 'EXPECTED_SHA=%s\n' "$EXPECTED_SHA"
+          printf 'ACTUAL_SHA=%s\n' "$(git rev-parse HEAD)"
+          printf 'MAC4_ALLOWED_PATH=%s\n' "$allowed_path"
+          printf 'MAC4_GIT_CONTROL_STATE=UNCHANGED\n'
+          printf 'CODEX_WORKSPACE_WRITE_PROOF=PASS\n'
+
+      - name: Mint scoped GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ vars.AGENT_CONTROL_APP_CLIENT_ID }}
+          private-key: ${{ secrets.AGENT_CONTROL_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+
+      - name: Publish controlled Draft PR
+        shell: bash
+        env:
+          GH_APP_TOKEN: ${{ steps.app-token.outputs.token }}
+          APP_SLUG: ${{ steps.app-token.outputs.app-slug }}
+          EXPECTED_SHA: ${{ needs.validate.outputs.verified_head }}
+          TASK_ID: ${{ needs.validate.outputs.task_id }}
+          REPOSITORY: ${{ github.repository }}
+          PATH: /usr/bin:/bin:/usr/sbin:/sbin
+        run: |
+          set -euo pipefail
+          allowed_path="docs/agent-control/mac4-acceptance.md"
+          branch_name="codex/agent-control-mac4-accept-${EXPECTED_SHA:0:12}"
+          askpass_file="$(mktemp "$RUNNER_TEMP/agent-control-mac4-askpass.XXXXXX")"
+          curl_config="$(mktemp "$RUNNER_TEMP/agent-control-mac4-curl.XXXXXX")"
+          pr_response="$(mktemp "$RUNNER_TEMP/agent-control-mac4-pr.XXXXXX")"
+          trap 'rm -f "$askpass_file" "$curl_config" "$pr_response"' EXIT
+
+          if ! printf '%s\n' "$branch_name" | grep -Eq '^codex/agent-control-mac4-accept-[0-9a-f]{12}$'; then
+            printf 'MAC4_BRANCH_NAME=INVALID\n'
+            exit 1
+          fi
+          if [ "$branch_name" = "master" ] || [ "$branch_name" = "main" ]; then
+            printf 'MAC4_PROTECTED_BRANCH_GUARD=FAIL\n'
+            exit 1
+          fi
+          if [ "$(git rev-parse HEAD)" != "$EXPECTED_SHA" ]; then
+            printf 'MAC4_PUBLISH_BASE_SHA=FAIL\n'
+            exit 1
+          fi
+          git diff --cached --exit-code > /dev/null
+          status_output="$(git status --porcelain=v1 --untracked-files=all)"
+          if [ "$status_output" != "?? $allowed_path" ]; then
+            printf 'MAC4_PUBLISH_WORKTREE_SHAPE=FAIL\n'
+            exit 1
+          fi
+
+          if [ ! -f "$allowed_path" ] || [ -L "$allowed_path" ] || [ -x "$allowed_path" ]; then
+            printf 'MAC4_PUBLISH_FILE_TYPE=FAIL\n'
+            exit 1
+          fi
+          expected_content_hash="$(printf '# MAC-4 Controlled Write Acceptance\n\nTASK_ID: %s\nBASE_SHA: %s\nCODEX_WORKSPACE_WRITE_PROOF: PASS\n' "$TASK_ID" "$EXPECTED_SHA" | shasum -a 256 | awk '{print $1}')"
+          actual_content_hash="$(shasum -a 256 "$allowed_path" | awk '{print $1}')"
+          if [ "$actual_content_hash" != "$expected_content_hash" ]; then
+            printf 'MAC4_PUBLISH_CONTENT=FAIL\n'
+            exit 1
+          fi
+
+          : > "$askpass_file"
+          cat > "$askpass_file" <<'EOF'
+          #!/bin/sh
+          case "$1" in
+            *Username*) printf '%s\n' 'x-access-token' ;;
+            *Password*) printf '%s\n' "$GH_APP_TOKEN" ;;
+            *) exit 1 ;;
+          esac
+          EOF
+          chmod 700 "$askpass_file"
+
+          if GIT_ASKPASS="$askpass_file" GIT_TERMINAL_PROMPT=0 git ls-remote --exit-code origin "refs/heads/$branch_name" > /dev/null 2>&1; then
+            printf 'MAC4_IDEMPOTENCY=BRANCH_ALREADY_EXISTS\n'
+            exit 1
+          fi
+
+          git -c core.hooksPath=/dev/null switch -c "$branch_name"
+          git add -- "$allowed_path"
+          git diff --cached --check
+          staged_paths="$(git diff --cached --name-only)"
+          if [ "$staged_paths" != "$allowed_path" ]; then
+            printf 'MAC4_STAGED_PATHS=FAIL\n'
+            exit 1
+          fi
+
+          bot_name="${APP_SLUG:-hongda-agent-control}[bot]"
+          git config user.name "$bot_name"
+          git config user.email "${APP_SLUG:-hongda-agent-control}[bot]@users.noreply.github.com"
+          git -c core.hooksPath=/dev/null commit -m "chore(agent-control): prove MAC-4 controlled write"
+          commit_sha="$(git rev-parse HEAD)"
+          if [ -n "$(git status --porcelain)" ]; then
+            printf 'MAC4_POST_COMMIT_STATUS=DIRTY\n'
+            exit 1
+          fi
+
+          GIT_ASKPASS="$askpass_file" GIT_TERMINAL_PROMPT=0 git -c core.hooksPath=/dev/null push origin "HEAD:refs/heads/$branch_name"
+
+          {
+            printf 'header = "Authorization: Bearer %s"\n' "$GH_APP_TOKEN"
+            printf 'header = "Accept: application/vnd.github+json"\n'
+            printf 'header = "X-GitHub-Api-Version: 2022-11-28"\n'
+          } > "$curl_config"
+          chmod 600 "$curl_config"
+
+          payload="$(printf '{"title":"MAC-4 controlled write acceptance","head":"%s","base":"master","body":"TASK_ID = %s\\nTASK_STATUS = PASS\\nBASE_MASTER_SHA = %s\\nBRANCH = %s\\nHEAD_SHA = %s\\nFILES_CHANGED = docs/agent-control/mac4-acceptance.md\\nCODEX_WORKSPACE_WRITE_PROOF = PASS\\nGITHUB_WRITE_IDENTITY = GitHub App installation token\\nAUTO_MERGE = false\\nAUTO_PRODUCTION = false\\nREADY_FOR_PM_REVIEW = YES","draft":true}' "$branch_name" "$TASK_ID" "$EXPECTED_SHA" "$branch_name" "$commit_sha")"
+
+          http_code="$(curl --silent --show-error \
+            --config "$curl_config" \
+            --output "$pr_response" \
+            --write-out '%{http_code}' \
+            --request POST \
+            "https://api.github.com/repos/$REPOSITORY/pulls" \
+            --data "$payload")"
+
+          if [ "$http_code" != "201" ]; then
+            printf 'MAC4_DRAFT_PR_CREATE=FAIL_HTTP_%s\n' "$http_code"
+            exit 1
+          fi
+          if ! grep -Eq '"draft"[[:space:]]*:[[:space:]]*true' "$pr_response"; then
+            printf 'MAC4_DRAFT_PR_PROOF=FAIL\n'
+            exit 1
+          fi
+          if ! grep -Eq '"ref"[[:space:]]*:[[:space:]]*"'"$branch_name"'"' "$pr_response"; then
+            printf 'MAC4_PR_HEAD_PROOF=FAIL\n'
+            exit 1
+          fi
+          pr_number="$(sed -nE 's/.*"number"[[:space:]]*:[[:space:]]*([0-9]+).*/\1/p' "$pr_response" | head -n 1)"
+          if ! printf '%s\n' "$pr_number" | grep -Eq '^[1-9][0-9]*$'; then
+            printf 'MAC4_PR_NUMBER=INVALID\n'
+            exit 1
+          fi
+
+          printf 'MAC4_BRANCH=%s\n' "$branch_name"
+          printf 'MAC4_COMMIT_SHA=%s\n' "$commit_sha"
+          printf 'MAC4_PR_NUMBER=%s\n' "$pr_number"
+          printf 'MAC4_DRAFT_PR=YES\n'
+          printf 'MAC4_PUBLISH_PROOF=PASS\n'

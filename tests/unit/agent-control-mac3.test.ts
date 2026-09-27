@@ -16,8 +16,11 @@ const workflowSource = fs.readFileSync(
   '.github/workflows/agent-control-dry-run.yml',
   'utf8',
 );
+const mac3Start = workflowSource.indexOf('  mac3-readonly-codex:');
+const mac4Start = workflowSource.indexOf('  mac4-controlled-write:');
 const codexSection = workflowSource.slice(
-  workflowSource.indexOf('  mac3-readonly-codex:'),
+  mac3Start,
+  mac4Start >= 0 ? mac4Start : undefined,
 );
 const schema = JSON.parse(
   fs.readFileSync(

@@ -1,0 +1,36 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "status",
+    "task_id",
+    "base_sha",
+    "workspace_write_confirmed",
+    "changed_paths",
+    "acceptance_sentinel"
+  ],
+  "properties": {
+    "status": {
+      "type": "string",
+      "enum": ["PASS", "BLOCKED", "FAILED"]
+    },
+    "task_id": {
+      "type": "string"
+    },
+    "base_sha": {
+      "type": "string"
+    },
+    "workspace_write_confirmed": {
+      "type": "boolean"
+    },
+    "changed_paths": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "acceptance_sentinel": {
+      "type": "string"
+    }
+  }
+}

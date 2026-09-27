@@ -269,6 +269,11 @@ const dryRunSource = fs.readFileSync(
   'scripts/agent-control/github-dry-run.ts',
   'utf8',
 );
+const mac4Start = workflowSource.indexOf('  mac4-controlled-write:');
+const readOnlyWorkflowSource = workflowSource.slice(
+  0,
+  mac4Start >= 0 ? mac4Start : undefined,
+);
 assert(
   dryRunSource.includes('GITHUB_OUTPUT')
   && dryRunSource.includes('result=${result.result}')
@@ -388,8 +393,8 @@ for (const forbidden of [
   'SUPABASE_SERVICE_ROLE_KEY',
 ]) {
   assert(
-    !workflowSource.includes(forbidden),
-    `workflow does not include ${forbidden}`,
+    !readOnlyWorkflowSource.includes(forbidden),
+    `read-only workflow path does not include ${forbidden}`,
   );
 }
 
