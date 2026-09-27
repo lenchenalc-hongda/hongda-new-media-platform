@@ -1,5 +1,7 @@
 # MAC-5 Live Acceptance
 
-STATE: BEFORE_FIX
+STATE: AFTER_FIX
 
-This file exists only for the bounded MAC-5 live acceptance.
+TASK_ID: CPC-AUTO-001-MAC-5-ACCEPT-001
+BASE_SHA: 65811fb15598868c047f5d0ea621c8414f63c903
+CODEX_FIX_PROOF: PASS
