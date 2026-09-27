@@ -18,7 +18,8 @@ import {
   type Mac5IssueComment,
 } from '../../src/lib/agent-control/mac5';
 import {
-  READY_BOOTSTRAP_ACCEPTANCE_TASK_ID,
+  buildReadyBootstrapAcceptanceContent,
+  readyTaskRecipe,
   selectTrustedReadyBootstrapTask,
 } from '../../src/lib/agent-control/ready-bootstrap';
 
@@ -237,7 +238,8 @@ async function main() {
   if (
     evaluated.result === 'READY'
     && state?.status === 'READY_FOR_CODEX'
-    && state.current_task_id === READY_BOOTSTRAP_ACCEPTANCE_TASK_ID
+    && state.current_task_id !== null
+    && readyTaskRecipe(state.current_task_id) !== null
   ) {
     if (
       state.active_pr !== null
@@ -272,6 +274,11 @@ async function main() {
 
     extraOutputs.task_comment_id = String(task.commentId);
     extraOutputs.task_body_b64 = Buffer.from(task.body, 'utf8').toString('base64');
+    extraOutputs.ready_path = readyTaskRecipe(state.current_task_id)!.path;
+    extraOutputs.ready_content_b64 = Buffer.from(
+      buildReadyBootstrapAcceptanceContent(state.current_task_id, state.master_sha),
+      'utf8',
+    ).toString('base64');
     console.log(`ready_bootstrap_task_comment_id=${task.commentId}`);
     console.log('ready_bootstrap_task_payload=AVAILABLE');
   }
