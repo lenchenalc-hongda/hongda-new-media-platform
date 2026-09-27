@@ -113,13 +113,17 @@ assert(
 );
 
 assert(
-  codexStep.includes('git show-ref | LC_ALL=C sort')
-  && codexStep.includes('git config --local --list | LC_ALL=C sort')
+  codexStep.includes('git_control_hash()')
+  && codexStep.includes('git_control_before="$(git_control_hash)"')
+  && codexStep.includes('git_control_after="$(git_control_hash)"')
+  && codexStep.includes('find "$git_dir/hooks" -type f')
+  && codexStep.includes('"$git_dir/info/exclude"')
+  && codexStep.includes('"$git_dir/info/attributes"')
   && codexStep.includes('git diff --cached --exit-code')
   && codexStep.includes('git status --porcelain=v1 --untracked-files=all')
-  && codexStep.includes('cmp -s "$refs_before" "$refs_after"')
-  && codexStep.includes('cmp -s "$config_before" "$config_after"'),
-  'post-Codex checks protect HEAD-adjacent git state and exact worktree shape',
+  && codexStep.includes('expected_content_hash=')
+  && codexStep.includes('[ -L "$allowed_path" ]'),
+  'post-Codex checks protect git control state, file type/content, and exact worktree shape',
 );
 
 assert(
@@ -156,9 +160,14 @@ assert(
 
 assert(
   publishStep.includes('GIT_ASKPASS="$askpass_file"')
+  && publishStep.includes('PATH: /usr/bin:/bin:/usr/sbin:/sbin')
+  && publishStep.includes('git -c core.hooksPath=/dev/null switch')
+  && publishStep.includes('git -c core.hooksPath=/dev/null commit')
+  && publishStep.includes('git -c core.hooksPath=/dev/null push')
+  && publishStep.includes('mktemp "$RUNNER_TEMP/agent-control-mac4-askpass.XXXXXX"')
   && !publishStep.includes('remote set-url')
   && !publishStep.includes('https://x-access-token:'),
-  'App token is not persisted in the repository remote or command URL',
+  'App token is isolated to the trusted wrapper with fixed PATH, disabled hooks, and no credential persistence',
 );
 
 assert(
