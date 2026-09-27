@@ -76,7 +76,9 @@ export function parseReadyGeneralTask(
     || !taskIdPattern.test(expected.taskId)
     || !shaPattern.test(expected.baseMasterSha)) return null;
 
-  const lines = comment.body.replace(/\r\n/g, '\n').trimEnd().split('\n');
+  const normalized = comment.body.replace(/\r\n/g, '\n');
+  if (normalized.includes('\r')) return null;
+  const lines = (normalized.endsWith('\n') ? normalized.slice(0, -1) : normalized).split('\n');
   if (lines.length !== fields.length + 1 || lines[0] !== READY_GENERAL_SENTINEL) return null;
   const values = new Map<string, string>();
   for (const line of lines.slice(1)) {
