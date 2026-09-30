@@ -52,6 +52,9 @@ jobs:
       - name: Agent Control READY bootstrap tests
         run: pnpm exec tsx tests/unit/agent-control-ready-bootstrap.test.ts
 
+      - name: Agent Control READY general policy tests
+        run: pnpm exec tsx tests/unit/agent-control-ready-general.test.ts
+
       - name: Check server-only imports
         run: bash scripts/check-server-imports.sh
 
