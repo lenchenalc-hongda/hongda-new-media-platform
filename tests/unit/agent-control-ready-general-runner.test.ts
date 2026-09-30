@@ -97,8 +97,11 @@ check(publisher.includes('codex/agent-control-ready-general-$normalized_task-')
   'publisher uses a deterministic branch, Draft PR and no force push');
 check(publisher.includes('READY_GENERAL_IDEMPOTENT_REUSE=YES')
   && publisher.includes('READY_GENERAL_BRANCH=CONFLICT')
-  && publisher.includes('READY_GENERAL_PR=CONFLICT'),
-  'same task/base/head can resume while conflicting remote state fails closed');
+  && publisher.includes('READY_GENERAL_PR=CONFLICT')
+  && publisher.includes('abort "not draft" unless pr["draft"] == true')
+  && publisher.includes('abort "wrong base" unless pr.dig("base", "ref") == "master"')
+  && publisher.includes('abort "wrong head sha" unless pr.dig("head", "sha") == ARGV[2]'),
+  'same task/base/head Draft PR can resume while conflicting remote state fails closed');
 check(publisher.includes('AUTO_MERGE = false')
   && publisher.includes('AUTO_PRODUCTION = false')
   && publisher.includes('DATABASE_CHANGED = NO')

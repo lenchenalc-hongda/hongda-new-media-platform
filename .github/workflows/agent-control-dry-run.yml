@@ -2107,7 +2107,14 @@ jobs:
           if [ -n "$remote_branch" ]; then
             [ "$remote_branch" = "$commit_sha" ] || { printf 'READY_GENERAL_BRANCH=CONFLICT\n'; exit 1; }
             [ "$open_pr_count" = 1 ] || { printf 'READY_GENERAL_PR=CONFLICT\n'; exit 1; }
-            pr_number="$(/usr/bin/ruby -rjson -e 'puts JSON.parse(File.read(ARGV[0]))[0]["number"]' "$response_file")"
+            pr_number="$(/usr/bin/ruby -rjson -e '
+              pr = JSON.parse(File.read(ARGV[0]))[0]
+              abort "not draft" unless pr["draft"] == true
+              abort "wrong base" unless pr.dig("base", "ref") == "master"
+              abort "wrong head branch" unless pr.dig("head", "ref") == ARGV[1]
+              abort "wrong head sha" unless pr.dig("head", "sha") == ARGV[2]
+              puts pr["number"]
+            ' "$response_file" "$branch" "$commit_sha")" || { printf 'READY_GENERAL_PR=CONFLICT\n'; exit 1; }
             printf 'READY_GENERAL_IDEMPOTENT_REUSE=YES\n'
           else
             [ "$open_pr_count" = 0 ] || { printf 'READY_GENERAL_PR=CONFLICT\n'; exit 1; }
@@ -2135,7 +2142,14 @@ jobs:
             pr_payload="$(/usr/bin/ruby "$json_encoder" draft-pr "Agent Control READY: $TASK_ID" "$branch" master "$pr_body_file")"
             pr_code="$(curl --silent --show-error --http1.1 --connect-timeout 20 --max-time 60 --config "$curl_config" --output "$response_file" --write-out '%{http_code}' --request POST "https://api.github.com/repos/$REPOSITORY/pulls" --data "$pr_payload")"
             [ "$pr_code" = 201 ]
-            pr_number="$(/usr/bin/ruby -rjson -e 'puts JSON.parse(File.read(ARGV[0]))["number"]' "$response_file")"
+            pr_number="$(/usr/bin/ruby -rjson -e '
+              pr = JSON.parse(File.read(ARGV[0]))
+              abort "not draft" unless pr["draft"] == true
+              abort "wrong base" unless pr.dig("base", "ref") == "master"
+              abort "wrong head branch" unless pr.dig("head", "ref") == ARGV[1]
+              abort "wrong head sha" unless pr.dig("head", "sha") == ARGV[2]
+              puts pr["number"]
+            ' "$response_file" "$branch" "$commit_sha")" || { printf 'READY_GENERAL_DRAFT_PR=INVALID\n'; exit 1; }
           fi
 
           files_changed="$(paste -sd, "$changed_paths_file")"
