@@ -69,8 +69,9 @@ check(isolated.includes('env -i')
 check(isolated.includes('git_control_before')
   && isolated.includes('git diff --cached --exit-code')
   && isolated.includes('READY_GENERAL_PATH=OUT_OF_SCOPE')
+  && isolated.includes('READY_GENERAL_PARENT_CHAIN=UNSAFE')
   && isolated.includes('READY_GENERAL_DIFF_SHAPE=UNSAFE'),
-  'runner enforces git control, unstaged output, exact paths and safe file shapes');
+  'runner enforces git control, unstaged output, exact paths, parent chains and safe file shapes');
 check(isolated.includes('case "$check_name" in')
   && isolated.includes('typecheck)')
   && isolated.includes('agent-control)')
@@ -82,7 +83,8 @@ check(isolated.includes('case "$check_name" in')
 const publisher = job.slice(publishStep);
 check(publisher.includes('pnpm exec tsx scripts/agent-control/github-dry-run.ts')
   && publisher.includes('READY_GENERAL_MASTER=MOVED')
-  && publisher.includes('ready_general_task_comment_id'),
+  && publisher.includes('ready_general_task_comment_id')
+  && publisher.includes('READY_GENERAL_PUBLISH_PARENT_CHAIN=UNSAFE'),
   'publisher rechecks live Issue state, newest task and master');
 check(publisher.includes('READ_TOKEN: ${{ github.token }}')
   && publisher.includes('GITHUB_TOKEN="$READ_TOKEN" pnpm exec tsx')
