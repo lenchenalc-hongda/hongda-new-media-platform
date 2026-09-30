@@ -22,6 +22,7 @@ import {
   readyTaskRecipe,
   selectTrustedReadyBootstrapTask,
 } from '../../src/lib/agent-control/ready-bootstrap';
+import { selectTrustedReadyGeneralTask } from '../../src/lib/agent-control/ready-general';
 
 const token = process.env.GITHUB_TOKEN;
 const eventPath = process.env.GITHUB_EVENT_PATH;
@@ -235,6 +236,39 @@ async function main() {
   });
 
   const extraOutputs: Record<string, string> = {};
+  if (
+    evaluated.result === 'READY'
+    && state?.status === 'READY_FOR_CODEX'
+    && state.current_task_id !== null
+    && state.active_pr === null
+    && state.active_branch === null
+    && state.fix_round === 0
+  ) {
+    const comments = await githubGetIssueComments(
+      repository,
+      AGENT_CONTROL_ISSUE_NUMBER,
+    );
+    const task = selectTrustedReadyGeneralTask(comments, {
+      taskId: state.current_task_id,
+      baseMasterSha: state.master_sha,
+    });
+
+    if (task) {
+      extraOutputs.ready_general_task_comment_id = String(task.commentId);
+      extraOutputs.ready_general_objective_b64 = Buffer.from(
+        task.objective,
+        'utf8',
+      ).toString('base64');
+      extraOutputs.ready_general_allowed_paths_b64 = Buffer.from(
+        JSON.stringify(task.allowedPaths),
+        'utf8',
+      ).toString('base64');
+      extraOutputs.ready_general_checks = task.checks.join(',');
+      console.log(`ready_general_task_comment_id=${task.commentId}`);
+      console.log('ready_general_normalized_payload=AVAILABLE');
+    }
+  }
+
   if (
     evaluated.result === 'READY'
     && state?.status === 'READY_FOR_CODEX'
