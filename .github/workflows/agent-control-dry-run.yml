@@ -1763,7 +1763,7 @@ jobs:
           printf 'READY_BOOTSTRAP_COMPLETION_COMMENT=PASS\n'
           printf 'READY_BOOTSTRAP_PUBLISH_PROOF=PASS\n'
 
-  ready-general-task:
+  ready-general-execute:
     needs: [validate, self-hosted-proof]
     if: >-
       github.actor == 'lenchenalc-hongda' &&
@@ -1782,7 +1782,11 @@ jobs:
     timeout-minutes: 60
     permissions:
       contents: read
-      issues: read
+      actions: read
+    outputs:
+      artifact_id: ${{ steps.artifact-meta.outputs.artifact_id }}
+      artifact_digest: ${{ steps.artifact-meta.outputs.artifact_digest }}
+      artifact_name: ${{ steps.artifact-meta.outputs.artifact_name }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # actions/checkout v4
         with:
@@ -1824,7 +1828,11 @@ jobs:
           event_log="$(mktemp "$RUNNER_TEMP/agent-control-ready-general-events.XXXXXX")"
           error_log="$(mktemp "$RUNNER_TEMP/agent-control-ready-general-error.XXXXXX")"
           changed_paths_file="$(mktemp "$RUNNER_TEMP/agent-control-ready-general-changed.XXXXXX")"
-          trap 'rm -f "$objective_file" "$paths_file" "$prompt_file" "$result_file" "$event_log" "$error_log" "$changed_paths_file"; if [ -n "${smoke_pid:-}" ]; then kill "$smoke_pid" 2>/dev/null || true; fi' EXIT
+          canonical_diff_file="$(mktemp "$RUNNER_TEMP/agent-control-ready-general-diff.XXXXXX")"
+          file_hashes_file="$(mktemp "$RUNNER_TEMP/agent-control-ready-general-hashes.XXXXXX")"
+          bundle_hash_file="$(mktemp "$RUNNER_TEMP/agent-control-ready-general-bundle.XXXXXX")"
+          artifact_dir="$RUNNER_TEMP/agent-control-ready-general-artifact"
+          trap 'rm -f "$objective_file" "$paths_file" "$prompt_file" "$result_file" "$event_log" "$error_log" "$changed_paths_file" "$canonical_diff_file" "$file_hashes_file" "$bundle_hash_file"; if [ -n "${smoke_pid:-}" ]; then kill "$smoke_pid" 2>/dev/null || true; fi' EXIT
 
           decode_b64() { printf '%s' "$1" | /usr/bin/base64 -D; }
           decode_b64 "$OBJECTIVE_B64" > "$objective_file"
@@ -1834,7 +1842,7 @@ jobs:
             abort "invalid path" unless value.all? { |p| p.is_a?(String) && p.match?(%r{\A(?:docs/customer-project-center/[A-Za-z0-9_./-]+\.md|src/lib/customer-projects/[A-Za-z0-9_./-]+\.ts|tests/unit/customer-project-[A-Za-z0-9_./-]+\.test\.ts)\z}) && p.split("/").none? { |part| part.empty? || part.start_with?(".") } }
             abort "duplicate path" unless value.uniq.length == value.length
             puts value
-          ' > "$paths_file"
+          ' | LC_ALL=C sort -u > "$paths_file"
           if [ ! -s "$objective_file" ] || [ "$(wc -c < "$objective_file" | tr -d ' ')" -gt 4000 ]; then
             printf 'READY_GENERAL_OBJECTIVE=INVALID\n'; exit 1
           fi
@@ -1882,6 +1890,85 @@ jobs:
             } | shasum -a 256 | awk '{print $1}'
           }
           git_control_before="$(git_control_hash)"
+          collect_changed_paths() {
+            {
+              git diff --name-only --no-renames
+              git ls-files --others --exclude-standard
+            } | sed '/^$/d' | LC_ALL=C sort -u > "$changed_paths_file"
+          }
+          canonical_diff_hash() {
+            local output_file="$1"
+            local diff_status=0
+            : > "$output_file"
+            while IFS= read -r diff_path; do
+              if git ls-files --error-unmatch -- "$diff_path" > /dev/null 2>&1; then
+                git -c core.abbrev=40 -c diff.algorithm=myers diff \
+                  --no-ext-diff --no-textconv --no-color --binary --no-renames \
+                  -- "$diff_path" >> "$output_file"
+              else
+                set +e
+                git -c core.abbrev=40 -c diff.algorithm=myers diff \
+                  --no-index --no-ext-diff --no-textconv --no-color --binary --no-renames \
+                  -- /dev/null "$diff_path" >> "$output_file"
+                diff_status=$?
+                set -e
+                if [ "$diff_status" -ne 0 ] && [ "$diff_status" -ne 1 ]; then
+                  printf 'READY_GENERAL_DIFF=FAILED\n'
+                  return 1
+                fi
+              fi
+            done < "$changed_paths_file"
+            shasum -a 256 "$output_file" | awk '{print $1}'
+          }
+          validate_workspace() {
+            local validation_phase="$1"
+            local changed_count
+            local changed_path
+            local index_mode
+            local worktree_mode
+
+            if [ "$(git rev-parse HEAD)" != "$EXPECTED_SHA" ]; then
+              printf 'READY_GENERAL_HEAD=CHANGED_%s\n' "$validation_phase"
+              return 1
+            fi
+            if ! git diff --cached --exit-code > /dev/null; then
+              printf 'READY_GENERAL_INDEX=DIRTY_%s\n' "$validation_phase"
+              return 1
+            fi
+            if [ "$(git_control_hash)" != "$git_control_before" ]; then
+              printf 'READY_GENERAL_GIT_CONTROL=CHANGED_%s\n' "$validation_phase"
+              return 1
+            fi
+
+            collect_changed_paths
+            changed_count="$(wc -l < "$changed_paths_file" | tr -d ' ')"
+            if [ "$changed_count" -lt 1 ] || [ "$changed_count" -gt 6 ]; then
+              printf 'READY_GENERAL_CHANGED_PATHS=INVALID_%s\n' "$validation_phase"
+              return 1
+            fi
+            while IFS= read -r changed_path; do
+              grep -Fxq "$changed_path" "$paths_file" \
+                || { printf 'READY_GENERAL_PATH=OUT_OF_SCOPE_%s\n' "$validation_phase"; return 1; }
+              verify_parent_chain "$changed_path" true
+              [ -f "$changed_path" ] && [ ! -L "$changed_path" ] \
+                || { printf 'READY_GENERAL_FILE_TYPE=INVALID_%s\n' "$validation_phase"; return 1; }
+              worktree_mode="$(stat -f '%Lp' "$changed_path")"
+              [ "$worktree_mode" = "644" ] \
+                || { printf 'READY_GENERAL_WORKTREE_MODE=INVALID_%s\n' "$validation_phase"; return 1; }
+              index_mode="$(git ls-files -s -- "$changed_path" | awk '{print $1}' | head -n 1)"
+              case "$index_mode" in
+                ''|100644) ;;
+                *) printf 'READY_GENERAL_INDEX_MODE=INVALID_%s\n' "$validation_phase"; return 1 ;;
+              esac
+            done < "$changed_paths_file"
+            if git diff --name-status --no-renames | grep -Ev '^[AM][[:space:]]' | grep -q . \
+              || git diff --summary | grep -Eq 'mode change|120000|160000|create mode 100755'; then
+              printf 'READY_GENERAL_DIFF_SHAPE=UNSAFE_%s\n' "$validation_phase"
+              return 1
+            fi
+            git diff --check
+            printf 'READY_GENERAL_WORKSPACE_VALIDATION=%s_PASS\n' "$validation_phase"
+          }
 
           cat > "$prompt_file" <<'EOF'
           You are executing one validated bounded general READY task.
@@ -1921,34 +2008,8 @@ jobs:
           if [ "$codex_status" -ne 0 ]; then
             printf 'CODEX_READY_GENERAL_PROOF=FAIL\n'; exit 1
           fi
-          if [ "$(git rev-parse HEAD)" != "$EXPECTED_SHA" ] \
-            || [ "$(git_control_hash)" != "$git_control_before" ]; then
-            printf 'READY_GENERAL_GIT_CONTROL=CHANGED\n'; exit 1
-          fi
-          git diff --cached --exit-code > /dev/null
-          {
-            git diff --name-only --no-renames
-            git ls-files --others --exclude-standard
-          } | sed '/^$/d' | LC_ALL=C sort -u > "$changed_paths_file"
+          validate_workspace before_checks
           changed_count="$(wc -l < "$changed_paths_file" | tr -d ' ')"
-          if [ "$changed_count" -lt 1 ] || [ "$changed_count" -gt 6 ]; then
-            printf 'READY_GENERAL_CHANGED_PATHS=INVALID\n'; exit 1
-          fi
-          while IFS= read -r changed_path; do
-            grep -Fxq "$changed_path" "$paths_file" || { printf 'READY_GENERAL_PATH=OUT_OF_SCOPE\n'; exit 1; }
-            verify_parent_chain "$changed_path" true
-            [ -f "$changed_path" ] && [ ! -L "$changed_path" ] && [ ! -x "$changed_path" ] \
-              || { printf 'READY_GENERAL_FILE_TYPE=INVALID\n'; exit 1; }
-            case "$(git ls-files -s -- "$changed_path" | awk '{print $1}' | head -n 1)" in
-              ''|100644) ;;
-              *) printf 'READY_GENERAL_INDEX_MODE=INVALID\n'; exit 1 ;;
-            esac
-          done < "$changed_paths_file"
-          if git diff --name-status --no-renames | grep -Ev '^[AM][[:space:]]' | grep -q . \
-            || git diff --summary | grep -Eq 'mode change|120000|160000|create mode 100755'; then
-            printf 'READY_GENERAL_DIFF_SHAPE=UNSAFE\n'; exit 1
-          fi
-          git diff --check
 
           /usr/bin/ruby -rjson -e '
             result = JSON.parse(File.read(ARGV[0]))
@@ -1986,9 +2047,433 @@ jobs:
               *) printf 'READY_GENERAL_CHECK=UNKNOWN\n'; exit 1 ;;
             esac
           done
+
+          validate_workspace after_checks
+          changed_count="$(wc -l < "$changed_paths_file" | tr -d ' ')"
+          rm -rf "$artifact_dir"
+          mkdir -p "$artifact_dir/files"
+          : > "$file_hashes_file"
+          while IFS= read -r changed_path; do
+            source_file="$GITHUB_WORKSPACE/$changed_path"
+            artifact_file="$artifact_dir/files/$changed_path"
+            [ -f "$source_file" ] && [ ! -L "$source_file" ] \
+              || { printf 'READY_GENERAL_PACKAGE_SOURCE=INVALID\n'; exit 1; }
+            [ "$(stat -f '%Lp' "$source_file")" = "644" ] \
+              || { printf 'READY_GENERAL_PACKAGE_MODE=INVALID\n'; exit 1; }
+            mkdir -p "$(dirname "$artifact_file")"
+            cp "$source_file" "$artifact_file"
+            chmod 644 "$artifact_file"
+            file_sha="$(shasum -a 256 "$source_file" | awk '{print $1}')"
+            printf '%s\t%s\n' "$changed_path" "$file_sha" >> "$file_hashes_file"
+          done < "$changed_paths_file"
+
+          canonical_diff_sha="$(canonical_diff_hash "$canonical_diff_file")"
+          {
+            printf 'AGENT_CONTROL_READY_GENERAL_BUNDLE_V1\n'
+            printf 'TASK_ID\t%s\n' "$TASK_ID"
+            printf 'BASE_MASTER_SHA\t%s\n' "$EXPECTED_SHA"
+            printf 'TRUSTED_COMMENT_ID\t%s\n' "$TASK_COMMENT_ID"
+            while IFS= read -r allowed_path; do
+              printf 'ALLOWED_PATH\t%s\n' "$allowed_path"
+            done < "$paths_file"
+            while IFS= read -r changed_path; do
+              printf 'CHANGED_PATH\t%s\n' "$changed_path"
+            done < "$changed_paths_file"
+            while IFS=$'\t' read -r changed_path file_sha; do
+              package_file="$GITHUB_WORKSPACE/$changed_path"
+              package_size="$(wc -c < "$package_file" | tr -d ' ')"
+              printf 'FILE\t%s\t100644\t%s\t%s\n' "$changed_path" "$file_sha" "$package_size"
+              cat "$package_file"
+              printf '\n'
+            done < "$file_hashes_file"
+            printf 'DIFF\t%s\n' "$canonical_diff_sha"
+          } > "$bundle_hash_file"
+          bundle_sha="$(shasum -a 256 "$bundle_hash_file" | awk '{print $1}')"
+          /usr/bin/ruby -rjson -e '
+            manifest_path, task_id, base_sha, comment_id, allowed_paths_path,
+              changed_paths_path, file_hashes_path, canonical_diff_sha, bundle_sha = ARGV
+            allowed_paths = File.readlines(allowed_paths_path, chomp: true)
+            changed_paths = File.readlines(changed_paths_path, chomp: true)
+            file_hashes = File.readlines(file_hashes_path, chomp: true).to_h do |line|
+              line.split("\t", 2)
+            end
+            manifest = {
+              "schema" => "AGENT_CONTROL_READY_GENERAL_BUNDLE_V1",
+              "task_id" => task_id,
+              "base_master_sha" => base_sha,
+              "trusted_comment_id" => comment_id,
+              "allowed_paths" => allowed_paths,
+              "changed_paths" => changed_paths,
+              "modes" => changed_paths.to_h { |path| [path, "100644"] },
+              "file_sha256" => file_hashes,
+              "canonical_diff_sha256" => canonical_diff_sha,
+              "bundle_sha256" => bundle_sha
+            }
+            File.write(manifest_path, JSON.pretty_generate(manifest) + "\n")
+          ' "$artifact_dir/manifest.json" "$TASK_ID" "$EXPECTED_SHA" \
+            "$TASK_COMMENT_ID" "$paths_file" "$changed_paths_file" \
+            "$file_hashes_file" "$canonical_diff_sha" "$bundle_sha"
+
           printf 'READY_GENERAL_CHANGED_PATHS=%s\n' "$changed_count"
           printf 'READY_GENERAL_FIXED_CHECKS=PASS\n'
+          printf 'READY_GENERAL_BUNDLE_SHA256=%s\n' "$bundle_sha"
+          printf 'READY_GENERAL_ARTIFACT=PACKAGED\n'
           printf 'CODEX_READY_GENERAL_PROOF=PASS\n'
+
+      - name: Upload validated general READY artifact
+        id: upload-ready-artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.0
+        with:
+          name: ready-general-${{ needs.validate.outputs.task_id }}-${{ needs.validate.outputs.verified_head }}
+          path: ${{ runner.temp }}/agent-control-ready-general-artifact
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Read uploaded artifact service metadata
+        id: artifact-meta
+        shell: bash
+        env:
+          READ_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          UPLOADED_ARTIFACT_ID: ${{ steps.upload-ready-artifact.outputs.artifact-id }}
+          PATH: /usr/bin:/bin:/usr/sbin:/sbin
+        run: |
+          set -euo pipefail
+          [ -n "$UPLOADED_ARTIFACT_ID" ]
+          metadata_file="$(mktemp "$RUNNER_TEMP/agent-control-ready-general-upload-metadata.XXXXXX")"
+          trap 'rm -f "$metadata_file"' EXIT
+          curl --fail --silent --show-error --http1.1 --connect-timeout 20 --max-time 60 \
+            --header "Authorization: Bearer $READ_TOKEN" \
+            --header 'Accept: application/vnd.github+json' \
+            --header 'X-GitHub-Api-Version: 2022-11-28' \
+            --output "$metadata_file" \
+            "https://api.github.com/repos/$REPOSITORY/actions/artifacts/$UPLOADED_ARTIFACT_ID"
+          /usr/bin/ruby -rjson -e '
+            metadata = JSON.parse(File.read(ARGV[0]))
+            abort "artifact id" unless metadata["id"].to_s == ARGV[1]
+            abort "artifact name" unless metadata["name"] == ARGV[2]
+            abort "artifact digest" unless metadata["digest"].is_a?(String) && metadata["digest"].start_with?("sha256:")
+            abort "artifact expired" unless metadata["expired"] == false
+            puts "artifact_id=#{metadata["id"]}"
+            puts "artifact_digest=#{metadata["digest"]}"
+            puts "artifact_name=#{metadata["name"]}"
+          ' "$metadata_file" "$UPLOADED_ARTIFACT_ID" \
+            "ready-general-${{ needs.validate.outputs.task_id }}-${{ needs.validate.outputs.verified_head }}" \
+            >> "$GITHUB_OUTPUT"
+
+  ready-general-publish:
+    needs: [validate, ready-general-execute]
+    if: >-
+      github.actor == 'lenchenalc-hongda' &&
+      needs.validate.outputs.result == 'READY' &&
+      needs.ready-general-execute.result == 'success' &&
+      needs.ready-general-execute.outputs.artifact_id != '' &&
+      needs.ready-general-execute.outputs.artifact_digest != '' &&
+      needs.ready-general-execute.outputs.artifact_name != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      actions: read
+      issues: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # actions/checkout v4
+        with:
+          ref: ${{ needs.validate.outputs.verified_head }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Download exact validated general READY artifact
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          artifact-ids: ${{ needs.ready-general-execute.outputs.artifact_id }}
+          path: ${{ runner.temp }}/agent-control-ready-general-download
+
+      - name: Verify artifact and reconstruct before writer token
+        id: verify-artifact
+        shell: bash
+        env:
+          READ_TOKEN: ${{ github.token }}
+          ARTIFACT_ID: ${{ needs.ready-general-execute.outputs.artifact_id }}
+          ARTIFACT_DIGEST: ${{ needs.ready-general-execute.outputs.artifact_digest }}
+          ARTIFACT_NAME: ${{ needs.ready-general-execute.outputs.artifact_name }}
+          EXPECTED_SHA: ${{ needs.validate.outputs.verified_head }}
+          TASK_ID: ${{ needs.validate.outputs.task_id }}
+          TASK_COMMENT_ID: ${{ needs.validate.outputs.ready_general_task_comment_id }}
+          OBJECTIVE_B64: ${{ needs.validate.outputs.ready_general_objective_b64 }}
+          ALLOWED_PATHS_B64: ${{ needs.validate.outputs.ready_general_allowed_paths_b64 }}
+          CHECKS: ${{ needs.validate.outputs.ready_general_checks }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          download_root="$RUNNER_TEMP/agent-control-ready-general-download"
+          artifact_root="$download_root/$ARTIFACT_NAME"
+          if [ ! -f "$artifact_root/manifest.json" ]; then
+            artifact_root="$download_root"
+          fi
+          manifest_file="$artifact_root/manifest.json"
+          files_root="$artifact_root/files"
+          expected_allowed_file="$RUNNER_TEMP/agent-control-ready-general-expected-allowed.txt"
+          expected_changed_file="$RUNNER_TEMP/agent-control-ready-general-expected-changed.txt"
+          manifest_hashes_file="$RUNNER_TEMP/agent-control-ready-general-manifest-hashes.txt"
+          actual_files_file="$(mktemp "$RUNNER_TEMP/agent-control-ready-general-actual-files.XXXXXX")"
+          expected_files_file="$(mktemp "$RUNNER_TEMP/agent-control-ready-general-expected-files.XXXXXX")"
+          actual_hashes_file="$(mktemp "$RUNNER_TEMP/agent-control-ready-general-actual-hashes.XXXXXX")"
+          bundle_hash_file="$(mktemp "$RUNNER_TEMP/agent-control-ready-general-publish-bundle.XXXXXX")"
+          canonical_diff_file="$(mktemp "$RUNNER_TEMP/agent-control-ready-general-publish-diff.XXXXXX")"
+          revalidate_output="$(mktemp "$RUNNER_TEMP/agent-control-ready-general-publish-revalidate.XXXXXX")"
+          artifact_metadata_file="$(mktemp "$RUNNER_TEMP/agent-control-ready-general-artifact-metadata.XXXXXX")"
+          changed_paths_file="$RUNNER_TEMP/agent-control-ready-general-changed-paths.txt"
+          trap 'rm -f "$actual_files_file" "$expected_files_file" "$actual_hashes_file" "$bundle_hash_file" "$canonical_diff_file" "$revalidate_output" "$artifact_metadata_file"' EXIT
+
+          [ -f "$manifest_file" ]
+          [ -d "$files_root" ]
+          if find "$artifact_root" -type l -print -quit | grep -q .; then
+            printf 'READY_GENERAL_ARTIFACT_SYMLINK=UNSAFE\n'; exit 1
+          fi
+          if find "$artifact_root" -mindepth 1 -maxdepth 1 ! -name manifest.json ! -name files -print -quit | grep -q .; then
+            printf 'READY_GENERAL_ARTIFACT_LAYOUT=UNSAFE\n'; exit 1
+          fi
+
+          curl --fail --silent --show-error --http1.1 --connect-timeout 20 --max-time 60 \
+            --header "Authorization: Bearer $READ_TOKEN" \
+            --header 'Accept: application/vnd.github+json' \
+            --header 'X-GitHub-Api-Version: 2022-11-28' \
+            --output "$artifact_metadata_file" \
+            "https://api.github.com/repos/$REPOSITORY/actions/artifacts/$ARTIFACT_ID"
+          /usr/bin/ruby -rjson -e '
+            metadata = JSON.parse(File.read(ARGV[0]))
+            expected_digest = ARGV[1]
+            expected_digest = "sha256:#{expected_digest}" unless expected_digest.start_with?("sha256:")
+            abort "artifact id" unless metadata["id"].to_s == ARGV[2]
+            abort "artifact name" unless metadata["name"] == ARGV[3]
+            abort "artifact digest" unless metadata["digest"] == expected_digest
+            abort "artifact expired" unless metadata["expired"] == false
+            puts expected_digest
+          ' "$artifact_metadata_file" "$ARTIFACT_DIGEST" "$ARTIFACT_ID" "$ARTIFACT_NAME" \
+            > "$RUNNER_TEMP/agent-control-ready-general-normalized-digest.txt"
+          normalized_artifact_digest="$(cat "$RUNNER_TEMP/agent-control-ready-general-normalized-digest.txt")"
+
+          printf '%s' "$ALLOWED_PATHS_B64" | /usr/bin/base64 -d \
+            | /usr/bin/ruby -rjson -e '
+              value = JSON.parse(STDIN.read)
+              abort "invalid paths" unless value.is_a?(Array) && value.length.between?(1, 6)
+              abort "invalid path" unless value.all? { |p| p.is_a?(String) && p.match?(%r{\A(?:docs/customer-project-center/[A-Za-z0-9_./-]+\.md|src/lib/customer-projects/[A-Za-z0-9_./-]+\.ts|tests/unit/customer-project-[A-Za-z0-9_./-]+\.test\.ts)\z}) && p.split("/").none? { |part| part.empty? || part.start_with?(".") } }
+              abort "duplicate path" unless value.uniq.length == value.length
+              puts value
+            ' | LC_ALL=C sort -u > "$expected_allowed_file"
+
+          /usr/bin/ruby -rjson -e '
+            manifest = JSON.parse(File.read(ARGV[0]))
+            allowed_paths = File.readlines(ARGV[1], chomp: true)
+            expected_keys = %w[schema task_id base_master_sha trusted_comment_id allowed_paths changed_paths modes file_sha256 canonical_diff_sha256 bundle_sha256].sort
+            abort "manifest keys" unless manifest.keys.sort == expected_keys
+            abort "schema" unless manifest["schema"] == "AGENT_CONTROL_READY_GENERAL_BUNDLE_V1"
+            abort "task" unless manifest["task_id"] == ARGV[2]
+            abort "base" unless manifest["base_master_sha"] == ARGV[3]
+            abort "comment" unless manifest["trusted_comment_id"] == ARGV[4]
+            abort "allowed paths" unless manifest["allowed_paths"].is_a?(Array) && manifest["allowed_paths"].sort == allowed_paths
+            changed_paths = manifest["changed_paths"]
+            abort "changed paths" unless changed_paths.is_a?(Array) && changed_paths.length.between?(1, 6) && changed_paths.uniq.length == changed_paths.length
+            abort "outside allowed" unless changed_paths.all? { |path| allowed_paths.include?(path) }
+            abort "path shape" unless changed_paths.all? { |path| path.is_a?(String) && path.match?(%r{\A(?:docs/customer-project-center/[A-Za-z0-9_./-]+\.md|src/lib/customer-projects/[A-Za-z0-9_./-]+\.ts|tests/unit/customer-project-[A-Za-z0-9_./-]+\.test\.ts)\z}) && path.split("/").none? { |part| part.empty? || part.start_with?(".") } }
+            abort "modes" unless manifest["modes"].is_a?(Hash) && manifest["modes"].keys.sort == changed_paths.sort && manifest["modes"].values.all? { |mode| mode == "100644" }
+            abort "file hashes" unless manifest["file_sha256"].is_a?(Hash) && manifest["file_sha256"].keys.sort == changed_paths.sort && manifest["file_sha256"].values.all? { |digest| digest.is_a?(String) && digest.match?(/\A[0-9a-f]{64}\z/) }
+            abort "diff hash" unless manifest["canonical_diff_sha256"].is_a?(String) && manifest["canonical_diff_sha256"].match?(/\A[0-9a-f]{64}\z/)
+            abort "bundle hash" unless manifest["bundle_sha256"].is_a?(String) && manifest["bundle_sha256"].match?(/\A[0-9a-f]{64}\z/)
+            File.write(ARGV[5], changed_paths.sort.join("\n") + "\n")
+            File.write(ARGV[6], manifest["file_sha256"].sort.map { |path, digest| "#{path}\t#{digest}\n" }.join)
+          ' "$manifest_file" "$expected_allowed_file" "$TASK_ID" "$EXPECTED_SHA" \
+            "$TASK_COMMENT_ID" "$expected_changed_file" "$manifest_hashes_file"
+
+          find "$files_root" -type f -printf '%P\n' | LC_ALL=C sort -u > "$actual_files_file"
+          LC_ALL=C sort -u "$expected_changed_file" > "$expected_files_file"
+          cmp -s "$actual_files_file" "$expected_files_file" \
+            || { printf 'READY_GENERAL_ARTIFACT_FILES=UNEXPECTED\n'; exit 1; }
+          : > "$actual_hashes_file"
+          while IFS=$'\t' read -r changed_path expected_hash; do
+            artifact_file="$files_root/$changed_path"
+            [ -f "$artifact_file" ] && [ ! -L "$artifact_file" ] \
+              || { printf 'READY_GENERAL_ARTIFACT_FILE=INVALID\n'; exit 1; }
+            actual_hash="$(shasum -a 256 "$artifact_file" | awk '{print $1}')"
+            [ "$actual_hash" = "$expected_hash" ] \
+              || { printf 'READY_GENERAL_ARTIFACT_HASH=MISMATCH\n'; exit 1; }
+            printf '%s\t%s\n' "$changed_path" "$actual_hash" >> "$actual_hashes_file"
+          done < "$manifest_hashes_file"
+
+          manifest_diff_sha="$(/usr/bin/ruby -rjson -e 'puts JSON.parse(File.read(ARGV[0]))["canonical_diff_sha256"]' "$manifest_file")"
+          manifest_bundle_sha="$(/usr/bin/ruby -rjson -e 'puts JSON.parse(File.read(ARGV[0]))["bundle_sha256"]' "$manifest_file")"
+          {
+            printf 'AGENT_CONTROL_READY_GENERAL_BUNDLE_V1\n'
+            printf 'TASK_ID\t%s\n' "$TASK_ID"
+            printf 'BASE_MASTER_SHA\t%s\n' "$EXPECTED_SHA"
+            printf 'TRUSTED_COMMENT_ID\t%s\n' "$TASK_COMMENT_ID"
+            while IFS= read -r allowed_path; do
+              printf 'ALLOWED_PATH\t%s\n' "$allowed_path"
+            done < "$expected_allowed_file"
+            while IFS= read -r changed_path; do
+              printf 'CHANGED_PATH\t%s\n' "$changed_path"
+            done < "$expected_changed_file"
+            while IFS=$'\t' read -r changed_path file_sha; do
+              artifact_file="$files_root/$changed_path"
+              artifact_size="$(wc -c < "$artifact_file" | tr -d ' ')"
+              printf 'FILE\t%s\t100644\t%s\t%s\n' "$changed_path" "$file_sha" "$artifact_size"
+              cat "$artifact_file"
+              printf '\n'
+            done < "$actual_hashes_file"
+            printf 'DIFF\t%s\n' "$manifest_diff_sha"
+          } > "$bundle_hash_file"
+          [ "$(shasum -a 256 "$bundle_hash_file" | awk '{print $1}')" = "$manifest_bundle_sha" ] \
+            || { printf 'READY_GENERAL_BUNDLE_HASH=MISMATCH\n'; exit 1; }
+
+          export GITHUB_OUTPUT="$revalidate_output"
+          GITHUB_TOKEN="$READ_TOKEN" pnpm exec tsx scripts/agent-control/github-dry-run.ts > /dev/null
+          output_value() { sed -n "s/^$1=//p" "$revalidate_output" | tail -n 1; }
+          [ "$(output_value result)" = READY ]
+          [ "$(output_value task_id)" = "$TASK_ID" ]
+          [ "$(output_value master_sha)" = "$EXPECTED_SHA" ]
+          [ "$(output_value status)" = READY_FOR_CODEX ]
+          [ "$(output_value active_pr)" = null ]
+          [ "$(output_value active_branch)" = "" ]
+          [ "$(output_value fix_round)" = 0 ]
+          [ "$(output_value ready_general_task_comment_id)" = "$TASK_COMMENT_ID" ]
+          [ "$(output_value ready_general_objective_b64)" = "$OBJECTIVE_B64" ]
+          [ "$(output_value ready_general_allowed_paths_b64)" = "$ALLOWED_PATHS_B64" ]
+          [ "$(output_value ready_general_checks)" = "$CHECKS" ]
+
+          git_control_hash() {
+            {
+              shasum -a 256 .git/HEAD .git/config
+              if [ -f .git/info/exclude ]; then shasum -a 256 .git/info/exclude; else printf 'INFO_EXCLUDE_ABSENT\n'; fi
+              if [ -f .git/info/attributes ]; then shasum -a 256 .git/info/attributes; else printf 'INFO_ATTRIBUTES_ABSENT\n'; fi
+              if [ -d .git/hooks ]; then find .git/hooks -type f -exec shasum -a 256 {} \; 2>/dev/null | LC_ALL=C sort; fi
+              { git show-ref || true; } | LC_ALL=C sort
+              git config --local --list | LC_ALL=C sort
+            } | shasum -a 256 | awk '{print $1}'
+          }
+          verify_parent_chain() {
+            local file_path="$1"
+            local parent_path
+            parent_path="$(dirname "$file_path")"
+            while [ "$parent_path" != "." ]; do
+              [ -d "$parent_path" ] && [ ! -L "$parent_path" ] \
+                || { printf 'READY_GENERAL_PUBLISH_PARENT_CHAIN=UNSAFE\n'; return 1; }
+              parent_path="$(dirname "$parent_path")"
+            done
+          }
+          collect_changed_paths() {
+            {
+              git diff --name-only --no-renames
+              git ls-files --others --exclude-standard
+            } | sed '/^$/d' | LC_ALL=C sort -u > "$changed_paths_file"
+          }
+          canonical_diff_hash() {
+            local output_file="$1"
+            local diff_status=0
+            : > "$output_file"
+            while IFS= read -r diff_path; do
+              if git ls-files --error-unmatch -- "$diff_path" > /dev/null 2>&1; then
+                git -c core.abbrev=40 -c diff.algorithm=myers diff \
+                  --no-ext-diff --no-textconv --no-color --binary --no-renames \
+                  -- "$diff_path" >> "$output_file"
+              else
+                set +e
+                git -c core.abbrev=40 -c diff.algorithm=myers diff \
+                  --no-index --no-ext-diff --no-textconv --no-color --binary --no-renames \
+                  -- /dev/null "$diff_path" >> "$output_file"
+                diff_status=$?
+                set -e
+                if [ "$diff_status" -ne 0 ] && [ "$diff_status" -ne 1 ]; then
+                  printf 'READY_GENERAL_PUBLISH_DIFF=FAILED\n'
+                  return 1
+                fi
+              fi
+            done < "$changed_paths_file"
+            shasum -a 256 "$output_file" | awk '{print $1}'
+          }
+
+          [ "$(git rev-parse HEAD)" = "$EXPECTED_SHA" ]
+          git diff --cached --exit-code > /dev/null
+          [ -z "$(git status --porcelain)" ]
+          git_control_before="$(git_control_hash)"
+          while IFS= read -r changed_path; do
+            verify_parent_chain "$changed_path"
+            [ ! -L "$changed_path" ] \
+              || { printf 'READY_GENERAL_PUBLISH_TARGET_SYMLINK=UNSAFE\n'; exit 1; }
+            install -m 0644 "$files_root/$changed_path" "$changed_path"
+          done < "$expected_changed_file"
+          [ "$(git_control_hash)" = "$git_control_before" ] \
+            || { printf 'READY_GENERAL_PUBLISH_GIT_CONTROL=CHANGED\n'; exit 1; }
+          git diff --cached --exit-code > /dev/null
+          collect_changed_paths
+          cmp -s "$changed_paths_file" "$expected_changed_file" \
+            || { printf 'READY_GENERAL_PUBLISH_PATHS=MISMATCH\n'; exit 1; }
+          while IFS= read -r changed_path; do
+            [ -f "$changed_path" ] && [ ! -L "$changed_path" ] \
+              || { printf 'READY_GENERAL_PUBLISH_FILE_TYPE=INVALID\n'; exit 1; }
+            [ "$(stat -c '%a' "$changed_path")" = "644" ] \
+              || { printf 'READY_GENERAL_PUBLISH_FILE_MODE=INVALID\n'; exit 1; }
+          done < "$changed_paths_file"
+          while IFS=$'\t' read -r changed_path expected_hash; do
+            actual_hash="$(shasum -a 256 "$changed_path" | awk '{print $1}')"
+            [ "$actual_hash" = "$expected_hash" ] \
+              || { printf 'READY_GENERAL_REBUILT_FILE_HASH=MISMATCH\n'; exit 1; }
+          done < "$manifest_hashes_file"
+          if git diff --name-status --no-renames | grep -Ev '^[AM][[:space:]]' | grep -q . \
+            || git diff --summary | grep -Eq 'mode change|120000|160000|create mode 100755'; then
+            printf 'READY_GENERAL_PUBLISH_DIFF_SHAPE=UNSAFE\n'; exit 1
+          fi
+          git diff --check
+          canonical_diff_sha="$(canonical_diff_hash "$canonical_diff_file")"
+          [ "$canonical_diff_sha" = "$manifest_diff_sha" ] \
+            || { printf 'READY_GENERAL_CANONICAL_DIFF=MISMATCH\n'; exit 1; }
+          {
+            printf 'AGENT_CONTROL_READY_GENERAL_BUNDLE_V1\n'
+            printf 'TASK_ID\t%s\n' "$TASK_ID"
+            printf 'BASE_MASTER_SHA\t%s\n' "$EXPECTED_SHA"
+            printf 'TRUSTED_COMMENT_ID\t%s\n' "$TASK_COMMENT_ID"
+            while IFS= read -r allowed_path; do
+              printf 'ALLOWED_PATH\t%s\n' "$allowed_path"
+            done < "$expected_allowed_file"
+            while IFS= read -r changed_path; do
+              printf 'CHANGED_PATH\t%s\n' "$changed_path"
+            done < "$changed_paths_file"
+            while IFS=$'\t' read -r changed_path file_sha; do
+              workspace_file="$changed_path"
+              workspace_size="$(wc -c < "$workspace_file" | tr -d ' ')"
+              printf 'FILE\t%s\t100644\t%s\t%s\n' "$changed_path" "$file_sha" "$workspace_size"
+              cat "$workspace_file"
+              printf '\n'
+            done < "$actual_hashes_file"
+            printf 'DIFF\t%s\n' "$canonical_diff_sha"
+          } > "$bundle_hash_file"
+          bundle_sha="$(shasum -a 256 "$bundle_hash_file" | awk '{print $1}')"
+          [ "$bundle_sha" = "$manifest_bundle_sha" ] \
+            || { printf 'READY_GENERAL_REBUILT_BUNDLE_HASH=MISMATCH\n'; exit 1; }
+
+          {
+            printf 'bundle_sha256=%s\n' "$bundle_sha"
+            printf 'artifact_digest=%s\n' "$normalized_artifact_digest"
+          } >> "$GITHUB_OUTPUT"
+          printf 'READY_GENERAL_ARTIFACT_ID=%s\n' "$ARTIFACT_ID"
+          printf 'READY_GENERAL_ARTIFACT_DIGEST=%s\n' "$normalized_artifact_digest"
+          printf 'READY_GENERAL_ARTIFACT_VERIFY=PASS\n'
+          printf 'READY_GENERAL_LIVE_STATE_VERIFY=PASS\n'
+          printf 'READY_GENERAL_RECONSTRUCT_VERIFY=PASS\n'
 
       - name: Mint scoped GitHub App token
         id: app-token
@@ -1999,36 +2484,33 @@ jobs:
           permission-contents: write
           permission-pull-requests: write
 
-      - name: Revalidate and publish one general READY Draft PR
+      - name: Publish verified general READY Draft PR
         shell: bash
         env:
           GH_APP_TOKEN: ${{ steps.app-token.outputs.token }}
-          READ_TOKEN: ${{ github.token }}
           APP_SLUG: ${{ steps.app-token.outputs.app-slug }}
           EXPECTED_SHA: ${{ needs.validate.outputs.verified_head }}
           TASK_ID: ${{ needs.validate.outputs.task_id }}
           TASK_COMMENT_ID: ${{ needs.validate.outputs.ready_general_task_comment_id }}
-          OBJECTIVE_B64: ${{ needs.validate.outputs.ready_general_objective_b64 }}
-          ALLOWED_PATHS_B64: ${{ needs.validate.outputs.ready_general_allowed_paths_b64 }}
           CHECKS: ${{ needs.validate.outputs.ready_general_checks }}
           REPOSITORY: ${{ github.repository }}
+          BUNDLE_SHA256: ${{ steps.verify-artifact.outputs.bundle_sha256 }}
+          VERIFIED_ARTIFACT_DIGEST: ${{ steps.verify-artifact.outputs.artifact_digest }}
           PATH: /usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin
         run: |
           set -euo pipefail
-          json_encoder="$GITHUB_WORKSPACE/scripts/agent-control/ready-bootstrap-json.rb"
           normalized_task="$(printf '%s' "$TASK_ID" | tr '[:upper:]' '[:lower:]')"
           branch="codex/agent-control-ready-general-$normalized_task-$(printf '%s' "$EXPECTED_SHA" | cut -c1-12)"
           askpass_file="$(mktemp "$RUNNER_TEMP/agent-control-ready-general-askpass.XXXXXX")"
           curl_config="$(mktemp "$RUNNER_TEMP/agent-control-ready-general-curl.XXXXXX")"
           response_file="$(mktemp "$RUNNER_TEMP/agent-control-ready-general-response.XXXXXX")"
-          paths_file="$(mktemp "$RUNNER_TEMP/agent-control-ready-general-paths.XXXXXX")"
-          changed_paths_file="$(mktemp "$RUNNER_TEMP/agent-control-ready-general-changed.XXXXXX")"
-          revalidate_output="$(mktemp "$RUNNER_TEMP/agent-control-ready-general-revalidate.XXXXXX")"
+          expected_paths_file="$RUNNER_TEMP/agent-control-ready-general-changed-paths.txt"
+          changed_paths_file="$(mktemp "$RUNNER_TEMP/agent-control-ready-general-publish-changed.XXXXXX")"
           pr_body_file="$(mktemp "$RUNNER_TEMP/agent-control-ready-general-pr.XXXXXX")"
           completion_file="$(mktemp "$RUNNER_TEMP/agent-control-ready-general-completion.XXXXXX")"
-          trap 'rm -f "$askpass_file" "$curl_config" "$response_file" "$paths_file" "$changed_paths_file" "$revalidate_output" "$pr_body_file" "$completion_file"' EXIT
+          trap 'rm -f "$askpass_file" "$curl_config" "$response_file" "$changed_paths_file" "$pr_body_file" "$completion_file"' EXIT
 
-          printf '%s' "$ALLOWED_PATHS_B64" | /usr/bin/base64 -D | /usr/bin/ruby -rjson -e 'puts JSON.parse(STDIN.read)' > "$paths_file"
+          [ -s "$expected_paths_file" ]
           cat > "$askpass_file" <<'EOF'
           #!/bin/sh
           case "$1" in
@@ -2045,16 +2527,8 @@ jobs:
           } > "$curl_config"
           chmod 600 "$curl_config"
 
-          export GITHUB_OUTPUT="$revalidate_output"
-          GITHUB_TOKEN="$READ_TOKEN" pnpm exec tsx scripts/agent-control/github-dry-run.ts > /dev/null
-          output_value() { sed -n "s/^$1=//p" "$revalidate_output" | tail -n 1; }
-          [ "$(output_value result)" = READY ]
-          [ "$(output_value task_id)" = "$TASK_ID" ]
-          [ "$(output_value master_sha)" = "$EXPECTED_SHA" ]
-          [ "$(output_value ready_general_task_comment_id)" = "$TASK_COMMENT_ID" ]
-          [ "$(output_value ready_general_objective_b64)" = "$OBJECTIVE_B64" ]
-          [ "$(output_value ready_general_allowed_paths_b64)" = "$ALLOWED_PATHS_B64" ]
-          [ "$(output_value ready_general_checks)" = "$CHECKS" ]
+          [ "$VERIFIED_ARTIFACT_DIGEST" != "" ]
+          [ "$BUNDLE_SHA256" != "" ]
 
           remote_master="$(GIT_ASKPASS="$askpass_file" GIT_TERMINAL_PROMPT=0 git -c http.version=HTTP/1.1 ls-remote --heads origin refs/heads/master | awk '{print $1}')"
           [ "$remote_master" = "$EXPECTED_SHA" ] || { printf 'READY_GENERAL_MASTER=MOVED\n'; exit 1; }
@@ -2075,11 +2549,13 @@ jobs:
             git status --porcelain=v1 --untracked-files=all -- "$path" | grep -Eq '^( M|\?\?) '
             verify_parent_chain "$path"
             [ -f "$path" ] && [ ! -L "$path" ] && [ ! -x "$path" ]
-          done < "$paths_file"
+            [ "$(stat -c '%a' "$path")" = "644" ]
+          done < "$expected_paths_file"
           { git diff --name-only --no-renames; git ls-files --others --exclude-standard; } \
             | sed '/^$/d' | LC_ALL=C sort -u > "$changed_paths_file"
           [ -s "$changed_paths_file" ]
-          while IFS= read -r path; do grep -Fxq "$path" "$paths_file"; done < "$changed_paths_file"
+          cmp -s "$changed_paths_file" "$expected_paths_file" \
+            || { printf 'READY_GENERAL_PUBLISH_PATHS=MISMATCH\n'; exit 1; }
 
           git -c core.hooksPath=/dev/null switch -c "$branch"
           while IFS= read -r path; do git add -- "$path"; done < "$changed_paths_file"
@@ -2093,7 +2569,10 @@ jobs:
           commit_date="$(git show -s --format=%cI "$EXPECTED_SHA")"
           git config user.name "$bot_name"
           git config user.email "$bot_email"
-          GIT_AUTHOR_DATE="$commit_date" GIT_COMMITTER_DATE="$commit_date" git -c core.hooksPath=/dev/null commit -m "feat(agent-control): execute $TASK_ID"
+          GIT_AUTHOR_DATE="$commit_date" GIT_COMMITTER_DATE="$commit_date" \
+            git -c core.hooksPath=/dev/null commit \
+            -m "feat(agent-control): execute $TASK_ID" \
+            -m "Bundle-SHA256: $BUNDLE_SHA256"
           commit_sha="$(git rev-parse HEAD)"
           [ -z "$(git status --porcelain)" ]
 
@@ -2139,7 +2618,15 @@ jobs:
           AUTO_MERGE = false
           AUTO_PRODUCTION = false
           EOF
-            pr_payload="$(/usr/bin/ruby "$json_encoder" draft-pr "Agent Control READY: $TASK_ID" "$branch" master "$pr_body_file")"
+            pr_payload="$(/usr/bin/ruby -rjson -e '
+              puts JSON.generate(
+                "title" => ARGV[0],
+                "head" => ARGV[1],
+                "base" => ARGV[2],
+                "draft" => true,
+                "body" => File.read(ARGV[3])
+              )
+            ' "Agent Control READY: $TASK_ID" "$branch" master "$pr_body_file")"
             pr_code="$(curl --silent --show-error --http1.1 --connect-timeout 20 --max-time 60 --config "$curl_config" --output "$response_file" --write-out '%{http_code}' --request POST "https://api.github.com/repos/$REPOSITORY/pulls" --data "$pr_payload")"
             [ "$pr_code" = 201 ]
             pr_number="$(/usr/bin/ruby -rjson -e '
@@ -2182,7 +2669,9 @@ jobs:
           if /usr/bin/ruby -rjson -e 'task, head, bot = ARGV[1], ARGV[2], ARGV[3]; exit(JSON.parse(File.read(ARGV[0])).any? { |c| c.dig("user", "login") == bot && c["body"].to_s.include?("TASK_ID = #{task}") && c["body"].to_s.include?("HEAD_SHA = #{head}") } ? 0 : 1)' "$response_file" "$TASK_ID" "$commit_sha" "${APP_SLUG:-hongda-agent-control}[bot]"; then
             printf 'READY_GENERAL_COMPLETION_COMMENT=REUSED\n'
           else
-            completion_payload="$(/usr/bin/ruby "$json_encoder" comment "$completion_file")"
+            completion_payload="$(/usr/bin/ruby -rjson -e '
+              puts JSON.generate("body" => File.read(ARGV[0]))
+            ' "$completion_file")"
             comment_code="$(curl --silent --show-error --http1.1 --connect-timeout 20 --max-time 60 --config "$curl_config" --output "$response_file" --write-out '%{http_code}' --request POST "https://api.github.com/repos/$REPOSITORY/issues/$pr_number/comments" --data "$completion_payload")"
             [ "$comment_code" = 201 ]
             printf 'READY_GENERAL_COMPLETION_COMMENT=CREATED\n'

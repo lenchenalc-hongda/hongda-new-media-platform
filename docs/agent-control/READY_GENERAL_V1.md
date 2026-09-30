@@ -45,10 +45,26 @@ runner must fail closed if any required check is absent or fails.
 1. Validate Issue state, newest trusted comment, master SHA and task fields on
    the cloud runner. Pass only normalized values to the isolated Mac job.
 2. Run Codex without GitHub App, database, Production, or personal model keys.
-   Record the clean base, git control state, file types and exact allowed diff.
-3. Recheck live master and deterministic task branch before push and PR POST.
-   Publish one Draft PR and authentic Completion Contract, with no force push.
-4. PM verifies the live diff and same-HEAD CI/Vercel, then waits for explicit
+   Record the clean base, git control state, file types and exact allowed diff;
+   rerun that complete validation after the fixed checks.
+3. Package only those validated regular-file bytes with a canonical manifest.
+   The manifest binds TASK_ID, base SHA, trusted comment ID, exact allowed and
+   changed paths, `100644` modes, per-file SHA-256, canonical diff SHA-256 and
+   bundle SHA-256. Upload the bundle with a commit-pinned artifact action and
+   export the service-issued artifact ID, name and digest.
+4. Start a fresh publisher runner. Checkout the exact base with persisted
+   credentials disabled, download the exact artifact by service ID with a
+   commit-pinned action, and verify the service digest plus every manifest,
+   file, diff and bundle hash before any writer credential exists.
+5. Re-read Issue #10, the newest trusted task and live master with read-only
+   authority, then reconstruct only verified regular files with exact `100644`
+   modes. Recheck paths, hashes, canonical diff, index and git control state.
+6. Only then mint the scoped App token. The publisher performs git and GitHub
+   API operations without executing repository scripts, Codex output, package
+   lifecycle hooks, tests or builds after the write token is available.
+7. Publish one Draft PR and authentic Completion Contract using deterministic
+   branch/commit identity, no force push and fail-closed idempotency.
+8. PM verifies the live diff and same-HEAD CI/Vercel, then waits for explicit
    owner approval to merge. A PR-opened event may precede its Contract or CI;
    the hourly reviewer must resume without inventing a PASS.
 
@@ -60,9 +76,13 @@ extra path, rename, symlink, submodule, executable/mode change or git-control
 mutation, then runs only repository-owned commands selected by validated names.
 
 Only after all checks pass does the workflow mint a contents/PR GitHub App
-token. The publisher revalidates Issue #10, the newest trusted task and live
-master, uses a deterministic branch, never force-pushes, and creates or resumes
-exactly one identical Draft PR. Conflicting remote state fails closed.
+token. The unprivileged execution job never receives that token or any other
+write credential. The publisher is a separate clean job with no shared process
+or mutable filesystem state from the Codex runner. It revalidates Issue #10, the
+newest trusted task and live master, verifies the service-issued artifact digest
+and content-addressed manifest, uses a deterministic branch, never force-pushes,
+and creates or resumes exactly one identical Draft PR. Conflicting remote state
+fails closed.
 
 General READY execution remains **UNVERIFIED** until this wiring is merged and a
 fresh bounded task creates a bot Draft PR that passes same-HEAD CI/Vercel and PM

@@ -52,26 +52,50 @@ check(validator.includes('ready_general_task_comment_id')
 check(!validator.includes('ready_general_task_body'),
   'raw task comments are not exported to the general runner');
 
-const jobStart = workflow.indexOf('  ready-general-task:');
-check(jobStart >= 0, 'general READY job exists');
-const job = workflow.slice(jobStart);
-const codexStep = job.indexOf('      - name: Run isolated general READY task and fixed checks');
-const tokenStep = job.indexOf('      - name: Mint scoped GitHub App token');
-const publishStep = job.indexOf('      - name: Revalidate and publish one general READY Draft PR');
-check(codexStep >= 0 && tokenStep > codexStep && publishStep > tokenStep,
-  'App token is minted only after execution, diff validation and fixed checks');
-const isolated = job.slice(codexStep, tokenStep);
+const executeStart = workflow.indexOf('  ready-general-execute:');
+const publishStart = workflow.indexOf('  ready-general-publish:');
+check(executeStart >= 0 && publishStart > executeStart,
+  'general READY execution and publishing are separate jobs');
+const execute = workflow.slice(executeStart, publishStart);
+const publisher = workflow.slice(publishStart);
+const codexStep = execute.indexOf('      - name: Run isolated general READY task and fixed checks');
+check(codexStep >= 0, 'isolated general READY execution step exists');
+const isolated = execute.slice(codexStep);
 check(isolated.includes('env -i')
   && !isolated.includes('GH_APP_TOKEN:')
   && !isolated.includes('SUPABASE_')
   && !isolated.includes('OPENAI_API_KEY'),
   'isolated Codex step receives no GitHub, database, Production or personal model token');
-check(isolated.includes('git_control_before')
-  && isolated.includes('git diff --cached --exit-code')
-  && isolated.includes('READY_GENERAL_PATH=OUT_OF_SCOPE')
-  && isolated.includes('READY_GENERAL_PARENT_CHAIN=UNSAFE')
-  && isolated.includes('READY_GENERAL_DIFF_SHAPE=UNSAFE'),
-  'runner enforces git control, unstaged output, exact paths, parent chains and safe file shapes');
+check(execute.includes('validate_workspace before_checks')
+  && execute.includes('validate_workspace after_checks')
+  && execute.includes('git_control_hash')
+  && execute.includes('git diff --cached --exit-code')
+  && execute.includes('READY_GENERAL_PATH=OUT_OF_SCOPE_')
+  && execute.includes('READY_GENERAL_PARENT_CHAIN=UNSAFE')
+  && execute.includes('READY_GENERAL_DIFF_SHAPE=UNSAFE_')
+  && execute.includes('git diff --check'),
+  'runner repeats git control, index, path, parent, mode and diff validation before and after checks');
+check(execute.includes('actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02')
+  && execute.includes('artifact-meta')
+  && execute.includes('actions/artifacts/$UPLOADED_ARTIFACT_ID')
+  && execute.includes('artifact_digest')
+  && execute.includes('artifact_id'),
+  'runner uploads with a commit-pinned action and exposes service artifact ID and digest');
+check(execute.includes('manifest.json')
+  && execute.includes('"trusted_comment_id"')
+  && execute.includes('"allowed_paths"')
+  && execute.includes('"changed_paths"')
+  && execute.includes('"modes"')
+  && execute.includes('"file_sha256"')
+  && execute.includes('"canonical_diff_sha256"')
+  && execute.includes('"bundle_sha256"'),
+  'runner packages exact bytes with a complete hash-bound manifest');
+check(!execute.includes('actions/create-github-app-token')
+  && !execute.includes('GH_APP_TOKEN')
+  && !execute.includes('secrets.AGENT_CONTROL_APP_PRIVATE_KEY')
+  && !execute.includes('permission-contents: write')
+  && !execute.includes('permission-pull-requests: write'),
+  'execution job cannot mint or receive a write credential');
 check(isolated.includes('case "$check_name" in')
   && isolated.includes('typecheck)')
   && isolated.includes('agent-control)')
@@ -80,18 +104,40 @@ check(isolated.includes('case "$check_name" in')
   && isolated.includes('smoke)'),
   'comment check names map to fixed repository-owned commands');
 
-const publisher = job.slice(publishStep);
-check(publisher.includes('pnpm exec tsx scripts/agent-control/github-dry-run.ts')
-  && publisher.includes('READY_GENERAL_MASTER=MOVED')
+check(publisher.includes('runs-on: ubuntu-latest')
+  && publisher.includes('persist-credentials: false')
+  && publisher.includes('actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093')
+  && publisher.includes('artifact-ids: ${{ needs.ready-general-execute.outputs.artifact_id }}'),
+  'publisher starts from a clean runner and downloads the exact artifact by ID');
+check(publisher.includes('actions/artifacts/$ARTIFACT_ID')
+  && publisher.includes('artifact digest')
+  && publisher.includes('"file_sha256"')
+  && publisher.includes('"canonical_diff_sha256"')
+  && publisher.includes('"bundle_sha256"')
+  && publisher.includes('READY_GENERAL_ARTIFACT_HASH=MISMATCH')
+  && publisher.includes('READY_GENERAL_CANONICAL_DIFF=MISMATCH')
+  && publisher.includes('READY_GENERAL_REBUILT_FILE_HASH=MISMATCH')
+  && publisher.includes('READY_GENERAL_REBUILT_BUNDLE_HASH=MISMATCH'),
+  'publisher verifies service digest plus manifest, bundle, file and canonical diff hashes');
+check(publisher.includes('GITHUB_TOKEN="$READ_TOKEN" pnpm exec tsx scripts/agent-control/github-dry-run.ts')
   && publisher.includes('ready_general_task_comment_id')
-  && publisher.includes('READY_GENERAL_PUBLISH_PARENT_CHAIN=UNSAFE'),
-  'publisher rechecks live Issue state, newest task and master');
+  && publisher.includes('READY_GENERAL_MASTER=MOVED')
+  && publisher.includes('READY_GENERAL_LIVE_STATE_VERIFY=PASS'),
+  'publisher rechecks live Issue state, newest task and master before writer token');
 check(publisher.includes('READ_TOKEN: ${{ github.token }}')
-  && publisher.includes('GITHUB_TOKEN="$READ_TOKEN" pnpm exec tsx')
   && !publisher.includes('GITHUB_TOKEN="$GH_APP_TOKEN" pnpm exec tsx'),
   'live revalidation uses a read-only workflow token, not the scoped writer token');
+const mintStart = publisher.indexOf('      - name: Mint scoped GitHub App token');
+check(mintStart >= 0, 'publisher mints the writer token only after preflight');
+const afterMint = publisher.slice(mintStart);
+check(!afterMint.includes('pnpm')
+  && !afterMint.includes('tsx')
+  && !afterMint.includes('scripts/agent-control')
+  && !afterMint.includes('ready-bootstrap-json.rb')
+  && !afterMint.includes('bash scripts/'),
+  'publisher never executes repository-provided code after the write token is available');
 check(publisher.includes('codex/agent-control-ready-general-$normalized_task-')
-  && publisher.includes('draft-pr')
+  && publisher.includes('"draft" => true')
   && !publisher.includes('push --force')
   && !publisher.includes('push -f'),
   'publisher uses a deterministic branch, Draft PR and no force push');
