@@ -2,10 +2,10 @@
 
 ## Scope of this change
 
-The existing READY publisher recognizes two fixed acceptance tasks. This change
-adds a pure parser and file policy for future Customer Project Center tasks. It
-does **not** wire those tasks into the GitHub workflow, grant a new token scope,
-or enable a new writer. The existing fixed acceptance path remains unchanged.
+The existing READY publisher recognizes two fixed acceptance tasks. The general
+READY path now combines the pure parser and file policy with a fail-closed,
+isolated Mac runner and a separately credentialed publisher. The existing fixed
+acceptance path remains unchanged.
 
 ## Trusted task format
 
@@ -40,7 +40,7 @@ Agent Control checks are always required. Tasks touching code or tests also
 require Customer Project Center tests, build, and secret audit. The future
 runner must fail closed if any required check is absent or fails.
 
-## Workflow wiring required before use
+## Workflow wiring
 
 1. Validate Issue state, newest trusted comment, master SHA and task fields on
    the cloud runner. Pass only normalized values to the isolated Mac job.
@@ -52,6 +52,19 @@ runner must fail closed if any required check is absent or fails.
    owner approval to merge. A PR-opened event may precede its Contract or CI;
    the hourly reviewer must resume without inventing a PASS.
 
-Until this wiring has its own reviewed PR and live acceptance, general READY
-execution is **disabled**. No Customer Project Center database table, SQL,
-RLS, Production, financial source, or customer ownership change is authorized.
+The cloud validator exports only the normalized objective, exact paths, fixed
+check names, task ID, base SHA and trusted comment ID. Codex executes under
+`env -i` without a GitHub token, database credential, Production credential or
+personal model key. It cannot stage, commit or push. The runner rejects any
+extra path, rename, symlink, submodule, executable/mode change or git-control
+mutation, then runs only repository-owned commands selected by validated names.
+
+Only after all checks pass does the workflow mint a contents/PR GitHub App
+token. The publisher revalidates Issue #10, the newest trusted task and live
+master, uses a deterministic branch, never force-pushes, and creates or resumes
+exactly one identical Draft PR. Conflicting remote state fails closed.
+
+General READY execution remains **UNVERIFIED** until this wiring is merged and a
+fresh bounded task creates a bot Draft PR that passes same-HEAD CI/Vercel and PM
+review. No Customer Project Center database table, SQL, RLS, Production,
+financial source, or customer ownership change is authorized.

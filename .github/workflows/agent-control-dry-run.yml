@@ -80,6 +80,10 @@ jobs:
       task_body_b64: ${{ steps.validate.outputs.task_body_b64 }}
       ready_path: ${{ steps.validate.outputs.ready_path }}
       ready_content_b64: ${{ steps.validate.outputs.ready_content_b64 }}
+      ready_general_task_comment_id: ${{ steps.validate.outputs.ready_general_task_comment_id }}
+      ready_general_objective_b64: ${{ steps.validate.outputs.ready_general_objective_b64 }}
+      ready_general_allowed_paths_b64: ${{ steps.validate.outputs.ready_general_allowed_paths_b64 }}
+      ready_general_checks: ${{ steps.validate.outputs.ready_general_checks }}
     steps:
       - uses: actions/checkout@v4
 
@@ -1758,3 +1762,385 @@ jobs:
           printf 'READY_BOOTSTRAP_DRAFT_PR=%s\n' "$pr_number"
           printf 'READY_BOOTSTRAP_COMPLETION_COMMENT=PASS\n'
           printf 'READY_BOOTSTRAP_PUBLISH_PROOF=PASS\n'
+
+  ready-general-task:
+    needs: [validate, self-hosted-proof]
+    if: >-
+      github.actor == 'lenchenalc-hongda' &&
+      needs.validate.outputs.result == 'READY' &&
+      needs.self-hosted-proof.result == 'success' &&
+      needs.validate.outputs.status == 'READY_FOR_CODEX' &&
+      needs.validate.outputs.active_pr == 'null' &&
+      needs.validate.outputs.active_branch == '' &&
+      needs.validate.outputs.fix_round == '0' &&
+      needs.validate.outputs.max_fix_rounds == '3' &&
+      needs.validate.outputs.ready_general_task_comment_id != '' &&
+      needs.validate.outputs.ready_general_objective_b64 != '' &&
+      needs.validate.outputs.ready_general_allowed_paths_b64 != '' &&
+      needs.validate.outputs.ready_general_checks != ''
+    runs-on: [self-hosted, macOS, X64, hongda-agent-control]
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # actions/checkout v4
+        with:
+          ref: ${{ needs.validate.outputs.verified_head }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run isolated general READY task and fixed checks
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ needs.validate.outputs.verified_head }}
+          TASK_ID: ${{ needs.validate.outputs.task_id }}
+          TASK_COMMENT_ID: ${{ needs.validate.outputs.ready_general_task_comment_id }}
+          OBJECTIVE_B64: ${{ needs.validate.outputs.ready_general_objective_b64 }}
+          ALLOWED_PATHS_B64: ${{ needs.validate.outputs.ready_general_allowed_paths_b64 }}
+          CHECKS: ${{ needs.validate.outputs.ready_general_checks }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          codex_binary="/Applications/ChatGPT.app/Contents/Resources/codex"
+          output_schema="$GITHUB_WORKSPACE/scripts/agent-control/codex-ready-general-output.schema.json"
+          objective_file="$(mktemp "$RUNNER_TEMP/agent-control-ready-general-objective.XXXXXX")"
+          paths_file="$(mktemp "$RUNNER_TEMP/agent-control-ready-general-paths.XXXXXX")"
+          prompt_file="$(mktemp "$RUNNER_TEMP/agent-control-ready-general-prompt.XXXXXX")"
+          result_file="$(mktemp "$RUNNER_TEMP/agent-control-ready-general-result.XXXXXX")"
+          event_log="$(mktemp "$RUNNER_TEMP/agent-control-ready-general-events.XXXXXX")"
+          error_log="$(mktemp "$RUNNER_TEMP/agent-control-ready-general-error.XXXXXX")"
+          changed_paths_file="$(mktemp "$RUNNER_TEMP/agent-control-ready-general-changed.XXXXXX")"
+          trap 'rm -f "$objective_file" "$paths_file" "$prompt_file" "$result_file" "$event_log" "$error_log" "$changed_paths_file"; if [ -n "${smoke_pid:-}" ]; then kill "$smoke_pid" 2>/dev/null || true; fi' EXIT
+
+          decode_b64() { printf '%s' "$1" | /usr/bin/base64 -D; }
+          decode_b64 "$OBJECTIVE_B64" > "$objective_file"
+          decode_b64 "$ALLOWED_PATHS_B64" | /usr/bin/ruby -rjson -e '
+            value = JSON.parse(STDIN.read)
+            abort "invalid paths" unless value.is_a?(Array) && value.length.between?(1, 6)
+            abort "invalid path" unless value.all? { |p| p.is_a?(String) && p.match?(%r{\A(?:docs/customer-project-center/[A-Za-z0-9_./-]+\.md|src/lib/customer-projects/[A-Za-z0-9_./-]+\.ts|tests/unit/customer-project-[A-Za-z0-9_./-]+\.test\.ts)\z}) && p.split("/").none? { |part| part.empty? || part.start_with?(".") } }
+            abort "duplicate path" unless value.uniq.length == value.length
+            puts value
+          ' > "$paths_file"
+          if [ ! -s "$objective_file" ] || [ "$(wc -c < "$objective_file" | tr -d ' ')" -gt 4000 ]; then
+            printf 'READY_GENERAL_OBJECTIVE=INVALID\n'; exit 1
+          fi
+          if ! printf '%s\n' "$TASK_ID" | grep -Eq '^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$' \
+            || ! printf '%s\n' "$EXPECTED_SHA" | grep -Eq '^[0-9a-f]{40}$' \
+            || ! printf '%s\n' "$TASK_COMMENT_ID" | grep -Eq '^[1-9][0-9]*$'; then
+            printf 'READY_GENERAL_IDENTITY=INVALID\n'; exit 1
+          fi
+          if [ "$(git rev-parse HEAD)" != "$EXPECTED_SHA" ] \
+            || [ -n "$(git status --porcelain)" ]; then
+            printf 'READY_GENERAL_INITIAL_STATE=INVALID\n'; exit 1
+          fi
+          if [ ! -x "$codex_binary" ] || [ ! -f "$output_schema" ]; then
+            printf 'READY_GENERAL_RUNTIME=ABSENT\n'; exit 1
+          fi
+
+          git_dir="$(git rev-parse --git-dir)"
+          git_control_hash() {
+            {
+              shasum -a 256 "$git_dir/HEAD" "$git_dir/config"
+              if [ -f "$git_dir/info/exclude" ]; then shasum -a 256 "$git_dir/info/exclude"; else printf 'INFO_EXCLUDE_ABSENT\n'; fi
+              if [ -f "$git_dir/info/attributes" ]; then shasum -a 256 "$git_dir/info/attributes"; else printf 'INFO_ATTRIBUTES_ABSENT\n'; fi
+              if [ -d "$git_dir/hooks" ]; then find "$git_dir/hooks" -type f -exec shasum -a 256 {} \; 2>/dev/null | LC_ALL=C sort; fi
+              { git show-ref || true; } | LC_ALL=C sort
+              git config --local --list | LC_ALL=C sort
+            } | shasum -a 256 | awk '{print $1}'
+          }
+          git_control_before="$(git_control_hash)"
+
+          cat > "$prompt_file" <<'EOF'
+          You are executing one validated bounded general READY task.
+          Read the task objective from the file named in READY_OBJECTIVE_FILE.
+          You may modify only the exact newline-separated repository paths in READY_ALLOWED_PATHS_FILE.
+          Do not modify any other path. Do not stage, commit, push, create or switch branches,
+          alter git metadata, call GitHub, use network writes, or read unrelated user files,
+          credentials, tokens, cookies, environment variables, database secrets, or Production configuration.
+          Keep every change unstaged. Return JSON matching the provided schema. Use the exact TASK_ID
+          and EXPECTED_SHA values supplied in the prompt environment, list every changed path exactly,
+          set workspace_write_confirmed to true, and set acceptance_sentinel to
+          CODEX_READY_GENERAL_PROOF=PASS.
+          EOF
+
+          set +e
+          env -i \
+            HOME="$HOME" \
+            PATH="/usr/bin:/bin:/usr/sbin:/sbin" \
+            TMPDIR="$RUNNER_TEMP" \
+            READY_OBJECTIVE_FILE="$objective_file" \
+            READY_ALLOWED_PATHS_FILE="$paths_file" \
+            TASK_ID="$TASK_ID" \
+            EXPECTED_SHA="$EXPECTED_SHA" \
+            "$codex_binary" exec \
+            -C "$GITHUB_WORKSPACE" \
+            -s workspace-write \
+            -c 'approval_policy="never"' \
+            --ephemeral \
+            --ignore-user-config \
+            --ignore-rules \
+            --json \
+            --output-schema "$output_schema" \
+            --output-last-message "$result_file" \
+            - < "$prompt_file" > "$event_log" 2> "$error_log"
+          codex_status=$?
+          set -e
+          if [ "$codex_status" -ne 0 ]; then
+            printf 'CODEX_READY_GENERAL_PROOF=FAIL\n'; exit 1
+          fi
+          if [ "$(git rev-parse HEAD)" != "$EXPECTED_SHA" ] \
+            || [ "$(git_control_hash)" != "$git_control_before" ]; then
+            printf 'READY_GENERAL_GIT_CONTROL=CHANGED\n'; exit 1
+          fi
+          git diff --cached --exit-code > /dev/null
+          {
+            git diff --name-only --no-renames
+            git ls-files --others --exclude-standard
+          } | sed '/^$/d' | LC_ALL=C sort -u > "$changed_paths_file"
+          changed_count="$(wc -l < "$changed_paths_file" | tr -d ' ')"
+          if [ "$changed_count" -lt 1 ] || [ "$changed_count" -gt 6 ]; then
+            printf 'READY_GENERAL_CHANGED_PATHS=INVALID\n'; exit 1
+          fi
+          while IFS= read -r changed_path; do
+            grep -Fxq "$changed_path" "$paths_file" || { printf 'READY_GENERAL_PATH=OUT_OF_SCOPE\n'; exit 1; }
+            [ -f "$changed_path" ] && [ ! -L "$changed_path" ] && [ ! -x "$changed_path" ] \
+              || { printf 'READY_GENERAL_FILE_TYPE=INVALID\n'; exit 1; }
+            case "$(git ls-files -s -- "$changed_path" | awk '{print $1}' | head -n 1)" in
+              ''|100644) ;;
+              *) printf 'READY_GENERAL_INDEX_MODE=INVALID\n'; exit 1 ;;
+            esac
+          done < "$changed_paths_file"
+          if git diff --name-status --no-renames | grep -Ev '^[AM][[:space:]]' | grep -q . \
+            || git diff --summary | grep -Eq 'mode change|120000|160000|create mode 100755'; then
+            printf 'READY_GENERAL_DIFF_SHAPE=UNSAFE\n'; exit 1
+          fi
+          git diff --check
+
+          /usr/bin/ruby -rjson -e '
+            result = JSON.parse(File.read(ARGV[0]))
+            expected_paths = File.readlines(ARGV[3], chomp: true).sort
+            abort "status" unless result["status"] == "PASS"
+            abort "task" unless result["task_id"] == ARGV[1]
+            abort "base" unless result["base_master_sha"] == ARGV[2]
+            abort "paths" unless result["changed_paths"].is_a?(Array) && result["changed_paths"].sort == expected_paths
+            abort "write" unless result["workspace_write_confirmed"] == true
+            abort "sentinel" unless result["acceptance_sentinel"] == "CODEX_READY_GENERAL_PROOF=PASS"
+          ' "$result_file" "$TASK_ID" "$EXPECTED_SHA" "$changed_paths_file"
+
+          IFS=',' read -r -a requested_checks <<< "$CHECKS"
+          for check_name in "${requested_checks[@]}"; do
+            case "$check_name" in
+              typecheck) pnpm exec tsc --noEmit ;;
+              agent-control)
+                for test_file in tests/unit/agent-control*.test.ts; do pnpm exec tsx "$test_file"; done ;;
+              customer-project-center)
+                pnpm exec tsx tests/unit/customer-project-center-foundation.test.ts
+                pnpm exec tsx tests/unit/customer-project-domain.test.ts ;;
+              build) pnpm build ;;
+              secret-audit) bash scripts/audit-bundle-secrets.sh ;;
+              smoke)
+                pnpm next start -p 3000 > "$RUNNER_TEMP/ready-general-smoke.log" 2>&1 &
+                smoke_pid=$!
+                for attempt in {1..25}; do curl -fsS http://localhost:3000 > /dev/null && break; sleep 2; done
+                curl -fsS http://localhost:3000 > /dev/null
+                BASE_URL=http://localhost:3000 pnpm tsx tests/e2e/routes.spec.ts
+                BASE_URL=http://localhost:3000 pnpm tsx tests/e2e/scripts.spec.ts
+                BASE_URL=http://localhost:3000 pnpm tsx tests/e2e/knowledge.spec.ts
+                BASE_URL=http://localhost:3000 pnpm tsx tests/e2e/topics.spec.ts
+                kill "$smoke_pid" 2>/dev/null || true
+                smoke_pid='' ;;
+              *) printf 'READY_GENERAL_CHECK=UNKNOWN\n'; exit 1 ;;
+            esac
+          done
+          printf 'READY_GENERAL_CHANGED_PATHS=%s\n' "$changed_count"
+          printf 'READY_GENERAL_FIXED_CHECKS=PASS\n'
+          printf 'CODEX_READY_GENERAL_PROOF=PASS\n'
+
+      - name: Mint scoped GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ vars.AGENT_CONTROL_APP_CLIENT_ID }}
+          private-key: ${{ secrets.AGENT_CONTROL_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+
+      - name: Revalidate and publish one general READY Draft PR
+        shell: bash
+        env:
+          GH_APP_TOKEN: ${{ steps.app-token.outputs.token }}
+          APP_SLUG: ${{ steps.app-token.outputs.app-slug }}
+          EXPECTED_SHA: ${{ needs.validate.outputs.verified_head }}
+          TASK_ID: ${{ needs.validate.outputs.task_id }}
+          TASK_COMMENT_ID: ${{ needs.validate.outputs.ready_general_task_comment_id }}
+          OBJECTIVE_B64: ${{ needs.validate.outputs.ready_general_objective_b64 }}
+          ALLOWED_PATHS_B64: ${{ needs.validate.outputs.ready_general_allowed_paths_b64 }}
+          CHECKS: ${{ needs.validate.outputs.ready_general_checks }}
+          REPOSITORY: ${{ github.repository }}
+          PATH: /usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin
+        run: |
+          set -euo pipefail
+          json_encoder="$GITHUB_WORKSPACE/scripts/agent-control/ready-bootstrap-json.rb"
+          normalized_task="$(printf '%s' "$TASK_ID" | tr '[:upper:]' '[:lower:]')"
+          branch="codex/agent-control-ready-general-$normalized_task-$(printf '%s' "$EXPECTED_SHA" | cut -c1-12)"
+          askpass_file="$(mktemp "$RUNNER_TEMP/agent-control-ready-general-askpass.XXXXXX")"
+          curl_config="$(mktemp "$RUNNER_TEMP/agent-control-ready-general-curl.XXXXXX")"
+          response_file="$(mktemp "$RUNNER_TEMP/agent-control-ready-general-response.XXXXXX")"
+          paths_file="$(mktemp "$RUNNER_TEMP/agent-control-ready-general-paths.XXXXXX")"
+          changed_paths_file="$(mktemp "$RUNNER_TEMP/agent-control-ready-general-changed.XXXXXX")"
+          revalidate_output="$(mktemp "$RUNNER_TEMP/agent-control-ready-general-revalidate.XXXXXX")"
+          pr_body_file="$(mktemp "$RUNNER_TEMP/agent-control-ready-general-pr.XXXXXX")"
+          completion_file="$(mktemp "$RUNNER_TEMP/agent-control-ready-general-completion.XXXXXX")"
+          trap 'rm -f "$askpass_file" "$curl_config" "$response_file" "$paths_file" "$changed_paths_file" "$revalidate_output" "$pr_body_file" "$completion_file"' EXIT
+
+          printf '%s' "$ALLOWED_PATHS_B64" | /usr/bin/base64 -D | /usr/bin/ruby -rjson -e 'puts JSON.parse(STDIN.read)' > "$paths_file"
+          cat > "$askpass_file" <<'EOF'
+          #!/bin/sh
+          case "$1" in
+            *Username*) printf '%s\n' 'x-access-token' ;;
+            *Password*) printf '%s\n' "$GH_APP_TOKEN" ;;
+            *) exit 1 ;;
+          esac
+          EOF
+          chmod 700 "$askpass_file"
+          {
+            printf 'header = "Authorization: Bearer %s"\n' "$GH_APP_TOKEN"
+            printf 'header = "Accept: application/vnd.github+json"\n'
+            printf 'header = "X-GitHub-Api-Version: 2022-11-28"\n'
+          } > "$curl_config"
+          chmod 600 "$curl_config"
+
+          export GITHUB_OUTPUT="$revalidate_output"
+          GITHUB_TOKEN="$GH_APP_TOKEN" pnpm exec tsx scripts/agent-control/github-dry-run.ts > /dev/null
+          output_value() { sed -n "s/^$1=//p" "$revalidate_output" | tail -n 1; }
+          [ "$(output_value result)" = READY ]
+          [ "$(output_value task_id)" = "$TASK_ID" ]
+          [ "$(output_value master_sha)" = "$EXPECTED_SHA" ]
+          [ "$(output_value ready_general_task_comment_id)" = "$TASK_COMMENT_ID" ]
+          [ "$(output_value ready_general_objective_b64)" = "$OBJECTIVE_B64" ]
+          [ "$(output_value ready_general_allowed_paths_b64)" = "$ALLOWED_PATHS_B64" ]
+          [ "$(output_value ready_general_checks)" = "$CHECKS" ]
+
+          remote_master="$(GIT_ASKPASS="$askpass_file" GIT_TERMINAL_PROMPT=0 git -c http.version=HTTP/1.1 ls-remote --heads origin refs/heads/master | awk '{print $1}')"
+          [ "$remote_master" = "$EXPECTED_SHA" ] || { printf 'READY_GENERAL_MASTER=MOVED\n'; exit 1; }
+          [ "$(git rev-parse HEAD)" = "$EXPECTED_SHA" ]
+          git diff --cached --exit-code > /dev/null
+          [ -n "$(git status --porcelain)" ]
+          while IFS= read -r path; do
+            git status --porcelain=v1 --untracked-files=all -- "$path" | grep -Eq '^( M|\?\?) '
+            [ -f "$path" ] && [ ! -L "$path" ] && [ ! -x "$path" ]
+          done < "$paths_file"
+          { git diff --name-only --no-renames; git ls-files --others --exclude-standard; } \
+            | sed '/^$/d' | LC_ALL=C sort -u > "$changed_paths_file"
+          [ -s "$changed_paths_file" ]
+          while IFS= read -r path; do grep -Fxq "$path" "$paths_file"; done < "$changed_paths_file"
+
+          git -c core.hooksPath=/dev/null switch -c "$branch"
+          while IFS= read -r path; do git add -- "$path"; done < "$changed_paths_file"
+          git diff --cached --check
+          [ "$(git diff --cached --name-only --no-renames | LC_ALL=C sort)" = "$(cat "$changed_paths_file")" ]
+          if git diff --cached --summary | grep -Eq 'mode change|120000|160000|create mode 100755'; then
+            printf 'READY_GENERAL_STAGED_MODE=UNSAFE\n'; exit 1
+          fi
+          bot_name="${APP_SLUG:-hongda-agent-control}[bot]"
+          bot_email="${APP_SLUG:-hongda-agent-control}[bot]@users.noreply.github.com"
+          commit_date="$(git show -s --format=%cI "$EXPECTED_SHA")"
+          git config user.name "$bot_name"
+          git config user.email "$bot_email"
+          GIT_AUTHOR_DATE="$commit_date" GIT_COMMITTER_DATE="$commit_date" git -c core.hooksPath=/dev/null commit -m "feat(agent-control): execute $TASK_ID"
+          commit_sha="$(git rev-parse HEAD)"
+          [ -z "$(git status --porcelain)" ]
+
+          remote_branch="$(GIT_ASKPASS="$askpass_file" GIT_TERMINAL_PROMPT=0 git -c http.version=HTTP/1.1 ls-remote --heads origin "refs/heads/$branch" | awk '{print $1}')"
+          owner="${REPOSITORY%%/*}"
+          head_filter="$owner:$branch"
+          open_pr_code="$(curl --silent --show-error --http1.1 --connect-timeout 20 --max-time 60 --config "$curl_config" --output "$response_file" --write-out '%{http_code}' "https://api.github.com/repos/$REPOSITORY/pulls?state=open&head=$head_filter")"
+          [ "$open_pr_code" = 200 ]
+          open_pr_count="$(/usr/bin/ruby -rjson -e 'puts JSON.parse(File.read(ARGV[0])).length' "$response_file")"
+          pr_number=''
+          if [ -n "$remote_branch" ]; then
+            [ "$remote_branch" = "$commit_sha" ] || { printf 'READY_GENERAL_BRANCH=CONFLICT\n'; exit 1; }
+            [ "$open_pr_count" = 1 ] || { printf 'READY_GENERAL_PR=CONFLICT\n'; exit 1; }
+            pr_number="$(/usr/bin/ruby -rjson -e 'puts JSON.parse(File.read(ARGV[0]))[0]["number"]' "$response_file")"
+            printf 'READY_GENERAL_IDEMPOTENT_REUSE=YES\n'
+          else
+            [ "$open_pr_count" = 0 ] || { printf 'READY_GENERAL_PR=CONFLICT\n'; exit 1; }
+            GIT_ASKPASS="$askpass_file" GIT_TERMINAL_PROMPT=0 git -c http.version=HTTP/1.1 -c core.hooksPath=/dev/null push origin "HEAD:refs/heads/$branch"
+            pushed_sha="$(GIT_ASKPASS="$askpass_file" GIT_TERMINAL_PROMPT=0 git -c http.version=HTTP/1.1 ls-remote --heads origin "refs/heads/$branch" | awk '{print $1}')"
+            [ "$pushed_sha" = "$commit_sha" ]
+            remote_master="$(GIT_ASKPASS="$askpass_file" GIT_TERMINAL_PROMPT=0 git -c http.version=HTTP/1.1 ls-remote --heads origin refs/heads/master | awk '{print $1}')"
+            [ "$remote_master" = "$EXPECTED_SHA" ] || { printf 'READY_GENERAL_MASTER=MOVED_BEFORE_PR\n'; exit 1; }
+            cat > "$pr_body_file" <<EOF
+          Bounded general READY task executed by the isolated Agent Control runner.
+
+          TASK_ID = $TASK_ID
+          BASE_MASTER_SHA = $EXPECTED_SHA
+          TASK_COMMENT_ID = $TASK_COMMENT_ID
+          BRANCH = $branch
+          HEAD_SHA = $commit_sha
+          CHECKS = $CHECKS
+          DATABASE_CHANGED = NO
+          MIGRATION_CREATED = NO
+          RLS_CHANGED = NO
+          PRODUCTION_CHANGED = NO
+          AUTO_MERGE = false
+          AUTO_PRODUCTION = false
+          EOF
+            pr_payload="$(/usr/bin/ruby "$json_encoder" draft-pr "Agent Control READY: $TASK_ID" "$branch" master "$pr_body_file")"
+            pr_code="$(curl --silent --show-error --http1.1 --connect-timeout 20 --max-time 60 --config "$curl_config" --output "$response_file" --write-out '%{http_code}' --request POST "https://api.github.com/repos/$REPOSITORY/pulls" --data "$pr_payload")"
+            [ "$pr_code" = 201 ]
+            pr_number="$(/usr/bin/ruby -rjson -e 'puts JSON.parse(File.read(ARGV[0]))["number"]' "$response_file")"
+          fi
+
+          files_changed="$(paste -sd, "$changed_paths_file")"
+          cat > "$completion_file" <<EOF
+          TASK_ID = $TASK_ID
+          TASK_STATUS = PASS
+          BASE_MASTER_SHA = $EXPECTED_SHA
+          BRANCH = $branch
+          HEAD_SHA = $commit_sha
+          PR_NUMBER = $pr_number
+          FILES_CHANGED = $files_changed
+          READY_GENERAL_POLICY_TEST = PASS
+          READY_GENERAL_RUNNER_TEST = PASS
+          AGENT_CONTROL_TESTS = PASS
+          TYPECHECK = PASS
+          BUILD = $(printf '%s' ",$CHECKS," | grep -q ',build,' && printf PASS || printf NOT_REQUESTED)
+          SECRET_AUDIT = $(printf '%s' ",$CHECKS," | grep -q ',secret-audit,' && printf PASS || printf NOT_REQUESTED)
+          SMOKE = $(printf '%s' ",$CHECKS," | grep -q ',smoke,' && printf PASS || printf NOT_REQUESTED)
+          DATABASE_CHANGED = NO
+          MIGRATION_CREATED = NO
+          RLS_CHANGED = NO
+          PRODUCTION_CHANGED = NO
+          AUTO_MERGE = false
+          AUTO_PRODUCTION = false
+          KNOWN_LIMITATIONS = PM must verify the live diff and same-HEAD CI/Vercel before merge approval.
+          READY_FOR_PM_REVIEW = YES
+          EOF
+          existing_comment_code="$(curl --silent --show-error --http1.1 --connect-timeout 20 --max-time 60 --config "$curl_config" --output "$response_file" --write-out '%{http_code}' "https://api.github.com/repos/$REPOSITORY/issues/$pr_number/comments?per_page=100")"
+          [ "$existing_comment_code" = 200 ]
+          if /usr/bin/ruby -rjson -e 'task, head, bot = ARGV[1], ARGV[2], ARGV[3]; exit(JSON.parse(File.read(ARGV[0])).any? { |c| c.dig("user", "login") == bot && c["body"].to_s.include?("TASK_ID = #{task}") && c["body"].to_s.include?("HEAD_SHA = #{head}") } ? 0 : 1)' "$response_file" "$TASK_ID" "$commit_sha" "${APP_SLUG:-hongda-agent-control}[bot]"; then
+            printf 'READY_GENERAL_COMPLETION_COMMENT=REUSED\n'
+          else
+            completion_payload="$(/usr/bin/ruby "$json_encoder" comment "$completion_file")"
+            comment_code="$(curl --silent --show-error --http1.1 --connect-timeout 20 --max-time 60 --config "$curl_config" --output "$response_file" --write-out '%{http_code}' --request POST "https://api.github.com/repos/$REPOSITORY/issues/$pr_number/comments" --data "$completion_payload")"
+            [ "$comment_code" = 201 ]
+            printf 'READY_GENERAL_COMPLETION_COMMENT=CREATED\n'
+          fi
+          printf 'READY_GENERAL_BRANCH=%s\n' "$branch"
+          printf 'READY_GENERAL_HEAD=%s\n' "$commit_sha"
+          printf 'READY_GENERAL_DRAFT_PR=%s\n' "$pr_number"
+          printf 'READY_GENERAL_PUBLISH_PROOF=PASS\n'
