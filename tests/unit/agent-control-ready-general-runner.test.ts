@@ -84,6 +84,10 @@ check(publisher.includes('pnpm exec tsx scripts/agent-control/github-dry-run.ts'
   && publisher.includes('READY_GENERAL_MASTER=MOVED')
   && publisher.includes('ready_general_task_comment_id'),
   'publisher rechecks live Issue state, newest task and master');
+check(publisher.includes('READ_TOKEN: ${{ github.token }}')
+  && publisher.includes('GITHUB_TOKEN="$READ_TOKEN" pnpm exec tsx')
+  && !publisher.includes('GITHUB_TOKEN="$GH_APP_TOKEN" pnpm exec tsx'),
+  'live revalidation uses a read-only workflow token, not the scoped writer token');
 check(publisher.includes('codex/agent-control-ready-general-$normalized_task-')
   && publisher.includes('draft-pr')
   && !publisher.includes('push --force')
