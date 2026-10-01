@@ -178,3 +178,28 @@ Draft PR is owner-merged. Before merge, the prior deferral remains in force.
 
 New business decisions remain open until the business owner or designated PM
 approves them. Approved choices must not drift back into proposal status.
+
+
+## Phase 2 merge-gated decisions
+
+Approval rule for `CPC-P2-EMPLOYEE-DAILY-WORKFLOW-001`: while these entries are on an unmerged PR they are candidates; owner merge of that PR is the approval act.
+
+### DEC-023: Today queue is derived, not manually rebuilt
+
+Morning work is derived from confirmed NEXT_ACTION, commitments, due waiting/check states, blockers, stale/missing-action exceptions, and due customer-level follow-up. Employees do not rewrite a separate daily plan.
+
+### DEC-024: Meaningful update and next action are one employee confirmation
+
+Where practical, one confirmation records the meaningful business change and establishes the next action or waiting/check state. The same confirmed facts feed history, daily report, weekly report, and management views.
+
+### DEC-025: End-of-day is exception review, not duplicate reporting
+
+End-of-day work focuses on missing next actions/checks, corrections, reschedules, important unknowns, and confirmation of the derived day summary. If daytime capture is complete, little or no manual narrative is required.
+
+### DEC-026: Waiting state replaces duplicate reminder rows
+
+When the next move belongs to another party, use `waiting_on + next_check_at`. The same obligation must not also generate repeated reminder WorkItems.
+
+### DEC-027: Routine old-customer work remains customer-level in the daily workflow
+
+Due old-customer follow-up appears in the same daily work queue without creating a Project. When a concrete opportunity appears, promotion to Project reuses customer/context and applies the Phase 1 Project creation invariant.
