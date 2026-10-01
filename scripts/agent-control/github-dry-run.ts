@@ -295,6 +295,7 @@ async function main() {
         }, publicationComments, {
           taskId: task.taskId,
           baseMasterSha: task.baseMasterSha,
+          taskCommentId: task.commentId,
         })) {
           printResult({
             result: 'NOT_EXECUTABLE',
