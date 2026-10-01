@@ -140,10 +140,10 @@ Current evidence classification:
 1. canonical customer pool / customer master — `EXTERNAL_OPERATIONAL_SOURCE_VERIFIED`: workshop `customers` with stable `C...` IDs; integration/authority contract still incomplete;
 2. customer ownership — `EXTERNAL_OPERATIONAL_SOURCE_VERIFIED_WITH_GAPS`: `projectOwnerId/projectOwnerName` on workshop customer records; history/effective-date and `profiles.id` bridge unresolved;
 3. payment / receipt — `EXTERNAL_OPERATIONAL_SOURCE_VERIFIED_WITH_GAPS`: workshop `receiptRecords` with stable `RCP...` IDs and customer links; correction/reconciliation/currency/API contract unresolved;
-4. order source — `UNVERIFIED_EXTERNAL`;
-5. quotation / quote-acceptance source — `UNVERIFIED_EXTERNAL`;
-6. WhatsApp customer identity / conversation integration — `UNVERIFIED_EXTERNAL`;
-7. external workshop employee ID → repository `profiles.id` mapping — `UNVERIFIED_EXTERNAL`.
+4. order source — `CURRENT_PROCESS_VERIFIED_NO_UNIFIED_SOT`: there is no unified order system today; Dongguan and Shantou operate separately, and Dongguan sends transfer-film / fixture production instruction sheets to Shantou through QQ when production is required there;
+5. quotation / quote-acceptance source — `CURRENT_FILE_SOURCE_VERIFIED_NO_STRUCTURED_SOT`: formal quotations are Excel files stored/shared in WeCom; no structured quotation id/version/acceptance system is evidenced;
+6. WhatsApp customer identity / conversation integration — `V1_BACKLOG_DECIDED`: WhatsApp remains an operational communication channel, but automatic synchronization is backlog and is not a Phase 0/V1 source requirement;
+7. external workshop employee ID → repository `profiles.id` mapping — `BRIDGE_CONTRACT_DEFINED_MAPPING_ROWS_DEFERRED`: CPC will use an explicit stable mapping and will not use display-name matching as the normal write contract.
 
 The follow-up evidence narrows the unknowns but does not authorize CPC to become a second customer, ownership or financial authority.
 
@@ -160,16 +160,26 @@ Repository evidence alone is not sufficient, but the follow-up external evidence
 
 ## 6. Gate decision
 
-`PHASE_0_GATE = BLOCKED`
+`PHASE_0_GATE = PASS`
 
-Blocking evidence still required before formal CPC schema work:
+Owner closeout establishes the current business reality needed for the audit gate:
 
-- business-approved integration contract for the verified workshop customer source and stable customer identifier;
-- verified customer-ownership reassignment/history semantics and workshop employee → `profiles.id` bridge;
-- verified receipt correction/reversal, currency, reconciliation and read/sync semantics;
-- verified order source and stable order/customer identifiers;
-- verified quotation source/version/acceptance semantics;
-- explicit decision on WhatsApp integration scope and customer/conversation identifiers;
-- explicit bridge from external responsible-person identities to repository `profiles.id` where applicable.
+- customer / customer ownership / receipt facts have a concrete current operational source in the Hongda workshop/finance tool and remain external during transition;
+- there is **no unified order source of truth today**;
+- the current Dongguan → Shantou transfer-film / fixture production-instruction path uses a production instruction sheet sent through QQ;
+- formal quotations are Excel files kept/shared in WeCom, without a verified structured quotation/version/acceptance store;
+- WhatsApp automatic synchronization stays in backlog for V1;
+- employee identity will use an explicit external employee id → `profiles.id` bridge when formal CPC writes need that relation.
 
-Until those mappings are evidenced and reviewed, Phase 0 must remain blocked and CPC must not create a competing customer, ownership, order, quotation or financial source of truth.
+The owner also approved a low-friction modernization principle: current tools are evidence of today's process, not constraints that must be preserved forever. CPC may replace fragmented steps when doing so removes work rather than adds duplicate manual entry.
+
+Phase 0 PASS means **the current-state sources and gaps are mapped well enough to continue business/workflow design**. It does not authorize database implementation.
+
+Before Phase 4 schema/RLS work can proceed, implementation-specific contracts still need to be completed for:
+
+- customer/ownership/receipt read or synchronization boundary;
+- actual external employee id → `profiles.id` mapping rows;
+- quote/order identifiers and lifecycle only to the extent the future workflow chooses to create them;
+- org/authorization and migration/cutover behavior.
+
+The overall `BUSINESS_DATABASE_GATE` therefore remains blocked by Master Checklist Phases 1–3 and the Phase 4 design gate.
