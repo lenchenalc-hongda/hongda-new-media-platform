@@ -176,9 +176,9 @@ New business decisions remain open until the business owner or designated PM
 approves them. Approved choices must not drift back into proposal status.
 
 
-## Phase 2 merge-gated decisions
+## Phase 2 approved decisions
 
-Approval rule for `CPC-P2-EMPLOYEE-DAILY-WORKFLOW-001`: while these entries are on an unmerged PR they are candidates; owner merge of that PR is the approval act.
+Owner-approved PR #44 merged `CPC-P2-EMPLOYEE-DAILY-WORKFLOW-001`; DEC-023 through DEC-027 are approved.
 
 ### DEC-023: Today queue is derived, not manually rebuilt
 
@@ -201,3 +201,49 @@ When the next move belongs to another party, use `waiting_on + next_check_at`. T
 ### DEC-027: Routine old-customer work remains customer-level in the daily workflow
 
 Due old-customer follow-up appears in the same daily work queue without creating a Project. When a concrete opportunity appears, promotion to Project reuses customer/context and applies the Phase 1 Project creation invariant.
+
+
+## Phase 3 merge-gated decisions
+
+Approval rule for `CPC-P3-INFORMATION-ARCHITECTURE-001`: while these entries are on an unmerged PR they are candidates; owner merge of that PR is the approval act.
+
+### DEC-028: Workbench is the primary CPC home
+
+`/customer-projects` is the default daily work surface. Today's prioritized work appears before management metrics, reports, or broad object browsing.
+
+### DEC-029: CPC primary navigation is compact and role-aware
+
+Primary navigation is My Workbench, Customers, Projects, My Tasks, My Reports, Team Board, Settings. Team Board is manager/admin only; Settings is admin only. Operator/viewer do not receive CPC portal access in V1.
+
+### DEC-030: Daily and weekly reports share one My Reports surface
+
+Replace the current disabled Daily + Weekly top-level placeholders with one `/customer-projects/reports` entry using a period selector/tabs. Reporting is a derived output, not two independent employee workflows.
+
+### DEC-031: Customer and Project detail are the main contextual work surfaces
+
+Old-customer follow-up happens from Customer context; concrete opportunity progress happens from Project context. Quick record, waiting/check, task completion/reschedule, collaboration, and consequential confirmation are contextual actions rather than separate top-level modules.
+
+### DEC-032: Mobile uses the same responsive CPC routes
+
+V1 does not create a separate mobile app. Mobile prioritizes Workbench, quick record, task actions, waiting/check, Customer/Project context, and end-of-day exceptions.
+
+### DEC-033: Route visibility is not resource authorization
+
+Role-based navigation controls UX only. Formal CPC reads/writes still require authenticated same-org profile resolution plus role/resource-relation authorization.
+
+### DEC-034: Team Board is an exception/support view, not employee activity surveillance
+
+Management views prioritize decisions, commitments, stalled/missing-action Projects, old-customer coverage, workload/support needs, and business outcomes. Raw notes/messages/clicks/task count are not staff performance rankings.
+
+
+### DEC-035: No CPC top-level Leads, Orders, or Quotes module in V1
+
+Leads remain acquisition-side; CPC must not create a third lead store. Orders have no unified current SoT and must not become a fabricated CPC ledger. Current quotation files remain source artifacts in WeCom during transition. These facts may appear contextually on Customer/Project surfaces after approved integration/model decisions.
+
+### DEC-036: Waiting/check visibility does not create a WorkItem
+
+My Tasks may render due/future Project or Customer waiting/check states for planning, but those rows remain derived waiting state. They must not be persisted as duplicate NEXT_ACTION/reminder WorkItems.
+
+### DEC-037: Approved stage profiles are not ordinary admin configuration
+
+CPC Settings may manage presentation labels and later approved non-consequential policy values. Changing the Phase 1 stage codes/order/profile semantics requires a new business decision and Decision Log approval.
