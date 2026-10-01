@@ -62,6 +62,8 @@ Fast path means fewer unnecessary steps, not weaker evidence.
 
 `CUSTOMER_CONFIRMED` requires explicit human-confirmed evidence and cannot be inferred from chat or AI alone.
 
+For equipment, `commercial_confirmation` is the equivalent commercial fact gate and also requires explicit human-confirmed evidence; it cannot be inferred from chat or AI.
+
 `order_confirmed` requires explicit human-confirmed order evidence. Current QQ production-instruction traffic is not itself a canonical order ledger.
 
 Current Excel quotation files in WeCom remain source artifacts during transition.
