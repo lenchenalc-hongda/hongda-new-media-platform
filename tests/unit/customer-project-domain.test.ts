@@ -124,6 +124,10 @@ assert(
 );
 assert(projectSchema.safeParse(validProject).success, 'valid active project schema');
 assert(
+  !projectSchema.safeParse({ ...validProject, stage: null }).success,
+  'persisted project requires a valid stage',
+);
+assert(
   !PROJECT_LIFECYCLE_STATUSES.includes('draft' as never),
   'persisted project draft state is not in lifecycle',
 );
