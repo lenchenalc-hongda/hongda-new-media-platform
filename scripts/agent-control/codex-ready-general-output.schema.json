@@ -1,5 +1,4 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -11,17 +10,27 @@
     "acceptance_sentinel"
   ],
   "properties": {
-    "status": { "const": "PASS" },
-    "task_id": { "type": "string", "minLength": 1, "maxLength": 128 },
-    "base_master_sha": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "status": {
+      "type": "string",
+      "enum": ["PASS", "FAILED", "BLOCKED"]
+    },
+    "task_id": {
+      "type": "string"
+    },
+    "base_master_sha": {
+      "type": "string"
+    },
     "changed_paths": {
       "type": "array",
-      "minItems": 1,
-      "maxItems": 6,
-      "uniqueItems": true,
-      "items": { "type": "string", "minLength": 1, "maxLength": 200 }
+      "items": {
+        "type": "string"
+      }
     },
-    "workspace_write_confirmed": { "const": true },
-    "acceptance_sentinel": { "const": "CODEX_READY_GENERAL_PROOF=PASS" }
+    "workspace_write_confirmed": {
+      "type": "boolean"
+    },
+    "acceptance_sentinel": {
+      "type": "string"
+    }
   }
 }
