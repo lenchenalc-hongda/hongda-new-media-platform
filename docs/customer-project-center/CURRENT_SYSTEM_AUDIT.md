@@ -133,17 +133,19 @@ Therefore CPC should reuse the hardened Review Center-era patterns, not mechanic
 
 ## 4. External business-source status
 
-The following required authorities are **UNVERIFIED_EXTERNAL** in this repository baseline:
+The repository itself still does not contain these external sources, but a follow-up Phase 0 evidence pass identified the existing Hongda workshop/finance production tool as a concrete operational source candidate for three domains. See `EXTERNAL_SOURCE_EVIDENCE.md`.
 
-1. canonical customer pool / customer master;
-2. customer ownership and ownership-change history;
-3. payment / receipt source of truth;
-4. order source of truth;
-5. quotation / quote-acceptance source of truth;
-6. WhatsApp customer identity / conversation integration;
-7. stable identifier mapping between those external systems and repository `profiles.id` / future CPC references.
+Current evidence classification:
 
-Repository documents state that customer ownership and financial truth remain outside CPC until an explicit integration decision is made, but they do not provide the live external schemas, stable IDs, APIs/files, write contracts or reconciliation rules needed to implement that integration.
+1. canonical customer pool / customer master — `EXTERNAL_OPERATIONAL_SOURCE_VERIFIED`: workshop `customers` with stable `C...` IDs; integration/authority contract still incomplete;
+2. customer ownership — `EXTERNAL_OPERATIONAL_SOURCE_VERIFIED_WITH_GAPS`: `projectOwnerId/projectOwnerName` on workshop customer records; history/effective-date and `profiles.id` bridge unresolved;
+3. payment / receipt — `EXTERNAL_OPERATIONAL_SOURCE_VERIFIED_WITH_GAPS`: workshop `receiptRecords` with stable `RCP...` IDs and customer links; correction/reconciliation/currency/API contract unresolved;
+4. order source — `UNVERIFIED_EXTERNAL`;
+5. quotation / quote-acceptance source — `UNVERIFIED_EXTERNAL`;
+6. WhatsApp customer identity / conversation integration — `UNVERIFIED_EXTERNAL`;
+7. external workshop employee ID → repository `profiles.id` mapping — `UNVERIFIED_EXTERNAL`.
+
+The follow-up evidence narrows the unknowns but does not authorize CPC to become a second customer, ownership or financial authority.
 
 ## 5. What Phase 0 establishes now
 
@@ -154,7 +156,7 @@ Repository evidence is sufficient to establish:
 - that formal CPC customer/project persistence does not yet exist;
 - that external business-source contracts are a prerequisite for safe schema work.
 
-Repository evidence is **not** sufficient to establish the live canonical IDs, ownership semantics or financial/order/quote synchronization contracts.
+Repository evidence alone is not sufficient, but the follow-up external evidence identifies live workshop customer IDs, ownership references and receipt IDs. Order, quotation, WhatsApp, identity-bridge and complete synchronization/correction contracts remain unresolved.
 
 ## 6. Gate decision
 
@@ -162,9 +164,9 @@ Repository evidence is **not** sufficient to establish the live canonical IDs, o
 
 Blocking evidence still required before formal CPC schema work:
 
-- verified canonical customer-source mapping and stable customer identifier;
-- verified customer-ownership authority, responsible-person identifier and reassignment/history contract;
-- verified payment/receipt source, customer link and reconciliation semantics;
+- business-approved integration contract for the verified workshop customer source and stable customer identifier;
+- verified customer-ownership reassignment/history semantics and workshop employee → `profiles.id` bridge;
+- verified receipt correction/reversal, currency, reconciliation and read/sync semantics;
 - verified order source and stable order/customer identifiers;
 - verified quotation source/version/acceptance semantics;
 - explicit decision on WhatsApp integration scope and customer/conversation identifiers;
