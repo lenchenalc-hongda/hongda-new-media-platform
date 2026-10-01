@@ -65,6 +65,7 @@ CREATE TABLE public.cpc_customer_references (
         AND source_synced_at IS NOT NULL
         AND provisional_source_reference IS NULL
         AND created_by_profile_id IS NULL
+        AND mapped_canonical_reference_id IS NULL
         AND status IN ('active', 'inactive')
       )
       OR
@@ -82,9 +83,24 @@ CREATE TABLE public.cpc_customer_references (
 
   CONSTRAINT chk_cpc_customer_reference_mapping_status
     CHECK (
-      (status = 'mapped' AND mapped_canonical_reference_id IS NOT NULL)
+      (
+        reference_kind = 'provisional'
+        AND status = 'mapped'
+        AND mapped_canonical_reference_id IS NOT NULL
+      )
       OR
-      (status <> 'mapped')
+      (
+        reference_kind = 'provisional'
+        AND status = 'pending_review'
+        AND mapped_canonical_reference_id IS NULL
+      )
+      OR
+      (
+        reference_kind = 'provisional'
+        AND status = 'inactive'
+      )
+      OR
+      reference_kind = 'canonical'
     ),
 
   CONSTRAINT fk_cpc_customer_reference_creator_org
@@ -772,6 +788,7 @@ BEGIN
           SELECT 1
           FROM public.cpc_external_profile_mappings epm
           WHERE epm.org_id = cr.org_id
+            AND epm.external_source = cr.external_source
             AND epm.external_person_id = cr.external_owner_reference
             AND epm.profile_id = v_actor_profile_id
             AND epm.status = 'active'
