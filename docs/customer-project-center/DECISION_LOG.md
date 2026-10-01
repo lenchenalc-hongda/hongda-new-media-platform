@@ -135,12 +135,9 @@ Implications:
 
 WhatsApp remains an operational communication channel. Automatic customer/conversation synchronization is not required for V1 and does not block Phase 0.
 
-## Phase 1 merge-gated decisions
+## Phase 1 approved decisions
 
-Approval rule for `CPC-P1-BUSINESS-MODEL-FREEZE-001`: while these entries are
-on an unmerged PR they are candidates; owner merge of that PR is the approval
-act. Once the same entries are present on master through that owner merge, they
-are approved decisions.
+Owner-approved PR #43 merged `CPC-P1-BUSINESS-MODEL-FREEZE-001`; DEC-019 through DEC-022 are approved.
 
 ### DEC-019: Customer-level follow-up versus Project creation
 
@@ -169,10 +166,9 @@ with `waiting_on` plus `next_check_at` without duplicate reminder rows.
 
 ## Resolved deferrals
 
-### DEFERRED-001: Exact project stage profiles — resolved by DEC-021 on owner merge
+### DEFERRED-001: Exact project stage profiles — resolved
 
-The previous stage-profile deferral is resolved by DEC-021 when the Phase 1
-Draft PR is owner-merged. Before merge, the prior deferral remains in force.
+Resolved by approved DEC-021 through owner-merged PR #43.
 
 ## Change rule
 
@@ -186,7 +182,9 @@ Approval rule for `CPC-P2-EMPLOYEE-DAILY-WORKFLOW-001`: while these entries are 
 
 ### DEC-023: Today queue is derived, not manually rebuilt
 
-Morning work is derived from confirmed NEXT_ACTION, commitments, due waiting/check states, blockers, stale/missing-action exceptions, and due customer-level follow-up. Employees do not rewrite a separate daily plan.
+Morning work is derived from confirmed NEXT_ACTION, commitments, due waiting/check states, blockers, stale/missing-action exceptions, and already-due customer-level follow-up. Employees do not rewrite a separate daily plan.
+
+Workflow priority classes are: P0 commitments/critical blockers, P1 due work, P2 missing-action/stale-project exceptions, then P3 already-due relationship follow-up. Exact scoring, stale thresholds, and old-customer cadence values are not invented by Phase 2.
 
 ### DEC-024: Meaningful update and next action are one employee confirmation
 
