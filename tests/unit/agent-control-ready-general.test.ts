@@ -1,7 +1,9 @@
 import {
+  buildReadyGeneralBranchName,
   isAllowedReadyGeneralPath,
   parseReadyGeneralTask,
   readyGeneralChangedPathsAllowed,
+  readyGeneralPublicationComplete,
   selectTrustedReadyGeneralTask,
 } from '../../src/lib/agent-control/ready-general';
 
@@ -66,5 +68,72 @@ check(selectTrustedReadyGeneralTask([
   comment(),
   { ...comment(lines.join('\n'), 'untrusted-user'), id: 124 },
 ], expected)?.commentId === 123, 'untrusted comment cannot supersede owner task');
+
+const publicationTaskId = 'CPC-AUTO-007-REPLAY-001';
+const publicationBase = 'b'.repeat(40);
+const publicationBranch = buildReadyGeneralBranchName(publicationTaskId, publicationBase)!;
+const publicationHead = 'c'.repeat(40);
+const publicationPr = {
+  number: 77,
+  state: 'open' as const,
+  draft: true,
+  headBranch: publicationBranch,
+  headSha: publicationHead,
+  baseBranch: 'master',
+  authorLogin: 'hongda-agent-control-writer[bot]',
+  body: [
+    'Bounded general READY task executed by the isolated Agent Control runner.',
+    `TASK_ID = ${publicationTaskId}`,
+    `BASE_MASTER_SHA = ${publicationBase}`,
+    'TASK_COMMENT_ID = 999',
+    `BRANCH = ${publicationBranch}`,
+    `HEAD_SHA = ${publicationHead}`,
+    'AUTO_MERGE = false',
+    'AUTO_PRODUCTION = false',
+  ].join('\n'),
+};
+const completionComment = {
+  id: 999,
+  authorLogin: 'hongda-agent-control-writer[bot]',
+  body: [
+    `TASK_ID = ${publicationTaskId}`,
+    'TASK_STATUS = PASS',
+    `BASE_MASTER_SHA = ${publicationBase}`,
+    `BRANCH = ${publicationBranch}`,
+    `HEAD_SHA = ${publicationHead}`,
+    'PR_NUMBER = 77',
+    'AUTO_MERGE = false',
+    'AUTO_PRODUCTION = false',
+    'READY_FOR_PM_REVIEW = YES',
+  ].join('\n'),
+};
+
+check(publicationBranch === `codex/agent-control-ready-general-cpc-auto-007-replay-001-${publicationBase.slice(0, 12)}`,
+  'deterministic branch is derived from task and base');
+check(readyGeneralPublicationComplete(
+  publicationPr,
+  [completionComment],
+  { taskId: publicationTaskId, baseMasterSha: publicationBase, taskCommentId: 999 },
+), 'authentic bot Draft PR plus same-head Completion Contract is complete');
+check(!readyGeneralPublicationComplete(
+  { ...publicationPr, body: publicationPr.body.replace('TASK_COMMENT_ID = 999', 'TASK_COMMENT_ID = 998') },
+  [completionComment],
+  { taskId: publicationTaskId, baseMasterSha: publicationBase, taskCommentId: 999 },
+), 'publication from an older task comment cannot satisfy replay guard');
+check(!readyGeneralPublicationComplete(
+  { ...publicationPr, authorLogin: 'lenchenalc-hongda' },
+  [completionComment],
+  { taskId: publicationTaskId, baseMasterSha: publicationBase, taskCommentId: 999 },
+), 'non-bot PR cannot satisfy publication replay guard');
+check(!readyGeneralPublicationComplete(
+  publicationPr,
+  [{ ...completionComment, body: completionComment.body.replace('READY_FOR_PM_REVIEW = YES', 'READY_FOR_PM_REVIEW = NO') }],
+  { taskId: publicationTaskId, baseMasterSha: publicationBase, taskCommentId: 999 },
+), 'incomplete contract cannot satisfy publication replay guard');
+check(!readyGeneralPublicationComplete(
+  { ...publicationPr, headSha: 'd'.repeat(40) },
+  [completionComment],
+  { taskId: publicationTaskId, baseMasterSha: publicationBase, taskCommentId: 999 },
+), 'mismatched publication head is rejected');
 
 console.log(`Agent Control READY general policy: ${passed} checks passed`);

@@ -22,7 +22,11 @@ import {
   readyTaskRecipe,
   selectTrustedReadyBootstrapTask,
 } from '../../src/lib/agent-control/ready-bootstrap';
-import { selectTrustedReadyGeneralTask } from '../../src/lib/agent-control/ready-general';
+import {
+  buildReadyGeneralBranchName,
+  readyGeneralPublicationComplete,
+  selectTrustedReadyGeneralTask,
+} from '../../src/lib/agent-control/ready-general';
 
 const token = process.env.GITHUB_TOKEN;
 const eventPath = process.env.GITHUB_EVENT_PATH;
@@ -254,6 +258,59 @@ async function main() {
     });
 
     if (task) {
+      const branch = buildReadyGeneralBranchName(task.taskId, task.baseMasterSha);
+      if (!branch) runtimeFailure('validated general READY task could not derive a branch');
+      const owner = repository.split('/')[0] ?? '';
+      const candidatePullRequests = await githubGetJson<Array<{
+        number: number;
+        state: 'open' | 'closed';
+        draft: boolean;
+        body: string | null;
+        user: { login: string };
+        head: { ref: string; sha: string };
+        base: { ref: string };
+      }>>(
+        `/repos/${repository}/pulls?state=open&head=${encodeURIComponent(`${owner}:${branch}`)}`,
+      );
+      if (candidatePullRequests.length > 1) {
+        printResult({
+          result: 'INVALID_STATE',
+          reason: 'multiple open PRs exist for the deterministic general READY branch',
+          summary: evaluated.summary,
+        });
+        process.exit(1);
+      }
+      if (candidatePullRequests.length === 1) {
+        const candidate = candidatePullRequests[0];
+        const publicationComments = await githubGetIssueComments(repository, candidate.number);
+        if (readyGeneralPublicationComplete({
+          number: candidate.number,
+          state: candidate.state,
+          draft: candidate.draft,
+          headBranch: candidate.head.ref,
+          headSha: candidate.head.sha,
+          baseBranch: candidate.base.ref,
+          authorLogin: candidate.user.login,
+          body: candidate.body ?? '',
+        }, publicationComments, {
+          taskId: task.taskId,
+          baseMasterSha: task.baseMasterSha,
+          taskCommentId: task.commentId,
+        })) {
+          printResult({
+            result: 'NOT_EXECUTABLE',
+            reason: 'general READY task already has an authentic completed bot publication',
+            summary: evaluated.summary,
+          }, {
+            ready_general_replay_guard: 'ALREADY_PUBLISHED',
+            ready_general_existing_pr: String(candidate.number),
+            ready_general_existing_head: candidate.head.sha,
+          });
+          return;
+        }
+      }
+
+      extraOutputs.ready_general_replay_guard = 'PROCEED';
       extraOutputs.ready_general_task_comment_id = String(task.commentId);
       extraOutputs.ready_general_objective_b64 = Buffer.from(
         task.objective,
@@ -265,6 +322,7 @@ async function main() {
       ).toString('base64');
       extraOutputs.ready_general_checks = task.checks.join(',');
       console.log(`ready_general_task_comment_id=${task.commentId}`);
+      console.log('ready_general_replay_guard=PROCEED');
       console.log('ready_general_normalized_payload=AVAILABLE');
     }
   }
