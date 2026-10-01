@@ -91,6 +91,46 @@ Exact stage lists are not frozen and must not become database enum constraints
 in the next batch. Repeat transfer-film business must not be forced through
 equipment-style stages.
 
+### DEC-015: Low-friction modernization over process preservation
+
+Current tools describe today's work; they are not requirements to preserve forever.
+
+New CPC workflows should:
+
+- remove or replace an existing manual step rather than add duplicate entry;
+- derive structured metadata from actions/files/events employees already perform where practical;
+- keep current operational artifacts available during transition;
+- prefer gradual cutover over a disruptive all-at-once replacement;
+- never use "automation" as a reason to change customer ownership, financial truth or other consequential facts without the correct authority.
+
+### DEC-016: No unified order source exists today
+
+The business currently has no unified order system across Dongguan and Shantou.
+
+For Dongguan work that requires Shantou transfer-film / fixture production, the current handoff is a production instruction sheet sent through QQ.
+
+Implications:
+
+- QQ is transport, not order source of truth;
+- historical QQ traffic must not be retroactively treated as a canonical order ledger;
+- future CPC may create a structured order/project coordination model because there is no existing unified order SoT to duplicate;
+- migration should preserve the production-instruction handoff until the replacement flow is proven.
+
+### DEC-017: Formal quotation artifact is Excel in WeCom
+
+Formal quotations are currently Excel files stored/shared in WeCom. No structured quote-number/version/acceptance system is established.
+
+Implications:
+
+- preserve the original quotation file as the source artifact during transition;
+- future CPC may add structured quotation metadata, versioning and acceptance evidence only if captured from the same workflow;
+- employees should not re-enter quotation data solely to satisfy CPC;
+- chat text or AI output cannot by itself establish quote acceptance.
+
+### DEC-018: WhatsApp automatic synchronization remains backlog for V1
+
+WhatsApp remains an operational communication channel. Automatic customer/conversation synchronization is not required for V1 and does not block Phase 0.
+
 ## Deferred decisions
 
 ### DEFERRED-001: Exact project stage profiles

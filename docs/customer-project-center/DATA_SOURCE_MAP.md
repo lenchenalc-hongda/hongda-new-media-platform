@@ -19,9 +19,9 @@ Repository rows remain limited to repository evidence. External customer/ownersh
 | Canonical customer master | External workshop/finance production evidence; see `EXTERNAL_SOURCE_EVIDENCE.md` | Workshop `customers` is a concrete operational customer pool; final integration authority contract still pending | stable `C...` id; customer name/source/dates; no explicit org field evidenced in customer schema | workshop UI → state → `/api/data` → production `shared-data.json` | Reference stable external customer id; never recreate by name | EXTERNAL_OPERATIONAL_SOURCE_VERIFIED |
 | Customer ownership | Workshop customer records carry `projectOwnerId/projectOwnerName`; downstream receipts copy owner attribution | Current operational ownership input in workshop tool; history/effective-date contract not evidenced | workshop employee `E...` reference + owner-name snapshot; repository `profiles.id` bridge missing | customer-pool edit path in workshop tool | Keep external; map responsible-person reference to `profiles.id` only through explicit bridge | EXTERNAL_OPERATIONAL_SOURCE_VERIFIED_WITH_GAPS |
 | Payment / receipt | Workshop `receiptRecords`; stable `RCP...` id, receiptNo and customerId linkage | Concrete operational receipt/commission source; correction/reconciliation contract incomplete | `RCP...` id + receiptNo + `customerId`; amount/account/date/commission snapshots; currency/status model not evidenced | workshop receipt entry/edit → `/api/data` → production `shared-data.json` | Read/integrate only after contract; no CPC financial ledger | EXTERNAL_OPERATIONAL_SOURCE_VERIFIED_WITH_GAPS |
-| Order | No canonical order system implementation evidenced | Not established | Unknown | Unknown | Map only after source contract | UNVERIFIED_EXTERNAL |
-| Quotation / acceptance | No canonical quote system implementation evidenced | Not established | Unknown | Unknown | Map only after source/version contract | UNVERIFIED_EXTERNAL |
-| WhatsApp customer conversations | No repository integration found | Not established | Unknown | Unknown | Keep outside CPC until explicit integration contract | UNVERIFIED_EXTERNAL |
+| Order | Owner-confirmed current process | No unified order SoT exists today; Dongguan and Shantou are separate. For Dongguan work sent to Shantou for transfer-film / fixture production, a production instruction sheet is sent through QQ | No stable unified order id evidenced; QQ is transport and the production instruction sheet is the operational artifact | Business/project staff prepare the production instruction and send it to Shantou through QQ when needed | Future CPC may become the structured order/project coordination layer if it replaces duplicate work; preserve the current production instruction artifact during transition and do not pretend historical QQ traffic is a unified order ledger | CURRENT_PROCESS_VERIFIED_NO_UNIFIED_SOT |
+| Quotation / acceptance | Owner-confirmed current process | Formal quotation artifact is an Excel file kept/shared in WeCom; no structured quotation lifecycle SoT is evidenced | File-based artifact; no stable quote id/version/acceptance record evidenced | Sales prepares Excel quotation and stores/shares it in WeCom | Preserve the original quotation file as source artifact. Future CPC may capture quote metadata/version/acceptance only from the same workflow so employees do not re-enter the same information | CURRENT_FILE_SOURCE_VERIFIED_NO_STRUCTURED_SOT |
+| WhatsApp customer conversations | Current sales practice + Master Checklist backlog decision | Operational customer communication channel, not a V1 business source of truth | Provider/contact/message identifiers not mapped for V1 | External communication workflow | Keep automatic sync in backlog; allow links/manual context only where useful without making chat text authoritative | V1_BACKLOG_NO_SOT_REQUIRED |
 
 ## Identity warning
 
@@ -30,3 +30,16 @@ CPC business relations are expected to use `profiles.id`. Authentication begins 
 ## Authority rule
 
 A repository table or UI representation is not automatically the business source of truth. Authority requires an explicit contract for stable identifier, ownership, organization scope, write path and reconciliation behavior. Missing external contracts remain `UNVERIFIED_EXTERNAL`.
+
+
+## Phase 0 transition rule
+
+Current-state mapping does not mean every current tool is the desired future design.
+
+Owner-approved rule:
+
+- improve fragmented work when the improvement is low-friction for employees;
+- replace existing manual steps rather than layering a second form on top;
+- capture structured metadata automatically from the action/file/event that already happens where possible;
+- preserve current source artifacts during migration so employees can continue working while the structured workflow is introduced;
+- do not silently convert communication channels such as QQ, WeCom or WhatsApp into authoritative business facts without an explicit confirmed event.
