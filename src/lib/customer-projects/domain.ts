@@ -107,7 +107,7 @@ export interface Project {
   project_type: ProjectType;
   owner_profile_id: string;
   status: ProjectLifecycleStatus;
-  stage: string | null;
+  stage: string;
   waiting_on: WaitingOn;
   next_action_summary: string | null;
   next_check_at: string | null;
