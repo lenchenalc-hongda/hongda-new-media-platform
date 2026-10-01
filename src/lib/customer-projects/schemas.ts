@@ -50,8 +50,17 @@ export const provisionalCustomerReferenceSchema = z.object({
   created_by_profile_id: uuidSchema,
   created_at: isoDateTimeSchema,
   updated_at: isoDateTimeSchema,
-}).strict().superRefine((reference, context) => {
-  if (reference.status === 'mapped' && !reference.mapped_canonical_reference_id) {
+}).strict();
+
+export const customerReferenceSchema = z.discriminatedUnion('reference_kind', [
+  canonicalCustomerReferenceSchema,
+  provisionalCustomerReferenceSchema,
+]).superRefine((reference, context) => {
+  if (
+    reference.reference_kind === 'provisional'
+    && reference.status === 'mapped'
+    && !reference.mapped_canonical_reference_id
+  ) {
     context.addIssue({
       code: z.ZodIssueCode.custom,
       path: ['mapped_canonical_reference_id'],
@@ -59,11 +68,6 @@ export const provisionalCustomerReferenceSchema = z.object({
     });
   }
 });
-
-export const customerReferenceSchema = z.discriminatedUnion('reference_kind', [
-  canonicalCustomerReferenceSchema,
-  provisionalCustomerReferenceSchema,
-]);
 
 export const projectSchema = z.object({
   id: uuidSchema,
