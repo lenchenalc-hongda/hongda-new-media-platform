@@ -89,7 +89,7 @@ Required fields:
 | `status` | `active`, `paused`, `won`, `lost`, `cancelled` |
 | `stage` | Type-specific/configurable stage code |
 | `waiting_on` | Waiting owner or `none` |
-| `next_action_summary` | Current agreed next step |
+| `next_action_summary` | Projection of confirmed NEXT_ACTION; nullable while an explicit waiting/check state is active |
 | `next_check_at` | Next review/check time |
 | `priority` | Operational priority |
 | `version` | Optimistic concurrency version |
@@ -223,6 +223,7 @@ Commercial truth rules:
 
 - `QUOTE_SENT` means a formal quotation artifact was sent; it never means accepted;
 - `CUSTOMER_CONFIRMED` requires explicit human-confirmed evidence and cannot be inferred from chat or AI;
+- equipment `commercial_confirmation` is the equivalent commercial fact gate and also requires explicit human-confirmed evidence;
 - `order_confirmed` requires explicit human-confirmed order evidence;
 - current QQ production-instruction traffic is not a canonical order ledger;
 - current Excel quotations in WeCom remain source artifacts during transition.
