@@ -234,3 +234,16 @@ Role-based navigation controls UX only. Formal CPC reads/writes still require au
 ### DEC-034: Team Board is an exception/support view, not employee activity surveillance
 
 Management views prioritize decisions, commitments, stalled/missing-action Projects, old-customer coverage, workload/support needs, and business outcomes. Raw notes/messages/clicks/task count are not staff performance rankings.
+
+
+### DEC-035: No CPC top-level Leads, Orders, or Quotes module in V1
+
+Leads remain acquisition-side; CPC must not create a third lead store. Orders have no unified current SoT and must not become a fabricated CPC ledger. Current quotation files remain source artifacts in WeCom during transition. These facts may appear contextually on Customer/Project surfaces after approved integration/model decisions.
+
+### DEC-036: Waiting/check visibility does not create a WorkItem
+
+My Tasks may render due/future Project or Customer waiting/check states for planning, but those rows remain derived waiting state. They must not be persisted as duplicate NEXT_ACTION/reminder WorkItems.
+
+### DEC-037: Approved stage profiles are not ordinary admin configuration
+
+CPC Settings may manage presentation labels and later approved non-consequential policy values. Changing the Phase 1 stage codes/order/profile semantics requires a new business decision and Decision Log approval.
