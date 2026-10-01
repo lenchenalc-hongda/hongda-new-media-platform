@@ -138,6 +138,12 @@ check(publisher.includes('GITHUB_TOKEN="$READ_TOKEN" pnpm exec tsx scripts/agent
 check(publisher.includes('READ_TOKEN: ${{ github.token }}')
   && !publisher.includes('GITHUB_TOKEN="$GH_APP_TOKEN" pnpm exec tsx'),
   'live revalidation uses a read-only workflow token, not the scoped writer token');
+check(publisher.includes("printf 'BUNDLE_SHA256=%s\\n' \"$bundle_sha\"")
+  && publisher.includes("printf 'VERIFIED_ARTIFACT_DIGEST=%s\\n' \"$normalized_artifact_digest\"")
+  && publisher.includes('} >> "$GITHUB_ENV"')
+  && !publisher.includes('BUNDLE_SHA256: ${{ steps.verify-artifact.outputs.bundle_sha256 }}')
+  && !publisher.includes('VERIFIED_ARTIFACT_DIGEST: ${{ steps.verify-artifact.outputs.artifact_digest }}'),
+  'verified artifact metadata survives step boundaries through the runner environment');
 const mintStart = publisher.indexOf('      - name: Mint scoped GitHub App token');
 check(mintStart >= 0, 'publisher mints the writer token only after preflight');
 const afterMint = publisher.slice(mintStart);
