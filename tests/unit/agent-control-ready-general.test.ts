@@ -85,6 +85,7 @@ const publicationPr = {
     'Bounded general READY task executed by the isolated Agent Control runner.',
     `TASK_ID = ${publicationTaskId}`,
     `BASE_MASTER_SHA = ${publicationBase}`,
+    'TASK_COMMENT_ID = 999',
     `BRANCH = ${publicationBranch}`,
     `HEAD_SHA = ${publicationHead}`,
     'AUTO_MERGE = false',
@@ -112,22 +113,27 @@ check(publicationBranch === `codex/agent-control-ready-general-cpc-auto-007-repl
 check(readyGeneralPublicationComplete(
   publicationPr,
   [completionComment],
-  { taskId: publicationTaskId, baseMasterSha: publicationBase },
+  { taskId: publicationTaskId, baseMasterSha: publicationBase, taskCommentId: 999 },
 ), 'authentic bot Draft PR plus same-head Completion Contract is complete');
+check(!readyGeneralPublicationComplete(
+  { ...publicationPr, body: publicationPr.body.replace('TASK_COMMENT_ID = 999', 'TASK_COMMENT_ID = 998') },
+  [completionComment],
+  { taskId: publicationTaskId, baseMasterSha: publicationBase, taskCommentId: 999 },
+), 'publication from an older task comment cannot satisfy replay guard');
 check(!readyGeneralPublicationComplete(
   { ...publicationPr, authorLogin: 'lenchenalc-hongda' },
   [completionComment],
-  { taskId: publicationTaskId, baseMasterSha: publicationBase },
+  { taskId: publicationTaskId, baseMasterSha: publicationBase, taskCommentId: 999 },
 ), 'non-bot PR cannot satisfy publication replay guard');
 check(!readyGeneralPublicationComplete(
   publicationPr,
   [{ ...completionComment, body: completionComment.body.replace('READY_FOR_PM_REVIEW = YES', 'READY_FOR_PM_REVIEW = NO') }],
-  { taskId: publicationTaskId, baseMasterSha: publicationBase },
+  { taskId: publicationTaskId, baseMasterSha: publicationBase, taskCommentId: 999 },
 ), 'incomplete contract cannot satisfy publication replay guard');
 check(!readyGeneralPublicationComplete(
   { ...publicationPr, headSha: 'd'.repeat(40) },
   [completionComment],
-  { taskId: publicationTaskId, baseMasterSha: publicationBase },
+  { taskId: publicationTaskId, baseMasterSha: publicationBase, taskCommentId: 999 },
 ), 'mismatched publication head is rejected');
 
 console.log(`Agent Control READY general policy: ${passed} checks passed`);
