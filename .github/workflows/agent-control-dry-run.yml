@@ -2469,6 +2469,10 @@ jobs:
             printf 'bundle_sha256=%s\n' "$bundle_sha"
             printf 'artifact_digest=%s\n' "$normalized_artifact_digest"
           } >> "$GITHUB_OUTPUT"
+          {
+            printf 'BUNDLE_SHA256=%s\n' "$bundle_sha"
+            printf 'VERIFIED_ARTIFACT_DIGEST=%s\n' "$normalized_artifact_digest"
+          } >> "$GITHUB_ENV"
           printf 'READY_GENERAL_ARTIFACT_ID=%s\n' "$ARTIFACT_ID"
           printf 'READY_GENERAL_ARTIFACT_DIGEST=%s\n' "$normalized_artifact_digest"
           printf 'READY_GENERAL_ARTIFACT_VERIFY=PASS\n'
@@ -2494,8 +2498,6 @@ jobs:
           TASK_COMMENT_ID: ${{ needs.validate.outputs.ready_general_task_comment_id }}
           CHECKS: ${{ needs.validate.outputs.ready_general_checks }}
           REPOSITORY: ${{ github.repository }}
-          BUNDLE_SHA256: ${{ steps.verify-artifact.outputs.bundle_sha256 }}
-          VERIFIED_ARTIFACT_DIGEST: ${{ steps.verify-artifact.outputs.artifact_digest }}
           PATH: /usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin
         run: |
           set -euo pipefail
