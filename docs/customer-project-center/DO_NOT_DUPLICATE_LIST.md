@@ -75,3 +75,19 @@ The database `leads` model and the current Leads UI persistence path already div
 ## 10. Authentication / authorization forks
 
 Do not introduce a CPC-only role system, client-trusted permission model or service-role shortcut for ordinary user actions. Reuse the repository auth/profile foundation and hardened same-org authorization patterns.
+
+
+## 11. Workshop customer / ownership / receipt truth
+
+The external workshop/finance tool is now evidenced as an operational source for `customers`, customer-owner references and `receiptRecords`.
+
+Do not:
+
+- import customers into a second CPC customer master keyed only by name;
+- make CPC Project Owner overwrite external customer ownership;
+- copy workshop receipts into a CPC payment ledger;
+- treat receipt owner snapshots as the current customer owner after reassignment;
+- use local browser cache as the integration target;
+- write back into `/opt/hongda-workshop/data/shared-data.json` from CPC without an approved integration/write contract.
+
+CPC may keep stable external references and derived read-only visibility once the Phase 0 integration contract is approved.
