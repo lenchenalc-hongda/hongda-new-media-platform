@@ -1,6 +1,6 @@
 # Customer Project Center Domain Model v1
 
-Status: domain freeze candidate after PM review `CPC-B2-REVIEW-001`.
+Status: domain freeze candidate updated by Phase 1 business-model freeze task `CPC-P1-BUSINESS-MODEL-FREEZE-001`; owner merge remains the approval gate.
 
 This document defines domain contracts only. It does not authorize database
 changes, migrations, RLS policies, service-role access, API implementation, or
@@ -12,6 +12,8 @@ Production deployment.
 - Customer official ownership and payment truth remain outside this repository.
 - This repository may hold canonical and clearly provisional CustomerReference mappings.
 - Project is one concrete commercial opportunity, not the lifetime customer relationship.
+- Routine old-customer relationship follow-up remains customer-level until a concrete opportunity exists.
+- Customer-level ProjectEvent/WorkItem may carry `customer_reference_id` with `project_id = null`.
 - A formal Project starts as `active`; incomplete qualification remains Lead,
   customer-level follow-up, or an AI draft.
 - One Project has one Project Owner and zero or more Collaborators.
@@ -105,6 +107,9 @@ Rules:
 
 - there is no persisted formal Project `draft` state;
 - a Project begins at `active` when a concrete opportunity exists;
+- Project creation requires a CustomerReference, concrete objective/need, project type,
+  exactly one owner, an initial valid type-specific stage, priority, and either a
+  concrete NEXT_ACTION or an explicit waiting/check state;
 - `expected_amount_minor` and `currency` must both be present or both be absent;
 - expected amount means expected opportunity value only, not confirmed order or payment;
 - a paused Project requires `next_check_at`;
@@ -112,13 +117,23 @@ Rules:
 
 ### Stage strategy
 
-Common lifecycle status is shared, but stage codes are type-specific and
-configurable.
+Common lifecycle status is shared. Stage is operational position, separate from
+lifecycle status, and stage codes remain configurable strings rather than
+database enums.
 
-Exact stage lists are not frozen and must not become a database enum constraint
-in the next batch. Repeat transfer-film business must not be forced through
-equipment-style stages. Stage lists will be finalized after pilot/workflow
-validation.
+Phase 1 freezes these V1 profiles:
+
+- `transfer_film`: `requirement_alignment -> artwork_material_alignment -> quotation -> sampling_or_plate -> customer_confirmation -> order_confirmed -> production -> delivery`
+- `transfer_processing`: `requirement_alignment -> material_fixture_process_alignment -> quotation -> trial_sample -> customer_confirmation -> order_confirmed -> production -> delivery`
+- `equipment`: `application_assessment -> solution_definition -> validation_or_demo -> quotation_negotiation -> commercial_confirmation -> production -> delivery_installation -> acceptance_training`
+- `uv`: `application_assessment -> sample_validation -> quotation -> customer_confirmation -> order_confirmed -> production -> delivery`
+- `other`: `qualification -> solution -> quotation -> validation -> customer_confirmation -> fulfillment -> delivery`
+
+Repeat/reorder work may enter at a later valid stage only when existing
+specification, artwork, material, process, fixture, application requirements,
+quality requirements, and risk facts remain unchanged. Relevant changes return
+the Project to the applicable validation stage. Repeat transfer-film business
+must never be forced through equipment-style stages.
 
 ## C. ProjectMember / Collaboration
 
@@ -204,6 +219,14 @@ reopen, pause, and loss changes for summaries without calling them progress.
 A free-text note does not automatically become progress. It remains ordinary
 contact or an AI draft until a human confirms the structured event.
 
+Commercial truth rules:
+
+- `QUOTE_SENT` means a formal quotation artifact was sent; it never means accepted;
+- `CUSTOMER_CONFIRMED` requires explicit human-confirmed evidence and cannot be inferred from chat or AI;
+- `order_confirmed` requires explicit human-confirmed order evidence;
+- current QQ production-instruction traffic is not a canonical order ledger;
+- current Excel quotations in WeCom remain source artifacts during transition.
+
 ## E. WorkItem
 
 WorkItem is a dedicated sales-domain task model and does not reuse legacy tasks.
@@ -246,6 +269,13 @@ Blocked rules:
 
 AI suggestions are not Work Items and cannot become overdue until accepted by a
 human.
+
+NEXT_ACTION single-source rule:
+
+- `WorkItem NEXT_ACTION` is the actionable task source of truth;
+- `Project.next_action_summary` is a projection/summary, not a second independently edited truth;
+- where practical, one employee confirmation updates Project progress and next action together;
+- `waiting_on` plus `next_check_at` represent waiting/check state without duplicate reminder rows.
 
 ## F. AIDraft
 
@@ -493,7 +523,9 @@ None at domain-model freeze time.
 
 ## SAFE_TO_IMPLEMENT_NEXT
 
-- Pure domain types and validators.
+- Pure domain types and validators using the frozen Phase 1 V1 stage profiles as configurable application data, not database enums.
+- Repeat/reorder fast-path validation rules that return changed artwork/material/process/fixture/application/quality/risk to the relevant validation stage.
+- NEXT_ACTION single-source/projection validators and waiting/check invariants.
 - Event progress/meaningful-change classification.
 - AI draft acceptance workflow without persistence.
 - Read-only external customer contract mapping after authority approval.
