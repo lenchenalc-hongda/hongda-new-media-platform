@@ -66,7 +66,10 @@ Customer list supports:
 - active opportunity/project count;
 - last meaningful customer-level interaction;
 - next relationship check;
-- simple filters such as mine / due follow-up / has active Project.
+- simple filters such as due follow-up / has active Project / assigned follow-up;
+- an external-owner filter only after the canonical customer-ownership mapping is verified.
+
+A generic `mine` customer filter must not invent CPC customer ownership.
 
 Customer detail prioritizes:
 
@@ -142,17 +145,18 @@ Purpose: complete work-item view beyond today's queue.
 
 Use cases:
 
-- future/open work;
-- overdue work;
-- waiting/check items;
+- future/open WorkItems;
+- overdue WorkItems;
+- derived waiting/check states shown in a separate view/tab;
 - internal collaboration assigned to me;
 - management decisions assigned to me;
-- completed/cancelled history.
+- completed/cancelled WorkItem history.
 
 Rules:
 
 - Workbench remains the daily priority view;
 - My Tasks is for planning/search/history, not a duplicate Today page;
+- a waiting/check row may be rendered here for visibility but remains Project/Customer waiting state, not a persisted WorkItem;
 - one obligation must not appear as duplicate NEXT_ACTION and reminder rows.
 
 ### 2.5 My Reports
@@ -214,7 +218,7 @@ Visible: admin only.
 
 Reserved configuration categories:
 
-- stage display/configuration based on approved type-specific profiles;
+- display labels/presentation for approved stage profiles;
 - workflow thresholds after explicit policy approval;
 - old-customer follow-up cadence after explicit policy approval;
 - integration/source status;
@@ -222,6 +226,7 @@ Reserved configuration categories:
 
 Rules:
 
+- the Phase 1 V1 stage profiles are a business contract; changing stage codes/order/profile semantics requires a new approved business decision and Decision Log update, not an ordinary Settings edit;
 - Phase 3 does not authorize changing canonical customer ownership or financial SoT;
 - no schema/RLS/Production controls are implemented by this IA decision;
 - defaults must not silently invent business policy.
@@ -242,6 +247,12 @@ These actions should use a modal, sheet, drawer, or inline panel when implementa
 Reason: these are actions inside work, not destinations employees should navigate to as separate modules.
 
 No separate V1 `AI Inbox` page is approved. Unresolved AI drafts should surface contextually or as Workbench/end-of-day exceptions.
+
+No CPC top-level `Leads`, `Orders`, or `Quotes` pages are approved in V1:
+
+- Leads remain in the existing acquisition-side domain; future handoff may create/promote a concrete opportunity without creating a third lead store;
+- current order handling has no unified SoT, so CPC must not invent an order ledger page before the later approved order model/integration;
+- quotations remain source artifacts in the current WeCom workflow during transition; quote metadata/evidence belongs in Project context rather than a duplicate quotation system.
 
 ## 4. NAVIGATION_MAP
 
@@ -461,7 +472,9 @@ The IA is coherent only if:
 9. operator/viewer do not receive the CPC portal in V1;
 10. mobile can perform daily capture without a separate app;
 11. route visibility alone cannot expose unrelated resources;
-12. disabled shell placeholders can be migrated to the approved navigation before they become active.
+12. disabled shell placeholders can be migrated to the approved navigation before they become active;
+13. waiting/check can be visible from My Tasks without being persisted as a duplicate WorkItem;
+14. CPC does not create new top-level Leads/Orders/Quotes modules that compete with existing/unresolved sources.
 
 ## 12. Gate
 
