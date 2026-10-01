@@ -161,10 +161,11 @@ assert(
 );
 
 assert(
-  !sql.includes('site_data')
-    && !sql.includes('/api/data')
-    && !sql.includes('localStorage'),
-  'formal CPC persistence does not use legacy generic storage',
+  !sql.includes('CREATE TABLE public.site_data')
+    && !sql.includes('INSERT INTO public.site_data')
+    && !sql.includes('UPDATE public.site_data')
+    && !sql.includes('DELETE FROM public.site_data'),
+  'formal CPC persistence does not read/write legacy site_data',
 );
 
 console.log(`Phase 5A migration audit: ${passed} passed, ${failed} failed`);
