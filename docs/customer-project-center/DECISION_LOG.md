@@ -203,9 +203,9 @@ When the next move belongs to another party, use `waiting_on + next_check_at`. T
 Due old-customer follow-up appears in the same daily work queue without creating a Project. When a concrete opportunity appears, promotion to Project reuses customer/context and applies the Phase 1 Project creation invariant.
 
 
-## Phase 3 merge-gated decisions
+## Phase 3 approved decisions
 
-Approval rule for `CPC-P3-INFORMATION-ARCHITECTURE-001`: while these entries are on an unmerged PR they are candidates; owner merge of that PR is the approval act.
+Owner-approved PR #45 merged `CPC-P3-INFORMATION-ARCHITECTURE-001`; DEC-028 through DEC-037 are approved.
 
 ### DEC-028: Workbench is the primary CPC home
 
@@ -247,3 +247,57 @@ My Tasks may render due/future Project or Customer waiting/check states for plan
 ### DEC-037: Approved stage profiles are not ordinary admin configuration
 
 CPC Settings may manage presentation labels and later approved non-consequential policy values. Changing the Phase 1 stage codes/order/profile semantics requires a new business decision and Decision Log approval.
+
+
+## Phase 4 merge-gated decisions
+
+Approval rule for `CPC-P4-DATABASE-AUTHORIZATION-DESIGN-001`: while these entries are on an unmerged PR they are candidates; owner merge of that PR is the approval act.
+
+### DEC-038: CPC owns project-work truth, not customer/finance/order/quote master truth
+
+Formal CPC persistence is limited to CustomerReference mapping, Projects, collaborators, confirmed events, WorkItems, AI Drafts, report snapshots, audit rows, and integration identity mappings. No competing customer master, ownership master, receipt ledger, order ledger, quote lifecycle master, Lead store, Review Center copy, or knowledge copy is approved.
+
+### DEC-039: Formal CPC mutations are RPC/domain-function only
+
+Ordinary user actions do not directly mutate CPC tables. Narrow authenticated mutations resolve the active profile, org, role, resource relation, expected version and domain invariant, then write business state plus audit atomically. RLS remains enabled for read visibility and defense in depth.
+
+### DEC-040: Project next-action display is derived from one open NEXT_ACTION
+
+The Project base row does not maintain an independently editable second next-action truth. `next_action_summary` is an API/read-model projection from the single current open NEXT_ACTION WorkItem.
+
+### DEC-041: Sales visibility is relation-based, not whole-org customer visibility
+
+Admin/manager may read same-org CPC resources under the approved matrix. Sales access is granted by Project ownership/collaboration, WorkItem relation, provisional-reference creation, AI-draft relation, or verified external customer-owner mapping. A Customers page does not grant sales users all same-org customers.
+
+### DEC-042: External employee identity uses an explicit stable-id bridge
+
+External responsible-person ids such as workshop `E...` identifiers map to `profiles.id` through audited mapping rows. Display-name matching is never the normal write contract.
+
+### DEC-043: CPC audit and reporting use monotonic sequences
+
+ProjectEvent receives `event_seq`; the append-only audit log receives `audit_seq`. Report provenance/cursors use these sequences rather than timestamp-only cursors.
+
+### DEC-044: Submitted reports and ProjectEvent remain append-only/immutable
+
+No role, including admin, may update/delete confirmed ProjectEvent rows or mutate submitted report snapshots in place. Corrections append a new event or report revision.
+
+### DEC-045: Waiting/check is Project/Customer state, not a duplicate reminder WorkItem
+
+Waiting visibility can appear in Today/My Tasks read models but does not create a second persisted reminder WorkItem for the same obligation.
+
+### DEC-046: Phase 1 stage profiles are validated in domain mutation logic, not PostgreSQL enums
+
+Project.stage remains TEXT. Type-specific validity is enforced by approved validators/mutation functions. Ordinary Settings cannot change stage codes/order/profile semantics without a new business decision.
+
+
+### DEC-047: CPC raw audit and external identity mapping are restricted surfaces
+
+The generic CPC audit table is directly readable only by same-org manager/admin; sales-facing history uses narrow resource-specific projections. External employee/profile mappings are admin-mutable only because they can affect ownership display and relation-based visibility.
+
+### DEC-048: Formal CPC tables do not expose direct authenticated DML
+
+Authenticated users receive only approved read visibility plus EXECUTE on narrow mutation RPCs. Formal table INSERT/UPDATE/DELETE is not an ordinary application write path. Anon receives no CPC access.
+
+### DEC-049: Business history uses explicit lifecycle changes, not destructive cascades
+
+Core CPC business rows use RESTRICT/NO ACTION deletion semantics. Project closure, collaborator removal, WorkItem cancellation, mapping deactivation and report correction preserve history rather than deleting it.

@@ -1,6 +1,6 @@
 # Customer Project Center Domain Model v1
 
-Status: domain freeze candidate updated by Phase 1 business-model freeze task `CPC-P1-BUSINESS-MODEL-FREEZE-001`; owner merge remains the approval gate.
+Status: Phase 1 domain/business model approved by owner-merged PR #43; Phase 4 candidate adds only persistence representation details consistent with that approved contract.
 
 This document defines domain contracts only. It does not authorize database
 changes, migrations, RLS policies, service-role access, API implementation, or
@@ -84,6 +84,7 @@ Required fields:
 | `org_id` | Organization UUID |
 | `customer_reference_id` | Same-organization CustomerReference |
 | `title` | Concise commercial opportunity title |
+| `objective_summary` | Concrete commercial need/objective required by the Phase 1 creation invariant |
 | `project_type` | `transfer_film`, `transfer_processing`, `equipment`, `uv`, `other` |
 | `owner_profile_id` | Exactly one owner profile |
 | `status` | `active`, `paused`, `won`, `lost`, `cancelled` |
@@ -516,11 +517,13 @@ None at domain-model freeze time.
 
 ## OPEN_TECHNICAL_DECISIONS
 
-- Decide whether report ingestion cursors use `recorded_at + id` or a monotonic
-  sequence when persistence is designed.
-- Decide which event types receive strict payload schemas first after pilot
-  validation.
-- Decide whether Work Item blocked reminders require a separate policy.
+Phase 4 candidate resolves persistence decisions as follows:
+
+- report ingestion uses monotonic ProjectEvent and audit sequences;
+- strict payload validation begins with consequential commercial, lifecycle,
+  stage and waiting-state events;
+- Work Item blocked-reminder timing remains a Phase 6 policy decision and does
+  not block the Phase 4 schema/authorization design.
 
 ## SAFE_TO_IMPLEMENT_NEXT
 
