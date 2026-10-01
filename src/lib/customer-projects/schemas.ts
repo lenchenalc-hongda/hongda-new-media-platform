@@ -74,7 +74,7 @@ export const projectSchema = z.object({
   project_type: z.enum(PROJECT_TYPES),
   owner_profile_id: uuidSchema,
   status: z.enum(PROJECT_LIFECYCLE_STATUSES),
-  stage: z.string().trim().min(1).max(100).nullable(),
+  stage: z.string().trim().min(1).max(100),
   waiting_on: z.enum(WAITING_ON_VALUES),
   next_action_summary: z.string().trim().min(1).max(1000).nullable(),
   next_check_at: isoDateTimeSchema.nullable(),
