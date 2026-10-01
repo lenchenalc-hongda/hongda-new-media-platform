@@ -136,3 +136,38 @@ Therefore:
 `PHASE_0_GATE = BLOCKED`
 
 This is a narrower blocker than the repository-only audit. Formal CPC schema/migration/RLS work must still wait until the remaining source contracts and identity bridge are verified.
+
+
+## 8. Owner-confirmed order and quotation reality
+
+Owner closeout on 2026-10-01 established:
+
+### Orders
+
+- there is no unified order system today;
+- Dongguan and Shantou are separate operating flows;
+- when Dongguan needs Shantou to produce transfer film / fixtures, Dongguan sends a production instruction sheet through QQ.
+
+Classification:
+
+`ORDER_SOURCE = CURRENT_PROCESS_VERIFIED_NO_UNIFIED_SOT`
+
+QQ is treated as transport, not as a database. The production instruction sheet is a current operational artifact, not proof of a unified historical order ledger.
+
+### Quotations
+
+- formal quotations are Excel files;
+- quotation files are stored/shared in WeCom;
+- no structured quote id/version/acceptance store was identified.
+
+Classification:
+
+`QUOTATION_SOURCE = CURRENT_FILE_SOURCE_VERIFIED_NO_STRUCTURED_SOT`
+
+The existing Excel file remains the source artifact during transition. Future CPC structure may wrap metadata/version/acceptance around that artifact only if it reduces work and avoids duplicate manual entry.
+
+### Modernization principle
+
+The owner explicitly stated that the current process is not automatically the desired future process. Low-friction improvements may be adopted when they help employees work better.
+
+This authorizes later workflow design to replace fragmented steps, but not to silently change financial/customer truth or to force parallel data entry.
