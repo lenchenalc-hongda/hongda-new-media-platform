@@ -15,6 +15,7 @@ function assert(condition: boolean, message: string) {
 const migrationPath =
   'supabase/migrations/20261001143000_customer_project_center_phase5a_core_foundation.sql';
 const sql = fs.readFileSync(migrationPath, 'utf8');
+const executableSql = sql.replace(/--.*$/gm, '');
 
 console.log('\n=== Customer Project Center Phase 5A Migration Audit ===');
 
@@ -153,18 +154,18 @@ assert(
 );
 
 assert(
-  !sql.includes('DROP TABLE')
-    && !sql.includes('TRUNCATE')
-    && !sql.includes('DELETE FROM')
-    && !sql.includes('DISABLE ROW LEVEL SECURITY'),
-  'migration contains no destructive or RLS-bypass statements',
+  !executableSql.includes('DROP TABLE')
+    && !executableSql.includes('TRUNCATE')
+    && !executableSql.includes('DELETE FROM')
+    && !executableSql.includes('DISABLE ROW LEVEL SECURITY'),
+  'migration contains no executable destructive or RLS-bypass statements',
 );
 
 assert(
-  !sql.includes('CREATE TABLE public.site_data')
-    && !sql.includes('INSERT INTO public.site_data')
-    && !sql.includes('UPDATE public.site_data')
-    && !sql.includes('DELETE FROM public.site_data'),
+  !executableSql.includes('CREATE TABLE public.site_data')
+    && !executableSql.includes('INSERT INTO public.site_data')
+    && !executableSql.includes('UPDATE public.site_data')
+    && !executableSql.includes('DELETE FROM public.site_data'),
   'formal CPC persistence does not read/write legacy site_data',
 );
 
