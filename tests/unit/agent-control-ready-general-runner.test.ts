@@ -60,6 +60,13 @@ check(validator.includes('ready_general_task_comment_id')
   && validator.includes('ready_general_allowed_paths_b64')
   && validator.includes('ready_general_checks'),
   'cloud validator exports only normalized runner fields');
+check(validator.includes('buildReadyGeneralBranchName')
+  && validator.includes('readyGeneralPublicationComplete')
+  && validator.includes('ready_general_replay_guard')
+  && validator.includes('ALREADY_PUBLISHED')
+  && validator.includes("result: 'NOT_EXECUTABLE'")
+  && validator.includes('/pulls?state=open&head='),
+  'cloud validator stops completed duplicate publications before self-hosted Codex execution');
 check(!validator.includes('ready_general_task_body'),
   'raw task comments are not exported to the general runner');
 
