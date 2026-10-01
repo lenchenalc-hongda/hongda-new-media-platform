@@ -108,3 +108,18 @@ Reuse the proven bounded Agent Control workflow for subsequent CPC tasks:
 ## 9. Leads as an integration candidate, not automatic truth
 
 The repository already has lead concepts and a Leads UI. CPC should reuse useful intake concepts only after Phase 0 resolves which live path is authoritative and how legacy localStorage/site_data state relates to the database `leads` table. No duplicate lead/customer master should be introduced merely to avoid that decision.
+
+
+## 10. Hongda workshop/finance external references
+
+Phase 0 external evidence identifies the existing workshop/finance tool as an operational source for customer records, customer-owner references and receipt records.
+
+Reuse rule:
+
+- preserve workshop customer `C...` IDs as external customer references;
+- preserve workshop receipt `RCP...` IDs / receipt numbers as external financial references;
+- preserve external ownership as an external reference rather than copying it into a second CPC ownership authority;
+- create an explicit workshop employee ID → `profiles.id` bridge before any CPC business FK depends on that person;
+- integrate through a narrow read/sync contract rather than coupling CPC directly to browser state or copying the whole `shared-data.json`.
+
+The current production file format is evidence of the source, not the desired long-term integration API.

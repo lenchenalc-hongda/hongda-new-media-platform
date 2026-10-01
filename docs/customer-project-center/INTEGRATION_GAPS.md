@@ -7,50 +7,51 @@ These gaps are evidence/contract gaps, not permission to guess an implementation
 
 ### GAP-01 — Canonical customer master
 
-Status: `UNVERIFIED_EXTERNAL`
+Status: `EXTERNAL_OPERATIONAL_SOURCE_VERIFIED_WITH_GAPS`
 
-Required evidence before schema work:
+Verified external evidence: the Hongda workshop/finance production tool persists a `customers` collection with stable `C...` IDs and a defined customer record shape. See `EXTERNAL_SOURCE_EVIDENCE.md`.
 
-- authoritative system/file/API name and owner;
-- stable customer identifier;
-- customer fields CPC may read;
+Remaining evidence before schema work:
+
+- business approval that the workshop customer pool is the canonical customer source CPC should reference;
 - branch/org scope;
 - duplicate/merge semantics;
 - read/write direction;
 - deletion/archive semantics;
-- example records or machine-readable schema sufficient to verify mapping.
+- a narrow supported read/export contract instead of coupling CPC to the generic whole-state `/api/data` payload.
 
-Without this, CPC cannot safely create a durable customer reference.
+Until these are closed, CPC may design only a reference boundary, not a competing customer authority.
 
 ### GAP-02 — Customer ownership
 
-Status: `UNVERIFIED_EXTERNAL`
+Status: `EXTERNAL_OPERATIONAL_SOURCE_VERIFIED_WITH_GAPS`
 
-Required evidence:
+Verified external evidence: workshop customer records carry `projectOwnerId/projectOwnerName`, and receipt creation copies the selected customer's owner attribution.
 
-- which system is authoritative;
-- ownership key and stable responsible-person identifier;
-- relationship to canonical customer id;
+Remaining evidence:
+
+- business approval that workshop customer ownership is the ownership authority CPC should reference;
 - reassignment workflow;
 - whether ownership history is retained;
 - effective-date semantics;
-- mapping from external responsible person to repository `profiles.id`.
+- mapping from workshop employee `E...` identifiers to repository `profiles.id`.
 
 CPC Project Owner must remain separate from customer ownership.
 
 ### GAP-03 — Payment / receipt source
 
-Status: `UNVERIFIED_EXTERNAL`
+Status: `EXTERNAL_OPERATIONAL_SOURCE_VERIFIED_WITH_GAPS`
 
-Required evidence:
+Verified external evidence: workshop `receiptRecords` uses stable `RCP...` IDs, unique receipt numbers and explicit `customerId` linkage; the operational UI stores amount/date/account and commission-related snapshots.
 
-- financial source of truth;
-- stable receipt/payment identifier;
-- customer and, if available, order link;
-- amount/currency/date/status fields;
-- reversal/correction semantics;
-- attribution rules used for reporting/commission where relevant;
-- refresh/synchronization contract.
+Remaining evidence:
+
+- business approval of the workshop receipt store as the integration authority;
+- currency semantics;
+- correction/reversal/void/refund semantics and immutable correction history;
+- order linkage once the authoritative order source is mapped;
+- attribution/reconciliation rules CPC may use for derived reporting;
+- a narrow supported read/synchronization contract.
 
 No CPC financial ledger should be created before this is verified.
 
@@ -144,7 +145,7 @@ Required decision:
 
 ## Phase 0 exit criteria
 
-Phase 0 may move from BLOCKED to PASS only after the PM can verify concrete source contracts for the required external customer/ownership/payment/order/quote integrations, plus a decision on WhatsApp scope and the necessary identity bridges.
+Phase 0 may move from BLOCKED to PASS only after the PM closes the remaining contract gaps for the now-identified workshop customer/ownership/receipt sources, verifies order and quotation sources, records the WhatsApp V1/backlog decision, and verifies the required external-employee → `profiles.id` identity bridge.
 
 Until then:
 
