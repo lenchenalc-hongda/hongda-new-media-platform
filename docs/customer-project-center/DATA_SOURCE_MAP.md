@@ -1,7 +1,7 @@
 # Customer Project Center — Data Source Map
 
 Baseline: `3632fe898087979c6140067eb214206bbd330f79`  
-Classification is limited to evidence present in this repository.
+Repository rows remain limited to repository evidence. External customer/ownership/receipt rows are extended by the verified production-evidence summary in `EXTERNAL_SOURCE_EVIDENCE.md`.
 
 | Domain / fact | Repository evidence | Current authority evidenced here | Storage / identifier / org scope | Current write path | CPC treatment | Status |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -16,9 +16,9 @@ Classification is limited to evidence present in this repository.
 | WeChat OA publishing | server-only publisher adapter | Publishing integration only | env-configured account/API identity | server adapter; some mock-style publish results | Do not treat as customer/conversation SoT | LIMITED_INTEGRATION |
 | CPC shell | `src/app/customer-projects/page.tsx` | No business-data authority | Empty-state UI | none | Reuse shell only | NO_SOT |
 | CPC domain model | `DOMAIN_MODEL_V1.md` and domain code | Design contract, not persisted business truth | typed/domain concepts | no formal CPC DB write path | Reuse semantics; schema still gated | DESIGN_ONLY |
-| Canonical customer master | CPC architecture/decision docs say external truth must be reused | No concrete external source evidenced | Unknown | Unknown | Integrate by stable reference after evidence | UNVERIFIED_EXTERNAL |
-| Customer ownership | CPC docs reserve external authority | No concrete authority/schema/ID evidenced | Unknown | Unknown | Never create competing ownership truth | UNVERIFIED_EXTERNAL |
-| Payment / receipt | CPC docs reserve financial truth externally | No concrete source/schema/ID evidenced | Unknown | Unknown | Read/integrate after contract; no duplicate ledger | UNVERIFIED_EXTERNAL |
+| Canonical customer master | External workshop/finance production evidence; see `EXTERNAL_SOURCE_EVIDENCE.md` | Workshop `customers` is a concrete operational customer pool; final integration authority contract still pending | stable `C...` id; customer name/source/dates; no explicit org field evidenced in customer schema | workshop UI → state → `/api/data` → production `shared-data.json` | Reference stable external customer id; never recreate by name | EXTERNAL_OPERATIONAL_SOURCE_VERIFIED |
+| Customer ownership | Workshop customer records carry `projectOwnerId/projectOwnerName`; downstream receipts copy owner attribution | Current operational ownership input in workshop tool; history/effective-date contract not evidenced | workshop employee `E...` reference + owner-name snapshot; repository `profiles.id` bridge missing | customer-pool edit path in workshop tool | Keep external; map responsible-person reference to `profiles.id` only through explicit bridge | EXTERNAL_OPERATIONAL_SOURCE_VERIFIED_WITH_GAPS |
+| Payment / receipt | Workshop `receiptRecords`; stable `RCP...` id, receiptNo and customerId linkage | Concrete operational receipt/commission source; correction/reconciliation contract incomplete | `RCP...` id + receiptNo + `customerId`; amount/account/date/commission snapshots; currency/status model not evidenced | workshop receipt entry/edit → `/api/data` → production `shared-data.json` | Read/integrate only after contract; no CPC financial ledger | EXTERNAL_OPERATIONAL_SOURCE_VERIFIED_WITH_GAPS |
 | Order | No canonical order system implementation evidenced | Not established | Unknown | Unknown | Map only after source contract | UNVERIFIED_EXTERNAL |
 | Quotation / acceptance | No canonical quote system implementation evidenced | Not established | Unknown | Unknown | Map only after source/version contract | UNVERIFIED_EXTERNAL |
 | WhatsApp customer conversations | No repository integration found | Not established | Unknown | Unknown | Keep outside CPC until explicit integration contract | UNVERIFIED_EXTERNAL |
