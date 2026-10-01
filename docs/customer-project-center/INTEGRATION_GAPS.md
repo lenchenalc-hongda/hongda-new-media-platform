@@ -7,9 +7,11 @@ These gaps are evidence/contract gaps, not permission to guess an implementation
 
 ### GAP-01 — Canonical customer master
 
-Status: `UNVERIFIED_EXTERNAL`
+Status: `EXTERNAL_OPERATIONAL_SOURCE_VERIFIED_WITH_GAPS`
 
-Required evidence before schema work:
+Verified external evidence: the Hongda workshop/finance production tool persists a `customers` collection with stable `C...` IDs and a defined customer record shape. See `EXTERNAL_SOURCE_EVIDENCE.md`.
+
+Remaining evidence before schema work:
 
 - authoritative system/file/API name and owner;
 - stable customer identifier;
@@ -24,9 +26,11 @@ Without this, CPC cannot safely create a durable customer reference.
 
 ### GAP-02 — Customer ownership
 
-Status: `UNVERIFIED_EXTERNAL`
+Status: `EXTERNAL_OPERATIONAL_SOURCE_VERIFIED_WITH_GAPS`
 
-Required evidence:
+Verified external evidence: workshop customer records carry `projectOwnerId/projectOwnerName`, and receipt creation copies the selected customer's owner attribution.
+
+Remaining evidence:
 
 - which system is authoritative;
 - ownership key and stable responsible-person identifier;
@@ -40,13 +44,15 @@ CPC Project Owner must remain separate from customer ownership.
 
 ### GAP-03 — Payment / receipt source
 
-Status: `UNVERIFIED_EXTERNAL`
+Status: `EXTERNAL_OPERATIONAL_SOURCE_VERIFIED_WITH_GAPS`
 
-Required evidence:
+Verified external evidence: workshop `receiptRecords` uses stable `RCP...` IDs, unique receipt numbers and explicit `customerId` linkage; the operational UI stores amount/date/account and commission-related snapshots.
 
-- financial source of truth;
-- stable receipt/payment identifier;
-- customer and, if available, order link;
+Remaining evidence:
+
+- business approval of the workshop receipt store as the integration authority;
+- correction/reversal/void/refund semantics;
+- currency semantics and, if available, order link;
 - amount/currency/date/status fields;
 - reversal/correction semantics;
 - attribution rules used for reporting/commission where relevant;
@@ -144,7 +150,7 @@ Required decision:
 
 ## Phase 0 exit criteria
 
-Phase 0 may move from BLOCKED to PASS only after the PM can verify concrete source contracts for the required external customer/ownership/payment/order/quote integrations, plus a decision on WhatsApp scope and the necessary identity bridges.
+Phase 0 may move from BLOCKED to PASS only after the PM closes the remaining contract gaps for the now-identified workshop customer/ownership/receipt sources, verifies order and quotation sources, records the WhatsApp V1/backlog decision, and verifies the required external-employee → `profiles.id` identity bridge.
 
 Until then:
 
