@@ -288,3 +288,16 @@ Waiting visibility can appear in Today/My Tasks read models but does not create 
 ### DEC-046: Phase 1 stage profiles are validated in domain mutation logic, not PostgreSQL enums
 
 Project.stage remains TEXT. Type-specific validity is enforced by approved validators/mutation functions. Ordinary Settings cannot change stage codes/order/profile semantics without a new business decision.
+
+
+### DEC-047: CPC raw audit and external identity mapping are restricted surfaces
+
+The generic CPC audit table is directly readable only by same-org manager/admin; sales-facing history uses narrow resource-specific projections. External employee/profile mappings are admin-mutable only because they can affect ownership display and relation-based visibility.
+
+### DEC-048: Formal CPC tables do not expose direct authenticated DML
+
+Authenticated users receive only approved read visibility plus EXECUTE on narrow mutation RPCs. Formal table INSERT/UPDATE/DELETE is not an ordinary application write path. Anon receives no CPC access.
+
+### DEC-049: Business history uses explicit lifecycle changes, not destructive cascades
+
+Core CPC business rows use RESTRICT/NO ACTION deletion semantics. Project closure, collaborator removal, WorkItem cancellation, mapping deactivation and report correction preserve history rather than deleting it.
