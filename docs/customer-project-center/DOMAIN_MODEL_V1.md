@@ -1,6 +1,6 @@
 # Customer Project Center Domain Model v1
 
-Status: domain freeze candidate updated by Phase 1 business-model freeze task `CPC-P1-BUSINESS-MODEL-FREEZE-001`; owner merge remains the approval gate.
+Status: Phase 1 domain/business model approved by owner-merged PR #43; Phase 4 candidate adds only persistence representation details consistent with that approved contract.
 
 This document defines domain contracts only. It does not authorize database
 changes, migrations, RLS policies, service-role access, API implementation, or
