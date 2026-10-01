@@ -119,23 +119,11 @@ A workshop `firstConfirmedOrderDate` customer field is only a date attribute. It
 
 The existing workshop `/api/wecom/status` server route is not evidence of an active frontend customer-conversation integration.
 
-## 7. Phase 0 gate
+## 7. Interim gate before owner closeout
 
-After this external evidence pass:
+At the end of the external-evidence-only pass, order, quotation and V1 communication scope were still unresolved, so the gate remained blocked pending owner confirmation.
 
-- canonical customer source: concrete operational source identified, integration/authority details still incomplete;
-- customer ownership: concrete operational source identified, history/profile bridge incomplete;
-- receipt/payment: concrete operational source identified, correction/reconciliation/API contract incomplete;
-- order: unresolved;
-- quotation: unresolved;
-- WhatsApp: unresolved;
-- external employee → `profiles.id`: unresolved.
-
-Therefore:
-
-`PHASE_0_GATE = BLOCKED`
-
-This is a narrower blocker than the repository-only audit. Formal CPC schema/migration/RLS work must still wait until the remaining source contracts and identity bridge are verified.
+That interim state was superseded by the owner closeout in Section 8.
 
 
 ## 8. Owner-confirmed order and quotation reality
@@ -171,3 +159,12 @@ The existing Excel file remains the source artifact during transition. Future CP
 The owner explicitly stated that the current process is not automatically the desired future process. Low-friction improvements may be adopted when they help employees work better.
 
 This authorizes later workflow design to replace fragmented steps, but not to silently change financial/customer truth or to force parallel data entry.
+
+
+## 9. Final Phase 0 classification
+
+After owner closeout:
+
+`PHASE_0_GATE = PASS`
+
+This PASS closes current-system discovery/mapping only. Customer/ownership/receipt adapter details, profile mapping rows, authorization and migration/cutover remain later implementation prerequisites, and formal schema/RLS work remains blocked by Master Checklist Phases 1–3 plus Phase 4 review.
