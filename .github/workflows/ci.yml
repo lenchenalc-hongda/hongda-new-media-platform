@@ -34,6 +34,9 @@ jobs:
       - name: Customer Project Center domain tests
         run: pnpm exec tsx tests/unit/customer-project-domain.test.ts
 
+      - name: Customer Project Center Phase 5A migration contract tests
+        run: pnpm exec tsx tests/unit/customer-project-center-phase5a-migration.test.ts
+
       - name: Agent Control tests
         run: pnpm exec tsx tests/unit/agent-control.test.ts
 
