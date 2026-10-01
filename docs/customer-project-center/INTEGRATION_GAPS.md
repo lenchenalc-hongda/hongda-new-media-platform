@@ -3,11 +3,11 @@
 Baseline: `3632fe898087979c6140067eb214206bbd330f79`  
 These gaps are evidence/contract gaps, not permission to guess an implementation.
 
-## Gate-blocking external gaps
+## Phase 0 mapped external domains and later implementation gaps
 
 ### GAP-01 — Canonical customer master
 
-Status: `EXTERNAL_OPERATIONAL_SOURCE_VERIFIED_WITH_GAPS`
+Status: `PHASE0_MAPPED_PHASE4_CONTRACT_REQUIRED`
 
 Verified external evidence: the Hongda workshop/finance production tool persists a `customers` collection with stable `C...` IDs and a defined customer record shape. See `EXTERNAL_SOURCE_EVIDENCE.md`.
 
@@ -24,7 +24,7 @@ Until these are closed, CPC may design only a reference boundary, not a competin
 
 ### GAP-02 — Customer ownership
 
-Status: `EXTERNAL_OPERATIONAL_SOURCE_VERIFIED_WITH_GAPS`
+Status: `PHASE0_MAPPED_PHASE4_CONTRACT_REQUIRED`
 
 Verified external evidence: workshop customer records carry `projectOwnerId/projectOwnerName`, and receipt creation copies the selected customer's owner attribution.
 
@@ -40,7 +40,7 @@ CPC Project Owner must remain separate from customer ownership.
 
 ### GAP-03 — Payment / receipt source
 
-Status: `EXTERNAL_OPERATIONAL_SOURCE_VERIFIED_WITH_GAPS`
+Status: `PHASE0_MAPPED_PHASE4_CONTRACT_REQUIRED`
 
 Verified external evidence: workshop `receiptRecords` uses stable `RCP...` IDs, unique receipt numbers and explicit `customerId` linkage; the operational UI stores amount/date/account and commission-related snapshots.
 
@@ -57,48 +57,48 @@ No CPC financial ledger should be created before this is verified.
 
 ### GAP-04 — Order source
 
-Status: `UNVERIFIED_EXTERNAL`
+Status: `CURRENT_PROCESS_VERIFIED_NO_UNIFIED_SOT`
 
-Required evidence:
+Owner-confirmed current state:
 
-- authoritative order store;
-- stable order id/order number;
-- canonical customer link;
-- order status lifecycle;
-- relevant product/amount/date fields;
-- cancellation/correction behavior;
-- read/sync contract.
+- there is no unified order system;
+- Dongguan and Shantou operate separately;
+- when Dongguan needs Shantou to produce transfer film / fixtures, a production instruction sheet is sent through QQ.
+
+Phase 0 consequence:
+
+- there is no existing canonical order ledger for CPC to duplicate;
+- QQ is a transport channel, not an order database;
+- the production instruction sheet is a current operational artifact;
+- future order/project structure may be created by CPC only if it replaces fragmented work and preserves the existing handoff during transition.
+
+Detailed order lifecycle, identifiers and cutover behavior are Phase 1/2/4 design work, not a remaining Phase 0 evidence blocker.
 
 ### GAP-05 — Quotation source and acceptance semantics
 
-Status: `UNVERIFIED_EXTERNAL`
+Status: `CURRENT_FILE_SOURCE_VERIFIED_NO_STRUCTURED_SOT`
 
-Required evidence:
+Owner-confirmed current state:
 
-- authoritative quote storage;
-- stable quote id and version id;
-- customer/project link;
-- price/currency validity fields needed by CPC;
-- what constitutes customer acceptance;
-- revision/supersession behavior.
+- formal quotations are Excel files;
+- they are stored/shared in WeCom;
+- no structured quote id/version/acceptance system is evidenced.
 
-CPC must not infer acceptance from notes or AI output.
+Phase 0 consequence:
+
+- the quotation file is the current source artifact;
+- CPC must not infer customer acceptance from notes, chat text or AI output;
+- a future structured quotation workflow may add metadata/version/acceptance around the existing file flow, but should not require sales to manually re-enter the same quote.
+
+Exact quote numbering, versioning and acceptance capture are later workflow/schema decisions.
 
 ### GAP-06 — WhatsApp integration scope
 
-Status: `UNVERIFIED_EXTERNAL`
+Status: `V1_BACKLOG_DECIDED`
 
-Required decision/evidence:
+WhatsApp is used operationally for customer follow-up, but Master Checklist V1 already places automatic WhatsApp/WeChat synchronization in backlog.
 
-- whether WhatsApp synchronization is in V1 or backlog;
-- supported account/provider/API;
-- stable customer/contact identifiers;
-- conversation/message identifiers;
-- inbound/outbound sync direction;
-- retention/permission boundary;
-- how a message is linked to canonical customer/project without making chat text an authoritative business fact.
-
-No WhatsApp implementation is evidenced in the repository baseline.
+Therefore Phase 0 does not require provider/contact/message mapping for V1. Future integration must still define permissions, identifiers and confirmation boundaries before chat content can create business facts.
 
 ## Repository gaps that must be resolved during design
 
@@ -145,10 +145,26 @@ Required decision:
 
 ## Phase 0 exit criteria
 
-Phase 0 may move from BLOCKED to PASS only after the PM closes the remaining contract gaps for the now-identified workshop customer/ownership/receipt sources, verifies order and quotation sources, records the WhatsApp V1/backlog decision, and verifies the required external-employee → `profiles.id` identity bridge.
+The current-state audit is now complete enough to proceed:
 
-Until then:
+- customer / ownership / receipt source identified;
+- current order reality identified as no unified SoT;
+- current quotation reality identified as WeCom-hosted Excel artifacts without structured lifecycle truth;
+- WhatsApp V1 automatic sync explicitly remains backlog;
+- employee/profile bridge strategy is explicit.
 
-`PHASE_0_GATE = BLOCKED`
+Therefore:
 
-Formal CPC database/schema/RLS implementation must not start.
+`PHASE_0_GATE = PASS`
+
+This PASS closes the **current-system audit gate only**. It does not start formal database work.
+
+Still required before Phase 4 implementation:
+
+- narrow read/sync boundary for workshop customer/ownership/receipt data;
+- actual external employee id → `profiles.id` mapping rows;
+- org isolation and authorization design;
+- order/quotation structured lifecycle choices produced by Phase 1/2 workflow design;
+- migration/cutover behavior that avoids duplicate employee work.
+
+Formal CPC database/schema/RLS implementation remains blocked by Master Checklist Phases 1–3 and Phase 4 review.
