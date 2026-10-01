@@ -67,7 +67,7 @@ function exactLineSet(body: string): Set<string> {
 export function readyGeneralPublicationComplete(
   pullRequest: ReadyGeneralPublishedPullRequest,
   comments: ReadyGeneralComment[],
-  expected: { taskId: string; baseMasterSha: string },
+  expected: { taskId: string; baseMasterSha: string; taskCommentId: number },
 ): boolean {
   const branch = buildReadyGeneralBranchName(expected.taskId, expected.baseMasterSha);
   if (!branch
@@ -82,6 +82,7 @@ export function readyGeneralPublicationComplete(
   const requiredPrLines = [
     `TASK_ID = ${expected.taskId}`,
     `BASE_MASTER_SHA = ${expected.baseMasterSha}`,
+    `TASK_COMMENT_ID = ${expected.taskCommentId}`,
     `BRANCH = ${branch}`,
     `HEAD_SHA = ${pullRequest.headSha}`,
     'AUTO_MERGE = false',
