@@ -13,16 +13,14 @@ Verified external evidence: the Hongda workshop/finance production tool persists
 
 Remaining evidence before schema work:
 
-- authoritative system/file/API name and owner;
-- stable customer identifier;
-- customer fields CPC may read;
+- business approval that the workshop customer pool is the canonical customer source CPC should reference;
 - branch/org scope;
 - duplicate/merge semantics;
 - read/write direction;
 - deletion/archive semantics;
-- example records or machine-readable schema sufficient to verify mapping.
+- a narrow supported read/export contract instead of coupling CPC to the generic whole-state `/api/data` payload.
 
-Without this, CPC cannot safely create a durable customer reference.
+Until these are closed, CPC may design only a reference boundary, not a competing customer authority.
 
 ### GAP-02 — Customer ownership
 
@@ -32,13 +30,11 @@ Verified external evidence: workshop customer records carry `projectOwnerId/proj
 
 Remaining evidence:
 
-- which system is authoritative;
-- ownership key and stable responsible-person identifier;
-- relationship to canonical customer id;
+- business approval that workshop customer ownership is the ownership authority CPC should reference;
 - reassignment workflow;
 - whether ownership history is retained;
 - effective-date semantics;
-- mapping from external responsible person to repository `profiles.id`.
+- mapping from workshop employee `E...` identifiers to repository `profiles.id`.
 
 CPC Project Owner must remain separate from customer ownership.
 
@@ -51,12 +47,11 @@ Verified external evidence: workshop `receiptRecords` uses stable `RCP...` IDs, 
 Remaining evidence:
 
 - business approval of the workshop receipt store as the integration authority;
-- correction/reversal/void/refund semantics;
-- currency semantics and, if available, order link;
-- amount/currency/date/status fields;
-- reversal/correction semantics;
-- attribution rules used for reporting/commission where relevant;
-- refresh/synchronization contract.
+- currency semantics;
+- correction/reversal/void/refund semantics and immutable correction history;
+- order linkage once the authoritative order source is mapped;
+- attribution/reconciliation rules CPC may use for derived reporting;
+- a narrow supported read/synchronization contract.
 
 No CPC financial ledger should be created before this is verified.
 
