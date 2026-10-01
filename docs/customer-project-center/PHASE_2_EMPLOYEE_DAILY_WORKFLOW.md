@@ -37,9 +37,18 @@ The queue may contain:
 - project/customer waiting checks whose `next_check_at` is due;
 - blocked items needing an employee action;
 - active Projects with no valid next action/check;
-- stale active Projects that exceeded the agreed no-progress threshold;
-- customer-level old-customer FOLLOW_UP due today;
+- stale active Projects that exceeded an approved no-progress threshold;
+- customer-level old-customer FOLLOW_UP already due under an approved cadence/source;
 - explicit MANAGEMENT_DECISION items assigned back to the employee.
+
+Priority classes are frozen at workflow level:
+
+1. `P0 commitment/critical`: overdue or due-today customer commitments, delivery/order-critical blockers, and explicit management decisions blocking delivery or customer commitment;
+2. `P1 due work`: overdue/due NEXT_ACTION and due waiting/check states;
+3. `P2 project hygiene`: active Projects missing a valid next action/check, then stale active Projects;
+4. `P3 relationship work`: already-due customer-level old-customer follow-up.
+
+Exact scoring, stale-day thresholds, and old-customer cadence values are configuration/policy decisions for later phases. Phase 2 does not invent them.
 
 Morning behavior:
 
@@ -60,8 +69,8 @@ The employee does not manually rewrite a daily plan from scratch.
 | --- | --- |
 | Remembering projects from chat history or memory | Derived Today queue |
 | Manually making a separate personal to-do list for project work | Confirm/use NEXT_ACTION queue |
-| Manager asking each person “what are you doing today?” | Management reads derived queue/exceptions |
-| Rechecking every old customer manually | Only due customer-level FOLLOW_UP appears |
+| Repeated manual status chasing about “what are you advancing today?” | Management reads derived queue/exceptions |
+| Manually scanning the whole customer list to remember follow-up | Only already-due customer-level FOLLOW_UP appears |
 
 ## 4. WORKING_FLOW
 
@@ -159,6 +168,8 @@ For a repeat/reorder:
 
 Routine old-customer outreach stays customer-level.
 
+Phase 2 consumes only follow-up that is already due from an approved cadence, explicit employee schedule, or later approved old-customer policy. It does not mass-create follow-up tasks for every old customer.
+
 The employee may record:
 - meaningful relationship follow-up result;
 - next relationship action;
@@ -168,7 +179,13 @@ Only when a concrete commercial opportunity appears does the employee create a P
 
 Promotion from customer follow-up to Project should reuse the existing customer and recent confirmed context rather than require duplicate re-entry.
 
-### 4.9 New Project creation
+### 4.9 Order / production handoff boundary
+
+After human-confirmed order evidence, CPC may create the next owner action or an internal collaboration/handoff item. It does not treat current QQ production-instruction traffic as the canonical order ledger.
+
+The existing Dongguan-to-Shantou production-instruction handoff remains usable during transition until a later approved workflow replaces it. Employees should not re-enter the same production instruction solely to satisfy CPC.
+
+### 4.10 New Project creation
 
 Create a Project only when the Phase 1 creation invariant is satisfied:
 
@@ -188,7 +205,7 @@ Project creation should capture these in one guided action, not as a multi-form 
 | --- | --- |
 | Confirm meaningful progress + next action together | Separate progress log + task creation + daily report entry |
 | Set waiting_on + next_check_at | Repeated self-reminders and duplicate follow-up tasks |
-| Confirm formal quote sent | Separate quotation-status spreadsheet entry |
+| Confirm formal quote sent | Avoids adding a second CPC-only quotation-status re-entry |
 | Create internal collaboration item | Chat-only handoff with no clear owner/due/result |
 | Customer-level old-customer follow-up | Creating fake Projects just to remember a relationship |
 | Promote concrete opportunity to Project | Re-entering customer and recent follow-up context |
@@ -215,9 +232,9 @@ Employee actions should be limited to:
 2. correct wrong or incomplete confirmed facts;
 3. reschedule/cancel tasks with a reason where necessary;
 4. resolve important unknowns;
-5. confirm that the system-generated day summary is materially correct.
+5. make one confirmation that the derived day summary is materially correct.
 
-If all work was captured during the day, end-of-day should require little or no typing.
+If all work was captured during the day, end-of-day should require no project-by-project rewriting and normally only a brief exception check plus one confirmation.
 
 ### END_OF_DAY_FLOW replaces
 
@@ -287,7 +304,7 @@ Management signals should focus on:
 
 Phase 2 workflow is considered coherent only if these scenarios work without duplicate entry:
 
-1. New-media lead becomes a concrete transfer-film opportunity.
+1. New-media lead remains acquisition-side until it becomes a concrete transfer-film opportunity; only then is a Project created.
 2. Existing customer routine follow-up produces no opportunity.
 3. Existing customer follow-up produces a repeat transfer-film order with unchanged artwork/process.
 4. Existing customer reorder changes material/artwork and returns to validation.
@@ -295,8 +312,9 @@ Phase 2 workflow is considered coherent only if these scenarios work without dup
 6. Customer confirms sample; owner creates next action in the same confirmation.
 7. Owner needs technical support; collaborator receives one internal task while Project ownership stays unchanged.
 8. Equipment opportunity moves through validation and human-confirmed commercial confirmation.
-9. Employee works all day and end-of-day report is generated without retyping progress.
-10. Active Project has no next action/check and is surfaced as an exception before day end.
+9. Confirmed order needs Dongguan-to-Shantou production handoff without CPC pretending QQ is an order SoT.
+10. Employee works all day and end-of-day report is generated without retyping progress.
+11. Active Project has no next action/check and is surfaced as an exception before day end.
 
 ## 11. Phase 2 gate
 
