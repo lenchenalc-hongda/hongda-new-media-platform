@@ -10,7 +10,18 @@ const ci = fs.readFileSync('.github/workflows/ci.yml', 'utf8');
 const schema = JSON.parse(fs.readFileSync(
   'scripts/agent-control/codex-ready-general-output.schema.json',
   'utf8',
-)) as { additionalProperties?: boolean; required?: string[] };
+)) as {
+  type?: string;
+  additionalProperties?: boolean;
+  required?: string[];
+  properties?: Record<string, {
+    type?: string;
+    enum?: string[];
+    items?: { type?: string };
+    [key: string]: unknown;
+  }>;
+  [key: string]: unknown;
+};
 
 let passed = 0;
 function check(value: unknown, name: string) {
@@ -154,10 +165,37 @@ check(publisher.includes('AUTO_MERGE = false')
   && publisher.includes('RLS_CHANGED = NO'),
   'Completion Contract preserves merge and Production gates');
 
-check(schema.additionalProperties === false
+check(schema.type === 'object'
+  && schema.additionalProperties === false
+  && schema.required?.length === 6
   && schema.required?.includes('changed_paths')
-  && schema.required?.includes('acceptance_sentinel'),
-  'Codex output schema is strict and requires proof fields');
+  && schema.required?.includes('acceptance_sentinel')
+  && schema.properties?.status?.type === 'string'
+  && schema.properties?.status?.enum?.includes('PASS') === true
+  && schema.properties?.task_id?.type === 'string'
+  && schema.properties?.base_master_sha?.type === 'string'
+  && schema.properties?.changed_paths?.type === 'array'
+  && schema.properties?.changed_paths?.items?.type === 'string'
+  && schema.properties?.workspace_write_confirmed?.type === 'boolean'
+  && schema.properties?.acceptance_sentinel?.type === 'string',
+  'Codex output schema uses the portable strict Structured Outputs subset');
+const serializedSchema = JSON.stringify(schema);
+check(!serializedSchema.includes('"$schema"')
+  && !serializedSchema.includes('"const"')
+  && !serializedSchema.includes('"minLength"')
+  && !serializedSchema.includes('"maxLength"')
+  && !serializedSchema.includes('"pattern"')
+  && !serializedSchema.includes('"minItems"')
+  && !serializedSchema.includes('"maxItems"')
+  && !serializedSchema.includes('"uniqueItems"'),
+  'Codex output schema avoids compatibility-sensitive constraints');
+check(isolated.includes('result["status"] == "PASS"')
+  && isolated.includes('result["task_id"] == ARGV[1]')
+  && isolated.includes('result["base_master_sha"] == ARGV[2]')
+  && isolated.includes('result["changed_paths"].sort == expected_paths')
+  && isolated.includes('result["workspace_write_confirmed"] == true')
+  && isolated.includes('result["acceptance_sentinel"] == "CODEX_READY_GENERAL_PROOF=PASS"'),
+  'exact READY acceptance identity remains enforced after model output');
 check(ci.includes('tests/unit/agent-control-ready-general-runner.test.ts'),
   'normal CI runs general READY runner safety tests');
 
