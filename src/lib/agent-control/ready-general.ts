@@ -2,6 +2,7 @@ import { TextDecoder } from 'node:util';
 
 export const READY_GENERAL_SENTINEL = 'AGENT_CONTROL_READY_TASK_V1';
 export const READY_GENERAL_TRUSTED_AUTHOR = 'lenchenalc-hongda';
+export const READY_GENERAL_WRITER_BOT = 'hongda-agent-control-writer[bot]';
 export const READY_GENERAL_MAX_COMMENT_BYTES = 20_000;
 export const READY_GENERAL_MAX_OBJECTIVE_BYTES = 4_000;
 export const READY_GENERAL_MAX_FILES = 6;
@@ -29,6 +30,17 @@ export interface ReadyGeneralComment {
   body: string;
 }
 
+export interface ReadyGeneralPublishedPullRequest {
+  number: number;
+  state: 'open' | 'closed';
+  draft: boolean;
+  headBranch: string;
+  headSha: string;
+  baseBranch: string;
+  authorLogin: string;
+  body: string;
+}
+
 const taskIdPattern = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
 const shaPattern = /^[0-9a-f]{40}$/;
 const allowedChecks: ReadyGeneralCheck[] = [
@@ -39,6 +51,60 @@ const fields = [
   'TASK_ID', 'TASK_STATUS', 'BASE_MASTER_SHA',
   'ALLOWED_PATHS_JSON', 'CHECKS', 'OBJECTIVE_B64',
 ] as const;
+
+export function buildReadyGeneralBranchName(
+  taskId: string,
+  baseMasterSha: string,
+): string | null {
+  if (!taskIdPattern.test(taskId) || !shaPattern.test(baseMasterSha)) return null;
+  return `codex/agent-control-ready-general-${taskId.toLowerCase()}-${baseMasterSha.slice(0, 12)}`;
+}
+
+function exactLineSet(body: string): Set<string> {
+  return new Set(body.replace(/\r\n/g, '\n').split('\n'));
+}
+
+export function readyGeneralPublicationComplete(
+  pullRequest: ReadyGeneralPublishedPullRequest,
+  comments: ReadyGeneralComment[],
+  expected: { taskId: string; baseMasterSha: string },
+): boolean {
+  const branch = buildReadyGeneralBranchName(expected.taskId, expected.baseMasterSha);
+  if (!branch
+    || pullRequest.state !== 'open'
+    || pullRequest.draft !== true
+    || pullRequest.authorLogin !== READY_GENERAL_WRITER_BOT
+    || pullRequest.baseBranch !== 'master'
+    || pullRequest.headBranch !== branch
+    || !shaPattern.test(pullRequest.headSha)) return false;
+
+  const prLines = exactLineSet(pullRequest.body);
+  const requiredPrLines = [
+    `TASK_ID = ${expected.taskId}`,
+    `BASE_MASTER_SHA = ${expected.baseMasterSha}`,
+    `BRANCH = ${branch}`,
+    `HEAD_SHA = ${pullRequest.headSha}`,
+    'AUTO_MERGE = false',
+    'AUTO_PRODUCTION = false',
+  ];
+  if (!requiredPrLines.every(line => prLines.has(line))) return false;
+
+  return comments.some(comment => {
+    if (comment.authorLogin !== READY_GENERAL_WRITER_BOT) return false;
+    const lines = exactLineSet(comment.body);
+    return [
+      `TASK_ID = ${expected.taskId}`,
+      'TASK_STATUS = PASS',
+      `BASE_MASTER_SHA = ${expected.baseMasterSha}`,
+      `BRANCH = ${branch}`,
+      `HEAD_SHA = ${pullRequest.headSha}`,
+      `PR_NUMBER = ${pullRequest.number}`,
+      'READY_FOR_PM_REVIEW = YES',
+      'AUTO_MERGE = false',
+      'AUTO_PRODUCTION = false',
+    ].every(line => lines.has(line));
+  });
+}
 
 export function isAllowedReadyGeneralPath(filePath: string): boolean {
   if (filePath.length > 200 || filePath.includes('\\') || filePath.includes('\0')) return false;
