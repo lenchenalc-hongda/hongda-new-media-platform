@@ -86,10 +86,14 @@ mutated in place.
 
 ### DEC-014: Project stage strategy
 
-Common lifecycle is shared. Stage codes are type-specific and configurable.
-Exact stage lists are not frozen and must not become database enum constraints
-in the next batch. Repeat transfer-film business must not be forced through
-equipment-style stages.
+Common lifecycle is shared. Stage is operational position and remains separate
+from lifecycle status. Stage codes are type-specific configurable strings and
+must not become database enum constraints. Repeat transfer-film business must
+not be forced through equipment-style stages.
+
+The exact V1 stage profiles are governed separately by the Phase 1 merge-gated
+decision below so this previously approved strategy does not pre-approve the
+new profile values before owner merge.
 
 ### DEC-015: Low-friction modernization over process preservation
 
@@ -131,13 +135,44 @@ Implications:
 
 WhatsApp remains an operational communication channel. Automatic customer/conversation synchronization is not required for V1 and does not block Phase 0.
 
-## Deferred decisions
+## Phase 1 merge-gated decisions
 
-### DEFERRED-001: Exact project stage profiles
+Approval rule for `CPC-P1-BUSINESS-MODEL-FREEZE-001`: while these entries are
+on an unmerged PR they are candidates; owner merge of that PR is the approval
+act. Once the same entries are present on master through that owner merge, they
+are approved decisions.
 
-Exact stage values for transfer film, transfer processing, equipment, UV, and
-other project types are deferred until pilot/workflow validation. This deferral
-does not block the v1 domain contract freeze.
+### DEC-019: Customer-level follow-up versus Project creation
+
+Routine old-customer relationship follow-up stays customer-level. Create a
+Project only when a concrete commercial opportunity exists. Customer-level
+ProjectEvent/WorkItem may carry `customer_reference_id` with `project_id = null`.
+
+### DEC-020: Repeat/reorder fast path
+
+Repeat/reorder work may start at a later valid type-specific stage only when
+existing specification, artwork, material, process, fixture, application
+requirements, quality requirements, and risk facts remain unchanged. Relevant
+changes return the work to the applicable validation stage.
+
+### DEC-021: Frozen V1 stage profiles
+
+Freeze the five Phase 1 V1 stage profiles in
+`PHASE_1_BUSINESS_MODEL_FREEZE.md`. Stage codes remain configurable strings,
+not database enums.
+
+### DEC-022: NEXT_ACTION single source
+
+`WorkItem NEXT_ACTION` is the actionable task source of truth.
+`Project.next_action_summary` is a projection/summary only. Waiting is modeled
+with `waiting_on` plus `next_check_at` without duplicate reminder rows.
+
+## Resolved deferrals
+
+### DEFERRED-001: Exact project stage profiles — resolved by DEC-021 on owner merge
+
+The previous stage-profile deferral is resolved by DEC-021 when the Phase 1
+Draft PR is owner-merged. Before merge, the prior deferral remains in force.
 
 ## Change rule
 
