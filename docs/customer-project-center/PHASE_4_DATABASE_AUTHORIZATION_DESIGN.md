@@ -176,7 +176,10 @@ Constraints:
 - lifecycle: `active | paused | won | lost | cancelled`;
 - stage stored as non-empty TEXT, never a PostgreSQL enum;
 - stage validity against the approved project-type profile is validated by mutation functions/domain validators;
+- title and objective_summary are non-empty after trim;
 - expected amount and currency appear together or both are null;
+- expected_amount_minor, when present, is >= 0;
+- currency, when present, is a normalized three-letter uppercase code;
 - paused requires `next_check_at`;
 - same-org CustomerReference;
 - same-org owner/creator profile;
@@ -190,6 +193,8 @@ An active Project must end each successful mutation with either:
 2. an explicit waiting state plus `next_check_at`.
 
 A provisional CustomerReference cannot transition the Project to `won`.
+
+A transition to terminal lifecycle `won | cancelled`, or to a closed/lost state with no active follow-up intent, must resolve any open Project NEXT_ACTION and waiting/check state in the same domain transaction so terminal Projects do not remain in the active Today queue. Reopening `lost -> active` re-establishes the active invariant.
 
 ### 4.4 cpc_project_members
 
@@ -537,7 +542,9 @@ Candidate names:
 
 - `cpc_create_provisional_customer_reference`
 - `cpc_map_customer_reference`
+- `cpc_manage_external_profile_mapping` — admin-only
 - `cpc_create_project`
+- `cpc_reassign_project_owner` — manager/admin, strong-audit
 - `cpc_record_progress`
 - `cpc_set_waiting_state`
 - `cpc_transition_project`
@@ -567,6 +574,32 @@ This implements Phase 2 "one confirmation, many uses."
 ## 8. RLS read policy
 
 All tables enable RLS.
+
+Cross-org is always denied.
+
+Authenticated/anon table grants and policies:
+
+- `anon`: no CPC table access and no CPC mutation-function execute grants;
+- `authenticated`: no direct INSERT/UPDATE/DELETE privilege path for formal CPC tables;
+- ordinary authenticated mutations happen only through explicitly granted narrow RPCs;
+- direct table SELECT is allowed only where the table's RLS policy below permits it;
+- security-definer mutation owners are not a reason to expose broad table grants.
+
+Table read policy intent:
+
+| Table | admin | manager | sales | operator/viewer |
+| --- | --- | --- | --- | --- |
+| cpc_customer_references | same-org | same-org | relation helper only | deny |
+| cpc_external_profile_mappings | same-org read | same-org read | no direct read | deny |
+| cpc_projects | same-org | same-org | relation helper only | deny |
+| cpc_project_members | same-org | same-org | only for readable Project | deny |
+| cpc_project_events | same-org | same-org | only through readable Customer/Project relation | deny |
+| cpc_work_items | same-org | same-org | assignee/creator or readable parent relation | deny |
+| cpc_ai_drafts | same-org | same-org | creator/authorized resource relation | deny |
+| cpc_reports | same-org | same-org | own subject reports only | deny |
+| cpc_audit_log | same-org | same-org | no direct raw-audit access | deny |
+
+Sales-facing history required by the product should be returned through domain-specific Project/WorkItem history read models rather than exposing the generic raw audit table.
 
 Cross-org is always denied.
 
@@ -623,6 +656,8 @@ Candidate internal helpers:
 
 Helpers must be same-org aware and fail closed.
 
+Profile-id arguments shown above are internal helper contracts, not client authority. Public RPCs derive the actor from auth.uid() and must not trust a caller-supplied actor/profile id.
+
 If implemented as security-definer SQL helpers, recursion/RLS interaction must be tested explicitly.
 
 ## 10. CustomerReference authorization
@@ -643,7 +678,9 @@ Denied:
 
 ### Manager/Admin
 
-May perform canonical mapping/remap only through audited functions using a verified external customer id.
+May perform canonical CustomerReference mapping/remap only through audited functions using a verified external customer id.
+
+External employee/profile identity mapping is stricter: only admin may create/change/deactivate `cpc_external_profile_mappings`, because those rows can affect ownership display and relation-based visibility. Manager may read the mapping for management visibility but cannot mutate it.
 
 A mapping row does not write back to the workshop/finance source.
 
@@ -695,7 +732,15 @@ AI Draft is not an authorization bypass.
 - submitted rows cannot be updated/deleted by any role;
 - correction creates a new draft snapshot.
 
-## 15. Audit and optimistic concurrency
+## 15. Referential and deletion safety
+
+All business parent references use same-org composite foreign keys where applicable.
+
+Default deletion behavior is RESTRICT / NO ACTION for CustomerReference, Project, Event, WorkItem, Report, Audit and profile relations. CPC must not use broad ON DELETE CASCADE to erase business/audit history.
+
+Lifecycle closure, collaborator removal, WorkItem cancellation and mapping deactivation are explicit domain mutations rather than destructive row deletion.
+
+## 16. Audit and optimistic concurrency
 
 Mutable resources carry `version`.
 
@@ -715,7 +760,7 @@ Every successful strong-audit mutation:
 4. appends audit row;
 5. commits atomically.
 
-## 16. Ingestion cursor decision
+## 17. Ingestion cursor decision
 
 Phase 4 resolves the prior cursor technical decision with monotonic sequences.
 
@@ -731,7 +776,7 @@ Reasons:
 
 Timestamps remain business/audit context but are not the only ingestion cursor.
 
-## 17. Source artifact treatment
+## 18. Source artifact treatment
 
 Quotation and production-instruction files remain source artifacts.
 
@@ -748,7 +793,7 @@ Do not copy entire external documents into generic JSON merely to claim structur
 
 Review Center and knowledge associations should link to their existing identifiers when later needed.
 
-## 18. External integration contract
+## 19. External integration contract
 
 ### Workshop/finance customer source
 
@@ -786,7 +831,7 @@ Confirmed order evidence may be represented by a human-confirmed event.
 
 Dongguan -> Shantou production instruction remains an operational source artifact until a future approved workflow replaces it.
 
-## 19. Migration implementation order
+## 20. Migration implementation order
 
 After Phase 4 owner merge, the implementation may be split into bounded PRs.
 
@@ -808,7 +853,7 @@ Each actual migration PR must be separately reviewed.
 
 Phase 4 merge is **not** permission to run Production SQL.
 
-## 20. Migration safety rules
+## 21. Migration safety rules
 
 Every migration implementation must:
 
@@ -820,7 +865,7 @@ Every migration implementation must:
 - run schema/RLS tests before any Production approval;
 - require explicit owner approval before Production SQL/RLS execution.
 
-## 21. No generic service-role shortcut
+## 22. No generic service-role shortcut
 
 Ordinary CPC user actions must not use a service-role client to bypass RLS.
 
@@ -834,7 +879,7 @@ Server-side elevated credentials may only be introduced for a separately approve
 
 Phase 4 does not approve such a Production integration job.
 
-## 22. Test matrix required before Phase 5 persistence
+## 23. Test matrix required before Phase 5 persistence
 
 ### Tenant isolation
 
@@ -844,11 +889,15 @@ Phase 4 does not approve such a Production integration job.
 
 ### Role/resource access
 
+- anon denied everywhere;
+- authenticated direct DML denied outside narrow RPCs;
 - admin/manager same-org read;
 - sales owner read/write allowed only for approved intents;
 - collaborator limited correctly;
 - assignee limited correctly;
 - unrelated sales denied;
+- raw audit denied to sales;
+- external profile mapping mutation admin-only;
 - operator/viewer denied.
 
 ### CustomerReference
@@ -864,8 +913,11 @@ Phase 4 does not approve such a Production integration job.
 
 - project type/lifecycle validation;
 - stage validated against project type in mutation layer;
+- title/objective non-empty;
+- amount non-negative and amount/currency pair valid;
 - paused requires check date;
 - active invariant requires one open NEXT_ACTION or waiting/check;
+- terminal transition resolves active NEXT_ACTION/waiting state;
 - Project owner is not collaborator;
 - version conflicts fail.
 
@@ -919,7 +971,7 @@ Tests/document assertions must confirm that Phase 4 does not introduce:
 - third Lead store;
 - CPC copies of Review Center/knowledge.
 
-## 23. Phase 4 implementation boundary
+## 24. Phase 4 implementation boundary
 
 After Phase 4 Gate passes, Phase 5 may begin implementing the **V1 core project system** using this design.
 
@@ -927,7 +979,7 @@ Phase 5 implementation still requires bounded migrations and code PRs.
 
 Production remains separately gated.
 
-## 24. Gate
+## 25. Gate
 
 `SCHEMA = PASS_CANDIDATE`
 
