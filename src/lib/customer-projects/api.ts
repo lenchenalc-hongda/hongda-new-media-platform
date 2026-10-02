@@ -1,0 +1,489 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { z } from 'zod';
+import { createClient } from '@/lib/supabase/server';
+import {
+  PROJECT_EVENT_TYPES,
+  PROJECT_LIFECYCLE_STATUSES,
+  PROJECT_PRIORITIES,
+  PROJECT_TYPES,
+  WAITING_ON_VALUES,
+  WORK_ITEM_STATUSES,
+} from './domain';
+import { expectedVersionSchema, isoDateTimeSchema, uuidSchema } from './schemas';
+
+export type CpcProfile = {
+  id: string;
+  orgId: string;
+  role: 'admin' | 'manager' | 'sales';
+};
+
+export type CpcMutationCommand =
+  | 'CREATE_PROVISIONAL_CUSTOMER'
+  | 'CREATE_PROJECT'
+  | 'RECORD_PROGRESS'
+  | 'SET_WAITING'
+  | 'TRANSITION_WORK_ITEM'
+  | 'TRANSITION_PROJECT';
+
+type RpcResult = {
+  data?: any;
+  error?: {
+    code?: string;
+    message?: string;
+    details?: string;
+    hint?: string;
+  } | null;
+};
+
+const cpcRoleSchema = z.enum(['admin', 'manager', 'sales']);
+
+const createProvisionalSchema = z.object({
+  displayNameSnapshot: z.string().trim().min(1).max(300),
+  provisionalSourceReference: z.string().trim().min(1).max(300),
+}).strict();
+
+const createProjectSchema = z.object({
+  customerReferenceId: uuidSchema,
+  title: z.string().trim().min(1).max(300),
+  objectiveSummary: z.string().trim().min(1).max(2000),
+  projectType: z.enum(PROJECT_TYPES),
+  stage: z.string().trim().min(1).max(100),
+  priority: z.enum(PROJECT_PRIORITIES),
+  ownerProfileId: uuidSchema.nullable().optional(),
+  initialNextActionTitle: z.string().trim().min(1).max(300).nullable().optional(),
+  initialNextActionDueAt: isoDateTimeSchema.nullable().optional(),
+  waitingOn: z.enum(WAITING_ON_VALUES).default('none'),
+  nextCheckAt: isoDateTimeSchema.nullable().optional(),
+}).strict();
+
+const progressEventTypes = PROJECT_EVENT_TYPES.filter(eventType => [
+  'CONTACT_LOGGED',
+  'EFFECTIVE_PROGRESS_RECORDED',
+  'CUSTOMER_RESPONSE_RECEIVED',
+  'QUOTE_SENT',
+  'SAMPLE_SENT',
+  'CUSTOMER_CONFIRMED',
+  'COMMERCIAL_CONFIRMED',
+  'ORDER_CONFIRMED',
+].includes(eventType)) as [
+  'CONTACT_LOGGED',
+  ...Array<
+    | 'EFFECTIVE_PROGRESS_RECORDED'
+    | 'CUSTOMER_RESPONSE_RECEIVED'
+    | 'QUOTE_SENT'
+    | 'SAMPLE_SENT'
+    | 'CUSTOMER_CONFIRMED'
+    | 'COMMERCIAL_CONFIRMED'
+    | 'ORDER_CONFIRMED'
+  >,
+];
+
+const progressSchema = z.object({
+  expectedVersion: expectedVersionSchema,
+  eventType: z.enum(progressEventTypes),
+  rawInput: z.string().trim().min(1).max(10000).nullable().optional(),
+  payload: z.record(z.string(), z.unknown()).default({}),
+  occurredAt: isoDateTimeSchema.nullable().optional(),
+  newStage: z.string().trim().min(1).max(100).nullable().optional(),
+  nextActionTitle: z.string().trim().min(1).max(300).nullable().optional(),
+  nextActionDueAt: isoDateTimeSchema.nullable().optional(),
+  waitingOn: z.enum(WAITING_ON_VALUES).nullable().optional(),
+  nextCheckAt: isoDateTimeSchema.nullable().optional(),
+}).strict();
+
+const waitingValues = WAITING_ON_VALUES.filter(value => value !== 'none') as [
+  'customer',
+  ...Array<'internal' | 'supplier' | 'quality' | 'finance' | 'logistics' | 'other'>,
+];
+
+const waitingSchema = z.object({
+  expectedVersion: expectedVersionSchema,
+  waitingOn: z.enum(waitingValues),
+  nextCheckAt: isoDateTimeSchema,
+  reason: z.string().trim().min(1).max(2000),
+}).strict();
+
+const transitionableWorkItemStatuses = WORK_ITEM_STATUSES.filter(status =>
+  ['in_progress', 'blocked', 'completed', 'cancelled'].includes(status),
+) as ['in_progress', ...Array<'blocked' | 'completed' | 'cancelled'>];
+
+const workItemTransitionSchema = z.object({
+  expectedVersion: expectedVersionSchema,
+  toStatus: z.enum(transitionableWorkItemStatuses),
+  reason: z.string().trim().min(1).max(2000).nullable().optional(),
+}).strict();
+
+const transitionableProjectStatuses = PROJECT_LIFECYCLE_STATUSES.filter(status =>
+  ['active', 'paused', 'won', 'lost', 'cancelled'].includes(status),
+) as ['active', ...Array<'paused' | 'won' | 'lost' | 'cancelled'>];
+
+const projectTransitionSchema = z.object({
+  expectedVersion: expectedVersionSchema,
+  toStatus: z.enum(transitionableProjectStatuses),
+  reason: z.string().trim().min(1).max(2000).nullable().optional(),
+  pauseNextCheckAt: isoDateTimeSchema.nullable().optional(),
+  reopenNextActionTitle: z.string().trim().min(1).max(300).nullable().optional(),
+  reopenNextActionDueAt: isoDateTimeSchema.nullable().optional(),
+  reopenWaitingOn: z.enum(WAITING_ON_VALUES).nullable().optional(),
+  reopenNextCheckAt: isoDateTimeSchema.nullable().optional(),
+}).strict();
+
+const COMMAND_SCHEMA = {
+  CREATE_PROVISIONAL_CUSTOMER: createProvisionalSchema,
+  CREATE_PROJECT: createProjectSchema,
+  RECORD_PROGRESS: progressSchema,
+  SET_WAITING: waitingSchema,
+  TRANSITION_WORK_ITEM: workItemTransitionSchema,
+  TRANSITION_PROJECT: projectTransitionSchema,
+} as const;
+
+const LOCAL_MESSAGES: Record<string, string> = {
+  FORBIDDEN: '无权执行此客户项目操作',
+  NOT_FOUND: '记录不存在或无权访问',
+  VERSION_CONFLICT: '记录已被其他操作更新，请刷新后重试',
+  INVALID_TRANSITION: '当前状态不允许执行此操作',
+  INVALID_PROJECT_STATE: '当前项目状态不允许执行此操作',
+  INVALID_INPUT: '提交内容无效',
+  INVALID_STAGE: '项目阶段不合法',
+  INVALID_PRIORITY: '项目优先级不合法',
+  INVALID_OWNER: '项目负责人无效',
+  INVALID_NEXT_STEP: '下一步任务或等待状态不合法',
+  NEXT_STEP_REQUIRED: '活跃项目必须保留下一步任务或明确等待/检查状态',
+  INVALID_EVENT_TYPE: '推进事件类型不合法',
+  INVALID_EVENT_PAYLOAD: '推进证据或事件内容不完整',
+  INVALID_WAITING_STATE: '等待状态不合法',
+  REASON_REQUIRED: '该操作必须填写原因',
+  NEXT_CHECK_REQUIRED: '该状态必须设置下一次检查时间',
+  INVALID_CUSTOMER_REFERENCE: '客户引用当前不可用于此操作',
+  DUPLICATE_REFERENCE: '该临时客户来源已存在',
+  CANONICAL_CUSTOMER_REQUIRED: '项目成交前必须先映射到正式客户',
+  ORDER_CONFIRMATION_REQUIRED: '项目成交前必须先确认订单证据',
+  INTERNAL_ERROR: '客户项目操作失败，请稍后重试',
+};
+
+function jsonError(message: string, status: number) {
+  return NextResponse.json({ error: message }, { status });
+}
+
+function internalError() {
+  return {
+    status: 500,
+    body: {
+      ok: false,
+      code: 'INTERNAL_ERROR',
+      message: LOCAL_MESSAGES.INTERNAL_ERROR,
+      data: null,
+    },
+  };
+}
+
+export async function resolveCpcProfile(client: any): Promise<
+  | { ok: true; profile: CpcProfile }
+  | { ok: false; status: number; message: string }
+> {
+  let authUserId: string | null = null;
+  try {
+    const authResult = await client.auth.getUser();
+    authUserId = typeof authResult?.data?.user?.id === 'string'
+      ? authResult.data.user.id
+      : null;
+  } catch {
+    return { ok: false, status: 401, message: '未登录或无权限' };
+  }
+
+  if (!authUserId) {
+    return { ok: false, status: 401, message: '未登录或无权限' };
+  }
+
+  const profileResult = await client
+    .from('profiles')
+    .select('id,org_id,role')
+    .eq('user_id', authUserId)
+    .eq('is_active', true)
+    .maybeSingle();
+
+  if (profileResult.error || !profileResult.data) {
+    return { ok: false, status: 403, message: '无有效档案' };
+  }
+
+  const parsedRole = cpcRoleSchema.safeParse(profileResult.data.role);
+  if (!parsedRole.success) {
+    return { ok: false, status: 403, message: '无权使用客户项目中心' };
+  }
+
+  if (
+    typeof profileResult.data.id !== 'string'
+    || typeof profileResult.data.org_id !== 'string'
+  ) {
+    return { ok: false, status: 403, message: '无有效档案' };
+  }
+
+  return {
+    ok: true,
+    profile: {
+      id: profileResult.data.id,
+      orgId: profileResult.data.org_id,
+      role: parsedRole.data,
+    },
+  };
+}
+
+function safeString(value: unknown): string | null {
+  return typeof value === 'string' && value.length > 0 ? value : null;
+}
+
+function safePositiveInteger(value: unknown): number | null {
+  return typeof value === 'number'
+    && Number.isInteger(value)
+    && value >= 1
+    ? value
+    : null;
+}
+
+function sanitizeSuccess(command: CpcMutationCommand, raw: unknown): Record<string, unknown> | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const data = raw as Record<string, unknown>;
+
+  if (command === 'CREATE_PROVISIONAL_CUSTOMER') {
+    const id = safeString(data.customer_reference_id);
+    const status = safeString(data.status);
+    const version = safePositiveInteger(data.version);
+    if (!id || !status || !version) return null;
+    return { customerReferenceId: id, status, version };
+  }
+
+  if (command === 'CREATE_PROJECT') {
+    const id = safeString(data.project_id);
+    const version = safePositiveInteger(data.version);
+    if (!id || !version) return null;
+    return {
+      projectId: id,
+      version,
+      nextActionId: safeString(data.next_action_id),
+    };
+  }
+
+  if (command === 'RECORD_PROGRESS') {
+    const id = safeString(data.project_id);
+    const version = safePositiveInteger(data.version);
+    const eventId = safeString(data.event_id);
+    if (!id || !version || !eventId) return null;
+    return {
+      projectId: id,
+      version,
+      eventId,
+      nextActionId: safeString(data.next_action_id),
+      waitingOn: safeString(data.waiting_on),
+      nextCheckAt: safeString(data.next_check_at),
+    };
+  }
+
+  if (command === 'SET_WAITING') {
+    const id = safeString(data.project_id);
+    const version = safePositiveInteger(data.version);
+    const eventId = safeString(data.event_id);
+    const waitingOn = safeString(data.waiting_on);
+    const nextCheckAt = safeString(data.next_check_at);
+    if (!id || !version || !eventId || !waitingOn || !nextCheckAt) return null;
+    return { projectId: id, version, eventId, waitingOn, nextCheckAt };
+  }
+
+  if (command === 'TRANSITION_WORK_ITEM') {
+    const id = safeString(data.work_item_id);
+    const status = safeString(data.status);
+    const version = safePositiveInteger(data.version);
+    if (!id || !status || !version) return null;
+    return { workItemId: id, status, version };
+  }
+
+  const id = safeString(data.project_id);
+  const status = safeString(data.status);
+  const version = safePositiveInteger(data.version);
+  const eventId = safeString(data.event_id);
+  if (!id || !status || !version || !eventId) return null;
+  return {
+    projectId: id,
+    status,
+    version,
+    eventId,
+    nextActionId: safeString(data.next_action_id),
+  };
+}
+
+export function mapCpcRpcResult(
+  command: CpcMutationCommand,
+  result: RpcResult,
+): { status: number; body: Record<string, unknown> } {
+  if (result.error) return internalError();
+
+  const envelope = result.data;
+  if (!envelope || typeof envelope !== 'object') return internalError();
+
+  if (envelope.ok === true && envelope.code === 'OK') {
+    const data = sanitizeSuccess(command, envelope.data);
+    if (!data) return internalError();
+    return {
+      status: 200,
+      body: { ok: true, code: 'OK', message: 'success', data },
+    };
+  }
+
+  const code = typeof envelope.code === 'string' ? envelope.code : 'UNKNOWN';
+  const message = LOCAL_MESSAGES[code] ?? LOCAL_MESSAGES.INTERNAL_ERROR;
+
+  if (code === 'FORBIDDEN') {
+    return { status: 403, body: { ok: false, code, message, data: null } };
+  }
+  if (code === 'NOT_FOUND') {
+    return { status: 404, body: { ok: false, code, message, data: null } };
+  }
+  if (
+    code === 'VERSION_CONFLICT'
+    || code === 'INVALID_TRANSITION'
+    || code === 'INVALID_PROJECT_STATE'
+    || code === 'NEXT_STEP_REQUIRED'
+    || code === 'CANONICAL_CUSTOMER_REQUIRED'
+    || code === 'ORDER_CONFIRMATION_REQUIRED'
+    || code === 'DUPLICATE_REFERENCE'
+  ) {
+    return { status: 409, body: { ok: false, code, message, data: null } };
+  }
+  if (
+    code === 'INVALID_INPUT'
+    || code === 'INVALID_STAGE'
+    || code === 'INVALID_PRIORITY'
+    || code === 'INVALID_OWNER'
+    || code === 'INVALID_NEXT_STEP'
+    || code === 'INVALID_EVENT_TYPE'
+    || code === 'INVALID_EVENT_PAYLOAD'
+    || code === 'INVALID_WAITING_STATE'
+    || code === 'REASON_REQUIRED'
+    || code === 'NEXT_CHECK_REQUIRED'
+    || code === 'INVALID_CUSTOMER_REFERENCE'
+  ) {
+    return { status: 422, body: { ok: false, code, message, data: null } };
+  }
+
+  return internalError();
+}
+
+function commandSchema(command: CpcMutationCommand): z.ZodTypeAny {
+  return COMMAND_SCHEMA[command] as z.ZodTypeAny;
+}
+
+export async function runCpcMutation(
+  req: NextRequest,
+  params: Record<string, string>,
+  command: CpcMutationCommand,
+): Promise<NextResponse> {
+  const idRequired = command === 'RECORD_PROGRESS'
+    || command === 'SET_WAITING'
+    || command === 'TRANSITION_WORK_ITEM'
+    || command === 'TRANSITION_PROJECT';
+
+  let resourceId: string | null = null;
+  if (idRequired) {
+    const parsedId = uuidSchema.safeParse(params.id);
+    if (!parsedId.success) return jsonError('请求参数无效', 400);
+    resourceId = parsedId.data;
+  }
+
+  let rawBody: unknown;
+  try {
+    rawBody = await req.json();
+  } catch {
+    return jsonError('请求体不是有效 JSON', 400);
+  }
+
+  const parsed = commandSchema(command).safeParse(rawBody);
+  if (!parsed.success) return jsonError('提交内容无效', 400);
+
+  const supabase = await createClient();
+  if (!supabase) return jsonError('数据库不可用', 500);
+
+  const profileResult = await resolveCpcProfile(supabase);
+  if (!profileResult.ok) {
+    return jsonError(profileResult.message, profileResult.status);
+  }
+
+  const requestId = crypto.randomUUID();
+  let result: RpcResult;
+
+  try {
+    const body: any = parsed.data;
+
+    if (command === 'CREATE_PROVISIONAL_CUSTOMER') {
+      result = await supabase.rpc('cpc_create_provisional_customer_reference', {
+        p_display_name_snapshot: body.displayNameSnapshot,
+        p_provisional_source_reference: body.provisionalSourceReference,
+        p_request_id: requestId,
+      });
+    } else if (command === 'CREATE_PROJECT') {
+      result = await supabase.rpc('cpc_create_project', {
+        p_customer_reference_id: body.customerReferenceId,
+        p_title: body.title,
+        p_objective_summary: body.objectiveSummary,
+        p_project_type: body.projectType,
+        p_stage: body.stage,
+        p_priority: body.priority,
+        p_owner_profile_id: body.ownerProfileId ?? null,
+        p_initial_next_action_title: body.initialNextActionTitle ?? null,
+        p_initial_next_action_due_at: body.initialNextActionDueAt ?? null,
+        p_waiting_on: body.waitingOn,
+        p_next_check_at: body.nextCheckAt ?? null,
+        p_request_id: requestId,
+      });
+    } else if (command === 'RECORD_PROGRESS') {
+      result = await supabase.rpc('cpc_record_progress', {
+        p_project_id: resourceId,
+        p_expected_version: body.expectedVersion,
+        p_event_type: body.eventType,
+        p_raw_input: body.rawInput ?? null,
+        p_payload: body.payload,
+        p_occurred_at: body.occurredAt ?? null,
+        p_new_stage: body.newStage ?? null,
+        p_next_action_title: body.nextActionTitle ?? null,
+        p_next_action_due_at: body.nextActionDueAt ?? null,
+        p_waiting_on: body.waitingOn ?? null,
+        p_next_check_at: body.nextCheckAt ?? null,
+        p_request_id: requestId,
+      });
+    } else if (command === 'SET_WAITING') {
+      result = await supabase.rpc('cpc_set_waiting_state', {
+        p_project_id: resourceId,
+        p_expected_version: body.expectedVersion,
+        p_waiting_on: body.waitingOn,
+        p_next_check_at: body.nextCheckAt,
+        p_reason: body.reason,
+        p_request_id: requestId,
+      });
+    } else if (command === 'TRANSITION_WORK_ITEM') {
+      result = await supabase.rpc('cpc_transition_work_item', {
+        p_work_item_id: resourceId,
+        p_expected_version: body.expectedVersion,
+        p_to_status: body.toStatus,
+        p_reason: body.reason ?? null,
+        p_request_id: requestId,
+      });
+    } else {
+      result = await supabase.rpc('cpc_transition_project', {
+        p_project_id: resourceId,
+        p_expected_version: body.expectedVersion,
+        p_to_status: body.toStatus,
+        p_reason: body.reason ?? null,
+        p_pause_next_check_at: body.pauseNextCheckAt ?? null,
+        p_reopen_next_action_title: body.reopenNextActionTitle ?? null,
+        p_reopen_next_action_due_at: body.reopenNextActionDueAt ?? null,
+        p_reopen_waiting_on: body.reopenWaitingOn ?? null,
+        p_reopen_next_check_at: body.reopenNextCheckAt ?? null,
+        p_request_id: requestId,
+      });
+    }
+  } catch {
+    const mapped = internalError();
+    return NextResponse.json(mapped.body, { status: mapped.status });
+  }
+
+  const mapped = mapCpcRpcResult(command, result);
+  return NextResponse.json(mapped.body, { status: mapped.status });
+}
