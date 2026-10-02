@@ -6,8 +6,10 @@ import AppLayout from '@/components/layout/AppLayout';
 import PageHeader from '@/components/layout/PageHeader';
 import EmptyState from '@/components/ui/EmptyState';
 import type { WorkbenchSnapshot } from '@/lib/customer-projects/read-models';
+import type { AiSuggestionListItem } from '@/lib/customer-projects/ai-drafts';
 import {
   WAITING_ON_LABELS,
+  PROJECT_PRIORITY_LABELS,
   WORKBENCH_PRIORITY_LABELS,
   WORKBENCH_REASON_LABELS,
   WORK_ITEM_TYPE_LABELS,
@@ -49,6 +51,12 @@ export default function CustomerProjectsPage() {
   const [snapshot, setSnapshot] = useState<WorkbenchSnapshot | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [workbenchRefreshKey, setWorkbenchRefreshKey] = useState(0);
+
+  const [aiSuggestions, setAiSuggestions] = useState<AiSuggestionListItem[]>([]);
+  const [aiLoading, setAiLoading] = useState(true);
+  const [aiError, setAiError] = useState('');
+  const [reviewingAiId, setReviewingAiId] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -93,7 +101,108 @@ export default function CustomerProjectsPage() {
     return () => {
       active = false;
     };
+  }, [workbenchRefreshKey]);
+
+  useEffect(() => {
+    let active = true;
+
+    async function loadAiSuggestions() {
+      setAiLoading(true);
+      try {
+        const response = await fetch('/api/customer-projects/ai-drafts', {
+          cache: 'no-store',
+        });
+        const body = await response.json().catch(() => null);
+
+        if (!active) return;
+
+        if (response.ok && body?.ok === true && Array.isArray(body?.data?.suggestions)) {
+          setAiSuggestions(body.data.suggestions as AiSuggestionListItem[]);
+          setAiError('');
+        } else if (response.status === 401) {
+          setAiError('登录状态已失效，请重新登录。');
+          setAiSuggestions([]);
+        } else if (response.status === 403) {
+          setAiError('你没有权限查看 AI 建议。');
+          setAiSuggestions([]);
+        } else if (response.status === 409) {
+          setAiError(typeof body?.error === 'string'
+            ? body.error
+            : 'AI 建议数量超出安全上限。');
+          setAiSuggestions([]);
+        } else {
+          setAiError('AI 建议加载失败，请稍后重试。');
+          setAiSuggestions([]);
+        }
+      } catch {
+        if (active) {
+          setAiError('AI 建议加载失败，请稍后重试。');
+          setAiSuggestions([]);
+        }
+      } finally {
+        if (active) setAiLoading(false);
+      }
+    }
+
+    void loadAiSuggestions();
+    return () => {
+      active = false;
+    };
   }, []);
+
+  async function reviewAiSuggestion(
+    suggestion: AiSuggestionListItem,
+    decision: 'accept' | 'reject',
+  ) {
+    if (reviewingAiId) return;
+    setReviewingAiId(suggestion.id);
+    setAiError('');
+
+    try {
+      const response = await fetch(
+        '/api/customer-projects/ai-drafts/'
+          + encodeURIComponent(suggestion.id)
+          + '/'
+          + decision,
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            expectedVersion: suggestion.version,
+            ...(decision === 'reject' ? { reason: null } : {}),
+          }),
+        },
+      );
+      const body = await response.json().catch(() => null);
+
+      if (response.ok && body?.ok === true) {
+        setAiSuggestions(current => current.filter(item => item.id !== suggestion.id));
+        if (decision === 'accept') {
+          setWorkbenchRefreshKey(value => value + 1);
+        }
+        return;
+      }
+
+      if (response.status === 409) {
+        setAiError(typeof body?.message === 'string'
+          ? body.message
+          : 'AI 建议状态或业务条件已经变化，请刷新后重试。');
+        setAiSuggestions(current => current.filter(item => item.id !== suggestion.id));
+      } else if (response.status === 422 || response.status === 400) {
+        setAiError(typeof body?.message === 'string'
+          ? body.message
+          : '当前 AI 建议无法转换为正式任务。');
+      } else if (response.status === 403) {
+        setAiError('你没有权限处理这条 AI 建议。');
+      } else {
+        setAiError('AI 建议处理失败，请稍后重试。');
+      }
+    } catch {
+      setAiError('AI 建议处理失败，请稍后重试。');
+    } finally {
+      setReviewingAiId(null);
+    }
+  }
 
   return (
     <AppLayout>
@@ -134,6 +243,125 @@ export default function CustomerProjectsPage() {
               description="未到时间的工作继续保留在任务/等待状态中，不会被提前标成逾期。"
             />
           )}
+        </SectionCard>
+
+        <SectionCard
+          title="AI建议（待确认）"
+          description="AI 只提出建议；只有你明确接受后，才会变成正式 NEXT_ACTION / FOLLOW_UP，并进入任务与提醒。"
+        >
+          {aiLoading ? (
+            <WorkbenchLoading />
+          ) : aiError ? (
+            <div className="space-y-3">
+              <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                {aiError}
+              </div>
+              {aiSuggestions.length === 0 && (
+                <EmptyState title="暂时无法读取 AI 建议" />
+              )}
+            </div>
+          ) : aiSuggestions.length === 0 ? (
+            <EmptyState
+              title="当前没有待确认的 AI 建议"
+              description="系统不会为了凑数量自动生成任务；AI/集成产生真实建议后才会出现在这里。"
+            />
+          ) : (
+            <div className="space-y-3">
+              {aiSuggestions.map(suggestion => (
+                <article
+                  key={suggestion.id}
+                  className="rounded-lg border border-violet-200 bg-violet-50/40 p-4"
+                >
+                  <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="rounded-full bg-violet-100 px-2 py-0.5 text-[11px] font-medium text-violet-700">
+                          AI 建议
+                        </span>
+                        <span className="text-xs font-medium text-gray-600">
+                          {WORK_ITEM_TYPE_LABELS[suggestion.proposal.workItemType]}
+                        </span>
+                        <span className="text-xs text-gray-500">
+                          优先级：{PROJECT_PRIORITY_LABELS[suggestion.proposal.priority]}
+                        </span>
+                      </div>
+
+                      <p className="mt-2 text-sm font-semibold text-gray-800">
+                        {suggestion.proposal.title}
+                      </p>
+
+                      {suggestion.proposal.description && (
+                        <p className="mt-1 text-xs leading-5 text-gray-600">
+                          {suggestion.proposal.description}
+                        </p>
+                      )}
+
+                      <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500">
+                        {suggestion.customerDisplayName && (
+                          <span>客户：{suggestion.customerDisplayName}</span>
+                        )}
+                        {suggestion.projectTitle && (
+                          <span>项目：{suggestion.projectTitle}</span>
+                        )}
+                        {suggestion.proposal.dueAt && (
+                          <span>建议时间：{formatBusinessDateTime(suggestion.proposal.dueAt)}</span>
+                        )}
+                      </div>
+
+                      <p className="mt-2 line-clamp-2 text-[11px] text-gray-400">
+                        建议依据：{suggestion.rawInput}
+                      </p>
+                    </div>
+
+                    <div className="flex shrink-0 flex-wrap items-center gap-2">
+                      {suggestion.projectId ? (
+                        <Link
+                          href={"/customer-projects/projects/" + suggestion.projectId}
+                          className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs text-gray-600 no-underline"
+                        >
+                          看项目
+                        </Link>
+                      ) : suggestion.customerReferenceId ? (
+                        <Link
+                          href={"/customer-projects/customers/" + suggestion.customerReferenceId}
+                          className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs text-gray-600 no-underline"
+                        >
+                          看客户
+                        </Link>
+                      ) : null}
+
+                      {suggestion.canReview ? (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => void reviewAiSuggestion(suggestion, 'reject')}
+                            disabled={reviewingAiId === suggestion.id}
+                            className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs text-gray-600"
+                          >
+                            忽略建议
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void reviewAiSuggestion(suggestion, 'accept')}
+                            disabled={reviewingAiId === suggestion.id}
+                            className="rounded-lg bg-violet-700 px-3 py-1.5 text-xs font-medium text-white"
+                          >
+                            {reviewingAiId === suggestion.id ? '处理中...' : '接受为正式任务'}
+                          </button>
+                        </>
+                      ) : (
+                        <span className="text-xs text-gray-400">仅可查看</span>
+                      )}
+                    </div>
+                  </div>
+                </article>
+              ))}
+            </div>
+          )}
+
+          <p className="mt-3 text-xs text-gray-400">
+            AI 建议本身不算逾期、不算未履约，也不进入员工绩效；接受后才成为正式业务动作。
+          </p>
         </SectionCard>
 
         <SectionCard
