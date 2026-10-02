@@ -137,7 +137,7 @@ export const PORTAL_GROUPS: PortalGroup[] = [
     color: 'cyan',
     items: [
       { label: '我的工作台', path: '/customer-projects', icon: '🏠', matchExact: true },
-      { label: '客户', path: '/customer-projects/customers', icon: '👥', disabled: true },
+      { label: '客户', path: '/customer-projects/customers', icon: '👥' },
       { label: '项目', path: '/customer-projects/projects', icon: '📁' },
       { label: '我的任务', path: '/customer-projects/tasks', icon: '✅' },
       { label: '我的报告', path: '/customer-projects/reports', icon: '📝', disabled: true },
