@@ -151,6 +151,25 @@ export const projectEventSchema = z.object({
     });
   }
   if (
+    [
+      'QUOTE_SENT',
+      'SAMPLE_SENT',
+      'CUSTOMER_CONFIRMED',
+      'COMMERCIAL_CONFIRMED',
+      'ORDER_CONFIRMED',
+    ].includes(event.event_type)
+    && (
+      typeof event.payload.evidence_reference !== 'string'
+      || event.payload.evidence_reference.trim().length === 0
+    )
+  ) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['payload', 'evidence_reference'],
+      message: 'commercial confirmation events require payload.evidence_reference',
+    });
+  }
+  if (
     event.event_type === 'PROJECT_PAUSED'
     && (
       typeof event.payload.pause_reason !== 'string'
