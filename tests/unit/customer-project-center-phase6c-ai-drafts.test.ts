@@ -140,8 +140,9 @@ for (const dangerous of [
   'ORDER_CONFIRMED',
   'CUSTOMER_CONFIRMED',
   'expected_amount_minor',
-  'owner_profile_id =',
-  'external_owner_reference =',
+  'SET owner_profile_id',
+  'SET external_owner_reference',
+  'UPDATE public.cpc_customer_references',
 ]) {
   assert(
     !acceptDraft.includes(dangerous),
