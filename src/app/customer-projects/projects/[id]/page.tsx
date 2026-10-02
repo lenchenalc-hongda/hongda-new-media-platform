@@ -20,6 +20,7 @@ import {
   CONSEQUENTIAL_PROGRESS_EVENTS,
   PROGRESS_EVENT_OPTIONS,
   PROJECT_PRIORITY_LABELS,
+  PROJECT_STAGE_OPTIONS,
   PROJECT_STATUS_LABELS,
   PROJECT_TYPE_LABELS,
   RISK_LEVEL_LABELS,
@@ -29,6 +30,7 @@ import {
   formatBusinessDate,
   formatBusinessDateTime,
   projectPriorityTone,
+  projectStageLabel,
   toIsoFromShanghaiDateTime,
   type ProgressEventType,
 } from '@/lib/customer-projects/presentation';
@@ -171,6 +173,7 @@ export default function CustomerProjectDetailPage() {
   const [eventType, setEventType] = useState<ProgressEventType>('EFFECTIVE_PROGRESS_RECORDED');
   const [summary, setSummary] = useState('');
   const [evidenceReference, setEvidenceReference] = useState('');
+  const [selectedStage, setSelectedStage] = useState('');
   const [nextStepMode, setNextStepMode] = useState<NextStepMode>('keep');
   const [nextActionTitle, setNextActionTitle] = useState('');
   const [nextActionDueAt, setNextActionDueAt] = useState('');
@@ -192,7 +195,9 @@ export default function CustomerProjectDetailPage() {
       const body = await response.json().catch(() => null);
 
       if (response.ok && body?.ok === true && body.data) {
-        setDetail(body.data as ProjectDetailDto);
+        const nextDetail = body.data as ProjectDetailDto;
+        setDetail(nextDetail);
+        setSelectedStage(nextDetail.project.stage);
         setLoadError('');
       } else if (response.status === 401) {
         setLoadError('登录状态已失效，请重新登录。');
@@ -261,6 +266,10 @@ export default function CustomerProjectDetailPage() {
       rawInput: trimmedSummary,
       payload,
     };
+
+    if (selectedStage && selectedStage !== detail.project.stage) {
+      requestBody.newStage = selectedStage;
+    }
 
     if (nextStepMode === 'new_action') {
       if (!nextActionTitle.trim()) {
@@ -393,8 +402,8 @@ export default function CustomerProjectDetailPage() {
               <p className="mt-4 text-sm leading-6 text-gray-700">{project.objectiveSummary}</p>
             </div>
             <dl className="grid shrink-0 grid-cols-2 gap-x-6 gap-y-3 text-sm sm:grid-cols-3 lg:min-w-[480px]">
-              <div><dt className="text-xs text-gray-400">当前阶段</dt><dd className="mt-1 font-medium text-gray-700">{project.stage}</dd></div>
-              <div><dt className="text-xs text-gray-400">客户类型</dt><dd className="mt-1">{customer?.referenceKind === 'canonical' ? '正式客户' : '临时客户'}</dd></div>
+              <div><dt className="text-xs text-gray-400">当前阶段</dt><dd className="mt-1 font-medium text-gray-700">{projectStageLabel(project.projectType, project.stage)}</dd></div>
+              <div><dt className="text-xs text-gray-400">客户类型</dt><dd className="mt-1">{customer ? (customer.referenceKind === 'canonical' ? '正式客户' : '临时客户') : '未映射'}</dd></div>
               <div><dt className="text-xs text-gray-400">预期金额</dt><dd className="mt-1">{formatAmount(project.expectedAmountMinor, project.currency)}</dd></div>
               <div><dt className="text-xs text-gray-400">预计成交</dt><dd className="mt-1">{formatBusinessDate(project.expectedCloseDate)}</dd></div>
               <div><dt className="text-xs text-gray-400">项目版本</dt><dd className="mt-1">v{project.version}</dd></div>
@@ -445,11 +454,19 @@ export default function CustomerProjectDetailPage() {
                   </select>
                 </div>
                 <div>
-                  <FieldLabel>当前正式阶段</FieldLabel>
-                  <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-700">
-                    {project.stage}
-                  </div>
-                  <p className="mt-1 text-[11px] text-gray-400">本批 UI 不允许自由输入阶段，避免绕过已冻结的业务阶段规则。</p>
+                  <FieldLabel>更新后的项目阶段</FieldLabel>
+                  <select
+                    value={selectedStage || project.stage}
+                    onChange={event => setSelectedStage(event.target.value)}
+                    className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm"
+                  >
+                    {PROJECT_STAGE_OPTIONS[project.projectType].map(option => (
+                      <option key={option.value} value={option.value}>{option.label}</option>
+                    ))}
+                  </select>
+                  <p className="mt-1 text-[11px] text-gray-400">
+                    当前：{projectStageLabel(project.projectType, project.stage)}。可按真实业务位置直接选择有效阶段，后台仍会再次校验。
+                  </p>
                 </div>
               </div>
 
