@@ -325,6 +325,31 @@ assert(
 
 assert(getProjectEventCategory('CONTACT_LOGGED') === 'CONTACT', 'contact category');
 assert(getProjectEventCategory('QUOTE_SENT') === 'COMMERCIAL', 'commercial category');
+assert(getProjectEventCategory('COMMERCIAL_CONFIRMED') === 'COMMERCIAL', 'equipment commercial confirmation category');
+assert(getProjectEventCategory('ORDER_CONFIRMED') === 'COMMERCIAL', 'order confirmed category');
+assert(getProjectEventCategory('PROJECT_WON') === 'LIFECYCLE', 'lifecycle category');
+assert(getProjectEventCategory('PROJECT_CANCELLED') === 'LIFECYCLE', 'project cancelled category');
+assert(projectEventCountsAsEffectiveProgress('ORDER_CONFIRMED'), 'confirmed order counts as effective progress');
+assert(projectEventCountsAsMeaningfulChange('PROJECT_CANCELLED'), 'cancelled project is meaningful change');
+
+const validEvent = {
+  id: '77777777-7777-4777-8777-777777777777',
+  org_id: ORG_ID,
+  customer_reference_id: CUSTOMER_ID,
+  project_id: PROJECT_ID,
+  event_type: 'EFFECTIVE_PROGRESS_RECORDED',
+  event_category: 'PROGRESS',
+  occurred_at: NOW,
+  recorded_at: NOW,
+  actor_profile_id: ACTOR_ID,
+  source: 'user',
+  source_reference_id: null,
+  raw_input: '客户确认进入样品验证',
+  payload_schema_version: 1,
+  payload: { progress_kind: 'sample_validation' },
+  correction_of_event_id: null,
+} as const;
+assert(projectEventSchema.safeParse(validEvent).success, 'valid progress event schema');
 assert(
   !projectEventSchema.safeParse({
     ...validEvent,
@@ -361,31 +386,7 @@ assert(
   }).success,
   'order confirmed with evidence reference accepted',
 );
-assert(getProjectEventCategory('COMMERCIAL_CONFIRMED') === 'COMMERCIAL', 'equipment commercial confirmation category');
-assert(getProjectEventCategory('ORDER_CONFIRMED') === 'COMMERCIAL', 'order confirmed category');
-assert(getProjectEventCategory('PROJECT_WON') === 'LIFECYCLE', 'lifecycle category');
-assert(getProjectEventCategory('PROJECT_CANCELLED') === 'LIFECYCLE', 'project cancelled category');
-assert(projectEventCountsAsEffectiveProgress('ORDER_CONFIRMED'), 'confirmed order counts as effective progress');
-assert(projectEventCountsAsMeaningfulChange('PROJECT_CANCELLED'), 'cancelled project is meaningful change');
 
-const validEvent = {
-  id: '77777777-7777-4777-8777-777777777777',
-  org_id: ORG_ID,
-  customer_reference_id: CUSTOMER_ID,
-  project_id: PROJECT_ID,
-  event_type: 'EFFECTIVE_PROGRESS_RECORDED',
-  event_category: 'PROGRESS',
-  occurred_at: NOW,
-  recorded_at: NOW,
-  actor_profile_id: ACTOR_ID,
-  source: 'user',
-  source_reference_id: null,
-  raw_input: '客户确认进入样品验证',
-  payload_schema_version: 1,
-  payload: { progress_kind: 'sample_validation' },
-  correction_of_event_id: null,
-} as const;
-assert(projectEventSchema.safeParse(validEvent).success, 'valid progress event schema');
 assert(
   !projectEventSchema.safeParse({
     ...validEvent,
