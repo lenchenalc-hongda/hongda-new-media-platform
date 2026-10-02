@@ -199,6 +199,22 @@ BEGIN
   RETURNING id INTO v_event_id;
 
   IF v_next_title IS NOT NULL THEN
+    IF EXISTS (
+      SELECT 1
+      FROM public.cpc_work_items wi
+      WHERE wi.org_id = v_actor_org_id
+        AND wi.customer_reference_id = p_customer_reference_id
+        AND wi.project_id IS NULL
+        AND wi.work_item_type = 'FOLLOW_UP'
+        AND wi.assignee_profile_id = v_actor_profile_id
+        AND wi.status IN ('pending', 'in_progress', 'blocked')
+    ) THEN
+      RETURN public.cpc_rpc_error(
+        'DUPLICATE_FOLLOW_UP',
+        '当前客户已有未完成的回访任务，请先处理或明确替换'
+      );
+    END IF;
+
     INSERT INTO public.cpc_work_items (
       org_id,
       customer_reference_id,
