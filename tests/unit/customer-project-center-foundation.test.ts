@@ -106,13 +106,13 @@ const enabledItems = salesPortal?.items.filter(item => !item.disabled).map(item 
 assert(
   JSON.stringify(enabledItems) === JSON.stringify([
     '/customer-projects',
+    '/customer-projects/customers',
     '/customer-projects/projects',
     '/customer-projects/tasks',
   ]),
-  'Workbench, Projects and My Tasks are enabled through Phase 5E',
+  'Workbench, Customers, Projects and My Tasks are enabled through Phase 5F',
 );
 for (const path of [
-  '/customer-projects/customers',
   '/customer-projects/reports',
   '/customer-projects/team',
   '/customer-projects/settings',

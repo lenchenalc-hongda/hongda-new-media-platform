@@ -23,7 +23,8 @@ export type CpcMutationCommand =
   | 'RECORD_PROGRESS'
   | 'SET_WAITING'
   | 'TRANSITION_WORK_ITEM'
-  | 'TRANSITION_PROJECT';
+  | 'TRANSITION_PROJECT'
+  | 'RECORD_CUSTOMER_FOLLOW_UP';
 
 type RpcResult = {
   data?: any;
@@ -113,6 +114,16 @@ const workItemTransitionSchema = z.object({
   reason: z.string().trim().min(1).max(2000).nullable().optional(),
 }).strict();
 
+const customerFollowUpSchema = z.object({
+  eventType: z.enum(['CONTACT_LOGGED', 'CUSTOMER_RESPONSE_RECEIVED']),
+  resultSummary: z.string().trim().min(1).max(10000),
+  occurredAt: isoDateTimeSchema.nullable().optional(),
+  currentFollowUpId: uuidSchema.nullable().optional(),
+  nextFollowUpTitle: z.string().trim().min(1).max(300).nullable().optional(),
+  nextFollowUpDueAt: isoDateTimeSchema.nullable().optional(),
+  nextFollowUpPriority: z.enum(PROJECT_PRIORITIES).default('medium'),
+}).strict();
+
 const transitionableProjectStatuses = PROJECT_LIFECYCLE_STATUSES.filter(status =>
   ['active', 'paused', 'won', 'lost', 'cancelled'].includes(status),
 ) as ['active', ...Array<'paused' | 'won' | 'lost' | 'cancelled'>];
@@ -135,6 +146,7 @@ const COMMAND_SCHEMA = {
   SET_WAITING: waitingSchema,
   TRANSITION_WORK_ITEM: workItemTransitionSchema,
   TRANSITION_PROJECT: projectTransitionSchema,
+  RECORD_CUSTOMER_FOLLOW_UP: customerFollowUpSchema,
 } as const;
 
 const LOCAL_MESSAGES: Record<string, string> = {
@@ -156,6 +168,7 @@ const LOCAL_MESSAGES: Record<string, string> = {
   NEXT_CHECK_REQUIRED: '该状态必须设置下一次检查时间',
   INVALID_CUSTOMER_REFERENCE: '客户引用当前不可用于此操作',
   DUPLICATE_REFERENCE: '该临时客户来源已存在',
+  DUPLICATE_FOLLOW_UP: '当前客户已有未完成的回访任务，请先处理或明确替换',
   CANONICAL_CUSTOMER_REQUIRED: '项目成交前必须先映射到正式客户',
   ORDER_CONFIRMATION_REQUIRED: '项目成交前必须先确认订单证据',
   INTERNAL_ERROR: '客户项目操作失败，请稍后重试',
@@ -296,6 +309,18 @@ function sanitizeSuccess(command: CpcMutationCommand, raw: unknown): Record<stri
     return { workItemId: id, status, version };
   }
 
+  if (command === 'RECORD_CUSTOMER_FOLLOW_UP') {
+    const customerReferenceId = safeString(data.customer_reference_id);
+    const eventId = safeString(data.event_id);
+    if (!customerReferenceId || !eventId) return null;
+    return {
+      customerReferenceId,
+      eventId,
+      completedFollowUpId: safeString(data.completed_follow_up_id),
+      nextFollowUpId: safeString(data.next_follow_up_id),
+    };
+  }
+
   const id = safeString(data.project_id);
   const status = safeString(data.status);
   const version = safePositiveInteger(data.version);
@@ -345,6 +370,7 @@ export function mapCpcRpcResult(
     || code === 'CANONICAL_CUSTOMER_REQUIRED'
     || code === 'ORDER_CONFIRMATION_REQUIRED'
     || code === 'DUPLICATE_REFERENCE'
+    || code === 'DUPLICATE_FOLLOW_UP'
   ) {
     return { status: 409, body: { ok: false, code, message, data: null } };
   }
@@ -379,7 +405,8 @@ export async function runCpcMutation(
   const idRequired = command === 'RECORD_PROGRESS'
     || command === 'SET_WAITING'
     || command === 'TRANSITION_WORK_ITEM'
-    || command === 'TRANSITION_PROJECT';
+    || command === 'TRANSITION_PROJECT'
+    || command === 'RECORD_CUSTOMER_FOLLOW_UP';
 
   let resourceId: string | null = null;
   if (idRequired) {
@@ -463,6 +490,18 @@ export async function runCpcMutation(
         p_expected_version: body.expectedVersion,
         p_to_status: body.toStatus,
         p_reason: body.reason ?? null,
+        p_request_id: requestId,
+      });
+    } else if (command === 'RECORD_CUSTOMER_FOLLOW_UP') {
+      result = await supabase.rpc('cpc_record_customer_follow_up', {
+        p_customer_reference_id: resourceId,
+        p_event_type: body.eventType,
+        p_result_summary: body.resultSummary,
+        p_occurred_at: body.occurredAt ?? null,
+        p_current_follow_up_id: body.currentFollowUpId ?? null,
+        p_next_follow_up_title: body.nextFollowUpTitle ?? null,
+        p_next_follow_up_due_at: body.nextFollowUpDueAt ?? null,
+        p_next_follow_up_priority: body.nextFollowUpPriority,
         p_request_id: requestId,
       });
     } else {

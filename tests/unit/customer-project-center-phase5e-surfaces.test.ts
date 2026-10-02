@@ -194,9 +194,9 @@ assert(
   'Projects and My Tasks navigation are enabled',
 );
 assert(
-  navigation.includes("{ label: '客户', path: '/customer-projects/customers', icon: '👥', disabled: true }")
+  navigation.includes("{ label: '客户', path: '/customer-projects/customers', icon: '👥' }")
     && navigation.includes("{ label: '我的报告', path: '/customer-projects/reports', icon: '📝', disabled: true }"),
-  'Customer and Reports remain gated; daily/weekly placeholders are consolidated',
+  'Customers are enabled by Phase 5F while Reports remain gated',
 );
 
 console.log('Phase 5E surface tests: ' + passed + ' passed, ' + failed + ' failed');
