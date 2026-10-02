@@ -132,9 +132,21 @@ export function formatBusinessDate(value: string | null | undefined): string {
   }).format(date);
 }
 
-export function toIsoFromLocalDateTime(value: string): string | null {
+export function toIsoFromShanghaiDateTime(value: string): string | null {
   if (!value) return null;
-  const date = new Date(value);
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(value);
+  if (!match) return null;
+  const [, year, month, day, hour, minute] = match;
+  const utcMs = Date.UTC(
+    Number(year),
+    Number(month) - 1,
+    Number(day),
+    Number(hour) - 8,
+    Number(minute),
+    0,
+    0,
+  );
+  const date = new Date(utcMs);
   return Number.isFinite(date.getTime()) ? date.toISOString() : null;
 }
 
