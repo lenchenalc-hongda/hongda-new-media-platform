@@ -102,6 +102,24 @@ export interface WorkbenchQuickProject {
   updatedAt: string;
 }
 
+export interface WorkbenchReminderItem {
+  occurrenceKey: string;
+  source: 'work_item' | 'waiting_check';
+  sourceId: string;
+  sourceVersion: number | null;
+  priorityClass: WorkbenchPriorityClass;
+  state: 'overdue' | 'due_now';
+  title: string;
+  customerReferenceId: string | null;
+  customerDisplayName: string | null;
+  projectId: string | null;
+  effectiveAt: string;
+  workItemType: WorkItemType | null;
+  workItemStatus: WorkItemStatus | null;
+  waitingOn: Exclude<WaitingOn, 'none'> | null;
+  blocked: boolean;
+}
+
 export interface WorkbenchSnapshot {
   businessDate: string;
   generatedAt: string;
@@ -109,6 +127,7 @@ export interface WorkbenchSnapshot {
   quickProjects: WorkbenchQuickProject[];
   attention: WorkbenchAttentionItem[];
   waiting: WorkbenchWaitingItem[];
+  reminders: WorkbenchReminderItem[];
   summary: {
     queueCount: number;
     p0Count: number;
@@ -116,6 +135,8 @@ export interface WorkbenchSnapshot {
     blockedCount: number;
     waitingCount: number;
     missingNextStepCount: number;
+    formalReminderCount: number;
+    reminderOverdueCount: number;
   };
 }
 
@@ -185,6 +206,17 @@ function isOverdue(dueAt: string | null, nowMs: number): boolean {
   return Number.isFinite(ms) && ms < nowMs;
 }
 
+function reminderPriorityClass(item: WorkbenchWorkItemRow): WorkbenchPriorityClass | null {
+  if (item.work_item_type === 'CUSTOMER_COMMITMENT') return 'P0';
+  if (item.work_item_type === 'MANAGEMENT_DECISION') {
+    return item.priority === 'critical' ? 'P0' : 'P1';
+  }
+  if (item.work_item_type === 'NEXT_ACTION') return 'P1';
+  if (item.work_item_type === 'INTERNAL_COLLABORATION') return 'P1';
+  if (item.work_item_type === 'FOLLOW_UP' && item.project_id === null) return 'P3';
+  return null;
+}
+
 function customerName(
   customerReferenceId: string | null,
   names: Map<string, string>,
@@ -200,13 +232,15 @@ export function buildWorkbenchSnapshot(input: {
 }): WorkbenchSnapshot {
   const { now, projects, workItems, customers } = input;
   const nowMs = now.getTime();
-  const { businessDate, endMs } = getShanghaiBusinessWindow(now);
+  const { businessDate, startMs, endMs } = getShanghaiBusinessWindow(now);
   const customerNames = new Map(customers.map(row => [row.id, row.display_name_snapshot]));
   const projectById = new Map(projects.map(project => [project.id, project]));
 
   const queue: WorkbenchQueueItem[] = [];
   const attention: WorkbenchAttentionItem[] = [];
   const waiting: WorkbenchWaitingItem[] = [];
+  const reminders: WorkbenchReminderItem[] = [];
+  const reminderKeys = new Set<string>();
 
   const openNextActionByProject = new Set(
     workItems
@@ -226,6 +260,37 @@ export function buildWorkbenchSnapshot(input: {
       ?? null;
     const displayName = customerName(customerReferenceId, customerNames);
     const due = isDueByEndOfBusinessDay(item.due_at, endMs);
+    const effectiveMs = toMs(item.due_at);
+    const reminderClass = reminderPriorityClass(item);
+
+    if (
+      reminderClass
+      && item.due_at
+      && Number.isFinite(effectiveMs)
+      && effectiveMs <= nowMs
+    ) {
+      const occurrenceKey = 'work_item:' + item.id + ':' + item.due_at;
+      if (!reminderKeys.has(occurrenceKey)) {
+        reminderKeys.add(occurrenceKey);
+        reminders.push({
+          occurrenceKey,
+          source: 'work_item',
+          sourceId: item.id,
+          sourceVersion: item.version,
+          priorityClass: reminderClass,
+          state: effectiveMs < startMs ? 'overdue' : 'due_now',
+          title: item.title,
+          customerReferenceId,
+          customerDisplayName: displayName,
+          projectId: item.project_id,
+          effectiveAt: item.due_at,
+          workItemType: item.work_item_type,
+          workItemStatus: item.status,
+          waitingOn: null,
+          blocked: item.status === 'blocked',
+        });
+      }
+    }
 
     if (
       item.work_item_type === 'CUSTOMER_COMMITMENT'
@@ -368,6 +433,31 @@ export function buildWorkbenchSnapshot(input: {
         due,
       });
 
+      const checkMs = toMs(project.next_check_at);
+      if (checkMs <= nowMs) {
+        const occurrenceKey = 'waiting_check:' + project.id + ':' + project.next_check_at;
+        if (!reminderKeys.has(occurrenceKey)) {
+          reminderKeys.add(occurrenceKey);
+          reminders.push({
+            occurrenceKey,
+            source: 'waiting_check',
+            sourceId: project.id,
+            sourceVersion: project.version,
+            priorityClass: 'P1',
+            state: checkMs < startMs ? 'overdue' : 'due_now',
+            title: project.title,
+            customerReferenceId: project.customer_reference_id,
+            customerDisplayName: customerName(project.customer_reference_id, customerNames),
+            projectId: project.id,
+            effectiveAt: project.next_check_at,
+            workItemType: null,
+            workItemStatus: null,
+            waitingOn: project.waiting_on,
+            blocked: false,
+          });
+        }
+      }
+
       if (due) {
         queue.push({
           id: `waiting:${project.id}`,
@@ -445,6 +535,13 @@ export function buildWorkbenchSnapshot(input: {
 
   waiting.sort((a, b) => toMs(a.nextCheckAt) - toMs(b.nextCheckAt));
   attention.sort((a, b) => toMs(a.dueAt) - toMs(b.dueAt) || a.id.localeCompare(b.id));
+  reminders.sort((a, b) => {
+    const classDiff = CLASS_WEIGHT[a.priorityClass] - CLASS_WEIGHT[b.priorityClass];
+    if (classDiff !== 0) return classDiff;
+    if (a.state !== b.state) return a.state === 'overdue' ? -1 : 1;
+    const dueDiff = toMs(a.effectiveAt) - toMs(b.effectiveAt);
+    return dueDiff !== 0 ? dueDiff : a.occurrenceKey.localeCompare(b.occurrenceKey);
+  });
 
   const quickProjects: WorkbenchQuickProject[] = projects
     .filter(project => project.status === 'active')
@@ -472,6 +569,7 @@ export function buildWorkbenchSnapshot(input: {
     quickProjects,
     attention,
     waiting,
+    reminders,
     summary: {
       queueCount: queue.length,
       p0Count: queue.filter(item => item.priorityClass === 'P0').length,
@@ -479,6 +577,8 @@ export function buildWorkbenchSnapshot(input: {
       blockedCount: workItems.filter(item => item.status === 'blocked').length,
       waitingCount: waiting.length,
       missingNextStepCount: queue.filter(item => item.reason === 'missing_next_step').length,
+      formalReminderCount: reminders.length,
+      reminderOverdueCount: reminders.filter(item => item.state === 'overdue').length,
     },
   };
 }
