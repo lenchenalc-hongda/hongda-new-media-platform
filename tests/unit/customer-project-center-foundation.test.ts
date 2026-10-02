@@ -104,15 +104,16 @@ assert(salesPortal?.color === 'cyan', 'sales portal color');
 
 const enabledItems = salesPortal?.items.filter(item => !item.disabled).map(item => item.path) ?? [];
 assert(
-  JSON.stringify(enabledItems) === JSON.stringify(['/customer-projects']),
-  'only my workbench is enabled in batch 1',
+  JSON.stringify(enabledItems) === JSON.stringify([
+    '/customer-projects',
+    '/customer-projects/projects',
+    '/customer-projects/tasks',
+  ]),
+  'Workbench, Projects and My Tasks are enabled through Phase 5E',
 );
 for (const path of [
   '/customer-projects/customers',
-  '/customer-projects/projects',
-  '/customer-projects/tasks',
-  '/customer-projects/daily',
-  '/customer-projects/weekly',
+  '/customer-projects/reports',
   '/customer-projects/team',
   '/customer-projects/settings',
 ]) {
@@ -125,6 +126,12 @@ for (const path of [
     `disabled portal item is not link-enabled: ${path}`,
   );
 }
+assert(
+  !salesPortal?.items.some(item => item.path === '/customer-projects/daily')
+  && !salesPortal?.items.some(item => item.path === '/customer-projects/weekly')
+  && salesPortal?.items.some(item => item.path === '/customer-projects/reports'),
+  'daily/weekly placeholders consolidate to one My Reports navigation entry',
+);
 
 assert(
   WORKSPACE_PORTAL_STYLES.cyan?.gradient === 'from-cyan-500 to-cyan-600',
