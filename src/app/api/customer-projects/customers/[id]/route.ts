@@ -138,6 +138,9 @@ export async function GET(
           blockedReason: currentFollowUp.blocked_reason,
           version: currentFollowUp.version,
           isAssignedToMe: currentFollowUp.assignee_profile_id === profile.id,
+          canClose: profile.role === 'admin'
+            || profile.role === 'manager'
+            || currentFollowUp.assignee_profile_id === profile.id,
         } : null,
         projects: projects.map(project => ({
           id: project.id,
