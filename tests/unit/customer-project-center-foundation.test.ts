@@ -157,23 +157,32 @@ assert(
 
 const pageSource = fs.readFileSync('src/app/customer-projects/page.tsx', 'utf8');
 for (const text of [
-  '每天推进客户与项目，减少重复记录，让下一步更清楚。',
-  '当前尚未接入项目任务数据。',
+  '我的工作台',
+  '今日工作',
   '快速记录',
-  '即将开放',
-  '暂无可展示的项目异常。',
-  '业务数据接入后自动生成，不要求员工重复填写日报。',
+  '需要关注',
+  '等待 / 检查',
+  '今天的业务摘要',
 ]) {
-  assert(pageSource.includes(text), 'foundation page contains: ' + text);
+  assert(pageSource.includes(text), 'workbench page contains: ' + text);
 }
 assert(
+  pageSource.includes("fetch('/api/customer-projects/workbench'"),
+  'workbench page uses formal CPC workbench API',
+);
+assert(
+  !pageSource.includes('当前尚未接入项目任务数据。')
+  && !pageSource.includes('即将开放'),
+  'foundation shell placeholders removed after Phase 5D',
+);
+assert(
   !/(成交20万|今天8个客户|3个逾期)/.test(pageSource),
-  'foundation page contains no mock business metrics',
+  'workbench page contains no mock business metrics',
 );
 assert(
   pageSource.includes("from '@/components/ui/EmptyState'")
   && !pageSource.includes('ReviewCenterEmpty'),
-  'foundation page uses generic EmptyState instead of Review Center UI',
+  'workbench uses generic EmptyState instead of Review Center UI',
 );
 
 const workspaceHomeSource = fs.readFileSync('src/app/workspace-home/page.tsx', 'utf8');
