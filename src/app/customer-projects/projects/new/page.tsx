@@ -2,7 +2,6 @@
 
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
 import AppLayout from '@/components/layout/AppLayout';
 import PageHeader from '@/components/layout/PageHeader';
 import type { ProjectPriority, ProjectType, WaitingOn } from '@/lib/customer-projects/domain';
@@ -51,9 +50,8 @@ function FieldLabel({
 }
 
 export default function NewCustomerProjectPage() {
-  const searchParams = useSearchParams();
-  const preselectedCustomerReferenceId = searchParams.get('customerReferenceId') ?? '';
-  const contextEventId = searchParams.get('contextEventId') ?? '';
+  const [preselectedCustomerReferenceId, setPreselectedCustomerReferenceId] = useState('');
+  const [contextEventId, setContextEventId] = useState('');
 
   const [customers, setCustomers] = useState<CustomerOption[]>([]);
   const [customerSearch, setCustomerSearch] = useState('');
@@ -115,6 +113,10 @@ export default function NewCustomerProjectPage() {
 
   useEffect(() => {
     void loadCustomers();
+
+    const params = new URLSearchParams(window.location.search);
+    setPreselectedCustomerReferenceId(params.get('customerReferenceId') ?? '');
+    setContextEventId(params.get('contextEventId') ?? '');
   }, []);
 
   useEffect(() => {
