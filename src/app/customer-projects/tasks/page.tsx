@@ -19,6 +19,7 @@ import {
   WORK_ITEM_STATUS_LABELS,
   WORK_ITEM_TYPE_LABELS,
   formatBusinessDateTime,
+  toIsoFromShanghaiDateTime,
 } from '@/lib/customer-projects/presentation';
 
 interface TaskListItem {
@@ -74,6 +75,9 @@ export default function CustomerProjectTasksPage() {
   const [reasonTaskId, setReasonTaskId] = useState<string | null>(null);
   const [reasonTransition, setReasonTransition] = useState<ReasonTransition>('blocked');
   const [reason, setReason] = useState('');
+  const [rescheduleTaskId, setRescheduleTaskId] = useState<string | null>(null);
+  const [rescheduleDueAt, setRescheduleDueAt] = useState('');
+  const [rescheduleReason, setRescheduleReason] = useState('');
   const [actionError, setActionError] = useState('');
 
   async function loadTasks(showLoading = true) {
@@ -177,10 +181,82 @@ export default function CustomerProjectTasksPage() {
   }
 
   function beginReasonTransition(taskId: string, toStatus: ReasonTransition) {
+    setRescheduleTaskId(null);
+    setRescheduleDueAt('');
+    setRescheduleReason('');
     setReasonTaskId(taskId);
     setReasonTransition(toStatus);
     setReason('');
     setActionError('');
+  }
+
+  function beginReschedule(taskId: string) {
+    setReasonTaskId(null);
+    setReason('');
+    setRescheduleTaskId(taskId);
+    setRescheduleDueAt('');
+    setRescheduleReason('');
+    setActionError('');
+  }
+
+  async function rescheduleTask(task: TaskListItem) {
+    if (workingTaskId) return;
+
+    const dueAt = toIsoFromShanghaiDateTime(rescheduleDueAt);
+    if (!dueAt) {
+      setActionError('改期必须设置有效的新时间。');
+      return;
+    }
+    if (!rescheduleReason.trim()) {
+      setActionError('改期必须填写原因。');
+      return;
+    }
+
+    setWorkingTaskId(task.id);
+    setActionError('');
+
+    try {
+      const response = await fetch(
+        '/api/customer-projects/work-items/' + encodeURIComponent(task.id) + '/reschedule',
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            expectedVersion: task.version,
+            toDueAt: dueAt,
+            reason: rescheduleReason.trim(),
+          }),
+        },
+      );
+      const body = await response.json().catch(() => null);
+
+      if (response.ok && body?.ok === true) {
+        setRescheduleTaskId(null);
+        setRescheduleDueAt('');
+        setRescheduleReason('');
+        await loadTasks(false);
+        return;
+      }
+
+      if (response.status === 409) {
+        setActionError(typeof body?.message === 'string'
+          ? body.message
+          : '任务版本已经变化，请刷新后重试。');
+        await loadTasks(false);
+      } else if (response.status === 422 || response.status === 400) {
+        setActionError(typeof body?.message === 'string'
+          ? body.message
+          : '改期信息无效，请检查后再提交。');
+      } else if (response.status === 403) {
+        setActionError('你没有权限调整这个任务的时间。');
+      } else {
+        setActionError('任务改期失败，请稍后重试。');
+      }
+    } catch {
+      setActionError('任务改期失败，请稍后重试。');
+    } finally {
+      setWorkingTaskId(null);
+    }
   }
 
   const openCount = tasks.filter(task => isOpen(task.status)).length;
@@ -346,6 +422,14 @@ export default function CustomerProjectTasksPage() {
                           </button>
                         )}
 
+                        <button
+                          type="button"
+                          onClick={() => beginReschedule(task.id)}
+                          className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-medium text-blue-700"
+                        >
+                          改期
+                        </button>
+
                         {task.status !== 'blocked' && (
                           <button
                             type="button"
@@ -384,6 +468,58 @@ export default function CustomerProjectTasksPage() {
                       </div>
                     )}
                   </div>
+
+                  {rescheduleTaskId === task.id && (
+                    <div className="mt-4 rounded-lg border border-blue-200 bg-blue-50 p-3">
+                      <p className="text-xs font-medium text-blue-800">调整任务时间</p>
+                      <p className="mt-1 text-xs text-blue-700">
+                        改期只更新正式任务的到期时间；旧时间和原因会保留在审计历史中。受阻状态不会因为改期自动清除。
+                      </p>
+                      <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
+                        <div>
+                          <label className="mb-1 block text-xs font-medium text-gray-600">
+                            新时间（东莞时间）
+                          </label>
+                          <input
+                            type="datetime-local"
+                            value={rescheduleDueAt}
+                            onChange={event => setRescheduleDueAt(event.target.value)}
+                            className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm"
+                          />
+                        </div>
+                        <div>
+                          <label className="mb-1 block text-xs font-medium text-gray-600">改期原因</label>
+                          <input
+                            value={rescheduleReason}
+                            onChange={event => setRescheduleReason(event.target.value)}
+                            placeholder="例如：客户确认项目推迟到下周"
+                            className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm"
+                          />
+                        </div>
+                      </div>
+                      <div className="mt-3 flex justify-end gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setRescheduleTaskId(null);
+                            setRescheduleDueAt('');
+                            setRescheduleReason('');
+                          }}
+                          className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs text-gray-600"
+                        >
+                          返回
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void rescheduleTask(task)}
+                          disabled={workingTaskId === task.id}
+                          className="rounded-lg bg-blue-700 px-3 py-1.5 text-xs font-medium text-white"
+                        >
+                          确认改期
+                        </button>
+                      </div>
+                    </div>
+                  )}
 
                   {reasonTaskId === task.id && (
                     <div className="mt-4 rounded-lg border border-gray-200 bg-gray-50 p-3">

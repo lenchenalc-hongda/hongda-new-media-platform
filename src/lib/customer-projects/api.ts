@@ -23,6 +23,7 @@ export type CpcMutationCommand =
   | 'RECORD_PROGRESS'
   | 'SET_WAITING'
   | 'TRANSITION_WORK_ITEM'
+  | 'RESCHEDULE_WORK_ITEM'
   | 'TRANSITION_PROJECT'
   | 'RECORD_CUSTOMER_FOLLOW_UP';
 
@@ -114,6 +115,12 @@ const workItemTransitionSchema = z.object({
   reason: z.string().trim().min(1).max(2000).nullable().optional(),
 }).strict();
 
+const workItemRescheduleSchema = z.object({
+  expectedVersion: expectedVersionSchema,
+  toDueAt: isoDateTimeSchema,
+  reason: z.string().trim().min(1).max(2000),
+}).strict();
+
 const customerFollowUpSchema = z.object({
   eventType: z.enum(['CONTACT_LOGGED', 'CUSTOMER_RESPONSE_RECEIVED']),
   resultSummary: z.string().trim().min(1).max(10000),
@@ -145,6 +152,7 @@ const COMMAND_SCHEMA = {
   RECORD_PROGRESS: progressSchema,
   SET_WAITING: waitingSchema,
   TRANSITION_WORK_ITEM: workItemTransitionSchema,
+  RESCHEDULE_WORK_ITEM: workItemRescheduleSchema,
   TRANSITION_PROJECT: projectTransitionSchema,
   RECORD_CUSTOMER_FOLLOW_UP: customerFollowUpSchema,
 } as const;
@@ -309,6 +317,14 @@ function sanitizeSuccess(command: CpcMutationCommand, raw: unknown): Record<stri
     return { workItemId: id, status, version };
   }
 
+  if (command === 'RESCHEDULE_WORK_ITEM') {
+    const id = safeString(data.work_item_id);
+    const dueAt = safeString(data.due_at);
+    const version = safePositiveInteger(data.version);
+    if (!id || !dueAt || !version) return null;
+    return { workItemId: id, dueAt, version };
+  }
+
   if (command === 'RECORD_CUSTOMER_FOLLOW_UP') {
     const customerReferenceId = safeString(data.customer_reference_id);
     const eventId = safeString(data.event_id);
@@ -405,6 +421,7 @@ export async function runCpcMutation(
   const idRequired = command === 'RECORD_PROGRESS'
     || command === 'SET_WAITING'
     || command === 'TRANSITION_WORK_ITEM'
+    || command === 'RESCHEDULE_WORK_ITEM'
     || command === 'TRANSITION_PROJECT'
     || command === 'RECORD_CUSTOMER_FOLLOW_UP';
 
@@ -490,6 +507,14 @@ export async function runCpcMutation(
         p_expected_version: body.expectedVersion,
         p_to_status: body.toStatus,
         p_reason: body.reason ?? null,
+        p_request_id: requestId,
+      });
+    } else if (command === 'RESCHEDULE_WORK_ITEM') {
+      result = await supabase.rpc('cpc_reschedule_work_item', {
+        p_work_item_id: resourceId,
+        p_expected_version: body.expectedVersion,
+        p_to_due_at: body.toDueAt,
+        p_reason: body.reason,
         p_request_id: requestId,
       });
     } else if (command === 'RECORD_CUSTOMER_FOLLOW_UP') {
