@@ -304,16 +304,17 @@ export interface AIDraft {
   raw_input: string;
   structured_proposal: unknown;
   proposal_type: AIDraftProposalType;
+  proposal_schema_version: number;
   customer_reference_id: string | null;
   project_id: string | null;
-  confidence: number | null;
   status: AIDraftStatus;
+  created_by_profile_id: string;
   accepted_by_profile_id: string | null;
   accepted_at: string | null;
   rejected_by_profile_id: string | null;
   rejected_at: string | null;
-  source_model: string | null;
-  source_run_id: string | null;
+  expires_at: string | null;
+  version: number;
   created_at: string;
   updated_at: string;
 }
