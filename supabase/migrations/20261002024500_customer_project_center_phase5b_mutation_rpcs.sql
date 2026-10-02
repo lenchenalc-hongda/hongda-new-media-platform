@@ -282,7 +282,7 @@ BEGIN
 
     IF TG_OP <> 'DELETE'
        AND NEW.project_id IS NOT NULL
-       AND NOT NEW.project_id = ANY(v_project_ids) THEN
+       AND NOT (NEW.project_id = ANY(v_project_ids)) THEN
       v_project_ids := array_append(v_project_ids, NEW.project_id);
     END IF;
   END IF;
@@ -1348,8 +1348,7 @@ BEGIN
 
   v_authorized :=
     v_actor_role IN ('admin', 'manager')
-    OR v_item.assignee_profile_id = v_actor_profile_id
-    OR v_item.created_by_profile_id = v_actor_profile_id;
+    OR v_item.assignee_profile_id = v_actor_profile_id;
 
   IF NOT v_authorized AND v_item.project_id IS NOT NULL THEN
     SELECT p.*
