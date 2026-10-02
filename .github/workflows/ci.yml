@@ -58,6 +58,15 @@ jobs:
       - name: Customer Project Center Phase 5E surface contract tests
         run: pnpm exec tsx tests/unit/customer-project-center-phase5e-surfaces.test.ts
 
+      - name: Customer Project Center Phase 5F follow-up RPC contract tests
+        run: pnpm exec tsx tests/unit/customer-project-center-phase5f-followup-rpc.test.ts
+
+      - name: Customer Project Center Phase 5F customer read-model tests
+        run: pnpm exec tsx tests/unit/customer-project-center-phase5f-customer-read-model.test.ts
+
+      - name: Customer Project Center Phase 5F surface contract tests
+        run: pnpm exec tsx tests/unit/customer-project-center-phase5f-surfaces.test.ts
+
       - name: Agent Control tests
         run: pnpm exec tsx tests/unit/agent-control.test.ts
 
