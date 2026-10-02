@@ -180,6 +180,32 @@ assert(
   'business error is locally mapped and raw details hidden',
 );
 
+const customerFollowUpMap = mapCpcRpcResult('RECORD_CUSTOMER_FOLLOW_UP', {
+  data: {
+    ok: true,
+    code: 'OK',
+    message: 'RAW FOLLOW-UP MESSAGE',
+    data: {
+      customer_reference_id: CUSTOMER_ID,
+      event_id: '00000000-0000-0000-0000-000000000399',
+      completed_follow_up_id: '00000000-0000-0000-0000-000000000398',
+      next_follow_up_id: '00000000-0000-0000-0000-000000000397',
+      external_owner_reference: 'SECRET_OWNER',
+    },
+  },
+  error: null,
+});
+assert(customerFollowUpMap.status === 200, 'customer follow-up success maps 200');
+assert(
+  JSON.stringify(Object.keys((customerFollowUpMap.body.data as any) ?? {}).sort())
+    === '["completedFollowUpId","customerReferenceId","eventId","nextFollowUpId"]',
+  'customer follow-up response is strict whitelist',
+);
+assert(
+  !JSON.stringify(customerFollowUpMap.body).includes('SECRET_OWNER'),
+  'customer follow-up response does not expose ownership internals',
+);
+
 const transport = mapCpcRpcResult('CREATE_PROJECT', {
   data: null,
   error: {
@@ -268,6 +294,7 @@ assert(
 
 const mutationOnlyRouteFiles = [
   'src/app/api/customer-projects/customers/provisional/route.ts',
+  'src/app/api/customer-projects/customers/[id]/follow-up/route.ts',
   'src/app/api/customer-projects/projects/[id]/progress/route.ts',
   'src/app/api/customer-projects/projects/[id]/waiting/route.ts',
   'src/app/api/customer-projects/projects/[id]/transition/route.ts',
