@@ -323,7 +323,7 @@ BEGIN
     v_project.id,
     p_event_type,
     v_event_category,
-    p_occurred_at,
+    COALESCE(p_occurred_at, NOW()),
     v_actor_profile_id,
     'user',
     NULLIF(btrim(p_raw_input), ''),
