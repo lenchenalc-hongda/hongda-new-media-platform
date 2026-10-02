@@ -136,6 +136,10 @@ assert(
   'WorkItem transition uses explicit lifecycle map',
 );
 assert(
+  !workItem.includes('OR v_item.created_by_profile_id = v_actor_profile_id'),
+  'WorkItem creator alone does not gain mutation authority',
+);
+assert(
   workItem.includes('NEXT_STEP_REQUIRED')
     && workItem.includes("v_project.status = 'active'")
     && workItem.includes("v_project.waiting_on = 'none'"),
