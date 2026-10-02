@@ -25,7 +25,10 @@ export type CpcMutationCommand =
   | 'TRANSITION_WORK_ITEM'
   | 'RESCHEDULE_WORK_ITEM'
   | 'TRANSITION_PROJECT'
-  | 'RECORD_CUSTOMER_FOLLOW_UP';
+  | 'RECORD_CUSTOMER_FOLLOW_UP'
+  | 'CREATE_AI_WORK_ITEM_DRAFT'
+  | 'ACCEPT_AI_DRAFT'
+  | 'REJECT_AI_DRAFT';
 
 type RpcResult = {
   data?: any;
@@ -131,6 +134,27 @@ const customerFollowUpSchema = z.object({
   nextFollowUpPriority: z.enum(PROJECT_PRIORITIES).default('medium'),
 }).strict();
 
+const aiWorkItemDraftSchema = z.object({
+  customerReferenceId: uuidSchema.nullable().optional(),
+  projectId: uuidSchema.nullable().optional(),
+  workItemType: z.enum(['NEXT_ACTION', 'FOLLOW_UP']),
+  title: z.string().trim().min(1).max(300),
+  description: z.string().trim().max(2000).nullable().optional(),
+  dueAt: isoDateTimeSchema.nullable().optional(),
+  priority: z.enum(PROJECT_PRIORITIES).default('medium'),
+  rawInput: z.string().trim().min(1).max(10000),
+  expiresAt: isoDateTimeSchema.nullable().optional(),
+}).strict();
+
+const aiDraftAcceptSchema = z.object({
+  expectedVersion: expectedVersionSchema,
+}).strict();
+
+const aiDraftRejectSchema = z.object({
+  expectedVersion: expectedVersionSchema,
+  reason: z.string().trim().max(2000).nullable().optional(),
+}).strict();
+
 const transitionableProjectStatuses = PROJECT_LIFECYCLE_STATUSES.filter(status =>
   ['active', 'paused', 'won', 'lost', 'cancelled'].includes(status),
 ) as ['active', ...Array<'paused' | 'won' | 'lost' | 'cancelled'>];
@@ -155,6 +179,9 @@ const COMMAND_SCHEMA = {
   RESCHEDULE_WORK_ITEM: workItemRescheduleSchema,
   TRANSITION_PROJECT: projectTransitionSchema,
   RECORD_CUSTOMER_FOLLOW_UP: customerFollowUpSchema,
+  CREATE_AI_WORK_ITEM_DRAFT: aiWorkItemDraftSchema,
+  ACCEPT_AI_DRAFT: aiDraftAcceptSchema,
+  REJECT_AI_DRAFT: aiDraftRejectSchema,
 } as const;
 
 const LOCAL_MESSAGES: Record<string, string> = {
@@ -179,6 +206,7 @@ const LOCAL_MESSAGES: Record<string, string> = {
   DUPLICATE_FOLLOW_UP: '当前客户已有未完成的回访任务，请先处理或明确替换',
   CANONICAL_CUSTOMER_REQUIRED: '项目成交前必须先映射到正式客户',
   ORDER_CONFIRMATION_REQUIRED: '项目成交前必须先确认订单证据',
+  DRAFT_EXPIRED: 'AI 建议已过期，请刷新后查看最新建议',
   INTERNAL_ERROR: '客户项目操作失败，请稍后重试',
 };
 
@@ -325,6 +353,31 @@ function sanitizeSuccess(command: CpcMutationCommand, raw: unknown): Record<stri
     return { workItemId: id, dueAt, version };
   }
 
+  if (command === 'CREATE_AI_WORK_ITEM_DRAFT') {
+    const id = safeString(data.ai_draft_id);
+    const status = safeString(data.status);
+    const version = safePositiveInteger(data.version);
+    if (!id || !status || !version) return null;
+    return { aiDraftId: id, status, version };
+  }
+
+  if (command === 'ACCEPT_AI_DRAFT') {
+    const id = safeString(data.ai_draft_id);
+    const status = safeString(data.status);
+    const version = safePositiveInteger(data.version);
+    const createdWorkItemId = safeString(data.created_work_item_id);
+    if (!id || !status || !version || !createdWorkItemId) return null;
+    return { aiDraftId: id, status, version, createdWorkItemId };
+  }
+
+  if (command === 'REJECT_AI_DRAFT') {
+    const id = safeString(data.ai_draft_id);
+    const status = safeString(data.status);
+    const version = safePositiveInteger(data.version);
+    if (!id || !status || !version) return null;
+    return { aiDraftId: id, status, version };
+  }
+
   if (command === 'RECORD_CUSTOMER_FOLLOW_UP') {
     const customerReferenceId = safeString(data.customer_reference_id);
     const eventId = safeString(data.event_id);
@@ -387,6 +440,7 @@ export function mapCpcRpcResult(
     || code === 'ORDER_CONFIRMATION_REQUIRED'
     || code === 'DUPLICATE_REFERENCE'
     || code === 'DUPLICATE_FOLLOW_UP'
+    || code === 'DRAFT_EXPIRED'
   ) {
     return { status: 409, body: { ok: false, code, message, data: null } };
   }
@@ -423,7 +477,9 @@ export async function runCpcMutation(
     || command === 'TRANSITION_WORK_ITEM'
     || command === 'RESCHEDULE_WORK_ITEM'
     || command === 'TRANSITION_PROJECT'
-    || command === 'RECORD_CUSTOMER_FOLLOW_UP';
+    || command === 'RECORD_CUSTOMER_FOLLOW_UP'
+    || command === 'ACCEPT_AI_DRAFT'
+    || command === 'REJECT_AI_DRAFT';
 
   let resourceId: string | null = null;
   if (idRequired) {
@@ -456,7 +512,20 @@ export async function runCpcMutation(
   try {
     const body: any = parsed.data;
 
-    if (command === 'CREATE_PROVISIONAL_CUSTOMER') {
+    if (command === 'CREATE_AI_WORK_ITEM_DRAFT') {
+      result = await supabase.rpc('cpc_create_ai_work_item_draft', {
+        p_customer_reference_id: body.customerReferenceId ?? null,
+        p_project_id: body.projectId ?? null,
+        p_work_item_type: body.workItemType,
+        p_title: body.title,
+        p_description: body.description ?? null,
+        p_due_at: body.dueAt ?? null,
+        p_priority: body.priority,
+        p_raw_input: body.rawInput,
+        p_expires_at: body.expiresAt ?? null,
+        p_request_id: requestId,
+      });
+    } else if (command === 'CREATE_PROVISIONAL_CUSTOMER') {
       result = await supabase.rpc('cpc_create_provisional_customer_reference', {
         p_display_name_snapshot: body.displayNameSnapshot,
         p_provisional_source_reference: body.provisionalSourceReference,
@@ -515,6 +584,19 @@ export async function runCpcMutation(
         p_expected_version: body.expectedVersion,
         p_to_due_at: body.toDueAt,
         p_reason: body.reason,
+        p_request_id: requestId,
+      });
+    } else if (command === 'ACCEPT_AI_DRAFT') {
+      result = await supabase.rpc('cpc_accept_ai_draft', {
+        p_ai_draft_id: resourceId,
+        p_expected_version: body.expectedVersion,
+        p_request_id: requestId,
+      });
+    } else if (command === 'REJECT_AI_DRAFT') {
+      result = await supabase.rpc('cpc_reject_ai_draft', {
+        p_ai_draft_id: resourceId,
+        p_expected_version: body.expectedVersion,
+        p_reason: body.reason ?? null,
         p_request_id: requestId,
       });
     } else if (command === 'RECORD_CUSTOMER_FOLLOW_UP') {

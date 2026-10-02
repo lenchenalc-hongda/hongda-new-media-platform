@@ -233,6 +233,82 @@ assert(
   'reschedule response hides internal fields',
 );
 
+const aiDraftMap = mapCpcRpcResult('CREATE_AI_WORK_ITEM_DRAFT', {
+  data: {
+    ok: true,
+    code: 'OK',
+    message: 'RAW AI DRAFT MESSAGE',
+    data: {
+      ai_draft_id: '00000000-0000-0000-0000-000000000395',
+      status: 'draft',
+      version: 1,
+      structured_proposal: { secret: 'SECRET_PROPOSAL' },
+    },
+  },
+  error: null,
+});
+assert(aiDraftMap.status === 200, 'AI draft staging success maps 200');
+assert(
+  JSON.stringify(Object.keys((aiDraftMap.body.data as any) ?? {}).sort())
+    === '["aiDraftId","status","version"]',
+  'AI draft staging response is strict whitelist',
+);
+assert(
+  !JSON.stringify(aiDraftMap.body).includes('SECRET_PROPOSAL'),
+  'AI draft staging response hides raw proposal internals',
+);
+
+const aiAcceptMap = mapCpcRpcResult('ACCEPT_AI_DRAFT', {
+  data: {
+    ok: true,
+    code: 'OK',
+    message: 'RAW AI ACCEPT MESSAGE',
+    data: {
+      ai_draft_id: '00000000-0000-0000-0000-000000000395',
+      status: 'accepted',
+      version: 2,
+      created_work_item_id: '00000000-0000-0000-0000-000000000394',
+      owner_profile_id: PROFILE_ID,
+    },
+  },
+  error: null,
+});
+assert(aiAcceptMap.status === 200, 'AI draft accept success maps 200');
+assert(
+  JSON.stringify(Object.keys((aiAcceptMap.body.data as any) ?? {}).sort())
+    === '["aiDraftId","createdWorkItemId","status","version"]',
+  'AI draft accept response is strict whitelist',
+);
+assert(
+  !JSON.stringify(aiAcceptMap.body).includes(PROFILE_ID),
+  'AI draft accept response hides internal profile identifiers',
+);
+
+const aiRejectMap = mapCpcRpcResult('REJECT_AI_DRAFT', {
+  data: {
+    ok: true,
+    code: 'OK',
+    message: 'RAW AI REJECT MESSAGE',
+    data: {
+      ai_draft_id: '00000000-0000-0000-0000-000000000395',
+      status: 'rejected',
+      version: 2,
+      raw_input: 'SECRET_RAW_INPUT',
+    },
+  },
+  error: null,
+});
+assert(aiRejectMap.status === 200, 'AI draft reject success maps 200');
+assert(
+  JSON.stringify(Object.keys((aiRejectMap.body.data as any) ?? {}).sort())
+    === '["aiDraftId","status","version"]',
+  'AI draft reject response is strict whitelist',
+);
+assert(
+  !JSON.stringify(aiRejectMap.body).includes('SECRET_RAW_INPUT'),
+  'AI draft reject response hides raw input',
+);
+
 const transport = mapCpcRpcResult('CREATE_PROJECT', {
   data: null,
   error: {
@@ -327,6 +403,8 @@ const mutationOnlyRouteFiles = [
   'src/app/api/customer-projects/projects/[id]/transition/route.ts',
   'src/app/api/customer-projects/work-items/[id]/transition/route.ts',
   'src/app/api/customer-projects/work-items/[id]/reschedule/route.ts',
+  'src/app/api/customer-projects/ai-drafts/[id]/accept/route.ts',
+  'src/app/api/customer-projects/ai-drafts/[id]/reject/route.ts',
 ];
 
 for (const path of mutationOnlyRouteFiles) {
