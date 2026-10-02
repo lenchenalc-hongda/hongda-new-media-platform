@@ -68,6 +68,12 @@ assert(
   'Workbench routes Project work into Project Detail',
 );
 assert(
+  workbench.includes('snapshot.quickProjects')
+    && workbench.includes('客户突然有新进展，也不用等它进入今日待办')
+    && workbench.includes('不代表它们今天已到期或更紧急'),
+  'Quick Record exposes recent active Projects without changing Today Queue priority',
+);
+assert(
   !workbench.includes('当前尚未接入项目任务数据。')
     && !workbench.includes('即将开放'),
   'Workbench no longer renders the Phase 1 shell placeholders',
