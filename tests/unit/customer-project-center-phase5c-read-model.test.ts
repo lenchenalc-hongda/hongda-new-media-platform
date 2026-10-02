@@ -241,6 +241,15 @@ assert(
   snapshot.queue.every(item => item.customerDisplayName === '测试客户'),
   'queue hydrates customer display name without ownership inference',
 );
+assert(
+  snapshot.quickProjects.length === 3
+    && snapshot.quickProjects[0].projectId === PROJECT_WAITING,
+  'quickProjects exposes recent active Projects without changing Today priority',
+);
+assert(
+  snapshot.quickProjects.every(project => project.customerDisplayName === '测试客户'),
+  'quickProjects hydrates customer display names',
+);
 assert(snapshot.summary.p0Count === 3, 'summary P0 count derived');
 assert(snapshot.summary.blockedCount === 1, 'summary blocked count derived');
 assert(snapshot.summary.waitingCount === 1, 'summary waiting count derived');
