@@ -46,6 +46,26 @@ export default function CustomerProjectReportsPage() {
     report.periodStart === today && report.status === 'submitted',
   );
 
+  const latestRevisionByDate = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const report of reports) {
+      map.set(
+        report.periodStart,
+        Math.max(map.get(report.periodStart) ?? 0, report.revisionNo),
+      );
+    }
+    return map;
+  }, [reports]);
+
+  const draftDates = useMemo(
+    () => new Set(
+      reports
+        .filter(report => report.status === 'draft')
+        .map(report => report.periodStart),
+    ),
+    [reports],
+  );
+
   async function loadReports(showLoading = true) {
     if (showLoading) setLoading(true);
     try {
@@ -315,7 +335,8 @@ export default function CustomerProjectReportsPage() {
                           {workingId === report.id ? '处理中...' : '确认并提交'}
                         </button>
                       </>
-                    ) : (
+                    ) : report.revisionNo === latestRevisionByDate.get(report.periodStart)
+                      && !draftDates.has(report.periodStart) ? (
                       <button
                         type="button"
                         onClick={() => {
@@ -328,6 +349,10 @@ export default function CustomerProjectReportsPage() {
                       >
                         创建更正版
                       </button>
+                    ) : (
+                      <span className="text-xs text-gray-400">
+                        {draftDates.has(report.periodStart) ? '已有更正草稿' : '历史版本'}
+                      </span>
                     )}
                   </div>
                 </div>
