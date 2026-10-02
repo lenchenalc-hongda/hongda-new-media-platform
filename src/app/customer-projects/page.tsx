@@ -104,6 +104,39 @@ export default function CustomerProjectsPage() {
 
       <div className="space-y-5">
         <SectionCard
+          title="正式提醒"
+          description="只来自已经确认的任务到期或等待检查时间；AI 建议不会在这里被算成逾期。"
+        >
+          {loading ? (
+            <WorkbenchLoading />
+          ) : error ? (
+            <EmptyState title={error} />
+          ) : snapshot && snapshot.summary.formalReminderCount > 0 ? (
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <div className="rounded-lg border border-red-200 bg-red-50 p-4">
+                <p className="text-xs text-red-600">已逾期</p>
+                <p className="mt-1 text-2xl font-semibold text-red-700">{snapshot.summary.reminderOverdueCount}</p>
+              </div>
+              <div className="rounded-lg border border-amber-200 bg-amber-50 p-4">
+                <p className="text-xs text-amber-700">今天已到时间</p>
+                <p className="mt-1 text-2xl font-semibold text-amber-800">
+                  {snapshot.summary.formalReminderCount - snapshot.summary.reminderOverdueCount}
+                </p>
+              </div>
+              <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
+                <p className="text-xs text-gray-500">正式提醒总数</p>
+                <p className="mt-1 text-2xl font-semibold text-gray-800">{snapshot.summary.formalReminderCount}</p>
+              </div>
+            </div>
+          ) : (
+            <EmptyState
+              title="当前没有已经到时间的正式提醒"
+              description="未到时间的工作继续保留在任务/等待状态中，不会被提前标成逾期。"
+            />
+          )}
+        </SectionCard>
+
+        <SectionCard
           title="今日工作"
           description="按客户承诺、今天到期、项目补齐和老客户回访排序，不需要再手工抄一份今日计划。"
         >
@@ -119,6 +152,11 @@ export default function CustomerProjectsPage() {
           ) : (
             <div className="space-y-3">
               {snapshot.queue.map(item => {
+                const reminder = snapshot.reminders.find(candidate =>
+                  candidate.source === 'work_item'
+                    ? candidate.sourceId === item.id
+                    : item.source === 'waiting_check' && candidate.sourceId === item.projectId,
+                );
                 const content = (
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div className="min-w-0">
@@ -129,6 +167,21 @@ export default function CustomerProjectsPage() {
                         <span className="text-xs text-gray-500">{WORKBENCH_REASON_LABELS[item.reason]}</span>
                         {item.workItemType && (
                           <span className="text-xs text-gray-400">{WORK_ITEM_TYPE_LABELS[item.workItemType]}</span>
+                        )}
+                        {reminder && (
+                          <span className={
+                            "rounded-full px-2 py-0.5 text-[11px] font-medium "
+                            + (reminder.state === 'overdue'
+                              ? 'bg-red-50 text-red-700'
+                              : 'bg-amber-50 text-amber-700')
+                          }>
+                            {reminder.state === 'overdue' ? '已逾期' : '已到时间'}
+                          </span>
+                        )}
+                        {reminder?.blocked && (
+                          <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[11px] text-gray-600">
+                            受阻但未自动延期
+                          </span>
                         )}
                       </div>
                       <p className="mt-2 truncate text-sm font-medium text-gray-800">{item.title}</p>
