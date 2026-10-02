@@ -144,10 +144,11 @@ assert(
 );
 
 assert(
-  newProjectPage.includes('useSearchParams')
-    && newProjectPage.includes("searchParams.get('customerReferenceId')")
-    && newProjectPage.includes("searchParams.get('contextEventId')"),
-  'Project creation accepts Customer context from Customer Detail',
+  newProjectPage.includes('new URLSearchParams(window.location.search)')
+    && newProjectPage.includes("params.get('customerReferenceId')")
+    && newProjectPage.includes("params.get('contextEventId')")
+    && !newProjectPage.includes('useSearchParams'),
+  'Project creation accepts Customer context after client mount without prerender bailout',
 );
 assert(
   newProjectPage.includes('promotionContext?.eventId')
