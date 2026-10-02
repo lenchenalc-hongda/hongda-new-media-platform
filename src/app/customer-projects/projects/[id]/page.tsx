@@ -6,6 +6,7 @@ import { useParams } from 'next/navigation';
 import AppLayout from '@/components/layout/AppLayout';
 import PageHeader from '@/components/layout/PageHeader';
 import EmptyState from '@/components/ui/EmptyState';
+import ProjectLifecycleSection from './lifecycle-section';
 import type {
   ProjectLifecycleStatus,
   ProjectPriority,
@@ -592,6 +593,14 @@ export default function CustomerProjectDetailPage() {
             </form>
           )}
         </Panel>
+
+        <ProjectLifecycleSection
+          projectId={project.id}
+          status={project.status}
+          version={project.version}
+          customerReferenceKind={customer?.referenceKind ?? null}
+          onChanged={() => loadProject(false)}
+        />
 
         <Panel
           title="项目任务"
