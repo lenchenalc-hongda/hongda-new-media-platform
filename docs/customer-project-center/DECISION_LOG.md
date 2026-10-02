@@ -301,3 +301,58 @@ Authenticated users receive only approved read visibility plus EXECUTE on narrow
 ### DEC-049: Business history uses explicit lifecycle changes, not destructive cascades
 
 Core CPC business rows use RESTRICT/NO ACTION deletion semantics. Project closure, collaborator removal, WorkItem cancellation, mapping deactivation and report correction preserve history rather than deleting it.
+
+
+## Phase 6A merge-gated decisions
+
+Approval rule for `CPC-P6A-REMINDER-SEMANTICS-001`: while these entries are on an unmerged PR they are candidates; owner merge of that PR is the approval act.
+
+### DEC-050: Formal reminders are derived from existing confirmed obligations
+
+Reminder visibility is projected from existing CPC truth such as open WorkItem `due_at` and Project `waiting_on + next_check_at`.
+
+Phase 6A does not approve a second reminder task source or a new `cpc_reminders` business truth table.
+
+### DEC-051: AI suggestions are not formal reminders before human acceptance
+
+AI may propose next actions, follow-ups, reschedules or check dates, but an unaccepted suggestion:
+
+- is not a WorkItem;
+- is not a commitment;
+- cannot be overdue;
+- cannot enter deterministic reminder counts;
+- cannot be treated as employee-performance evidence.
+
+Only an authorized human acceptance through the same domain mutation used for manual work can create or change formal reminder-eligible facts.
+
+### DEC-052: Blocked status does not waive or move a deadline
+
+Blocked remains operational context. It does not silently alter `due_at`.
+
+A blocked open WorkItem may remain overdue until the real due date is explicitly rescheduled through an authorized mutation.
+
+### DEC-053: Reschedule changes the source obligation and preserves history
+
+A reminder never owns its own due date.
+
+Rescheduling updates the authoritative WorkItem or Project waiting/check state, preserves before/after audit history, and derives the current reminder from the new effective time. The prior date remains historical evidence rather than a second active reminder.
+
+### DEC-054: Reminder visibility must be deduplicated by underlying obligation
+
+Workbench, Today, My Tasks and future notification surfaces may show the same underlying obligation in different contexts, but they must reference the same source identity and must not create duplicate active reminder WorkItems.
+
+If future notification delivery logs are added, their occurrence key must derive from the source obligation and effective due/check time so repeated scheduler runs are idempotent.
+
+### DEC-055: Phase 6A does not invent reminder policy values
+
+The following remain deferred until a later explicit decision:
+
+- stale-project threshold;
+- old-customer follow-up cadence;
+- due-soon window;
+- notification channels;
+- notification repeat cadence;
+- quiet hours;
+- escalation-after-N-reminders rules.
+
+The absence of these policy values does not block deterministic due/overdue reminders for already-confirmed obligations.
