@@ -168,6 +168,7 @@ const LOCAL_MESSAGES: Record<string, string> = {
   NEXT_CHECK_REQUIRED: '该状态必须设置下一次检查时间',
   INVALID_CUSTOMER_REFERENCE: '客户引用当前不可用于此操作',
   DUPLICATE_REFERENCE: '该临时客户来源已存在',
+  DUPLICATE_FOLLOW_UP: '当前客户已有未完成的回访任务，请先处理或明确替换',
   CANONICAL_CUSTOMER_REQUIRED: '项目成交前必须先映射到正式客户',
   ORDER_CONFIRMATION_REQUIRED: '项目成交前必须先确认订单证据',
   INTERNAL_ERROR: '客户项目操作失败，请稍后重试',
@@ -369,6 +370,7 @@ export function mapCpcRpcResult(
     || code === 'CANONICAL_CUSTOMER_REQUIRED'
     || code === 'ORDER_CONFIRMATION_REQUIRED'
     || code === 'DUPLICATE_REFERENCE'
+    || code === 'DUPLICATE_FOLLOW_UP'
   ) {
     return { status: 409, body: { ok: false, code, message, data: null } };
   }
