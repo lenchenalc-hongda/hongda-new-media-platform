@@ -229,6 +229,12 @@ export default function CustomerProjectDetailPage() {
 
   const currentNextStepText = useMemo(() => {
     if (!detail) return '';
+    if (detail.project.status === 'paused') {
+      return '项目已暂停 · 下次检查 ' + formatBusinessDateTime(detail.project.nextCheckAt);
+    }
+    if (detail.project.status !== 'active') {
+      return '当前状态：' + PROJECT_STATUS_LABELS[detail.project.status];
+    }
     if (detail.project.waitingOn !== 'none') {
       return '等待 ' + WAITING_ON_LABELS[detail.project.waitingOn]
         + ' · ' + formatBusinessDateTime(detail.project.nextCheckAt);
@@ -239,7 +245,7 @@ export default function CustomerProjectDetailPage() {
           ? ' · ' + formatBusinessDateTime(detail.nextAction.dueAt)
           : '');
     }
-    return '当前没有下一步/等待状态';
+    return '活跃项目当前没有下一步/等待状态';
   }, [detail]);
 
   async function submitProgress(event: FormEvent<HTMLFormElement>) {
@@ -417,11 +423,15 @@ export default function CustomerProjectDetailPage() {
           title="当前下一步"
           description="活跃项目始终应该有一个明确的下一步，或者一个等待对象 + 检查时间。"
         >
-          <div className={project.waitingOn !== 'none'
+          <div className={project.status === 'paused'
             ? 'rounded-lg border border-amber-200 bg-amber-50 p-4'
-            : nextAction
-              ? 'rounded-lg border border-cyan-200 bg-cyan-50 p-4'
-              : 'rounded-lg border border-red-200 bg-red-50 p-4'}
+            : project.status !== 'active'
+              ? 'rounded-lg border border-gray-200 bg-gray-50 p-4'
+              : project.waitingOn !== 'none'
+                ? 'rounded-lg border border-amber-200 bg-amber-50 p-4'
+                : nextAction
+                  ? 'rounded-lg border border-cyan-200 bg-cyan-50 p-4'
+                  : 'rounded-lg border border-red-200 bg-red-50 p-4'}
           >
             <p className="text-sm font-medium text-gray-800">{currentNextStepText}</p>
             {nextAction?.blockedReason && (
