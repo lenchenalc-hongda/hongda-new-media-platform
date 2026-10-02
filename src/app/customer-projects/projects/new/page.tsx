@@ -116,8 +116,7 @@ export default function NewCustomerProjectPage() {
     setStage(PROJECT_STAGE_OPTIONS[value][0].value);
   }
 
-  async function createProvisionalCustomer(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function createProvisionalCustomer() {
     const name = provisionalName.trim();
     const source = provisionalSource.trim();
 
@@ -332,10 +331,7 @@ export default function NewCustomerProjectPage() {
           )}
 
           {showProvisional && (
-            <form
-              onSubmit={createProvisionalCustomer}
-              className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-4"
-            >
+            <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-4">
               <p className="text-sm font-medium text-amber-800">创建临时客户引用</p>
               <p className="mt-1 text-xs text-amber-700">
                 临时引用只用于先推进真实机会；项目成交前仍必须映射到正式客户。
@@ -361,13 +357,14 @@ export default function NewCustomerProjectPage() {
                 </div>
               </div>
               <button
-                type="submit"
+                type="button"
+                onClick={() => void createProvisionalCustomer()}
                 className="mt-3 rounded-lg bg-amber-600 px-4 py-2 text-sm font-medium text-white"
                 disabled={creatingCustomer}
               >
                 {creatingCustomer ? '创建中...' : '创建并选中'}
               </button>
-            </form>
+            </div>
           )}
 
           {selectedCustomer && (
