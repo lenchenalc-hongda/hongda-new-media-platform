@@ -45,8 +45,7 @@ assert(
   'approved formal reminder source types include collaboration and customer-level follow-up',
 );
 assert(
-  !readModels.includes("reminderPriorityClass(item: WorkbenchWorkItemRow): WorkbenchPriorityClass | null {
-  if (item.work_item_type === 'PROJECT_EXCEPTION'"),
+  !readModels.includes("item.work_item_type === 'PROJECT_EXCEPTION'"),
   'project hygiene exception is not fabricated as a formal obligation type',
 );
 
