@@ -20,6 +20,64 @@ export const PROJECT_TYPE_LABELS: Record<ProjectType, string> = {
   other: '其他',
 };
 
+export const PROJECT_STAGE_OPTIONS: Record<
+  ProjectType,
+  ReadonlyArray<{ value: string; label: string }>
+> = {
+  transfer_film: [
+    { value: 'requirement_alignment', label: '需求确认' },
+    { value: 'artwork_material_alignment', label: '图稿 / 材质确认' },
+    { value: 'quotation', label: '报价' },
+    { value: 'sampling_or_plate', label: '打样 / 制版' },
+    { value: 'customer_confirmation', label: '客户确认' },
+    { value: 'order_confirmed', label: '订单确认' },
+    { value: 'production', label: '生产' },
+    { value: 'delivery', label: '交付' },
+  ],
+  transfer_processing: [
+    { value: 'requirement_alignment', label: '需求确认' },
+    { value: 'material_fixture_process_alignment', label: '材料 / 夹具 / 工艺确认' },
+    { value: 'quotation', label: '报价' },
+    { value: 'trial_sample', label: '试样' },
+    { value: 'customer_confirmation', label: '客户确认' },
+    { value: 'order_confirmed', label: '订单确认' },
+    { value: 'production', label: '生产' },
+    { value: 'delivery', label: '交付' },
+  ],
+  equipment: [
+    { value: 'application_assessment', label: '应用评估' },
+    { value: 'solution_definition', label: '方案定义' },
+    { value: 'validation_or_demo', label: '验证 / 演示' },
+    { value: 'quotation_negotiation', label: '报价 / 商务沟通' },
+    { value: 'commercial_confirmation', label: '商务确认' },
+    { value: 'production', label: '生产' },
+    { value: 'delivery_installation', label: '交付 / 安装' },
+    { value: 'acceptance_training', label: '验收 / 培训' },
+  ],
+  uv: [
+    { value: 'application_assessment', label: '应用评估' },
+    { value: 'sample_validation', label: '样品验证' },
+    { value: 'quotation', label: '报价' },
+    { value: 'customer_confirmation', label: '客户确认' },
+    { value: 'order_confirmed', label: '订单确认' },
+    { value: 'production', label: '生产' },
+    { value: 'delivery', label: '交付' },
+  ],
+  other: [
+    { value: 'qualification', label: '机会确认' },
+    { value: 'solution', label: '方案' },
+    { value: 'quotation', label: '报价' },
+    { value: 'validation', label: '验证' },
+    { value: 'customer_confirmation', label: '客户确认' },
+    { value: 'fulfillment', label: '履约' },
+    { value: 'delivery', label: '交付' },
+  ],
+};
+
+export function projectStageLabel(projectType: ProjectType, stage: string): string {
+  return PROJECT_STAGE_OPTIONS[projectType].find(option => option.value === stage)?.label ?? stage;
+}
+
 export const PROJECT_STATUS_LABELS: Record<ProjectLifecycleStatus, string> = {
   active: '推进中',
   paused: '已暂停',
