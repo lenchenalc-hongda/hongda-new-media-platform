@@ -10,6 +10,7 @@ import {
   PROJECT_LIFECYCLE_STATUSES,
   PROJECT_PRIORITIES,
   PROJECT_TYPES,
+  PROVISIONAL_CUSTOMER_REFERENCE_STATUSES,
   RISK_LEVELS,
   WAITING_ON_VALUES,
   WORK_ITEM_PRIORITIES,
@@ -44,7 +45,7 @@ export const provisionalCustomerReferenceSchema = z.object({
   reference_kind: z.literal('provisional'),
   provisional_source_reference: z.string().trim().min(1).max(300),
   display_name_snapshot: z.string().trim().min(1).max(300),
-  status: z.literal('pending_review'),
+  status: z.enum(PROVISIONAL_CUSTOMER_REFERENCE_STATUSES),
   mapped_canonical_reference_id: uuidSchema.nullable(),
   created_by_profile_id: uuidSchema,
   created_at: isoDateTimeSchema,
@@ -54,17 +55,30 @@ export const provisionalCustomerReferenceSchema = z.object({
 export const customerReferenceSchema = z.discriminatedUnion('reference_kind', [
   canonicalCustomerReferenceSchema,
   provisionalCustomerReferenceSchema,
-]);
+]).superRefine((reference, context) => {
+  if (
+    reference.reference_kind === 'provisional'
+    && reference.status === 'mapped'
+    && !reference.mapped_canonical_reference_id
+  ) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['mapped_canonical_reference_id'],
+      message: 'mapped provisional references require mapped_canonical_reference_id',
+    });
+  }
+});
 
 export const projectSchema = z.object({
   id: uuidSchema,
   org_id: uuidSchema,
   customer_reference_id: uuidSchema,
   title: z.string().trim().min(1).max(300),
+  objective_summary: z.string().trim().min(1).max(2000),
   project_type: z.enum(PROJECT_TYPES),
   owner_profile_id: uuidSchema,
   status: z.enum(PROJECT_LIFECYCLE_STATUSES),
-  stage: z.string().trim().min(1).max(100).nullable(),
+  stage: z.string().trim().min(1).max(100),
   waiting_on: z.enum(WAITING_ON_VALUES),
   next_action_summary: z.string().trim().min(1).max(1000).nullable(),
   next_check_at: isoDateTimeSchema.nullable(),

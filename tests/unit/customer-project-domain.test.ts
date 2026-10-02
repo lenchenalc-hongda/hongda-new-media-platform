@@ -91,6 +91,7 @@ const validProject = {
   org_id: ORG_ID,
   customer_reference_id: CUSTOMER_ID,
   title: '转印膜年度框架机会',
+  objective_summary: '客户需要年度转印膜供货并确认样品颜色标准',
   project_type: 'transfer_film',
   owner_profile_id: OWNER_ID,
   status: 'active',
@@ -122,6 +123,10 @@ assert(
   'unknown project type rejected',
 );
 assert(projectSchema.safeParse(validProject).success, 'valid active project schema');
+assert(
+  !projectSchema.safeParse({ ...validProject, stage: null }).success,
+  'persisted project requires a valid stage',
+);
 assert(
   !PROJECT_LIFECYCLE_STATUSES.includes('draft' as never),
   'persisted project draft state is not in lifecycle',
@@ -166,6 +171,22 @@ assert(
 assert(
   customerReferenceSchema.safeParse(provisionalCustomerReference).success,
   'valid provisional customer reference',
+);
+assert(
+  !customerReferenceSchema.safeParse({
+    ...provisionalCustomerReference,
+    status: 'mapped',
+    mapped_canonical_reference_id: null,
+  }).success,
+  'mapped provisional reference requires canonical mapping id',
+);
+assert(
+  customerReferenceSchema.safeParse({
+    ...provisionalCustomerReference,
+    status: 'mapped',
+    mapped_canonical_reference_id: CUSTOMER_ID,
+  }).success,
+  'mapped provisional reference with canonical id accepted',
 );
 assert(
   !customerReferenceSchema.safeParse({
@@ -304,7 +325,12 @@ assert(
 
 assert(getProjectEventCategory('CONTACT_LOGGED') === 'CONTACT', 'contact category');
 assert(getProjectEventCategory('QUOTE_SENT') === 'COMMERCIAL', 'commercial category');
+assert(getProjectEventCategory('COMMERCIAL_CONFIRMED') === 'COMMERCIAL', 'equipment commercial confirmation category');
+assert(getProjectEventCategory('ORDER_CONFIRMED') === 'COMMERCIAL', 'order confirmed category');
 assert(getProjectEventCategory('PROJECT_WON') === 'LIFECYCLE', 'lifecycle category');
+assert(getProjectEventCategory('PROJECT_CANCELLED') === 'LIFECYCLE', 'project cancelled category');
+assert(projectEventCountsAsEffectiveProgress('ORDER_CONFIRMED'), 'confirmed order counts as effective progress');
+assert(projectEventCountsAsMeaningfulChange('PROJECT_CANCELLED'), 'cancelled project is meaningful change');
 
 const validEvent = {
   id: '77777777-7777-4777-8777-777777777777',

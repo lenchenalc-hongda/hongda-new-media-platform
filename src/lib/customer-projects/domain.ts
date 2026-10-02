@@ -72,13 +72,22 @@ export interface CanonicalCustomerReference {
   updated_at: string;
 }
 
+export const PROVISIONAL_CUSTOMER_REFERENCE_STATUSES = [
+  'pending_review',
+  'mapped',
+  'inactive',
+] as const;
+
+export type ProvisionalCustomerReferenceStatus =
+  (typeof PROVISIONAL_CUSTOMER_REFERENCE_STATUSES)[number];
+
 export interface ProvisionalCustomerReference {
   id: string;
   org_id: string;
   reference_kind: 'provisional';
   provisional_source_reference: string;
   display_name_snapshot: string;
-  status: 'pending_review';
+  status: ProvisionalCustomerReferenceStatus;
   mapped_canonical_reference_id: string | null;
   created_by_profile_id: string;
   created_at: string;
@@ -94,10 +103,11 @@ export interface Project {
   org_id: string;
   customer_reference_id: string;
   title: string;
+  objective_summary: string;
   project_type: ProjectType;
   owner_profile_id: string;
   status: ProjectLifecycleStatus;
-  stage: string | null;
+  stage: string;
   waiting_on: WaitingOn;
   next_action_summary: string | null;
   next_check_at: string | null;
@@ -141,11 +151,14 @@ export const PROJECT_EVENT_TYPES = [
   'QUOTE_SENT',
   'SAMPLE_SENT',
   'CUSTOMER_CONFIRMED',
+  'COMMERCIAL_CONFIRMED',
+  'ORDER_CONFIRMED',
   'STAGE_CHANGED',
   'PROJECT_PAUSED',
   'PROJECT_REOPENED',
   'PROJECT_WON',
   'PROJECT_LOST',
+  'PROJECT_CANCELLED',
 ] as const;
 
 export type ProjectEventType = (typeof PROJECT_EVENT_TYPES)[number];
@@ -373,6 +386,8 @@ export const BUSINESS_PROFILE_FK_FIELDS = [
   'cancelled_by_profile_id',
   'actor_profile_id',
   'added_by_profile_id',
+  'removed_by_profile_id',
+  'mapped_by_profile_id',
   'accepted_by_profile_id',
   'rejected_by_profile_id',
   'submitted_by_profile_id',
@@ -448,12 +463,15 @@ export function getProjectEventCategory(
     case 'QUOTE_SENT':
     case 'SAMPLE_SENT':
     case 'CUSTOMER_CONFIRMED':
+    case 'COMMERCIAL_CONFIRMED':
+    case 'ORDER_CONFIRMED':
       return 'COMMERCIAL';
     case 'STAGE_CHANGED':
     case 'PROJECT_PAUSED':
     case 'PROJECT_REOPENED':
     case 'PROJECT_WON':
     case 'PROJECT_LOST':
+    case 'PROJECT_CANCELLED':
       return 'LIFECYCLE';
   }
 }
@@ -466,6 +484,8 @@ export function projectEventCountsAsEffectiveProgress(
     'QUOTE_SENT',
     'SAMPLE_SENT',
     'CUSTOMER_CONFIRMED',
+    'COMMERCIAL_CONFIRMED',
+    'ORDER_CONFIRMED',
     'PROJECT_WON',
   ].includes(eventType);
 }
@@ -481,6 +501,7 @@ export function projectEventCountsAsMeaningfulChange(
     'PROJECT_PAUSED',
     'PROJECT_REOPENED',
     'PROJECT_LOST',
+    'PROJECT_CANCELLED',
   ].includes(eventType);
 }
 
