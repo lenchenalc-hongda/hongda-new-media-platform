@@ -318,7 +318,11 @@ BEGIN
     END IF;
   END LOOP;
 
-  RETURN CASE WHEN TG_OP = 'DELETE' THEN OLD ELSE NEW END;
+  IF TG_OP = 'DELETE' THEN
+    RETURN OLD;
+  END IF;
+
+  RETURN NEW;
 END;
 $$;
 
@@ -362,7 +366,9 @@ BEGIN
       AND p.is_active = TRUE
     LIMIT 1;
 
-  IF NOT FOUND OR v_actor_role NOT IN ('admin', 'manager', 'sales') THEN
+  IF NOT FOUND
+     OR v_actor_role IS NULL
+     OR v_actor_role NOT IN ('admin', 'manager', 'sales') THEN
     RETURN public.cpc_rpc_error('FORBIDDEN', '无有效客户项目权限');
   END IF;
 
@@ -474,7 +480,9 @@ BEGIN
       AND p.is_active = TRUE
     LIMIT 1;
 
-  IF NOT FOUND OR v_actor_role NOT IN ('admin', 'manager', 'sales') THEN
+  IF NOT FOUND
+     OR v_actor_role IS NULL
+     OR v_actor_role NOT IN ('admin', 'manager', 'sales') THEN
     RETURN public.cpc_rpc_error('FORBIDDEN', '无有效项目创建权限');
   END IF;
 
@@ -529,7 +537,8 @@ BEGIN
     RETURN public.cpc_rpc_error('INVALID_STAGE', '项目类型或阶段不合法');
   END IF;
 
-  IF p_priority NOT IN ('low', 'medium', 'high', 'critical') THEN
+  IF p_priority IS NULL
+     OR p_priority NOT IN ('low', 'medium', 'high', 'critical') THEN
     RETURN public.cpc_rpc_error('INVALID_PRIORITY', '项目优先级不合法');
   END IF;
 
@@ -542,7 +551,9 @@ BEGIN
       AND p.org_id = v_actor_org_id
       AND p.is_active = TRUE;
 
-  IF NOT FOUND OR v_owner_role NOT IN ('admin', 'manager', 'sales') THEN
+  IF NOT FOUND
+     OR v_owner_role IS NULL
+     OR v_owner_role NOT IN ('admin', 'manager', 'sales') THEN
     RETURN public.cpc_rpc_error('INVALID_OWNER', '项目负责人无效');
   END IF;
 
@@ -744,7 +755,9 @@ BEGIN
       AND p.is_active = TRUE
     LIMIT 1;
 
-  IF NOT FOUND OR v_actor_role NOT IN ('admin', 'manager', 'sales') THEN
+  IF NOT FOUND
+     OR v_actor_role IS NULL
+     OR v_actor_role NOT IN ('admin', 'manager', 'sales') THEN
     RETURN public.cpc_rpc_error('FORBIDDEN', '无有效项目权限');
   END IF;
 
@@ -939,7 +952,7 @@ BEGIN
       v_project.id,
       'WAITING_RESOLVED',
       'WAIT',
-      p_occurred_at,
+      COALESCE(p_occurred_at, NOW()),
       v_actor_profile_id,
       'user',
       1,
@@ -1001,7 +1014,7 @@ BEGIN
       v_project.id,
       'STAGE_CHANGED',
       'LIFECYCLE',
-      p_occurred_at,
+      COALESCE(p_occurred_at, NOW()),
       v_actor_profile_id,
       'user',
       1,
@@ -1114,7 +1127,9 @@ BEGIN
       AND p.is_active = TRUE
     LIMIT 1;
 
-  IF NOT FOUND OR v_actor_role NOT IN ('admin', 'manager', 'sales') THEN
+  IF NOT FOUND
+     OR v_actor_role IS NULL
+     OR v_actor_role NOT IN ('admin', 'manager', 'sales') THEN
     RETURN public.cpc_rpc_error('FORBIDDEN', '无有效项目权限');
   END IF;
 
@@ -1314,7 +1329,9 @@ BEGIN
       AND p.is_active = TRUE
     LIMIT 1;
 
-  IF NOT FOUND OR v_actor_role NOT IN ('admin', 'manager', 'sales') THEN
+  IF NOT FOUND
+     OR v_actor_role IS NULL
+     OR v_actor_role NOT IN ('admin', 'manager', 'sales') THEN
     RETURN public.cpc_rpc_error('FORBIDDEN', '无有效任务权限');
   END IF;
 
@@ -1517,7 +1534,9 @@ BEGIN
       AND p.is_active = TRUE
     LIMIT 1;
 
-  IF NOT FOUND OR v_actor_role NOT IN ('admin', 'manager', 'sales') THEN
+  IF NOT FOUND
+     OR v_actor_role IS NULL
+     OR v_actor_role NOT IN ('admin', 'manager', 'sales') THEN
     RETURN public.cpc_rpc_error('FORBIDDEN', '无有效项目权限');
   END IF;
 
