@@ -52,6 +52,12 @@ jobs:
       - name: Customer Project Center Phase 5D waiting-event contract tests
         run: pnpm exec tsx tests/unit/customer-project-center-phase5d-waiting-event.test.ts
 
+      - name: Customer Project Center Phase 5E list-model tests
+        run: pnpm exec tsx tests/unit/customer-project-center-phase5e-list-models.test.ts
+
+      - name: Customer Project Center Phase 5E surface contract tests
+        run: pnpm exec tsx tests/unit/customer-project-center-phase5e-surfaces.test.ts
+
       - name: Agent Control tests
         run: pnpm exec tsx tests/unit/agent-control.test.ts
 
