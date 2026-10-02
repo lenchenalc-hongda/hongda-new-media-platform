@@ -90,10 +90,23 @@ export interface WorkbenchWaitingItem {
   due: boolean;
 }
 
+export interface WorkbenchQuickProject {
+  projectId: string;
+  title: string;
+  customerReferenceId: string;
+  customerDisplayName: string | null;
+  stage: string;
+  priority: ProjectPriority;
+  waitingOn: WaitingOn;
+  nextCheckAt: string | null;
+  updatedAt: string;
+}
+
 export interface WorkbenchSnapshot {
   businessDate: string;
   generatedAt: string;
   queue: WorkbenchQueueItem[];
+  quickProjects: WorkbenchQuickProject[];
   attention: WorkbenchAttentionItem[];
   waiting: WorkbenchWaitingItem[];
   summary: {
@@ -433,10 +446,30 @@ export function buildWorkbenchSnapshot(input: {
   waiting.sort((a, b) => toMs(a.nextCheckAt) - toMs(b.nextCheckAt));
   attention.sort((a, b) => toMs(a.dueAt) - toMs(b.dueAt) || a.id.localeCompare(b.id));
 
+  const quickProjects: WorkbenchQuickProject[] = projects
+    .filter(project => project.status === 'active')
+    .sort((a, b) => {
+      const updatedDiff = toMs(b.updated_at) - toMs(a.updated_at);
+      return updatedDiff !== 0 ? updatedDiff : a.id.localeCompare(b.id);
+    })
+    .slice(0, 8)
+    .map(project => ({
+      projectId: project.id,
+      title: project.title,
+      customerReferenceId: project.customer_reference_id,
+      customerDisplayName: customerName(project.customer_reference_id, customerNames),
+      stage: project.stage,
+      priority: project.priority,
+      waitingOn: project.waiting_on,
+      nextCheckAt: project.next_check_at,
+      updatedAt: project.updated_at,
+    }));
+
   return {
     businessDate,
     generatedAt: now.toISOString(),
     queue,
+    quickProjects,
     attention,
     waiting,
     summary: {
