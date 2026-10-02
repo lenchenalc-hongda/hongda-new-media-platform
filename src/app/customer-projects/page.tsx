@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import AppLayout from '@/components/layout/AppLayout';
 import PageHeader from '@/components/layout/PageHeader';
@@ -95,20 +95,6 @@ export default function CustomerProjectsPage() {
     };
   }, []);
 
-  const firstProjectId = useMemo(() => {
-    if (!snapshot) return null;
-    for (const item of snapshot.queue) {
-      if (item.projectId) return item.projectId;
-    }
-    for (const item of snapshot.waiting) {
-      if (item.projectId) return item.projectId;
-    }
-    for (const item of snapshot.attention) {
-      if (item.projectId) return item.projectId;
-    }
-    return null;
-  }, [snapshot]);
-
   return (
     <AppLayout>
       <PageHeader
@@ -184,19 +170,30 @@ export default function CustomerProjectsPage() {
           title="快速记录"
           description="从具体项目进入后，用一次确认记录“发生了什么 + 下一步/等待”，不会要求你再写一份日报。"
         >
-          {firstProjectId ? (
-            <div className="flex flex-col gap-3 rounded-lg bg-cyan-50 p-4 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-800">有推进就顺手记录</p>
-                <p className="mt-1 text-xs text-gray-500">报价、打样、客户确认、订单确认等关键事实仍需要人工确认。</p>
+          {snapshot && snapshot.quickProjects.length > 0 ? (
+            <div className="space-y-3">
+              <div className="rounded-lg bg-cyan-50 p-4">
+                <p className="text-sm font-medium text-gray-800">客户突然有新进展，也不用等它进入今日待办</p>
+                <p className="mt-1 text-xs text-gray-500">下面是最近更新的活跃项目，仅用于快速进入记录，不代表它们今天已到期或更紧急。</p>
               </div>
-              <Link href={"/customer-projects/projects/" + firstProjectId} className="btn-primary no-underline">
-                进入项目记录
-              </Link>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                {snapshot.quickProjects.map(project => (
+                  <Link
+                    key={project.projectId}
+                    href={"/customer-projects/projects/" + project.projectId}
+                    className="rounded-lg border border-gray-200 p-3 no-underline transition hover:border-cyan-300 hover:bg-cyan-50/30"
+                  >
+                    <p className="truncate text-sm font-medium text-gray-800">{project.title}</p>
+                    <p className="mt-1 truncate text-xs text-gray-500">{project.customerDisplayName || '未显示客户名称'}</p>
+                    <p className="mt-2 text-[11px] text-gray-400">阶段：{project.stage}</p>
+                    <p className="mt-2 text-xs font-medium text-cyan-700">记录进展 →</p>
+                  </Link>
+                ))}
+              </div>
             </div>
           ) : (
             <EmptyState
-              title="暂无可快速记录的项目"
+              title="暂无可快速记录的活跃项目"
               description="出现具体商业机会并建立项目后，可从这里进入记录。"
             />
           )}
