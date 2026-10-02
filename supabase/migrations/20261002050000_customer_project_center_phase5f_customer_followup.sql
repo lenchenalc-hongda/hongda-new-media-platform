@@ -12,6 +12,83 @@
 
 BEGIN;
 
+CREATE OR REPLACE FUNCTION public.cpc_can_follow_customer(
+  p_customer_reference_id UUID,
+  p_org_id UUID
+)
+RETURNS BOOLEAN
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $
+DECLARE
+  v_actor_profile_id UUID := public.auth_profile_id();
+  v_actor_org_id TEXT := public.auth_org_id();
+BEGIN
+  IF v_actor_profile_id IS NULL
+     OR v_actor_org_id IS NULL
+     OR p_org_id::TEXT <> v_actor_org_id THEN
+    RETURN FALSE;
+  END IF;
+
+  IF public.auth_has_role('admin') OR public.auth_has_role('manager') THEN
+    RETURN EXISTS (
+      SELECT 1
+      FROM public.cpc_customer_references cr
+      WHERE cr.id = p_customer_reference_id
+        AND cr.org_id = p_org_id
+    );
+  END IF;
+
+  IF NOT public.auth_has_role('sales') THEN
+    RETURN FALSE;
+  END IF;
+
+  RETURN EXISTS (
+    SELECT 1
+    FROM public.cpc_customer_references cr
+    WHERE cr.id = p_customer_reference_id
+      AND cr.org_id = p_org_id
+      AND (
+        (
+          cr.reference_kind = 'provisional'
+          AND cr.created_by_profile_id = v_actor_profile_id
+        )
+        OR (
+          cr.reference_kind = 'canonical'
+          AND cr.external_source IS NOT NULL
+          AND cr.external_owner_reference IS NOT NULL
+          AND EXISTS (
+            SELECT 1
+            FROM public.cpc_external_profile_mappings epm
+            WHERE epm.org_id = cr.org_id
+              AND epm.external_source = cr.external_source
+              AND epm.external_person_id = cr.external_owner_reference
+              AND epm.profile_id = v_actor_profile_id
+              AND epm.status = 'active'
+          )
+        )
+        OR EXISTS (
+          SELECT 1
+          FROM public.cpc_work_items wi
+          WHERE wi.org_id = cr.org_id
+            AND wi.customer_reference_id = cr.id
+            AND wi.project_id IS NULL
+            AND wi.work_item_type = 'FOLLOW_UP'
+            AND wi.assignee_profile_id = v_actor_profile_id
+            AND wi.status IN ('pending', 'in_progress', 'blocked')
+        )
+      )
+  );
+END;
+$;
+
+REVOKE ALL ON FUNCTION public.cpc_can_follow_customer(UUID, UUID)
+  FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.cpc_can_follow_customer(UUID, UUID)
+  TO authenticated;
+
 CREATE OR REPLACE FUNCTION public.cpc_record_customer_follow_up(
   p_customer_reference_id UUID,
   p_event_type TEXT,
@@ -77,12 +154,11 @@ BEGIN
     );
   END IF;
 
-  IF v_actor_role = 'sales'
-     AND NOT public.cpc_can_read_customer_reference(
-       p_customer_reference_id,
-       v_actor_org_id
-     ) THEN
-    RETURN public.cpc_rpc_error('FORBIDDEN', '无权跟进该客户');
+  IF NOT public.cpc_can_follow_customer(
+    p_customer_reference_id,
+    v_actor_org_id
+  ) THEN
+    RETURN public.cpc_rpc_error('FORBIDDEN', '无权维护该客户的关系回访');
   END IF;
 
   IF p_event_type NOT IN (
