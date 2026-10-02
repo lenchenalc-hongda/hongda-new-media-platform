@@ -129,7 +129,7 @@ for (const path of [
 assert(
   !salesPortal?.items.some(item => item.path === '/customer-projects/daily')
   && !salesPortal?.items.some(item => item.path === '/customer-projects/weekly')
-  && salesPortal?.items.some(item => item.path === '/customer-projects/reports'),
+  && !!salesPortal?.items.some(item => item.path === '/customer-projects/reports'),
   'daily/weekly placeholders consolidate to one My Reports navigation entry',
 );
 
