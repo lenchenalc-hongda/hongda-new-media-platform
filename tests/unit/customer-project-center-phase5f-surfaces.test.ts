@@ -137,8 +137,9 @@ assert(
   'Customer detail cannot silently close another salesperson follow-up',
 );
 assert(
-  !customerDetailPage.includes('自动生成老客户回访周期')
-    && customerDetailPage.includes('系统不会在没有批准规则的情况下自动生成老客户回访周期'),
+  customerDetailPage.includes('系统不会在没有批准规则的情况下自动生成老客户回访周期')
+    && !customerDetailPage.includes('每30天自动')
+    && !customerDetailPage.includes('每60天自动'),
   'Phase 5F does not invent an old-customer cadence policy',
 );
 
