@@ -266,21 +266,34 @@ assert(
   'invalid resource id rejected before RPC',
 );
 
-const mutationRouteFiles = [
+const mutationOnlyRouteFiles = [
   'src/app/api/customer-projects/customers/provisional/route.ts',
-  'src/app/api/customer-projects/projects/route.ts',
   'src/app/api/customer-projects/projects/[id]/progress/route.ts',
   'src/app/api/customer-projects/projects/[id]/waiting/route.ts',
   'src/app/api/customer-projects/projects/[id]/transition/route.ts',
   'src/app/api/customer-projects/work-items/[id]/transition/route.ts',
 ];
 
-for (const path of mutationRouteFiles) {
+for (const path of mutationOnlyRouteFiles) {
   const source = fs.readFileSync(path, 'utf8');
   assert(source.includes('runCpcMutation'), path + ' delegates to shared command layer');
-  assert(!source.includes('.from('), path + ' does not directly write/query tables');
+  assert(!source.includes('.from('), path + ' does not directly query/write tables');
   assert(!source.includes('.rpc('), path + ' does not duplicate RPC mapping');
 }
+
+const projectsRouteSource = fs.readFileSync(
+  'src/app/api/customer-projects/projects/route.ts',
+  'utf8',
+);
+assert(
+  projectsRouteSource.includes('export async function POST')
+    && projectsRouteSource.includes("runCpcMutation(req, {}, 'CREATE_PROJECT')"),
+  'Projects POST continues to delegate mutation to shared command layer',
+);
+assert(
+  !projectsRouteSource.includes('.rpc('),
+  'Projects route does not duplicate RPC mutation mapping even after read GET was added',
+);
 
 const workbenchSource = fs.readFileSync(
   'src/app/api/customer-projects/workbench/route.ts',
