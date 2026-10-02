@@ -46,6 +46,9 @@ jobs:
       - name: Customer Project Center Phase 5C API contract tests
         run: pnpm exec tsx tests/unit/customer-project-center-phase5c-api.test.ts
 
+      - name: Customer Project Center Phase 5D UI contract tests
+        run: pnpm exec tsx tests/unit/customer-project-center-phase5d-ui.test.ts
+
       - name: Agent Control tests
         run: pnpm exec tsx tests/unit/agent-control.test.ts
 
