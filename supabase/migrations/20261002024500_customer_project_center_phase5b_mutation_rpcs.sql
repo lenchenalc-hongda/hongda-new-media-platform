@@ -1716,7 +1716,23 @@ BEGIN
       'to_status', p_to_status,
       'reason', NULLIF(btrim(p_reason), ''),
       'pause_next_check_at', p_pause_next_check_at
-    ),
+    )
+    ||
+    CASE p_to_status
+      WHEN 'paused' THEN jsonb_build_object(
+        'pause_reason', btrim(p_reason)
+      )
+      WHEN 'active' THEN jsonb_build_object(
+        'reopen_reason', btrim(p_reason)
+      )
+      WHEN 'lost' THEN jsonb_build_object(
+        'loss_reason', btrim(p_reason)
+      )
+      WHEN 'cancelled' THEN jsonb_build_object(
+        'cancellation_reason', btrim(p_reason)
+      )
+      ELSE '{}'::JSONB
+    END,
     p_request_id
   )
   RETURNING id INTO v_event_id;
