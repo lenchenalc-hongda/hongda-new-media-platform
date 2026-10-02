@@ -140,7 +140,7 @@ export const PORTAL_GROUPS: PortalGroup[] = [
       { label: '客户', path: '/customer-projects/customers', icon: '👥' },
       { label: '项目', path: '/customer-projects/projects', icon: '📁' },
       { label: '我的任务', path: '/customer-projects/tasks', icon: '✅' },
-      { label: '我的报告', path: '/customer-projects/reports', icon: '📝', disabled: true },
+      { label: '我的报告', path: '/customer-projects/reports', icon: '📝' },
       { label: '团队看板', path: '/customer-projects/team', icon: '📈', disabled: true },
       { label: '设置', path: '/customer-projects/settings', icon: '⚙️', disabled: true },
     ],
