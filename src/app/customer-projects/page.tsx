@@ -141,6 +141,8 @@ export default function CustomerProjectsPage() {
                     <div className="shrink-0">
                       {item.projectId ? (
                         <span className="text-xs font-medium text-cyan-700">打开项目 →</span>
+                      ) : item.customerReferenceId ? (
+                        <span className="text-xs font-medium text-cyan-700">打开客户 →</span>
                       ) : (
                         <span className="text-xs text-gray-400">客户级任务</span>
                       )}
@@ -152,6 +154,14 @@ export default function CustomerProjectsPage() {
                   <Link
                     key={item.id}
                     href={"/customer-projects/projects/" + item.projectId}
+                    className="block rounded-lg border border-gray-200 p-4 no-underline transition hover:border-cyan-300 hover:bg-cyan-50/30"
+                  >
+                    {content}
+                  </Link>
+                ) : item.customerReferenceId ? (
+                  <Link
+                    key={item.id}
+                    href={"/customer-projects/customers/" + item.customerReferenceId}
                     className="block rounded-lg border border-gray-200 p-4 no-underline transition hover:border-cyan-300 hover:bg-cyan-50/30"
                   >
                     {content}
