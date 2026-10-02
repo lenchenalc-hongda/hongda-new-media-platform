@@ -206,6 +206,33 @@ assert(
   'customer follow-up response does not expose ownership internals',
 );
 
+const rescheduleMap = mapCpcRpcResult('RESCHEDULE_WORK_ITEM', {
+  data: {
+    ok: true,
+    code: 'OK',
+    message: 'RAW RESCHEDULE MESSAGE',
+    data: {
+      work_item_id: '00000000-0000-0000-0000-000000000396',
+      due_at: '2026-10-05T08:00:00.000Z',
+      version: 5,
+      org_id: ORG_ID,
+      secret: 'SECRET_RESCHEDULE',
+    },
+  },
+  error: null,
+});
+assert(rescheduleMap.status === 200, 'reschedule success maps 200');
+assert(
+  JSON.stringify(Object.keys((rescheduleMap.body.data as any) ?? {}).sort())
+    === '["dueAt","version","workItemId"]',
+  'reschedule response is strict whitelist',
+);
+assert(
+  !JSON.stringify(rescheduleMap.body).includes('SECRET_RESCHEDULE')
+    && !JSON.stringify(rescheduleMap.body).includes(ORG_ID),
+  'reschedule response hides internal fields',
+);
+
 const transport = mapCpcRpcResult('CREATE_PROJECT', {
   data: null,
   error: {
@@ -299,6 +326,7 @@ const mutationOnlyRouteFiles = [
   'src/app/api/customer-projects/projects/[id]/waiting/route.ts',
   'src/app/api/customer-projects/projects/[id]/transition/route.ts',
   'src/app/api/customer-projects/work-items/[id]/transition/route.ts',
+  'src/app/api/customer-projects/work-items/[id]/reschedule/route.ts',
 ];
 
 for (const path of mutationOnlyRouteFiles) {
