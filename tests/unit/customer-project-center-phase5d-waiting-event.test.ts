@@ -52,6 +52,10 @@ assert(
   'waiting event remains within the same audited progress mutation',
 );
 assert(
+  sql.includes("p_event_type,\n    v_event_category,\n    COALESCE(p_occurred_at, NOW()),"),
+  'progress event defaults occurred_at server-side when API omits a timestamp',
+);
+assert(
   !executableSql.includes('DROP TABLE')
     && !executableSql.includes('TRUNCATE')
     && !executableSql.includes('DELETE FROM public.cpc_')
