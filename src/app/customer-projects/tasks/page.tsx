@@ -264,6 +264,11 @@ export default function CustomerProjectTasksPage() {
                 && task.project?.status === 'active'
                 && task.project.waitingOn === 'none';
 
+              const customerFollowUpNeedsCustomerFlow =
+                task.workItemType === 'FOLLOW_UP'
+                && task.project === null
+                && !!task.customerReferenceId;
+
               return (
                 <article key={task.id} className="rounded-lg border border-gray-200 bg-white p-4">
                   <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
@@ -298,6 +303,12 @@ export default function CustomerProjectTasksPage() {
                           当前是活跃项目的 NEXT_ACTION。完成或取消必须同时确定新的下一步/等待状态，不能在这里单独关闭。
                         </p>
                       )}
+
+                      {customerFollowUpNeedsCustomerFlow && (
+                        <p className="mt-2 text-xs text-cyan-700">
+                          客户级回访完成时需要记录实际结果和下一次关系动作，请进入客户页确认；任务页不会静默完成回访。
+                        </p>
+                      )}
                     </div>
 
                     {isOpen(task.status) && (
@@ -324,7 +335,7 @@ export default function CustomerProjectTasksPage() {
                           </button>
                         )}
 
-                        {!activeNextActionNeedsProjectFlow && (
+                        {!activeNextActionNeedsProjectFlow && !customerFollowUpNeedsCustomerFlow && (
                           <button
                             type="button"
                             onClick={() => void transitionTask(task, 'completed')}
@@ -355,14 +366,21 @@ export default function CustomerProjectTasksPage() {
                           </button>
                         )}
 
-                        {task.project && (
+                        {task.project ? (
                           <Link
                             href={"/customer-projects/projects/" + task.project.id}
                             className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-600 no-underline"
                           >
                             去项目
                           </Link>
-                        )}
+                        ) : task.customerReferenceId ? (
+                          <Link
+                            href={"/customer-projects/customers/" + task.customerReferenceId}
+                            className="rounded-lg border border-cyan-200 bg-cyan-50 px-3 py-1.5 text-xs font-medium text-cyan-700 no-underline"
+                          >
+                            去客户
+                          </Link>
+                        ) : null}
                       </div>
                     )}
                   </div>
