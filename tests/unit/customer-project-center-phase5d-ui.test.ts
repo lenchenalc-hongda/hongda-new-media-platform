@@ -114,10 +114,20 @@ assert(
   'progress submit can carry next action or waiting/check in the same command',
 );
 assert(
-  projectDetail.includes('本批 UI 不允许自由输入阶段')
-    && !projectDetail.includes('setNewStage'),
-  'Phase 5D does not introduce a free-form stage editor',
+  projectDetail.includes('PROJECT_STAGE_OPTIONS[project.projectType]')
+    && projectDetail.includes('requestBody.newStage = selectedStage')
+    && !projectDetail.includes('placeholder="输入阶段'),
+  'Phase 5D uses controlled frozen stage options instead of free-form stage input',
 );
+for (const stage of [
+  'artwork_material_alignment',
+  'material_fixture_process_alignment',
+  'commercial_confirmation',
+  'sample_validation',
+  'acceptance_training',
+]) {
+  assert(presentation.includes(stage), 'presentation contains frozen stage: ' + stage);
+}
 assert(
   projectDetail.includes('项目任务')
     && projectDetail.includes('已确认的项目历史')
