@@ -236,11 +236,31 @@ export function buildWorkbenchSnapshot(input: {
     } else if (
       item.work_item_type === 'MANAGEMENT_DECISION'
       && due
+      && item.priority === 'critical'
     ) {
       queue.push({
         id: item.id,
         source: 'work_item',
         priorityClass: 'P0',
+        title: item.title,
+        customerReferenceId,
+        customerDisplayName: displayName,
+        projectId: item.project_id,
+        dueAt: item.due_at,
+        workItemType: item.work_item_type,
+        workItemStatus: item.status,
+        projectStage: project?.stage ?? null,
+        projectPriority: project?.priority ?? null,
+        reason: 'management_decision_due',
+      });
+    } else if (
+      item.work_item_type === 'MANAGEMENT_DECISION'
+      && due
+    ) {
+      queue.push({
+        id: item.id,
+        source: 'work_item',
+        priorityClass: 'P1',
         title: item.title,
         customerReferenceId,
         customerDisplayName: displayName,
