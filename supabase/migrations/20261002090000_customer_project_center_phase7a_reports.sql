@@ -393,7 +393,7 @@ BEGIN
       AND e.project_id IS NULL
       AND e.occurred_at >= v_start
       AND e.occurred_at < v_end
-      AND COALESCE((e.payload ->> 'relationship_follow_up')::BOOLEAN, FALSE);
+      AND e.payload -> 'relationship_follow_up' = 'true'::JSONB;
 
   SELECT
     COUNT(*) FILTER (WHERE e.event_type = 'QUOTE_SENT')::INTEGER,
@@ -479,6 +479,12 @@ BEGIN
   IF p_business_date IS NULL THEN
     RETURN public.cpc_rpc_error('INVALID_INPUT', '日报日期不能为空');
   END IF;
+
+  PERFORM 1
+    FROM public.profiles p
+    WHERE p.id = v_actor_profile_id
+      AND p.org_id = v_actor_org_id
+    FOR UPDATE;
 
   v_today := (NOW() AT TIME ZONE 'Asia/Shanghai')::DATE;
 
@@ -830,13 +836,19 @@ BEGIN
     RETURN public.cpc_rpc_error('FORBIDDEN', '无有效日报权限');
   END IF;
 
+  PERFORM 1
+    FROM public.profiles p
+    WHERE p.id = v_actor_profile_id
+      AND p.org_id = v_actor_org_id
+    FOR UPDATE;
+
   SELECT r.*
     INTO v_report
     FROM public.cpc_reports r
     WHERE r.id = p_report_id
       AND r.org_id = v_actor_org_id
       AND r.subject_profile_id = v_actor_profile_id
-    FOR SHARE;
+    FOR UPDATE;
 
   IF NOT FOUND THEN
     RETURN public.cpc_rpc_error('NOT_FOUND', '日报不存在');
@@ -863,6 +875,22 @@ BEGIN
     RETURN public.cpc_rpc_error(
       'INVALID_INPUT',
       'Phase 7A 仅支持日报更正'
+    );
+  END IF;
+
+  IF EXISTS (
+    SELECT 1
+    FROM public.cpc_reports r
+    WHERE r.org_id = v_actor_org_id
+      AND r.subject_profile_id = v_actor_profile_id
+      AND r.period_type = v_report.period_type
+      AND r.period_start = v_report.period_start
+      AND r.period_end = v_report.period_end
+      AND r.revision_no > v_report.revision_no
+  ) THEN
+    RETURN public.cpc_rpc_error(
+      'INVALID_TRANSITION',
+      '只能从最新提交版本创建更正版'
     );
   END IF;
 
