@@ -195,8 +195,10 @@ assert(
 );
 assert(
   navigation.includes("{ label: '客户', path: '/customer-projects/customers', icon: '👥' }")
-    && navigation.includes("{ label: '我的报告', path: '/customer-projects/reports', icon: '📝', disabled: true }"),
-  'Customers are enabled by Phase 5F while Reports remain gated',
+    && navigation.includes("{ label: '我的报告', path: '/customer-projects/reports', icon: '📝' }")
+    && navigation.includes("{ label: '团队看板', path: '/customer-projects/team', icon: '📈', disabled: true }")
+    && navigation.includes("{ label: '设置', path: '/customer-projects/settings', icon: '⚙️', disabled: true }"),
+  'Customers remain enabled and Phase 7A enables My Reports while Team/Settings stay gated',
 );
 
 console.log('Phase 5E surface tests: ' + passed + ' passed, ' + failed + ' failed');
