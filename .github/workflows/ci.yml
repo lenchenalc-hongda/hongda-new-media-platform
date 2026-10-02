@@ -76,6 +76,15 @@ jobs:
       - name: Customer Project Center Phase 6B surface contract tests
         run: pnpm exec tsx tests/unit/customer-project-center-phase6b-surfaces.test.ts
 
+      - name: Customer Project Center Phase 6C AI Draft contract tests
+        run: pnpm exec tsx tests/unit/customer-project-center-phase6c-ai-drafts.test.ts
+
+      - name: Customer Project Center Phase 6C AI proposal parser tests
+        run: pnpm exec tsx tests/unit/customer-project-center-phase6c-ai-parser.test.ts
+
+      - name: Customer Project Center Phase 6C surface contract tests
+        run: pnpm exec tsx tests/unit/customer-project-center-phase6c-surfaces.test.ts
+
       - name: Agent Control tests
         run: pnpm exec tsx tests/unit/agent-control.test.ts
 
