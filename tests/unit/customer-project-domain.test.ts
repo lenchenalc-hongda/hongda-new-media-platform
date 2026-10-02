@@ -325,6 +325,42 @@ assert(
 
 assert(getProjectEventCategory('CONTACT_LOGGED') === 'CONTACT', 'contact category');
 assert(getProjectEventCategory('QUOTE_SENT') === 'COMMERCIAL', 'commercial category');
+assert(
+  !projectEventSchema.safeParse({
+    ...validEvent,
+    event_type: 'QUOTE_SENT',
+    event_category: 'COMMERCIAL',
+    payload: {},
+  }).success,
+  'quote sent requires evidence reference',
+);
+assert(
+  projectEventSchema.safeParse({
+    ...validEvent,
+    event_type: 'QUOTE_SENT',
+    event_category: 'COMMERCIAL',
+    payload: { evidence_reference: 'WeCom quotation file Q-2026-001' },
+  }).success,
+  'quote sent with evidence reference accepted',
+);
+assert(
+  !projectEventSchema.safeParse({
+    ...validEvent,
+    event_type: 'ORDER_CONFIRMED',
+    event_category: 'COMMERCIAL',
+    payload: {},
+  }).success,
+  'order confirmed requires explicit evidence reference',
+);
+assert(
+  projectEventSchema.safeParse({
+    ...validEvent,
+    event_type: 'ORDER_CONFIRMED',
+    event_category: 'COMMERCIAL',
+    payload: { evidence_reference: 'Customer PO / confirmation message' },
+  }).success,
+  'order confirmed with evidence reference accepted',
+);
 assert(getProjectEventCategory('COMMERCIAL_CONFIRMED') === 'COMMERCIAL', 'equipment commercial confirmation category');
 assert(getProjectEventCategory('ORDER_CONFIRMED') === 'COMMERCIAL', 'order confirmed category');
 assert(getProjectEventCategory('PROJECT_WON') === 'LIFECYCLE', 'lifecycle category');
