@@ -353,6 +353,43 @@ assert(projectEventSchema.safeParse(validEvent).success, 'valid progress event s
 assert(
   !projectEventSchema.safeParse({
     ...validEvent,
+    event_type: 'QUOTE_SENT',
+    event_category: 'COMMERCIAL',
+    payload: {},
+  }).success,
+  'quote sent requires evidence reference',
+);
+assert(
+  projectEventSchema.safeParse({
+    ...validEvent,
+    event_type: 'QUOTE_SENT',
+    event_category: 'COMMERCIAL',
+    payload: { evidence_reference: 'WeCom quotation file Q-2026-001' },
+  }).success,
+  'quote sent with evidence reference accepted',
+);
+assert(
+  !projectEventSchema.safeParse({
+    ...validEvent,
+    event_type: 'ORDER_CONFIRMED',
+    event_category: 'COMMERCIAL',
+    payload: {},
+  }).success,
+  'order confirmed requires explicit evidence reference',
+);
+assert(
+  projectEventSchema.safeParse({
+    ...validEvent,
+    event_type: 'ORDER_CONFIRMED',
+    event_category: 'COMMERCIAL',
+    payload: { evidence_reference: 'Customer PO / confirmation message' },
+  }).success,
+  'order confirmed with evidence reference accepted',
+);
+
+assert(
+  !projectEventSchema.safeParse({
+    ...validEvent,
     event_category: 'CONTACT',
   }).success,
   'event category must match event type',
