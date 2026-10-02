@@ -67,6 +67,15 @@ jobs:
       - name: Customer Project Center Phase 5F surface contract tests
         run: pnpm exec tsx tests/unit/customer-project-center-phase5f-surfaces.test.ts
 
+      - name: Customer Project Center Phase 6B reminder read-model tests
+        run: pnpm exec tsx tests/unit/customer-project-center-phase6b-reminders.test.ts
+
+      - name: Customer Project Center Phase 6B reschedule contract tests
+        run: pnpm exec tsx tests/unit/customer-project-center-phase6b-reschedule.test.ts
+
+      - name: Customer Project Center Phase 6B surface contract tests
+        run: pnpm exec tsx tests/unit/customer-project-center-phase6b-surfaces.test.ts
+
       - name: Agent Control tests
         run: pnpm exec tsx tests/unit/agent-control.test.ts
 
