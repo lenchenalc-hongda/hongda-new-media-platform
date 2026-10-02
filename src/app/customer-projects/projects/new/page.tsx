@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import AppLayout from '@/components/layout/AppLayout';
 import PageHeader from '@/components/layout/PageHeader';
 import type { ProjectPriority, ProjectType, WaitingOn } from '@/lib/customer-projects/domain';
@@ -50,6 +51,10 @@ function FieldLabel({
 }
 
 export default function NewCustomerProjectPage() {
+  const searchParams = useSearchParams();
+  const preselectedCustomerReferenceId = searchParams.get('customerReferenceId') ?? '';
+  const contextEventId = searchParams.get('contextEventId') ?? '';
+
   const [customers, setCustomers] = useState<CustomerOption[]>([]);
   const [customerSearch, setCustomerSearch] = useState('');
   const [selectedCustomerId, setSelectedCustomerId] = useState('');
@@ -75,6 +80,7 @@ export default function NewCustomerProjectPage() {
 
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState('');
+  const [carriedContext, setCarriedContext] = useState(false);
 
   const selectedCustomer = useMemo(
     () => customers.find(customer => customer.id === selectedCustomerId) ?? null,
@@ -110,6 +116,57 @@ export default function NewCustomerProjectPage() {
   useEffect(() => {
     void loadCustomers();
   }, []);
+
+  useEffect(() => {
+    if (!preselectedCustomerReferenceId) return;
+
+    let active = true;
+
+    async function loadCustomerContext() {
+      try {
+        const response = await fetch(
+          '/api/customer-projects/customers/' + encodeURIComponent(preselectedCustomerReferenceId),
+          { cache: 'no-store' },
+        );
+        const body = await response.json().catch(() => null);
+        if (!active || !response.ok || body?.ok !== true || !body?.data?.customer) return;
+
+        const customer = body.data.customer;
+        const option: CustomerOption = {
+          id: customer.id,
+          referenceKind: customer.referenceKind,
+          displayName: customer.displayName,
+          status: customer.status,
+          sourceLabel: customer.sourceLabel ?? null,
+        };
+
+        setCustomers(current => [
+          option,
+          ...current.filter(item => item.id !== option.id),
+        ]);
+        setSelectedCustomerId(option.id);
+
+        if (
+          contextEventId
+          && body.data.promotionContext?.eventId === contextEventId
+          && typeof body.data.promotionContext?.summary === 'string'
+        ) {
+          const summary = body.data.promotionContext.summary.trim();
+          if (summary) {
+            setObjectiveSummary(current => current.trim() ? current : summary);
+            setCarriedContext(true);
+          }
+        }
+      } catch {
+        // The normal selector remains usable even if contextual preload fails.
+      }
+    }
+
+    void loadCustomerContext();
+    return () => {
+      active = false;
+    };
+  }, [contextEventId, preselectedCustomerReferenceId]);
 
   function handleProjectTypeChange(value: ProjectType) {
     setProjectType(value);
@@ -392,11 +449,19 @@ export default function NewCustomerProjectPage() {
               <FieldLabel required>具体需求 / 目标</FieldLabel>
               <textarea
                 value={objectiveSummary}
-                onChange={event => setObjectiveSummary(event.target.value)}
+                onChange={event => {
+                  setObjectiveSummary(event.target.value);
+                  setCarriedContext(false);
+                }}
                 rows={4}
                 placeholder="写清楚客户真正要解决什么、做什么产品，不要只写“跟进客户”。"
                 className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
               />
+              {carriedContext && (
+                <p className="mt-1 text-[11px] text-cyan-700">
+                  已带入最近一次已确认的客户回访摘要，请确认并按具体机会修改。
+                </p>
+              )}
             </div>
             <div>
               <FieldLabel required>业务类型</FieldLabel>
