@@ -40,6 +40,12 @@ jobs:
       - name: Customer Project Center Phase 5B mutation RPC contract tests
         run: pnpm exec tsx tests/unit/customer-project-center-phase5b-mutation-rpcs.test.ts
 
+      - name: Customer Project Center Phase 5C read-model tests
+        run: pnpm exec tsx tests/unit/customer-project-center-phase5c-read-model.test.ts
+
+      - name: Customer Project Center Phase 5C API contract tests
+        run: pnpm exec tsx tests/unit/customer-project-center-phase5c-api.test.ts
+
       - name: Agent Control tests
         run: pnpm exec tsx tests/unit/agent-control.test.ts
 
