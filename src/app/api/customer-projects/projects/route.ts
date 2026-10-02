@@ -76,7 +76,25 @@ export async function GET(_req: NextRequest) {
       code: 'OK',
       message: 'success',
       data: {
-        projects: buildProjectList({ projects, workItems, customers }),
+        projects: buildProjectList({ projects, workItems, customers }).map(project => ({
+          id: project.id,
+          customerReferenceId: project.customerReferenceId,
+          customerDisplayName: project.customerDisplayName,
+          title: project.title,
+          projectType: project.projectType,
+          status: project.status,
+          stage: project.stage,
+          waitingOn: project.waitingOn,
+          nextCheckAt: project.nextCheckAt,
+          riskLevel: project.riskLevel,
+          priority: project.priority,
+          version: project.version,
+          updatedAt: project.updatedAt,
+          nextAction: project.nextAction,
+          needsAction: project.needsAction,
+          blocked: project.blocked,
+          isOwnedByMe: project.ownerProfileId === profile.id,
+        })),
       },
     });
   } catch {
