@@ -247,6 +247,13 @@ BEGIN
     RETURN public.cpc_rpc_error('INVALID_INPUT', '日报日期不能为空');
   END IF;
 
+  IF p_period_date IS DISTINCT FROM (NOW() AT TIME ZONE 'Asia/Shanghai')::DATE THEN
+    RETURN public.cpc_rpc_error(
+      'INVALID_REPORT_PERIOD',
+      '实时日报指标只允许计算当天；历史请读取已提交快照'
+    );
+  END IF;
+
   v_start := p_period_date::TIMESTAMP AT TIME ZONE 'Asia/Shanghai';
   v_end := v_start + INTERVAL '1 day';
 
