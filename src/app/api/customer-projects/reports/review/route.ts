@@ -65,11 +65,16 @@ export async function GET(_req: NextRequest) {
 
     if (reportResult.error) throw new Error('submitted daily reports read failed');
 
-    const reportRows = reportResult.data ?? [];
+    const reportRows: unknown[] = reportResult.data ?? [];
     const subjectProfileIds = Array.from(new Set(
-      reportRows
-        .map(row => row.subject_profile_id)
-        .filter((value): value is string => typeof value === 'string'),
+      reportRows.flatMap(row => {
+        if (!row || typeof row !== 'object') return [];
+        const subjectProfileId =
+          (row as Record<string, unknown>).subject_profile_id;
+        return typeof subjectProfileId === 'string'
+          ? [subjectProfileId]
+          : [];
+      }),
     ));
 
     const profileRows = subjectProfileIds.length > 0
