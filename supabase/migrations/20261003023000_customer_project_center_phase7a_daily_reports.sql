@@ -559,6 +559,22 @@ BEGIN
     );
   END IF;
 
+  IF EXISTS (
+    SELECT 1
+    FROM public.cpc_reports r
+    WHERE r.org_id = v_actor_org_id
+      AND r.subject_profile_id = v_actor_profile_id
+      AND r.period_type = 'daily'
+      AND r.period_start = p_period_date
+      AND r.period_end = p_period_date
+      AND r.status = 'submitted'
+  ) THEN
+    RETURN public.cpc_rpc_error(
+      'INVALID_TRANSITION',
+      '日报已提交；Phase 7A 不允许原地重建，后续更正必须创建新 revision'
+    );
+  END IF;
+
   v_snapshot := public.cpc_get_daily_report_metrics(p_period_date);
 
   IF COALESCE((v_snapshot ->> 'ok')::BOOLEAN, FALSE) IS NOT TRUE THEN
