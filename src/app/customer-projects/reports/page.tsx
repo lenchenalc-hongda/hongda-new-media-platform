@@ -1,9 +1,11 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
 import AppLayout from '@/components/layout/AppLayout';
 import PageHeader from '@/components/layout/PageHeader';
 import EmptyState from '@/components/ui/EmptyState';
+import { useCanReviewDailyReports } from '@/components/layout/RoleProvider';
 import {
   DAILY_REPORT_METRIC_LABELS,
   DAILY_REPORT_METRIC_ORDER,
@@ -54,6 +56,7 @@ function narrativeStaleLabel(
 }
 
 export default function CustomerProjectReportsPage() {
+  const canReviewDailyReports = useCanReviewDailyReports();
   const [reports, setReports] = useState<DailyReportListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -411,6 +414,14 @@ export default function CustomerProjectReportsPage() {
         <PageHeader
           title="我的报告"
           description="日报数字从已确认业务事实派生。员工只做异常校正与提交确认，不重复抄写项目进展。"
+          actions={canReviewDailyReports ? (
+            <Link
+              href="/customer-projects/reports/review"
+              className="rounded-lg border border-cyan-200 bg-cyan-50 px-3 py-2 text-sm text-cyan-700 no-underline"
+            >
+              审阅同组织日报
+            </Link>
+          ) : undefined}
         />
 
         <div className="flex items-center gap-2 border-b border-gray-200">
