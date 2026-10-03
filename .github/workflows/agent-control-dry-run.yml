@@ -189,7 +189,16 @@ jobs:
           REPOSITORY: ${{ github.repository }}
         run: |
           set -euo pipefail
-          codex_binary="/Applications/ChatGPT.app/Contents/Resources/codex"
+          codex_binary="/Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex"
+          if [ ! -x "$codex_binary" ]; then
+            codex_binary="/Applications/ChatGPT.app/Contents/Resources/codex"
+          fi
+          deepseek_api_key="$(/bin/launchctl getenv DEEPSEEK_API_KEY 2>/dev/null || true)"
+          if [ -z "$deepseek_api_key" ]; then
+            printf 'DEEPSEEK_API_KEY_STATUS=MISSING\n'
+            exit 1
+          fi
+          printf 'DEEPSEEK_API_KEY_STATUS=AVAILABLE\n'
           output_schema="$GITHUB_WORKSPACE/scripts/agent-control/codex-readonly-output.schema.json"
           prompt_file="$RUNNER_TEMP/agent-control-mac3-prompt.txt"
           result_file="$RUNNER_TEMP/agent-control-mac3-result.json"
@@ -255,6 +264,7 @@ jobs:
           env -i \
             HOME="$HOME" \
             PATH="/usr/bin:/bin:/usr/sbin:/sbin" \
+            DEEPSEEK_API_KEY="$deepseek_api_key" \
             "$codex_binary" login status > "$login_log" 2>&1
           login_exit_status=$?
           set -e
@@ -269,6 +279,7 @@ jobs:
           env -i \
             HOME="$HOME" \
             PATH="/usr/bin:/bin:/usr/sbin:/sbin" \
+            DEEPSEEK_API_KEY="$deepseek_api_key" \
             TMPDIR="$RUNNER_TEMP" \
             "$codex_binary" exec \
             -C "$GITHUB_WORKSPACE" \
@@ -384,7 +395,16 @@ jobs:
           REPOSITORY: ${{ github.repository }}
         run: |
           set -euo pipefail
-          codex_binary="/Applications/ChatGPT.app/Contents/Resources/codex"
+          codex_binary="/Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex"
+          if [ ! -x "$codex_binary" ]; then
+            codex_binary="/Applications/ChatGPT.app/Contents/Resources/codex"
+          fi
+          deepseek_api_key="$(/bin/launchctl getenv DEEPSEEK_API_KEY 2>/dev/null || true)"
+          if [ -z "$deepseek_api_key" ]; then
+            printf 'DEEPSEEK_API_KEY_STATUS=MISSING\n'
+            exit 1
+          fi
+          printf 'DEEPSEEK_API_KEY_STATUS=AVAILABLE\n'
           allowed_path="docs/agent-control/mac4-acceptance.md"
           output_schema="$GITHUB_WORKSPACE/scripts/agent-control/codex-mac4-output.schema.json"
           prompt_file="$(mktemp "$RUNNER_TEMP/agent-control-mac4-prompt.XXXXXX")"
@@ -487,6 +507,7 @@ jobs:
           env -i \
             HOME="$HOME" \
             PATH="/usr/bin:/bin:/usr/sbin:/sbin" \
+            DEEPSEEK_API_KEY="$deepseek_api_key" \
             "$codex_binary" login status > "$login_log" 2>&1
           login_exit_status=$?
           set -e
@@ -501,6 +522,7 @@ jobs:
           env -i \
             HOME="$HOME" \
             PATH="/usr/bin:/bin:/usr/sbin:/sbin" \
+            DEEPSEEK_API_KEY="$deepseek_api_key" \
             TMPDIR="$RUNNER_TEMP" \
             "$codex_binary" exec \
             -C "$GITHUB_WORKSPACE" \
@@ -743,7 +765,16 @@ jobs:
           REPOSITORY: ${{ github.repository }}
         run: |
           set -euo pipefail
-          codex_binary="/Applications/ChatGPT.app/Contents/Resources/codex"
+          codex_binary="/Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex"
+          if [ ! -x "$codex_binary" ]; then
+            codex_binary="/Applications/ChatGPT.app/Contents/Resources/codex"
+          fi
+          deepseek_api_key="$(/bin/launchctl getenv DEEPSEEK_API_KEY 2>/dev/null || true)"
+          if [ -z "$deepseek_api_key" ]; then
+            printf 'DEEPSEEK_API_KEY_STATUS=MISSING\n'
+            exit 1
+          fi
+          printf 'DEEPSEEK_API_KEY_STATUS=AVAILABLE\n'
           output_schema="$GITHUB_WORKSPACE/scripts/agent-control/codex-mac5-output.schema.json"
           task_file="$(mktemp "$RUNNER_TEMP/agent-control-mac5-task.XXXXXX")"
           prompt_file="$(mktemp "$RUNNER_TEMP/agent-control-mac5-prompt.XXXXXX")"
@@ -875,6 +906,7 @@ jobs:
           env -i \
             HOME="$HOME" \
             PATH="/usr/bin:/bin:/usr/sbin:/sbin" \
+            DEEPSEEK_API_KEY="$deepseek_api_key" \
             "$codex_binary" login status > "$login_log" 2>&1
           login_exit_status=$?
           set -e
@@ -889,6 +921,7 @@ jobs:
           env -i \
             HOME="$HOME" \
             PATH="/usr/bin:/bin:/usr/sbin:/sbin" \
+            DEEPSEEK_API_KEY="$deepseek_api_key" \
             TMPDIR="$RUNNER_TEMP" \
             "$codex_binary" exec \
             -C "$GITHUB_WORKSPACE" \
@@ -1220,7 +1253,16 @@ jobs:
           REPOSITORY: ${{ github.repository }}
         run: |
           set -euo pipefail
-          codex_binary="/Applications/ChatGPT.app/Contents/Resources/codex"
+          codex_binary="/Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex"
+          if [ ! -x "$codex_binary" ]; then
+            codex_binary="/Applications/ChatGPT.app/Contents/Resources/codex"
+          fi
+          deepseek_api_key="$(/bin/launchctl getenv DEEPSEEK_API_KEY 2>/dev/null || true)"
+          if [ -z "$deepseek_api_key" ]; then
+            printf 'DEEPSEEK_API_KEY_STATUS=MISSING\n'
+            exit 1
+          fi
+          printf 'DEEPSEEK_API_KEY_STATUS=AVAILABLE\n'
           acceptance_path="$READY_PATH"
           output_schema="$GITHUB_WORKSPACE/scripts/agent-control/codex-ready-bootstrap-output.schema.json"
           task_file="$(mktemp "$RUNNER_TEMP/agent-control-ready-task.XXXXXX")"
@@ -1357,6 +1399,7 @@ jobs:
           env -i \
             HOME="$HOME" \
             PATH="/usr/bin:/bin:/usr/sbin:/sbin" \
+            DEEPSEEK_API_KEY="$deepseek_api_key" \
             "$codex_binary" login status > "$login_log" 2>&1
           login_exit_status=$?
           set -e
@@ -1370,6 +1413,7 @@ jobs:
           env -i \
             HOME="$HOME" \
             PATH="/usr/bin:/bin:/usr/sbin:/sbin" \
+            DEEPSEEK_API_KEY="$deepseek_api_key" \
             TMPDIR="$RUNNER_TEMP" \
             "$codex_binary" exec \
             -C "$GITHUB_WORKSPACE" \
@@ -1815,7 +1859,16 @@ jobs:
           REPOSITORY: ${{ github.repository }}
         run: |
           set -euo pipefail
-          codex_binary="/Applications/ChatGPT.app/Contents/Resources/codex"
+          codex_binary="/Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex"
+          if [ ! -x "$codex_binary" ]; then
+            codex_binary="/Applications/ChatGPT.app/Contents/Resources/codex"
+          fi
+          deepseek_api_key="$(/bin/launchctl getenv DEEPSEEK_API_KEY 2>/dev/null || true)"
+          if [ -z "$deepseek_api_key" ]; then
+            printf 'DEEPSEEK_API_KEY_STATUS=MISSING\n'
+            exit 1
+          fi
+          printf 'DEEPSEEK_API_KEY_STATUS=AVAILABLE\n'
           output_schema="$GITHUB_WORKSPACE/scripts/agent-control/codex-ready-general-output.schema.json"
           objective_file="$(mktemp "$RUNNER_TEMP/agent-control-ready-general-objective.XXXXXX")"
           paths_file="$(mktemp "$RUNNER_TEMP/agent-control-ready-general-paths.XXXXXX")"
@@ -1983,6 +2036,7 @@ jobs:
           env -i \
             HOME="$HOME" \
             PATH="/usr/bin:/bin:/usr/sbin:/sbin" \
+            DEEPSEEK_API_KEY="$deepseek_api_key" \
             TMPDIR="$RUNNER_TEMP" \
             READY_OBJECTIVE_FILE="$objective_file" \
             READY_ALLOWED_PATHS_FILE="$paths_file" \

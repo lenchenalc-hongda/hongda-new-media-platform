@@ -80,10 +80,12 @@ const codexStep = execute.indexOf('      - name: Run isolated general READY task
 check(codexStep >= 0, 'isolated general READY execution step exists');
 const isolated = execute.slice(codexStep);
 check(isolated.includes('env -i')
+  && isolated.includes('/bin/launchctl getenv DEEPSEEK_API_KEY')
+  && isolated.includes('DEEPSEEK_API_KEY="$deepseek_api_key"')
   && !isolated.includes('GH_APP_TOKEN:')
   && !isolated.includes('SUPABASE_')
   && !isolated.includes('OPENAI_API_KEY'),
-  'isolated Codex step receives no GitHub, database, Production or personal model token');
+  'isolated Codex step receives only the local model credential and no GitHub, database or Production credential');
 check(execute.includes('validate_workspace before_checks')
   && execute.includes('validate_workspace after_checks')
   && execute.includes('git_control_hash')
