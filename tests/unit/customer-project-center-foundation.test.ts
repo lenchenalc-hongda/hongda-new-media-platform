@@ -1,4 +1,6 @@
 import fs from 'node:fs';
+import './customer-project-center-phase8-weekly.test';
+import './customer-project-center-phase8-surfaces.test';
 import {
   canAccessPage,
   getPageSlugFromRoute,

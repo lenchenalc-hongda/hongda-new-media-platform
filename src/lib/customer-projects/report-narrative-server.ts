@@ -6,9 +6,8 @@ import { getProvider } from '@/lib/ai/providers/factory';
 import { createAdminSupabaseClient } from '@/lib/supabase/admin';
 import type { CpcProfile } from './api';
 import { derivedReportSnapshotSchema } from './schemas';
-import type { DailyReportListItem } from './reports';
+import type { DerivedReportListItem } from './reports';
 import {
-  REPORT_NARRATIVE_PROMPT_VERSION,
   REPORT_NARRATIVE_PROPOSAL_TYPE,
   REPORT_NARRATIVE_SCHEMA_VERSION,
   buildReportNarrativeBasis,
@@ -17,6 +16,7 @@ import {
   evaluateReportNarrativeStaleness,
   parseReportNarrativeProposal,
   parseReportNarrativeStatus,
+  reportNarrativePromptVersion,
   validateReportNarrativeText,
   type ReportNarrativeProposal,
   type ReportNarrativeProposalView,
@@ -88,14 +88,14 @@ function requestId(): string {
   return globalThis.crypto.randomUUID();
 }
 
-function toDailyReportListItem(row: unknown): DailyReportListItem | null {
+function toDerivedReportListItem(row: unknown): DerivedReportListItem | null {
   const parsed = derivedReportSnapshotSchema.safeParse(row);
-  if (!parsed.success || parsed.data.period_type !== 'daily') return null;
+  if (!parsed.success) return null;
 
   const report = parsed.data;
   return {
     id: report.id,
-    periodType: 'daily',
+    periodType: report.period_type,
     periodStart: report.period_start,
     periodEnd: report.period_end,
     revisionNo: report.revision_no,
@@ -114,34 +114,33 @@ function toDailyReportListItem(row: unknown): DailyReportListItem | null {
   };
 }
 
-async function loadOwnDailyReport(
+async function loadOwnReport(
   session: any,
   profile: CpcProfile,
   reportId: string,
-): Promise<DailyReportListItem> {
+): Promise<DerivedReportListItem> {
   const result = await session
     .from('cpc_reports')
     .select(REPORT_SELECT)
     .eq('id', reportId)
     .eq('org_id', profile.orgId)
     .eq('subject_profile_id', profile.id)
-    .eq('period_type', 'daily')
     .maybeSingle();
 
   if (result.error) {
-    fail(500, 'INTERNAL_ERROR', '日报读取失败，请稍后重试。');
+    fail(500, 'INTERNAL_ERROR', '报告读取失败，请稍后重试。');
   }
 
-  const report = result.data ? toDailyReportListItem(result.data) : null;
+  const report = result.data ? toDerivedReportListItem(result.data) : null;
   if (!report) {
-    fail(404, 'NOT_FOUND', '日报不存在或无权访问。');
+    fail(404, 'NOT_FOUND', '报告不存在或无权访问。');
   }
   return report;
 }
 
 function proposalView(
   row: any,
-  report: DailyReportListItem,
+  report: DerivedReportListItem,
 ): ReportNarrativeProposalView | null {
   if (
     !row
@@ -252,7 +251,7 @@ async function loadNarrativeProposalRow(
 }
 
 function buildState(
-  report: DailyReportListItem,
+  report: DerivedReportListItem,
   rows: any[],
 ): ReportNarrativeState {
   const views = rows
@@ -282,7 +281,7 @@ export async function readReportNarrativeState(
   profile: CpcProfile,
   reportId: string,
 ): Promise<ReportNarrativeState> {
-  const report = await loadOwnDailyReport(session, profile, reportId);
+  const report = await loadOwnReport(session, profile, reportId);
   const rows = await loadNarrativeProposalRows(session, profile, reportId);
   return buildState(report, rows);
 }
@@ -299,7 +298,7 @@ function providerModel(
   return 'mock';
 }
 
-function composeSafeMockNarrative(report: DailyReportListItem): string {
+function composeSafeMockNarrative(report: DerivedReportListItem): string {
   const facts = buildReportNarrativeFactLines(report);
   const positive = facts
     .filter(fact => fact.state === 'known' && (fact.value ?? 0) > 0)
@@ -310,21 +309,23 @@ function composeSafeMockNarrative(report: DailyReportListItem): string {
     .slice(0, 3)
     .map(fact => `${fact.label}尚未确认`);
 
+  const periodLabel = report.periodType === 'weekly' ? '本周' : '本日';
+  const reportLabel = report.periodType === 'weekly' ? '周报' : '日报';
   const progress = positive.length > 0
-    ? `本日确定性日报记录：${positive.join('、')}。`
-    : '本日未记录可重建的 CPC 有效推进事件，这不等同于没有工作，也不代表外部订单或回款为零。';
+    ? `${periodLabel}确定性${reportLabel}记录：${positive.join('、')}。`
+    : `${periodLabel}未记录可重建的 CPC 有效推进事件，这不等同于没有工作，也不代表外部订单或回款为零。`;
   const uncertainty = unknown.length > 0
     ? `另有${unknown.join('、')}。`
     : '';
   const next = report.status === 'draft'
-    ? '请员工复核事实后再决定是否接受为正式日报摘要。'
-    : '该摘要基于已提交的日报快照，不再修改正式报告。';
+    ? `请员工复核事实后再决定是否接受为正式${reportLabel}摘要。`
+    : `该摘要基于已提交的${reportLabel}快照，不再修改正式报告。`;
 
   return progress + uncertainty + next;
 }
 
 async function generateNarrativeText(
-  report: DailyReportListItem,
+  report: DerivedReportListItem,
 ): Promise<{
   narrative: string;
   provider: ReportNarrativeProviderMetadata;
@@ -333,7 +334,7 @@ async function generateNarrativeText(
   const provider = await getProvider();
   const response = await provider.generateStructured({
     systemPrompt: [
-      '你是宏达印业的日报摘要助手。',
+      `你是宏达印业的${report.periodType === 'weekly' ? '周报' : '日报'}摘要助手。`,
       '只允许依据输入 JSON 中明确给出的 CPC 确定事实和未知项写 2-4 句简洁中文。',
       '只围绕有效推进、项目阶段/状态/等待变化、下一步、客户承诺及日末逾期、',
       '内部协作与管理决策、老客户回访、已确认报价/样品/商务/订单事件、阻塞和未知项。',
@@ -414,9 +415,9 @@ export async function generateReportNarrative(
   profile: CpcProfile,
   reportId: string,
 ): Promise<ReportNarrativeState> {
-  const report = await loadOwnDailyReport(session, profile, reportId);
+  const report = await loadOwnReport(session, profile, reportId);
   if (report.status !== 'draft') {
-    fail(409, 'REPORT_NOT_DRAFT', '只有草稿日报可以生成或刷新 AI 摘要。');
+    fail(409, 'REPORT_NOT_DRAFT', '只有草稿报告可以生成或刷新 AI 摘要。');
   }
 
   const existingRows = await loadNarrativeProposalRows(
@@ -433,7 +434,7 @@ export async function generateReportNarrative(
     narrative: generated.narrative,
     basis,
     generationRequest: {
-      promptVersion: REPORT_NARRATIVE_PROMPT_VERSION,
+      promptVersion: reportNarrativePromptVersion(report.periodType),
       requestedAt: nowIso(),
       factSource: 'DETERMINISTIC_REPORT_SNAPSHOT',
       externalIntegrationPolicy: 'UNKNOWN_NOT_ZERO',
@@ -445,7 +446,7 @@ export async function generateReportNarrative(
   const admin = requireAdminStore();
   const timestamp = nowIso();
   const rawInput =
-    `日报 AI 摘要生成请求：${report.periodStart}，仅使用确定性日报快照。`;
+    `${report.periodType === 'weekly' ? '周报' : '日报'} AI 摘要生成请求：${report.periodStart}，仅使用确定性${report.periodType === 'weekly' ? '周报' : '日报'}快照。`;
   let aiDraftId: string;
 
   if (pendingRow) {
@@ -522,7 +523,7 @@ export async function generateReportNarrative(
       source_audit_seq: report.sourceAuditSeq,
       provider: generated.provider.provider,
       model: generated.provider.model,
-      prompt_version: REPORT_NARRATIVE_PROMPT_VERSION,
+      prompt_version: reportNarrativePromptVersion(report.periodType),
     },
   });
 
@@ -537,9 +538,9 @@ export async function acceptReportNarrative(
   expectedProposalVersion: number,
   expectedReportVersion: number,
 ): Promise<ReportNarrativeState> {
-  const report = await loadOwnDailyReport(session, profile, reportId);
+  const report = await loadOwnReport(session, profile, reportId);
   if (report.status !== 'draft') {
-    fail(409, 'REPORT_NOT_DRAFT', '已提交日报不可修改。');
+    fail(409, 'REPORT_NOT_DRAFT', '已提交报告不可修改。');
   }
 
   const row = await loadNarrativeProposalRow(
@@ -749,7 +750,7 @@ export async function rejectReportNarrative(
   expectedProposalVersion: number,
   reason: string | null,
 ): Promise<ReportNarrativeState> {
-  await loadOwnDailyReport(session, profile, reportId);
+  await loadOwnReport(session, profile, reportId);
   const row = await loadNarrativeProposalRow(
     session,
     profile,

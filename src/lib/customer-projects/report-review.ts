@@ -10,7 +10,7 @@ const reportReviewerProfileSchema = z.object({
   is_active: z.boolean().nullable(),
 }).strict();
 
-export interface SubmittedDailyReportReviewItem {
+interface SubmittedReportReviewItemBase {
   id: string;
   status: 'submitted';
   periodStart: string;
@@ -34,6 +34,20 @@ export interface SubmittedDailyReportReviewItem {
   };
 }
 
+export interface SubmittedDailyReportReviewItem
+  extends SubmittedReportReviewItemBase {
+  periodType: 'daily';
+}
+
+export interface SubmittedWeeklyReportReviewItem
+  extends SubmittedReportReviewItemBase {
+  periodType: 'weekly';
+}
+
+export type SubmittedReportReviewItem =
+  | SubmittedDailyReportReviewItem
+  | SubmittedWeeklyReportReviewItem;
+
 export function canReviewSubmittedDailyReports(
   role: string | null | undefined,
 ): boolean {
@@ -45,6 +59,29 @@ export function buildSubmittedDailyReportReviewItems(input: {
   profiles: unknown[];
   orgId: string;
 }): SubmittedDailyReportReviewItem[] {
+  return buildSubmittedReportReviewItems({
+    ...input,
+    periodType: 'daily',
+  }) as SubmittedDailyReportReviewItem[];
+}
+
+export function buildSubmittedWeeklyReportReviewItems(input: {
+  reports: unknown[];
+  profiles: unknown[];
+  orgId: string;
+}): SubmittedWeeklyReportReviewItem[] {
+  return buildSubmittedReportReviewItems({
+    ...input,
+    periodType: 'weekly',
+  }) as SubmittedWeeklyReportReviewItem[];
+}
+
+function buildSubmittedReportReviewItems(input: {
+  reports: unknown[];
+  profiles: unknown[];
+  orgId: string;
+  periodType: 'daily' | 'weekly';
+}): SubmittedReportReviewItem[] {
   const profiles = new Map<string, z.infer<typeof reportReviewerProfileSchema>>();
 
   for (const row of input.profiles) {
@@ -53,7 +90,7 @@ export function buildSubmittedDailyReportReviewItems(input: {
     profiles.set(parsed.data.id, parsed.data);
   }
 
-  const items: SubmittedDailyReportReviewItem[] = [];
+  const items: SubmittedReportReviewItem[] = [];
 
   for (const row of input.reports) {
     const parsed = derivedReportSnapshotSchema.safeParse(row);
@@ -62,7 +99,7 @@ export function buildSubmittedDailyReportReviewItems(input: {
     const report = parsed.data;
     if (
       report.org_id !== input.orgId
-      || report.period_type !== 'daily'
+      || report.period_type !== input.periodType
       || report.status !== 'submitted'
       || report.submitted_at === null
     ) {
@@ -75,6 +112,7 @@ export function buildSubmittedDailyReportReviewItems(input: {
 
     items.push({
       id: report.id,
+      periodType: report.period_type,
       status: 'submitted',
       periodStart: report.period_start,
       periodEnd: report.period_end,

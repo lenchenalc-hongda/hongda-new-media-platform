@@ -171,13 +171,14 @@ assert(
   'My Reports instructs source correction rather than duplicate report entry',
 );
 assert(
-  reportsPage.includes('周报 · 后续开放')
-    && reportsPage.includes('disabled'),
-  'weekly report remains deferred to Phase 8',
+  reportsPage.includes('日报')
+    && reportsPage.includes('周报')
+    && reportsPage.includes("switchPeriod('weekly')"),
+  'Phase 8 enables the weekly tab on the existing My Reports surface',
 );
 assert(
-  reportsPage.includes('latestRevisionByDate')
-    && reportsPage.includes('draftDates.has(report.periodStart)'),
+  reportsPage.includes('latestRevisionByPeriod')
+    && reportsPage.includes('draftPeriods.has(periodKey)'),
   'correction UI only permits latest submitted revision when no draft exists',
 );
 assert(
