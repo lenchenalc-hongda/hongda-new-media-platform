@@ -28,7 +28,9 @@ export type CpcMutationCommand =
   | 'RECORD_CUSTOMER_FOLLOW_UP'
   | 'CREATE_AI_WORK_ITEM_DRAFT'
   | 'ACCEPT_AI_DRAFT'
-  | 'REJECT_AI_DRAFT';
+  | 'REJECT_AI_DRAFT'
+  | 'REFRESH_DAILY_REPORT'
+  | 'SUBMIT_REPORT';
 
 type RpcResult = {
   data?: any;
@@ -155,6 +157,15 @@ const aiDraftRejectSchema = z.object({
   reason: z.string().trim().max(2000).nullable().optional(),
 }).strict();
 
+const dailyReportRefreshSchema = z.object({
+  periodDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  narrative: z.string().trim().max(4000).nullable().optional(),
+}).strict();
+
+const reportSubmitSchema = z.object({
+  expectedVersion: expectedVersionSchema,
+}).strict();
+
 const transitionableProjectStatuses = PROJECT_LIFECYCLE_STATUSES.filter(status =>
   ['active', 'paused', 'won', 'lost', 'cancelled'].includes(status),
 ) as ['active', ...Array<'paused' | 'won' | 'lost' | 'cancelled'>];
@@ -182,6 +193,8 @@ const COMMAND_SCHEMA = {
   CREATE_AI_WORK_ITEM_DRAFT: aiWorkItemDraftSchema,
   ACCEPT_AI_DRAFT: aiDraftAcceptSchema,
   REJECT_AI_DRAFT: aiDraftRejectSchema,
+  REFRESH_DAILY_REPORT: dailyReportRefreshSchema,
+  SUBMIT_REPORT: reportSubmitSchema,
 } as const;
 
 const LOCAL_MESSAGES: Record<string, string> = {
@@ -207,6 +220,7 @@ const LOCAL_MESSAGES: Record<string, string> = {
   CANONICAL_CUSTOMER_REQUIRED: '项目成交前必须先映射到正式客户',
   ORDER_CONFIRMATION_REQUIRED: '项目成交前必须先确认订单证据',
   DRAFT_EXPIRED: 'AI 建议已过期，请刷新后查看最新建议',
+  INVALID_REPORT_PERIOD: 'Phase 7A 只允许生成或刷新当天日报',
   INTERNAL_ERROR: '客户项目操作失败，请稍后重试',
 };
 
@@ -370,6 +384,22 @@ function sanitizeSuccess(command: CpcMutationCommand, raw: unknown): Record<stri
     return { aiDraftId: id, status, version, createdWorkItemId };
   }
 
+  if (command === 'REFRESH_DAILY_REPORT') {
+    const id = safeString(data.report_id);
+    const status = safeString(data.status);
+    const version = safePositiveInteger(data.version);
+    if (!id || !status || !version) return null;
+    return { reportId: id, status, version };
+  }
+
+  if (command === 'SUBMIT_REPORT') {
+    const id = safeString(data.report_id);
+    const status = safeString(data.status);
+    const version = safePositiveInteger(data.version);
+    if (!id || !status || !version) return null;
+    return { reportId: id, status, version };
+  }
+
   if (command === 'REJECT_AI_DRAFT') {
     const id = safeString(data.ai_draft_id);
     const status = safeString(data.status);
@@ -441,6 +471,7 @@ export function mapCpcRpcResult(
     || code === 'DUPLICATE_REFERENCE'
     || code === 'DUPLICATE_FOLLOW_UP'
     || code === 'DRAFT_EXPIRED'
+    || code === 'INVALID_REPORT_PERIOD'
   ) {
     return { status: 409, body: { ok: false, code, message, data: null } };
   }
@@ -479,7 +510,8 @@ export async function runCpcMutation(
     || command === 'TRANSITION_PROJECT'
     || command === 'RECORD_CUSTOMER_FOLLOW_UP'
     || command === 'ACCEPT_AI_DRAFT'
-    || command === 'REJECT_AI_DRAFT';
+    || command === 'REJECT_AI_DRAFT'
+    || command === 'SUBMIT_REPORT';
 
   let resourceId: string | null = null;
   if (idRequired) {
@@ -512,7 +544,13 @@ export async function runCpcMutation(
   try {
     const body: any = parsed.data;
 
-    if (command === 'CREATE_AI_WORK_ITEM_DRAFT') {
+    if (command === 'REFRESH_DAILY_REPORT') {
+      result = await supabase.rpc('cpc_refresh_daily_report_draft', {
+        p_period_date: body.periodDate,
+        p_narrative: body.narrative ?? null,
+        p_request_id: requestId,
+      });
+    } else if (command === 'CREATE_AI_WORK_ITEM_DRAFT') {
       result = await supabase.rpc('cpc_create_ai_work_item_draft', {
         p_customer_reference_id: body.customerReferenceId ?? null,
         p_project_id: body.projectId ?? null,
@@ -589,6 +627,12 @@ export async function runCpcMutation(
     } else if (command === 'ACCEPT_AI_DRAFT') {
       result = await supabase.rpc('cpc_accept_ai_draft', {
         p_ai_draft_id: resourceId,
+        p_expected_version: body.expectedVersion,
+        p_request_id: requestId,
+      });
+    } else if (command === 'SUBMIT_REPORT') {
+      result = await supabase.rpc('cpc_submit_report', {
+        p_report_id: resourceId,
         p_expected_version: body.expectedVersion,
         p_request_id: requestId,
       });
