@@ -86,8 +86,11 @@ assert(
 
 assert(
   codexStep.includes(
-    'codex_binary="/Applications/ChatGPT.app/Contents/Resources/codex"',
+    'codex_binary="/Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex"',
   )
+  && codexStep.includes('codex_binary="/Applications/ChatGPT.app/Contents/Resources/codex"')
+  && codexStep.includes('/bin/launchctl getenv DEEPSEEK_API_KEY')
+  && codexStep.includes('DEEPSEEK_API_KEY="$deepseek_api_key"')
   && codexStep.includes('"$codex_binary" exec')
   && codexStep.includes('-s workspace-write')
   && codexStep.includes(`-c 'approval_policy="never"'`)
