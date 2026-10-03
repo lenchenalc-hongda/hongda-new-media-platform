@@ -353,19 +353,22 @@ export interface DerivedReportSnapshot {
   id: string;
   org_id: string;
   subject_profile_id: string;
-  period: DerivedReportPeriod;
+  period_type: DerivedReportPeriod;
   period_start: string;
   period_end: string;
-  timezone: string;
+  revision_no: number;
   status: DerivedReportStatus;
+  metrics_schema_version: number;
   deterministic_metrics: Record<string, MetricValue<number>>;
-  ai_narrative: string | null;
-  source_event_cursor: IngestionCursor | null;
-  source_work_item_cursor: IngestionCursor | null;
-  version: number;
+  narrative: string | null;
+  unknowns: unknown[];
+  source_event_seq: number | null;
+  source_audit_seq: number | null;
   supersedes_report_id: string | null;
+  created_by_profile_id: string;
   submitted_by_profile_id: string | null;
   submitted_at: string | null;
+  version: number;
   created_at: string;
   updated_at: string;
 }

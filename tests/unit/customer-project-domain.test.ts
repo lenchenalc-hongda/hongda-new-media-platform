@@ -632,35 +632,31 @@ const validDraftReport = {
   id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
   org_id: ORG_ID,
   subject_profile_id: OWNER_ID,
-  period: 'daily',
+  period_type: 'daily',
   period_start: '2026-09-26',
   period_end: '2026-09-26',
-  timezone: 'Asia/Shanghai',
+  revision_no: 1,
   status: 'draft',
+  metrics_schema_version: 1,
   deterministic_metrics: {
-    effective_progress_events: { state: 'known', value: 2 },
-    unresolved_work_items: { state: 'unknown', reason: 'WorkItem 尚未接入' },
+    meaningfulProgressCount: { state: 'known', value: 2 },
+    unresolvedSourceData: { state: 'unknown', reason: '数据尚未接入' },
   },
-  ai_narrative: null,
-  source_event_cursor: {
-    cursor_kind: 'recorded_at_id',
-    recorded_at: NOW,
-    record_id: validEvent.id,
-  },
-  source_work_item_cursor: {
-    cursor_kind: 'monotonic_sequence',
-    sequence: 42,
-  },
-  version: 1,
+  narrative: null,
+  unknowns: [],
+  source_event_seq: 42,
+  source_audit_seq: 84,
   supersedes_report_id: null,
+  created_by_profile_id: OWNER_ID,
   submitted_by_profile_id: null,
   submitted_at: null,
+  version: 1,
   created_at: NOW,
   updated_at: NOW,
 } as const;
 assert(
   derivedReportSnapshotSchema.safeParse(validDraftReport).success,
-  'draft report with explicit ingestion cursors',
+  'draft report matches approved persisted snapshot shape',
 );
 assert(
   !derivedReportSnapshotSchema.safeParse({
@@ -696,10 +692,20 @@ assert(
 assert(
   derivedReportSnapshotSchema.safeParse({
     ...validDraftReport,
+    revision_no: 2,
     supersedes_report_id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
   }).success,
   'correction draft can point to an earlier report',
 );
+assert(
+  !derivedReportSnapshotSchema.safeParse({
+    ...validDraftReport,
+    period_start: '2026-09-27',
+    period_end: '2026-09-26',
+  }).success,
+  'report period cannot end before it starts',
+);
+
 assert(
   REPORT_METRIC_SEMANTICS.actionCountIsNotUniqueCustomerCount
   && REPORT_METRIC_SEMANTICS.actionCountIsNotUniqueProjectCount,

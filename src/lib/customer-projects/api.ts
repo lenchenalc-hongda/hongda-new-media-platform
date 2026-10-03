@@ -9,7 +9,12 @@ import {
   WAITING_ON_VALUES,
   WORK_ITEM_STATUSES,
 } from './domain';
-import { expectedVersionSchema, isoDateTimeSchema, uuidSchema } from './schemas';
+import {
+  expectedVersionSchema,
+  isoDateSchema,
+  isoDateTimeSchema,
+  uuidSchema,
+} from './schemas';
 
 export type CpcProfile = {
   id: string;
@@ -28,7 +33,10 @@ export type CpcMutationCommand =
   | 'RECORD_CUSTOMER_FOLLOW_UP'
   | 'CREATE_AI_WORK_ITEM_DRAFT'
   | 'ACCEPT_AI_DRAFT'
-  | 'REJECT_AI_DRAFT';
+  | 'REJECT_AI_DRAFT'
+  | 'GENERATE_DAILY_REPORT'
+  | 'SUBMIT_REPORT'
+  | 'CREATE_REPORT_CORRECTION';
 
 type RpcResult = {
   data?: any;
@@ -155,6 +163,19 @@ const aiDraftRejectSchema = z.object({
   reason: z.string().trim().max(2000).nullable().optional(),
 }).strict();
 
+const generateDailyReportSchema = z.object({
+  businessDate: isoDateSchema,
+}).strict();
+
+const reportSubmitSchema = z.object({
+  expectedVersion: expectedVersionSchema,
+}).strict();
+
+const reportCorrectionSchema = z.object({
+  expectedVersion: expectedVersionSchema,
+  reason: z.string().trim().min(1).max(2000),
+}).strict();
+
 const transitionableProjectStatuses = PROJECT_LIFECYCLE_STATUSES.filter(status =>
   ['active', 'paused', 'won', 'lost', 'cancelled'].includes(status),
 ) as ['active', ...Array<'paused' | 'won' | 'lost' | 'cancelled'>];
@@ -182,6 +203,9 @@ const COMMAND_SCHEMA = {
   CREATE_AI_WORK_ITEM_DRAFT: aiWorkItemDraftSchema,
   ACCEPT_AI_DRAFT: aiDraftAcceptSchema,
   REJECT_AI_DRAFT: aiDraftRejectSchema,
+  GENERATE_DAILY_REPORT: generateDailyReportSchema,
+  SUBMIT_REPORT: reportSubmitSchema,
+  CREATE_REPORT_CORRECTION: reportCorrectionSchema,
 } as const;
 
 const LOCAL_MESSAGES: Record<string, string> = {
@@ -207,6 +231,8 @@ const LOCAL_MESSAGES: Record<string, string> = {
   CANONICAL_CUSTOMER_REQUIRED: '项目成交前必须先映射到正式客户',
   ORDER_CONFIRMATION_REQUIRED: '项目成交前必须先确认订单证据',
   DRAFT_EXPIRED: 'AI 建议已过期，请刷新后查看最新建议',
+  REPORT_ALREADY_SUBMITTED: '该日期日报已经提交；如需修改请创建更正版',
+  REPORT_DRAFT_EXISTS: '该周期已有更正草稿，请先处理现有草稿',
   INTERNAL_ERROR: '客户项目操作失败，请稍后重试',
 };
 
@@ -378,6 +404,27 @@ function sanitizeSuccess(command: CpcMutationCommand, raw: unknown): Record<stri
     return { aiDraftId: id, status, version };
   }
 
+  if (
+    command === 'GENERATE_DAILY_REPORT'
+    || command === 'SUBMIT_REPORT'
+    || command === 'CREATE_REPORT_CORRECTION'
+  ) {
+    const id = safeString(data.report_id);
+    const status = safeString(data.status);
+    const revisionNo = safePositiveInteger(data.revision_no);
+    const version = safePositiveInteger(data.version);
+    if (!id || !status || !revisionNo || !version) return null;
+    return {
+      reportId: id,
+      status,
+      revisionNo,
+      version,
+      ...(command === 'CREATE_REPORT_CORRECTION'
+        ? { supersedesReportId: safeString(data.supersedes_report_id) }
+        : {}),
+    };
+  }
+
   if (command === 'RECORD_CUSTOMER_FOLLOW_UP') {
     const customerReferenceId = safeString(data.customer_reference_id);
     const eventId = safeString(data.event_id);
@@ -441,6 +488,8 @@ export function mapCpcRpcResult(
     || code === 'DUPLICATE_REFERENCE'
     || code === 'DUPLICATE_FOLLOW_UP'
     || code === 'DRAFT_EXPIRED'
+    || code === 'REPORT_ALREADY_SUBMITTED'
+    || code === 'REPORT_DRAFT_EXISTS'
   ) {
     return { status: 409, body: { ok: false, code, message, data: null } };
   }
@@ -479,7 +528,9 @@ export async function runCpcMutation(
     || command === 'TRANSITION_PROJECT'
     || command === 'RECORD_CUSTOMER_FOLLOW_UP'
     || command === 'ACCEPT_AI_DRAFT'
-    || command === 'REJECT_AI_DRAFT';
+    || command === 'REJECT_AI_DRAFT'
+    || command === 'SUBMIT_REPORT'
+    || command === 'CREATE_REPORT_CORRECTION';
 
   let resourceId: string | null = null;
   if (idRequired) {
@@ -512,7 +563,12 @@ export async function runCpcMutation(
   try {
     const body: any = parsed.data;
 
-    if (command === 'CREATE_AI_WORK_ITEM_DRAFT') {
+    if (command === 'GENERATE_DAILY_REPORT') {
+      result = await supabase.rpc('cpc_generate_daily_report_draft', {
+        p_business_date: body.businessDate,
+        p_request_id: requestId,
+      });
+    } else if (command === 'CREATE_AI_WORK_ITEM_DRAFT') {
       result = await supabase.rpc('cpc_create_ai_work_item_draft', {
         p_customer_reference_id: body.customerReferenceId ?? null,
         p_project_id: body.projectId ?? null,
@@ -597,6 +653,19 @@ export async function runCpcMutation(
         p_ai_draft_id: resourceId,
         p_expected_version: body.expectedVersion,
         p_reason: body.reason ?? null,
+        p_request_id: requestId,
+      });
+    } else if (command === 'SUBMIT_REPORT') {
+      result = await supabase.rpc('cpc_submit_report', {
+        p_report_id: resourceId,
+        p_expected_version: body.expectedVersion,
+        p_request_id: requestId,
+      });
+    } else if (command === 'CREATE_REPORT_CORRECTION') {
+      result = await supabase.rpc('cpc_create_report_correction', {
+        p_report_id: resourceId,
+        p_expected_version: body.expectedVersion,
+        p_reason: body.reason,
         p_request_id: requestId,
       });
     } else if (command === 'RECORD_CUSTOMER_FOLLOW_UP') {

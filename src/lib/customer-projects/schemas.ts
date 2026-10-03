@@ -349,22 +349,33 @@ export const derivedReportSnapshotSchema = z.object({
   id: uuidSchema,
   org_id: uuidSchema,
   subject_profile_id: uuidSchema,
-  period: z.enum(['daily', 'weekly']),
+  period_type: z.enum(['daily', 'weekly']),
   period_start: isoDateSchema,
   period_end: isoDateSchema,
-  timezone: z.string().trim().min(1).max(100),
+  revision_no: z.number().int().min(1),
   status: z.enum(['draft', 'submitted']),
+  metrics_schema_version: z.number().int().min(1),
   deterministic_metrics: z.record(z.string(), metricValueSchema),
-  ai_narrative: z.string().trim().min(1).max(20000).nullable(),
-  source_event_cursor: ingestionCursorSchema.nullable(),
-  source_work_item_cursor: ingestionCursorSchema.nullable(),
-  version: expectedVersionSchema,
+  narrative: z.string().trim().max(20000).nullable(),
+  unknowns: z.array(z.unknown()),
+  source_event_seq: z.number().int().min(0).nullable(),
+  source_audit_seq: z.number().int().min(0).nullable(),
   supersedes_report_id: uuidSchema.nullable(),
+  created_by_profile_id: uuidSchema,
   submitted_by_profile_id: uuidSchema.nullable(),
   submitted_at: isoDateTimeSchema.nullable(),
+  version: expectedVersionSchema,
   created_at: isoDateTimeSchema,
   updated_at: isoDateTimeSchema,
 }).strict().superRefine((report, context) => {
+  if (report.period_start > report.period_end) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['period_end'],
+      message: 'report period_start must be <= period_end',
+    });
+  }
+
   const hasSubmissionMetadata = report.submitted_by_profile_id !== null
     || report.submitted_at !== null;
 

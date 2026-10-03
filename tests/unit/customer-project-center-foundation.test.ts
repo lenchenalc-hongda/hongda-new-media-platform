@@ -109,11 +109,11 @@ assert(
     '/customer-projects/customers',
     '/customer-projects/projects',
     '/customer-projects/tasks',
+    '/customer-projects/reports',
   ]),
-  'Workbench, Customers, Projects and My Tasks are enabled through Phase 5F',
+  'Workbench, Customers, Projects, My Tasks and My Reports are enabled through Phase 7A',
 );
 for (const path of [
-  '/customer-projects/reports',
   '/customer-projects/team',
   '/customer-projects/settings',
 ]) {
@@ -130,7 +130,11 @@ assert(
   !salesPortal?.items.some(item => item.path === '/customer-projects/daily')
   && !salesPortal?.items.some(item => item.path === '/customer-projects/weekly')
   && !!salesPortal?.items.some(item => item.path === '/customer-projects/reports'),
-  'daily/weekly placeholders consolidate to one My Reports navigation entry',
+  'daily/weekly placeholders consolidate to one enabled My Reports navigation entry',
+);
+assert(
+  isPortalItemEnabled(salesPortal!.items.find(item => item.path === '/customer-projects/reports')!),
+  'My Reports navigation is link-enabled in Phase 7A',
 );
 
 assert(
