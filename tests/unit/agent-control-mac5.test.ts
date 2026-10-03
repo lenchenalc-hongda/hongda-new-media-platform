@@ -178,6 +178,8 @@ assert(
   && !codexStep.includes('--ignore-user-config')
   && codexStep.includes('--ignore-rules')
   && codexStep.includes('env -i')
+  && codexStep.includes('/bin/launchctl getenv DEEPSEEK_API_KEY')
+  && codexStep.includes('DEEPSEEK_API_KEY="$deepseek_api_key"')
   && !/GH_APP_TOKEN|GITHUB_TOKEN|AGENT_CONTROL_APP_PRIVATE_KEY|OPENAI_API_KEY|SUPABASE_SERVICE_ROLE_KEY/.test(codexStep),
   'Codex receives workspace write but no GitHub/application/Production credential',
 );
