@@ -439,6 +439,8 @@ assert(
 
 assert(
   codexStep.includes('env -i')
+  && codexStep.includes('/bin/launchctl getenv DEEPSEEK_API_KEY')
+  && codexStep.includes('DEEPSEEK_API_KEY="$deepseek_api_key"')
   && codexStep.includes('-s workspace-write')
   && codexStep.includes(`-c 'approval_policy="never"'`)
   && codexStep.includes('--ephemeral')
