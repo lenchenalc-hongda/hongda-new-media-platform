@@ -57,17 +57,19 @@ export function buildSubmittedDailyReportReviewItems(input: {
 
   for (const row of input.reports) {
     const parsed = derivedReportSnapshotSchema.safeParse(row);
+    if (!parsed.success) continue;
+
+    const report = parsed.data;
     if (
-      !parsed.success
-      || parsed.data.org_id !== input.orgId
-      || parsed.data.period_type !== 'daily'
-      || parsed.data.status !== 'submitted'
-      || !parsed.data.submitted_at
+      report.org_id !== input.orgId
+      || report.period_type !== 'daily'
+      || report.status !== 'submitted'
+      || report.submitted_at === null
     ) {
       continue;
     }
 
-    const report = parsed.data;
+    const submittedAt = report.submitted_at;
     const subject = profiles.get(report.subject_profile_id);
     if (!subject) continue;
 
@@ -84,7 +86,7 @@ export function buildSubmittedDailyReportReviewItems(input: {
       sourceEventSeq: report.source_event_seq,
       sourceAuditSeq: report.source_audit_seq,
       supersedesReportId: report.supersedes_report_id,
-      submittedAt: report.submitted_at,
+      submittedAt,
       version: report.version,
       createdAt: report.created_at,
       updatedAt: report.updated_at,
