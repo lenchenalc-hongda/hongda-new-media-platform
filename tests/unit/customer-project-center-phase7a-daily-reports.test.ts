@@ -133,6 +133,11 @@ assert(
   'draft creation/refresh is audited',
 );
 assert(
+  refresh.includes("r.status = 'submitted'")
+    && refresh.includes('日报已提交；Phase 7A 不允许原地重建'),
+  'submitted same-day snapshot blocks silent draft recreation until correction flow exists',
+);
+assert(
   refresh.includes("status = 'draft'")
     && !refresh.includes("status = 'submitted'"),
   'refresh never silently submits report',
