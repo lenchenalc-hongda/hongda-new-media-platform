@@ -275,8 +275,7 @@ jobs:
             -s read-only \
             -c 'approval_policy="never"' \
             --ephemeral \
-            --ignore-user-config \
-            --ignore-rules \
+            # Use the self-hosted Mac user config (~/.codex/config.toml), including the configured model provider.\n            --ignore-rules \
             --json \
             --output-schema "$output_schema" \
             --output-last-message "$result_file" \
@@ -508,8 +507,7 @@ jobs:
             -s workspace-write \
             -c 'approval_policy="never"' \
             --ephemeral \
-            --ignore-user-config \
-            --ignore-rules \
+            # Use the self-hosted Mac user config (~/.codex/config.toml), including the configured model provider.\n            --ignore-rules \
             --json \
             --output-schema "$output_schema" \
             --output-last-message "$result_file" \
@@ -897,8 +895,7 @@ jobs:
             -s workspace-write \
             -c 'approval_policy="never"' \
             --ephemeral \
-            --ignore-user-config \
-            --ignore-rules \
+            # Use the self-hosted Mac user config (~/.codex/config.toml), including the configured model provider.\n            --ignore-rules \
             --json \
             --output-schema "$output_schema" \
             --output-last-message "$result_file" \
@@ -1379,8 +1376,7 @@ jobs:
             -s workspace-write \
             -c 'approval_policy="never"' \
             --ephemeral \
-            --ignore-user-config \
-            --ignore-rules \
+            # Use the self-hosted Mac user config (~/.codex/config.toml), including the configured model provider.\n            --ignore-rules \
             --json \
             --output-schema "$output_schema" \
             --output-last-message "$result_file" \
@@ -1997,8 +1993,7 @@ jobs:
             -s workspace-write \
             -c 'approval_policy="never"' \
             --ephemeral \
-            --ignore-user-config \
-            --ignore-rules \
+            # Use the self-hosted Mac user config (~/.codex/config.toml), including the configured model provider.\n            --ignore-rules \
             --json \
             --output-schema "$output_schema" \
             --output-last-message "$result_file" \
