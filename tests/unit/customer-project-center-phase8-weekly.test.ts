@@ -304,7 +304,7 @@ assert(
   'WORK_ITEM proposal persists weekly report and rationale traceability',
 );
 assert(
-  weeklyWorkItemProposal
+  weeklyWorkItemProposal !== null
     && evaluateWeeklySuggestionStaleness(
       weeklyWorkItemProposal,
       { ...weeklyReport, version: 4 },
