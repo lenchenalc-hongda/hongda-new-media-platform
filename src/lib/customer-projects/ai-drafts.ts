@@ -164,7 +164,10 @@ export function parseAiWorkItemProposal(value: unknown): AiWorkItemProposal | nu
   const description = optionalString(proposal.description, 2000);
   const dueAt = optionalIso(proposal.dueAt);
   const priority = proposal.priority;
-  const weeklyBasis = parseWeeklyBasis(proposal.weeklyBasis);
+  const hasWeeklyBasis = Object.prototype.hasOwnProperty.call(proposal, 'weeklyBasis');
+  const weeklyBasis = hasWeeklyBasis
+    ? parseWeeklyBasis(proposal.weeklyBasis)
+    : null;
   const rationale = proposal.rationale === undefined
     ? undefined
     : nonEmptyString(proposal.rationale, 1000) ?? undefined;
@@ -173,7 +176,7 @@ export function parseAiWorkItemProposal(value: unknown): AiWorkItemProposal | nu
     : nonEmptyString(proposal.candidateId, 100) ?? undefined;
 
   if (!title || description === undefined || dueAt === undefined) return null;
-  if (weeklyBasis === undefined) return null;
+  if (hasWeeklyBasis && !weeklyBasis) return null;
   if (proposal.rationale !== undefined && !rationale) return null;
   if (proposal.candidateId !== undefined && !candidateId) return null;
   if (typeof priority !== 'string' || !PRIORITIES.has(priority as WorkItemPriority)) {
