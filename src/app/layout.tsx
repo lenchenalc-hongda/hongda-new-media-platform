@@ -3,6 +3,7 @@ import { RoleProvider } from '@/components/layout/RoleProvider';
 import { getCurrentUserReadOnly } from '@/lib/auth/current-user';
 import { canRoleAccessPage } from '@/lib/auth/roles';
 import { canCreateReview } from '@/lib/review-center/permissions';
+import { canReviewSubmittedDailyReports } from '@/lib/customer-projects/report-review';
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -13,6 +14,7 @@ export const metadata: Metadata = {
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   let canCreate = false;
   let canAccessCustomerProjectCenter = false;
+  let canReviewDailyReports = false;
   try {
     const user = await getCurrentUserReadOnly();
     if (user) {
@@ -21,6 +23,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         user.role,
         'customer_project_center',
       );
+      canReviewDailyReports = canReviewSubmittedDailyReports(user.role);
     }
   } catch {}
 
@@ -30,6 +33,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <RoleProvider
           canCreateReview={canCreate}
           canAccessCustomerProjectCenter={canAccessCustomerProjectCenter}
+          canReviewDailyReports={canReviewDailyReports}
         >
           {children}
         </RoleProvider>
