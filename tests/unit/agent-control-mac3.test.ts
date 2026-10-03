@@ -102,7 +102,7 @@ assert(
   && codexSection.includes('-c \'approval_policy="never"\'')
   && !codexSection.includes('--ask-for-approval')
   && codexSection.includes('--ephemeral')
-  && codexSection.includes('--ignore-user-config')
+  && !codexSection.includes('--ignore-user-config')
   && codexSection.includes('--ignore-rules'),
   'Codex job uses the version-compatible read-only noninteractive control set',
 );

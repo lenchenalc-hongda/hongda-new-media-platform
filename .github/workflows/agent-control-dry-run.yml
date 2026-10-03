@@ -275,7 +275,6 @@ jobs:
             -s read-only \
             -c 'approval_policy="never"' \
             --ephemeral \
-            --ignore-user-config \
             --ignore-rules \
             --json \
             --output-schema "$output_schema" \
@@ -508,7 +507,6 @@ jobs:
             -s workspace-write \
             -c 'approval_policy="never"' \
             --ephemeral \
-            --ignore-user-config \
             --ignore-rules \
             --json \
             --output-schema "$output_schema" \
@@ -897,7 +895,6 @@ jobs:
             -s workspace-write \
             -c 'approval_policy="never"' \
             --ephemeral \
-            --ignore-user-config \
             --ignore-rules \
             --json \
             --output-schema "$output_schema" \
@@ -1379,7 +1376,6 @@ jobs:
             -s workspace-write \
             -c 'approval_policy="never"' \
             --ephemeral \
-            --ignore-user-config \
             --ignore-rules \
             --json \
             --output-schema "$output_schema" \
@@ -1997,7 +1993,6 @@ jobs:
             -s workspace-write \
             -c 'approval_policy="never"' \
             --ephemeral \
-            --ignore-user-config \
             --ignore-rules \
             --json \
             --output-schema "$output_schema" \
