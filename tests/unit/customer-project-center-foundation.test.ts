@@ -109,11 +109,11 @@ assert(
     '/customer-projects/customers',
     '/customer-projects/projects',
     '/customer-projects/tasks',
+    '/customer-projects/reports',
   ]),
-  'Workbench, Customers, Projects and My Tasks are enabled through Phase 5F',
+  'Workbench, Customers, Projects, My Tasks and My Reports are enabled through Phase 7A',
 );
 for (const path of [
-  '/customer-projects/reports',
   '/customer-projects/team',
   '/customer-projects/settings',
 ]) {
