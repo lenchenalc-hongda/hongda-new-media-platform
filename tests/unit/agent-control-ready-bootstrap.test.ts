@@ -442,7 +442,7 @@ assert(
   && codexStep.includes('-s workspace-write')
   && codexStep.includes(`-c 'approval_policy="never"'`)
   && codexStep.includes('--ephemeral')
-  && codexStep.includes('--ignore-user-config')
+  && !codexStep.includes('--ignore-user-config')
   && codexStep.includes('--ignore-rules')
   && !/GH_APP_TOKEN|GITHUB_TOKEN|AGENT_CONTROL_APP_PRIVATE_KEY|OPENAI_API_KEY|SUPABASE_SERVICE_ROLE_KEY/.test(codexStep),
   'Codex receives workspace write but no GitHub/application/Production credential',
