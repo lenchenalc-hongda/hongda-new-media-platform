@@ -10,6 +10,10 @@ import {
   knownMetricValue,
   type DailyReportListItem,
 } from '@/lib/customer-projects/reports';
+import type {
+  ReportNarrativeStaleReason,
+  ReportNarrativeState,
+} from '@/lib/customer-projects/report-narrative';
 import { formatBusinessDateTime } from '@/lib/customer-projects/presentation';
 
 function shanghaiBusinessDate(): string {
@@ -30,6 +34,25 @@ function statusTone(status: DailyReportListItem['status']): string {
     : 'bg-amber-50 text-amber-700';
 }
 
+function narrativeStaleLabel(
+  reasons: ReportNarrativeStaleReason[],
+): string {
+  if (reasons.includes('PROPOSAL_EXPIRED')) return 'AI 摘要已过期';
+  if (reasons.includes('REPORT_NOT_DRAFT')) return '日报已提交，不能继续审核';
+  if (reasons.includes('REPORT_VERSION_CHANGED')) return '日报版本已变化';
+  if (reasons.includes('REPORT_BASIS_FINGERPRINT_CHANGED')) {
+    return '日报数字或未知项已变化';
+  }
+  if (
+    reasons.includes('SOURCE_EVENT_CURSOR_CHANGED')
+    || reasons.includes('SOURCE_AUDIT_CURSOR_CHANGED')
+  ) {
+    return '日报来源游标已变化';
+  }
+  if (reasons.includes('METRICS_SCHEMA_CHANGED')) return '指标版本已变化';
+  return '提案依据已经过期';
+}
+
 export default function CustomerProjectReportsPage() {
   const [reports, setReports] = useState<DailyReportListItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -37,6 +60,9 @@ export default function CustomerProjectReportsPage() {
   const [workingId, setWorkingId] = useState<string | null>(null);
   const [correctionId, setCorrectionId] = useState<string | null>(null);
   const [correctionReason, setCorrectionReason] = useState('');
+  const [narrativeByReport, setNarrativeByReport] = useState<
+    Record<string, ReportNarrativeState>
+  >({});
 
   const today = useMemo(() => shanghaiBusinessDate(), []);
   const todayDraft = reports.find(report =>
@@ -75,7 +101,9 @@ export default function CustomerProjectReportsPage() {
       const body = await response.json().catch(() => null);
 
       if (response.ok && body?.ok === true && Array.isArray(body?.data?.reports)) {
-        setReports(body.data.reports as DailyReportListItem[]);
+        const nextReports = body.data.reports as DailyReportListItem[];
+        setReports(nextReports);
+        await loadNarrativeStates(nextReports);
         setError('');
       } else if (response.status === 401) {
         setError('登录状态已失效，请重新登录。');
@@ -88,6 +116,170 @@ export default function CustomerProjectReportsPage() {
       setError('日报加载失败，请稍后重试。');
     } finally {
       if (showLoading) setLoading(false);
+    }
+  }
+
+  async function loadNarrativeStates(nextReports: DailyReportListItem[]) {
+    const candidates = nextReports.filter(report =>
+      report.status === 'draft' || report.narrative !== null,
+    );
+
+    const entries = await Promise.all(candidates.map(async report => {
+      try {
+        const response = await fetch(
+          '/api/customer-projects/reports/'
+            + encodeURIComponent(report.id)
+            + '/narrative',
+          { cache: 'no-store' },
+        );
+        const body = await response.json().catch(() => null);
+        if (response.ok && body?.ok === true && body?.data) {
+          return [report.id, body.data as ReportNarrativeState] as const;
+        }
+      } catch {
+        return null;
+      }
+      return null;
+    }));
+
+    setNarrativeByReport(current => {
+      const next: Record<string, ReportNarrativeState> = {};
+      for (const report of nextReports) {
+        if (report.status !== 'draft' && report.narrative === null) continue;
+        const retained = current[report.id];
+        if (retained) next[report.id] = retained;
+      }
+      for (const entry of entries) {
+        if (entry) next[entry[0]] = entry[1];
+      }
+      return next;
+    });
+  }
+
+  function applyNarrativeState(
+    reportId: string,
+    state: ReportNarrativeState,
+  ) {
+    setNarrativeByReport(current => ({
+      ...current,
+      [reportId]: state,
+    }));
+  }
+
+  async function generateNarrative(
+    report: DailyReportListItem,
+    regenerate = false,
+  ) {
+    const operationId = 'narrative-generate-' + report.id;
+    if (workingId) return;
+    setWorkingId(operationId);
+    setError('');
+
+    try {
+      const endpoint = regenerate
+        ? `/api/customer-projects/reports/${encodeURIComponent(report.id)}/narrative/regenerate`
+        : `/api/customer-projects/reports/${encodeURIComponent(report.id)}/narrative`;
+      const response = await fetch(
+        endpoint,
+        { method: 'POST' },
+      );
+      const body = await response.json().catch(() => null);
+
+      if (response.ok && body?.ok === true && body?.data) {
+        applyNarrativeState(report.id, body.data as ReportNarrativeState);
+        return;
+      }
+
+      setError(typeof body?.message === 'string'
+        ? body.message
+        : '生成 AI 摘要失败，请稍后重试。');
+      if (response.status === 409) await loadReports(false);
+    } catch {
+      setError('生成 AI 摘要失败，请稍后重试。');
+    } finally {
+      setWorkingId(null);
+    }
+  }
+
+  async function acceptNarrative(
+    report: DailyReportListItem,
+    proposalId: string,
+    proposalVersion: number,
+  ) {
+    const operationId = 'narrative-accept-' + report.id;
+    if (workingId) return;
+    setWorkingId(operationId);
+    setError('');
+
+    try {
+      const response = await fetch(
+        `/api/customer-projects/reports/${encodeURIComponent(report.id)}/narrative/accept`,
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            proposalId,
+            expectedProposalVersion: proposalVersion,
+            expectedReportVersion: report.version,
+          }),
+        },
+      );
+      const body = await response.json().catch(() => null);
+
+      if (response.ok && body?.ok === true && body?.data) {
+        applyNarrativeState(report.id, body.data as ReportNarrativeState);
+        await loadReports(false);
+        return;
+      }
+
+      setError(typeof body?.message === 'string'
+        ? body.message
+        : '接受 AI 摘要失败，请刷新后重试。');
+      if (response.status === 409) await loadReports(false);
+    } catch {
+      setError('接受 AI 摘要失败，请刷新后重试。');
+    } finally {
+      setWorkingId(null);
+    }
+  }
+
+  async function rejectNarrative(
+    report: DailyReportListItem,
+    proposalId: string,
+    proposalVersion: number,
+  ) {
+    const operationId = 'narrative-reject-' + report.id;
+    if (workingId) return;
+    setWorkingId(operationId);
+    setError('');
+
+    try {
+      const response = await fetch(
+        `/api/customer-projects/reports/${encodeURIComponent(report.id)}/narrative/reject`,
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            proposalId,
+            expectedProposalVersion: proposalVersion,
+          }),
+        },
+      );
+      const body = await response.json().catch(() => null);
+
+      if (response.ok && body?.ok === true && body?.data) {
+        applyNarrativeState(report.id, body.data as ReportNarrativeState);
+        return;
+      }
+
+      setError(typeof body?.message === 'string'
+        ? body.message
+        : '拒绝 AI 摘要失败，请刷新后重试。');
+      if (response.status === 409) await loadReports(false);
+    } catch {
+      setError('拒绝 AI 摘要失败，请刷新后重试。');
+    } finally {
+      setWorkingId(null);
     }
   }
 
@@ -281,7 +473,13 @@ export default function CustomerProjectReportsPage() {
           />
         ) : (
           <div className="space-y-4">
-            {reports.map(report => (
+            {reports.map(report => {
+              const narrativeState = narrativeByReport[report.id];
+              const pendingProposal = narrativeState?.pendingProposal ?? null;
+              const acceptedNarrativeStale =
+                narrativeState?.acceptedNarrativeStale ?? false;
+
+              return (
               <article
                 key={report.id}
                 className="rounded-xl border border-gray-200 bg-white p-5"
@@ -377,17 +575,115 @@ export default function CustomerProjectReportsPage() {
                 </div>
 
                 <div className="mt-4 rounded-lg border border-gray-100 bg-gray-50 p-4">
-                  <p className="text-xs font-medium text-gray-600">摘要</p>
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-xs font-medium text-gray-600">正式日报摘要</p>
+                    {acceptedNarrativeStale && (
+                      <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-800">
+                        摘要依据已过期
+                      </span>
+                    )}
+                  </div>
                   {report.narrative ? (
                     <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-gray-700">
                       {report.narrative}
                     </p>
                   ) : (
                     <p className="mt-2 text-sm text-gray-400">
-                      Phase 7A 先锁定可靠数字；AI 摘要将在 Phase 7B 接入，并且仍需员工确认。
+                      尚未接受 AI 摘要。确定性数字仍以快照为准。
                     </p>
                   )}
+                  {acceptedNarrativeStale && (
+                    <p className="mt-2 text-xs leading-5 text-amber-700">
+                      AI 摘要接受后，确定性数字或来源版本发生了变化。旧摘要没有被覆盖，
+                      需要重新生成并明确接受。
+                    </p>
+                  )}
+                  {report.status === 'draft' && !pendingProposal && (
+                    <button
+                      type="button"
+                      onClick={() => void generateNarrative(report, report.narrative !== null)}
+                      disabled={workingId !== null}
+                      className="mt-3 rounded-lg border border-cyan-200 bg-white px-3 py-1.5 text-xs font-medium text-cyan-700 disabled:opacity-50"
+                    >
+                      {workingId === 'narrative-generate-' + report.id
+                        ? '正在生成 AI 摘要...'
+                        : report.narrative
+                          ? '重新生成 AI 摘要'
+                          : '生成 AI 摘要'}
+                    </button>
+                  )}
                 </div>
+
+                {pendingProposal && (
+                  <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-4">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="text-xs font-medium text-amber-900">
+                        待确认 AI 摘要（非正式）
+                      </p>
+                      <span className="text-[11px] text-amber-700">
+                        AI Draft v{pendingProposal.version}
+                      </span>
+                    </div>
+                    {pendingProposal.isStale && (
+                      <p className="mt-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs leading-5 text-red-700">
+                        {narrativeStaleLabel(pendingProposal.staleReasons)}
+                        。当前提案不能接受，请重新生成并复核。
+                      </p>
+                    )}
+                    <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-amber-950">
+                      {pendingProposal.narrative}
+                    </p>
+                    <p className="mt-2 text-[11px] leading-5 text-amber-700">
+                      提供方：{pendingProposal.provider.provider}
+                      {pendingProposal.provider.model
+                        ? ' / ' + pendingProposal.provider.model
+                        : ''}
+                      。接受后只会写入摘要文字，不会改写日报数字或项目事实。
+                    </p>
+                    <div className="mt-3 flex flex-wrap justify-end gap-2">
+                      {pendingProposal.isStale && (
+                        <button
+                          type="button"
+                          onClick={() => void generateNarrative(report, true)}
+                          disabled={workingId !== null}
+                          className="rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-medium text-amber-800 disabled:opacity-50"
+                        >
+                          {workingId === 'narrative-generate-' + report.id
+                            ? '正在重新生成...'
+                            : '重新生成'}
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => void rejectNarrative(
+                          report,
+                          pendingProposal.id,
+                          pendingProposal.version,
+                        )}
+                        disabled={workingId !== null}
+                        className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs text-gray-600 disabled:opacity-50"
+                      >
+                        {workingId === 'narrative-reject-' + report.id
+                          ? '正在拒绝...'
+                          : '拒绝提案'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void acceptNarrative(
+                          report,
+                          pendingProposal.id,
+                          pendingProposal.version,
+                        )}
+                        disabled={workingId !== null || !pendingProposal.canAccept}
+                        className="rounded-lg bg-amber-700 px-3 py-1.5 text-xs font-medium text-white disabled:cursor-not-allowed disabled:opacity-40"
+                      >
+                        {workingId === 'narrative-accept-' + report.id
+                          ? '正在接受...'
+                          : '接受为正式摘要'}
+                      </button>
+                    </div>
+                  </div>
+                )}
 
                 {report.unknowns.length > 0 && (
                   <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-4">
@@ -433,7 +729,8 @@ export default function CustomerProjectReportsPage() {
                   </div>
                 )}
               </article>
-            ))}
+              );
+            })}
           </div>
         )}
 
