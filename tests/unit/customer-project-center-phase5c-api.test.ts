@@ -309,6 +309,56 @@ assert(
   'AI draft reject response hides raw input',
 );
 
+const reportRefreshMap = mapCpcRpcResult('REFRESH_DAILY_REPORT', {
+  data: {
+    ok: true,
+    code: 'OK',
+    message: 'RAW REPORT REFRESH MESSAGE',
+    data: {
+      report_id: '00000000-0000-0000-0000-000000000393',
+      status: 'draft',
+      version: 2,
+      deterministic_metrics: { secret: 999 },
+    },
+  },
+  error: null,
+});
+assert(reportRefreshMap.status === 200, 'daily report refresh success maps 200');
+assert(
+  JSON.stringify(Object.keys((reportRefreshMap.body.data as any) ?? {}).sort())
+    === '["reportId","status","version"]',
+  'daily report refresh response is strict whitelist',
+);
+assert(
+  !JSON.stringify(reportRefreshMap.body).includes('deterministic_metrics'),
+  'daily report refresh response hides internal metric payload',
+);
+
+const reportSubmitMap = mapCpcRpcResult('SUBMIT_REPORT', {
+  data: {
+    ok: true,
+    code: 'OK',
+    message: 'RAW REPORT SUBMIT MESSAGE',
+    data: {
+      report_id: '00000000-0000-0000-0000-000000000393',
+      status: 'submitted',
+      version: 3,
+      submitted_by_profile_id: PROFILE_ID,
+    },
+  },
+  error: null,
+});
+assert(reportSubmitMap.status === 200, 'report submit success maps 200');
+assert(
+  JSON.stringify(Object.keys((reportSubmitMap.body.data as any) ?? {}).sort())
+    === '["reportId","status","version"]',
+  'report submit response is strict whitelist',
+);
+assert(
+  !JSON.stringify(reportSubmitMap.body).includes(PROFILE_ID),
+  'report submit response hides internal profile id',
+);
+
 const transport = mapCpcRpcResult('CREATE_PROJECT', {
   data: null,
   error: {
@@ -405,6 +455,7 @@ const mutationOnlyRouteFiles = [
   'src/app/api/customer-projects/work-items/[id]/reschedule/route.ts',
   'src/app/api/customer-projects/ai-drafts/[id]/accept/route.ts',
   'src/app/api/customer-projects/ai-drafts/[id]/reject/route.ts',
+  'src/app/api/customer-projects/reports/[id]/submit/route.ts',
 ];
 
 for (const path of mutationOnlyRouteFiles) {
