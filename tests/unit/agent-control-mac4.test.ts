@@ -92,7 +92,7 @@ assert(
   && codexStep.includes('-s workspace-write')
   && codexStep.includes(`-c 'approval_policy="never"'`)
   && codexStep.includes('--ephemeral')
-  && codexStep.includes('--ignore-user-config')
+  && !codexStep.includes('--ignore-user-config')
   && codexStep.includes('--ignore-rules')
   && !/danger-full-access|dangerously-bypass/.test(codexStep),
   'Codex is bounded to workspace-write with noninteractive safe controls',
