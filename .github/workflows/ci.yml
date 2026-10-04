@@ -106,6 +106,12 @@ jobs:
       - name: Customer Project Center Phase 8 surface contract tests
         run: pnpm exec tsx tests/unit/customer-project-center-phase8-surfaces.test.ts
 
+      - name: Customer Project Center Phase 9 Team Board contract tests
+        run: pnpm exec tsx tests/unit/customer-project-center-phase9-team-board.test.ts
+
+      - name: Customer Project Center Phase 9 surface contract tests
+        run: pnpm exec tsx tests/unit/customer-project-center-phase9-surfaces.test.ts
+
       - name: Agent Control tests
         run: pnpm exec tsx tests/unit/agent-control.test.ts
 
