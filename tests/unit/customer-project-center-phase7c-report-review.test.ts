@@ -179,7 +179,8 @@ assert(
 );
 assert(
   reportsPage.includes('/customer-projects/reports/review')
-    && reportsPage.includes('canReviewDailyReports'),
+    && reportsPage.includes('useCanReviewDailyReports()')
+    && reportsPage.includes('actions={canReviewReports ?'),
   'My Reports exposes manager review only through the role-aware link',
 );
 
