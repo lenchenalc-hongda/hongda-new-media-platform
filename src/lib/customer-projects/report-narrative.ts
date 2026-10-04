@@ -1,14 +1,25 @@
 import type { AIDraftStatus, MetricValue } from './domain';
 import {
-  DAILY_REPORT_METRIC_LABELS,
-  DAILY_REPORT_METRIC_ORDER,
   knownMetricValue,
-  type DailyReportListItem,
+  reportMetricLabels,
+  reportMetricOrder,
+  type DerivedReportListItem,
+  type DerivedReportPeriod,
 } from './reports';
 
 export const REPORT_NARRATIVE_PROPOSAL_TYPE = 'REPORT_NARRATIVE';
 export const REPORT_NARRATIVE_SCHEMA_VERSION = 1;
 export const REPORT_NARRATIVE_PROMPT_VERSION = 'cpc-daily-report-narrative-v1';
+export const WEEKLY_REPORT_NARRATIVE_PROMPT_VERSION =
+  'cpc-weekly-report-narrative-v1';
+
+export function reportNarrativePromptVersion(
+  periodType: DerivedReportPeriod,
+): string {
+  return periodType === 'weekly'
+    ? WEEKLY_REPORT_NARRATIVE_PROMPT_VERSION
+    : REPORT_NARRATIVE_PROMPT_VERSION;
+}
 
 export type ReportNarrativeProviderName = 'deepseek' | 'openai' | 'mock';
 
@@ -28,7 +39,7 @@ export interface ReportNarrativeBasis {
   reportId: string;
   reportVersion: number;
   reportRevisionNo: number;
-  periodType: 'daily';
+  periodType: DerivedReportPeriod;
   periodStart: string;
   periodEnd: string;
   metricsSchemaVersion: number;
@@ -86,7 +97,7 @@ export interface ReportNarrativeProposalView {
 export interface ReportNarrativeState {
   reportId: string;
   reportVersion: number;
-  reportStatus: DailyReportListItem['status'];
+  reportStatus: DerivedReportListItem['status'];
   formalNarrative: string | null;
   pendingProposal: ReportNarrativeProposalView | null;
   acceptedProposal: ReportNarrativeProposalView | null;
@@ -103,7 +114,7 @@ export interface ReportNarrativeFact {
 
 export interface ReportNarrativePromptInput {
   period: {
-    type: 'daily';
+    type: DerivedReportPeriod;
     start: string;
     end: string;
     revisionNo: number;
@@ -212,7 +223,7 @@ function hash32(input: string, seed: number): string {
 }
 
 export function computeReportNarrativeBasisFingerprint(input: {
-  periodType: 'daily';
+  periodType: DerivedReportPeriod;
   periodStart: string;
   periodEnd: string;
   revisionNo: number;
@@ -243,18 +254,18 @@ export function computeReportNarrativeBasisFingerprint(input: {
 }
 
 export function buildReportNarrativeBasis(
-  report: DailyReportListItem,
+  report: DerivedReportListItem,
 ): ReportNarrativeBasis {
   return {
     reportId: report.id,
     reportVersion: report.version,
     reportRevisionNo: report.revisionNo,
-    periodType: 'daily',
+    periodType: report.periodType,
     periodStart: report.periodStart,
     periodEnd: report.periodEnd,
     metricsSchemaVersion: report.metricsSchemaVersion,
     deterministicMetricsFingerprint: computeReportNarrativeBasisFingerprint({
-      periodType: 'daily',
+      periodType: report.periodType,
       periodStart: report.periodStart,
       periodEnd: report.periodEnd,
       revisionNo: report.revisionNo,
@@ -287,7 +298,7 @@ function parseBasis(value: unknown): ReportNarrativeBasis | null {
     !reportId
     || !reportVersion
     || !reportRevisionNo
-    || value.periodType !== 'daily'
+    || (value.periodType !== 'daily' && value.periodType !== 'weekly')
     || !periodStart
     || !periodEnd
     || periodStart > periodEnd
@@ -303,7 +314,7 @@ function parseBasis(value: unknown): ReportNarrativeBasis | null {
     reportId,
     reportVersion,
     reportRevisionNo,
-    periodType: 'daily',
+    periodType: value.periodType,
     periodStart,
     periodEnd,
     metricsSchemaVersion,
@@ -389,7 +400,7 @@ export function parseReportNarrativeStatus(
 
 export function evaluateReportNarrativeStaleness(
   proposal: ReportNarrativeProposal,
-  report: DailyReportListItem,
+  report: DerivedReportListItem,
   proposalStatus: AIDraftStatus,
 ): ReportNarrativeStaleReason[] {
   const reasons: ReportNarrativeStaleReason[] = [];
@@ -450,14 +461,15 @@ function summarizeUnknown(value: unknown): string {
 }
 
 export function buildReportNarrativeFactLines(
-  report: DailyReportListItem,
+  report: DerivedReportListItem,
 ): ReportNarrativeFact[] {
-  return DAILY_REPORT_METRIC_ORDER.map(key => {
+  const labels = reportMetricLabels(report.periodType);
+  return reportMetricOrder(report.periodType).map(key => {
     const metric = report.deterministicMetrics[key];
     const value = knownMetricValue(report.deterministicMetrics, key);
     return {
       key,
-      label: DAILY_REPORT_METRIC_LABELS[key] ?? key,
+      label: labels[key] ?? key,
       state: metric?.state === 'unknown' ? 'unknown' : 'known',
       value,
       reason: metric?.state === 'unknown' ? metric.reason : null,
@@ -466,11 +478,11 @@ export function buildReportNarrativeFactLines(
 }
 
 export function buildReportNarrativePromptInput(
-  report: DailyReportListItem,
+  report: DerivedReportListItem,
 ): ReportNarrativePromptInput {
   return {
     period: {
-      type: 'daily',
+      type: report.periodType,
       start: report.periodStart,
       end: report.periodEnd,
       revisionNo: report.revisionNo,
@@ -516,7 +528,7 @@ export function validateReportNarrativeText(value: unknown): string | null {
 
 export function isCurrentReportNarrativeProposal(
   proposal: ReportNarrativeProposalView,
-  report: DailyReportListItem,
+  report: DerivedReportListItem,
 ): boolean {
   return !proposal.isStale && report.status === 'draft';
 }

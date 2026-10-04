@@ -7,10 +7,11 @@ import PageHeader from '@/components/layout/PageHeader';
 import EmptyState from '@/components/ui/EmptyState';
 import { useCanReviewDailyReports } from '@/components/layout/RoleProvider';
 import {
-  DAILY_REPORT_METRIC_LABELS,
-  DAILY_REPORT_METRIC_ORDER,
+  reportMetricLabels,
+  reportMetricOrder,
+  type DerivedReportPeriod,
 } from '@/lib/customer-projects/reports';
-import type { SubmittedDailyReportReviewItem } from '@/lib/customer-projects/report-review';
+import type { SubmittedReportReviewItem } from '@/lib/customer-projects/report-review';
 import type { MetricValue } from '@/lib/customer-projects/domain';
 import { formatBusinessDateTime } from '@/lib/customer-projects/presentation';
 
@@ -26,28 +27,35 @@ function metricDisplay(metric: MetricValue<number> | undefined): {
 }
 
 export default function CustomerProjectReportReviewPage() {
-  const canReviewDailyReports = useCanReviewDailyReports();
-  const [reports, setReports] = useState<SubmittedDailyReportReviewItem[]>([]);
+  const canReviewReports = useCanReviewDailyReports();
+  const [period, setPeriod] = useState<DerivedReportPeriod>('daily');
+  const [reports, setReports] = useState<SubmittedReportReviewItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+
+  useEffect(() => {
+    const requested = new URLSearchParams(window.location.search).get('period');
+    if (requested === 'weekly') setPeriod('weekly');
+    if (requested === 'daily') setPeriod('daily');
+  }, []);
 
   useEffect(() => {
     let active = true;
 
     async function loadReports() {
-      if (!canReviewDailyReports) {
+      if (!canReviewReports) {
         setReports([]);
-        setError('你当前没有日报审阅权限。');
+        setError('你当前没有报告审阅权限。');
         setLoading(false);
         return;
       }
 
       setLoading(true);
       try {
-        const response = await fetch(
-          '/api/customer-projects/reports/review',
-          { cache: 'no-store' },
-        );
+        const endpoint = period === 'weekly'
+          ? '/api/customer-projects/reports/review/weekly'
+          : '/api/customer-projects/reports/review';
+        const response = await fetch(endpoint, { cache: 'no-store' });
         const body = await response.json().catch(() => null);
         if (!active) return;
 
@@ -56,22 +64,22 @@ export default function CustomerProjectReportReviewPage() {
           && body?.ok === true
           && Array.isArray(body?.data?.reports)
         ) {
-          setReports(body.data.reports as SubmittedDailyReportReviewItem[]);
+          setReports(body.data.reports as SubmittedReportReviewItem[]);
           setError('');
         } else if (response.status === 401) {
           setReports([]);
           setError('登录状态已失效，请重新登录。');
         } else if (response.status === 403) {
           setReports([]);
-          setError('你当前没有日报审阅权限。');
+          setError('你当前没有报告审阅权限。');
         } else {
           setReports([]);
-          setError('日报审阅加载失败，请稍后重试。');
+          setError('报告审阅加载失败，请稍后重试。');
         }
       } catch {
         if (active) {
           setReports([]);
-          setError('日报审阅加载失败，请稍后重试。');
+          setError('报告审阅加载失败，请稍后重试。');
         }
       } finally {
         if (active) setLoading(false);
@@ -82,14 +90,16 @@ export default function CustomerProjectReportReviewPage() {
     return () => {
       active = false;
     };
-  }, [canReviewDailyReports]);
+  }, [canReviewReports, period]);
+
+  const periodName = period === 'weekly' ? '周报' : '日报';
 
   return (
     <AppLayout>
       <div className="space-y-6">
         <PageHeader
-          title="日报审阅"
-          description="只读查看同组织已提交的日报版本。数字、未知状态和来源游标均以提交快照为准。"
+          title="报告审阅"
+          description={`只读查看同组织已提交的${periodName}版本。数字、未知状态和来源游标均以提交快照为准。`}
           actions={(
             <Link
               href="/customer-projects/reports"
@@ -100,6 +110,35 @@ export default function CustomerProjectReportReviewPage() {
           )}
         />
 
+        <div className="flex items-center gap-2 border-b border-gray-200">
+          <button
+            type="button"
+            onClick={() => setPeriod('daily')}
+            className={
+              period === 'daily'
+                ? 'border-b-2 border-cyan-600 px-4 py-2 text-sm font-medium text-cyan-700'
+                : 'px-4 py-2 text-sm text-gray-500'
+            }
+          >
+            日报
+          </button>
+          <button
+            type="button"
+            onClick={() => setPeriod('weekly')}
+            className={
+              period === 'weekly'
+                ? 'border-b-2 border-cyan-600 px-4 py-2 text-sm font-medium text-cyan-700'
+                : 'px-4 py-2 text-sm text-gray-500'
+            }
+          >
+            周报
+          </button>
+        </div>
+
+        <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-xs leading-5 text-blue-700">
+          管理审阅只读。不能代替员工编辑、提交、更正或接受 AI 摘要与工作建议。
+        </div>
+
         {error && (
           <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
             {error}
@@ -108,16 +147,20 @@ export default function CustomerProjectReportReviewPage() {
 
         {loading ? (
           <div className="rounded-lg border border-gray-200 bg-white p-8 text-center text-sm text-gray-400">
-            正在加载已提交日报...
+            正在加载已提交{periodName}...
           </div>
         ) : reports.length === 0 ? (
           <EmptyState
-            title="还没有可审阅的已提交日报"
-            description="仅展示同组织的已提交日报，草稿不会出现在这里。"
+            title={`还没有可审阅的已提交${periodName}`}
+            description={`仅展示同组织的已提交${periodName}，草稿不会出现在这里。`}
           />
         ) : (
           <div className="space-y-4">
-            {reports.map(report => (
+            {reports.map(report => {
+              const metricOrder = reportMetricOrder(report.periodType);
+              const metricLabels = reportMetricLabels(report.periodType);
+
+              return (
               <article
                 key={report.id}
                 className="rounded-lg border border-gray-200 bg-white p-5"
@@ -126,7 +169,11 @@ export default function CustomerProjectReportReviewPage() {
                   <div>
                     <div className="flex flex-wrap items-center gap-2">
                       <h2 className="text-base font-semibold text-gray-800">
-                        {report.periodStart} · {report.subject.displayName}
+                        {report.periodStart}
+                        {report.periodType === 'weekly'
+                          ? ` 至 ${report.periodEnd} · `
+                          : ' · '}
+                        {report.subject.displayName}
                       </h2>
                       <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">
                         已提交
@@ -159,7 +206,7 @@ export default function CustomerProjectReportReviewPage() {
                 </div>
 
                 <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
-                  {DAILY_REPORT_METRIC_ORDER.map(key => {
+                  {metricOrder.map(key => {
                     const display = metricDisplay(report.deterministicMetrics[key]);
                     return (
                       <div
@@ -167,7 +214,7 @@ export default function CustomerProjectReportReviewPage() {
                         className="rounded-lg border border-gray-100 bg-gray-50 p-3"
                       >
                         <p className="text-[11px] leading-4 text-gray-500">
-                          {DAILY_REPORT_METRIC_LABELS[key] ?? key}
+                          {metricLabels[key] ?? key}
                         </p>
                         <p className="mt-1 text-xl font-semibold text-gray-800">
                           {display.value}
@@ -197,7 +244,7 @@ export default function CustomerProjectReportReviewPage() {
                     <div className="grid gap-2 text-xs text-gray-500 sm:grid-cols-2">
                       <p>Event cursor：{report.sourceEventSeq ?? '-'}</p>
                       <p>Audit cursor：{report.sourceAuditSeq ?? '-'}</p>
-                      <p>日报版本：{report.version}</p>
+                      <p>报告版本：{report.version}</p>
                       <p>
                         更正来源：
                         {report.supersedesReportId
@@ -207,9 +254,9 @@ export default function CustomerProjectReportReviewPage() {
                     </div>
 
                     <div>
-                      <p className="text-xs font-medium text-gray-600">未知项</p>
+                      <p className="text-xs font-medium text-gray-600">未知项与覆盖</p>
                       {report.unknowns.length > 0 ? (
-                        <pre className="mt-2 overflow-auto whitespace-pre-wrap text-xs leading-5 text-amber-700">
+                        <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap text-xs leading-5 text-amber-700">
                           {JSON.stringify(report.unknowns, null, 2)}
                         </pre>
                       ) : (
@@ -219,7 +266,8 @@ export default function CustomerProjectReportReviewPage() {
                   </div>
                 </details>
               </article>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>

@@ -53,9 +53,9 @@ assert(
   'narrative mutations require the report subject and proposal creator identity',
 );
 assert(
-  server.includes('.eq(\'period_type\', \'daily\')')
+  server.includes('toDerivedReportListItem')
     && server.includes("if (report.status !== 'draft')"),
-  'generation is limited to an existing personal daily report draft',
+  'generation is limited to an existing personal report draft',
 );
 assert(
   server.includes('expectedProposalVersion')
@@ -184,7 +184,7 @@ for (const forbidden of [
   );
 }
 assert(
-  reportsPage.includes('接受后只会写入摘要文字，不会改写日报数字或项目事实')
+  reportsPage.includes('接受后只会写入摘要文字，不会改写报告数字或项目事实')
     && reportsPage.includes('旧摘要没有被覆盖'),
   'narrative UI clearly separates non-authoritative AI text from deterministic facts',
 );

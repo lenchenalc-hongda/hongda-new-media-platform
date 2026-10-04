@@ -162,20 +162,25 @@ for (const forbidden of [
   assert(!page.includes(forbidden), 'manager page has no forbidden path or inference: ' + forbidden);
 }
 assert(
-  page.includes("fetch(\n          '/api/customer-projects/reports/review'")
+  page.includes("fetch(endpoint")
+    && page.includes("'/api/customer-projects/reports/review'")
+    && page.includes("'/api/customer-projects/reports/review/weekly'")
     && page.includes("metric.state === 'known'")
     && page.includes("return { value: '未知', reason: metric.reason }"),
   'manager page reads the controlled API and keeps unknown semantics visible',
 );
 assert(
-  page.includes('只读查看同组织已提交的日报版本')
+  page.includes('只读查看同组织已提交的')
     && page.includes('员工尚未接受正式摘要')
-    && !page.includes('<button'),
+    && page.includes('管理审阅只读')
+    && !page.includes('接受为正式')
+    && !page.includes('确认并提交'),
   'manager page is read-only and distinguishes accepted narrative',
 );
 assert(
   reportsPage.includes('/customer-projects/reports/review')
-    && reportsPage.includes('canReviewDailyReports'),
+    && reportsPage.includes('useCanReviewDailyReports()')
+    && reportsPage.includes('actions={canReviewReports ?'),
   'My Reports exposes manager review only through the role-aware link',
 );
 
