@@ -6,6 +6,7 @@ import AppLayout from '@/components/layout/AppLayout';
 import PageHeader from '@/components/layout/PageHeader';
 import EmptyState from '@/components/ui/EmptyState';
 import type { WorkItemPriority, WorkItemStatus } from '@/lib/customer-projects/domain';
+import type { OldCustomerRecommendation } from '@/lib/customer-projects/old-customer-proactive';
 import { formatBusinessDateTime } from '@/lib/customer-projects/presentation';
 
 interface CustomerListItem {
@@ -34,15 +35,22 @@ interface CustomerListItem {
     occurredAt: string;
     summary: string | null;
   } | null;
+  recommendation: OldCustomerRecommendation;
   updatedAt: string;
 }
 
-type FilterKey = 'all' | 'due_follow_up' | 'assigned_follow_up' | 'active_project';
+type FilterKey =
+  | 'all'
+  | 'due_follow_up'
+  | 'assigned_follow_up'
+  | 'due_recommendation'
+  | 'active_project';
 
 const FILTERS: Array<{ key: FilterKey; label: string }> = [
   { key: 'all', label: '全部可见客户' },
   { key: 'due_follow_up', label: '待我回访' },
   { key: 'assigned_follow_up', label: '已安排给我' },
+  { key: 'due_recommendation', label: '到建议周期' },
   { key: 'active_project', label: '有活跃项目' },
 ];
 
@@ -50,6 +58,21 @@ function eventLabel(eventType: string): string {
   if (eventType === 'CUSTOMER_RESPONSE_RECEIVED') return '收到客户反馈';
   if (eventType === 'CONTACT_LOGGED') return '客户联系记录';
   return eventType;
+}
+
+function recommendationStateLabel(state: OldCustomerRecommendation['state']): string {
+  if (state === 'due') return '到建议周期';
+  if (state === 'not_due') return '未到建议周期';
+  if (state === 'suppressed_active_project') return '已有项目，暂停建议';
+  if (state === 'suppressed_open_follow_up') return '已有正式回访';
+  if (state === 'needs_baseline') return '缺少关系基线';
+  return '证据未知';
+}
+
+function recommendationTone(state: OldCustomerRecommendation['state']): string {
+  if (state === 'due') return 'border-amber-200 bg-amber-50';
+  if (state === 'not_due') return 'border-cyan-200 bg-cyan-50';
+  return 'border-gray-200 bg-gray-50';
 }
 
 export default function CustomersPage() {
@@ -114,6 +137,11 @@ export default function CustomersPage() {
         && !customer.nextFollowUp?.isAssignedToMe
       ) return false;
 
+      if (
+        filter === 'due_recommendation'
+        && customer.recommendation.state !== 'due'
+      ) return false;
+
       if (filter === 'active_project' && !customer.hasActiveProject) return false;
 
       if (!query) return true;
@@ -124,6 +152,7 @@ export default function CustomersPage() {
         customer.externalOwnerReference ?? '',
         customer.nextFollowUp?.title ?? '',
         customer.lastInteraction?.summary ?? '',
+        customer.recommendation.segmentBasis,
       ].some(value => value.toLowerCase().includes(query));
     });
   }, [customers, filter, search]);
@@ -133,6 +162,9 @@ export default function CustomersPage() {
     && customer.nextFollowUp.dueByBusinessEnd,
   ).length;
   const assignedCount = customers.filter(customer => customer.nextFollowUp?.isAssignedToMe).length;
+  const recommendationDueCount = customers.filter(
+    customer => customer.recommendation.state === 'due',
+  ).length;
   const activeProjectCount = customers.filter(customer => customer.hasActiveProject).length;
 
   return (
@@ -143,10 +175,11 @@ export default function CustomersPage() {
       />
 
       <div className="space-y-4">
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
           {[
             ['待我回访', dueCount],
             ['已安排给我', assignedCount],
+            ['到建议周期', recommendationDueCount],
             ['有活跃项目', activeProjectCount],
           ].map(([label, value]) => (
             <div key={String(label)} className="rounded-lg border border-gray-200 bg-white p-3">
@@ -208,7 +241,13 @@ export default function CustomersPage() {
             {visibleCustomers.map(customer => (
               <Link
                 key={customer.id}
-                href={"/customer-projects/customers/" + customer.id}
+                href={
+                  "/customer-projects/customers/"
+                  + customer.id
+                  + (customer.recommendation.canArrangeFollowUp
+                    ? '#old-customer-recommendation'
+                    : '')
+                }
                 className="block rounded-lg border border-gray-200 bg-white p-4 no-underline transition hover:border-cyan-300 hover:shadow-sm"
               >
                 <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
@@ -252,6 +291,42 @@ export default function CustomersPage() {
                   </div>
 
                   <div className="xl:w-[400px]">
+                    {customer.recommendation.segment !== 'UNKNOWN' && (
+                      <div
+                        className={
+                        'mb-2 rounded-lg border px-3 py-2 '
+                        + recommendationTone(customer.recommendation.state)
+                        }
+                      >
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-medium text-gray-700">
+                            {customer.recommendation.segment} 类 · 每 {customer.recommendation.cadenceDays} 天建议
+                          </span>
+                          <span className="text-[11px] font-medium text-gray-700">
+                            {recommendationStateLabel(customer.recommendation.state)}
+                          </span>
+                        </div>
+                        <p className="mt-1 text-[11px] leading-4 text-gray-600">
+                          {customer.recommendation.segmentBasis}
+                        </p>
+                        {customer.recommendation.nextSuggestedFollowUpAt && (
+                          <p className="mt-1 text-[11px] text-gray-500">
+                            建议日期：
+                            {formatBusinessDateTime(customer.recommendation.nextSuggestedFollowUpAt)}
+                          </p>
+                        )}
+                        {customer.recommendation.suppressionReason && (
+                          <p className="mt-1 text-[11px] text-gray-500">
+                            {customer.recommendation.suppressionReason}
+                          </p>
+                        )}
+                        {customer.recommendation.canArrangeFollowUp && (
+                          <p className="mt-2 text-[11px] font-medium text-cyan-700">
+                            安排回访 →
+                          </p>
+                        )}
+                      </div>
+                    )}
                     {customer.nextFollowUp ? (
                       <div className={
                         'rounded-lg border px-3 py-2 '
@@ -282,7 +357,7 @@ export default function CustomersPage() {
                       </div>
                     ) : (
                       <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-xs text-gray-500">
-                        当前没有已安排的客户级回访。系统不会自动发明回访周期。
+                        当前没有已安排的客户级回访。建议只有由员工确认后才会成为正式任务。
                       </div>
                     )}
                   </div>

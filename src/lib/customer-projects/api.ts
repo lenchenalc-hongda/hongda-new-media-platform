@@ -15,6 +15,10 @@ import {
   isoDateTimeSchema,
   uuidSchema,
 } from './schemas';
+import {
+  RELATIONSHIP_CONVERSION_SOURCE_KEY,
+  RELATIONSHIP_EVENT_TYPES,
+} from './old-customer-proactive';
 
 export type CpcProfile = {
   id: string;
@@ -31,6 +35,7 @@ export type CpcMutationCommand =
   | 'RESCHEDULE_WORK_ITEM'
   | 'TRANSITION_PROJECT'
   | 'RECORD_CUSTOMER_FOLLOW_UP'
+  | 'CREATE_CUSTOMER_RELATIONSHIP_FOLLOW_UP'
   | 'CREATE_AI_WORK_ITEM_DRAFT'
   | 'ACCEPT_AI_DRAFT'
   | 'REJECT_AI_DRAFT'
@@ -67,6 +72,7 @@ const createProjectSchema = z.object({
   initialNextActionDueAt: isoDateTimeSchema.nullable().optional(),
   waitingOn: z.enum(WAITING_ON_VALUES).default('none'),
   nextCheckAt: isoDateTimeSchema.nullable().optional(),
+  sourceFollowUpEventId: uuidSchema.nullable().optional(),
 }).strict();
 
 const progressEventTypes = PROJECT_EVENT_TYPES.filter(eventType => [
@@ -142,6 +148,12 @@ const customerFollowUpSchema = z.object({
   nextFollowUpPriority: z.enum(PROJECT_PRIORITIES).default('medium'),
 }).strict();
 
+const createRelationshipFollowUpSchema = z.object({
+  title: z.string().trim().min(1).max(300).default('客户关系回访'),
+  dueAt: isoDateTimeSchema,
+  priority: z.enum(PROJECT_PRIORITIES).default('medium'),
+}).strict();
+
 const aiWorkItemDraftSchema = z.object({
   customerReferenceId: uuidSchema.nullable().optional(),
   projectId: uuidSchema.nullable().optional(),
@@ -200,6 +212,7 @@ const COMMAND_SCHEMA = {
   RESCHEDULE_WORK_ITEM: workItemRescheduleSchema,
   TRANSITION_PROJECT: projectTransitionSchema,
   RECORD_CUSTOMER_FOLLOW_UP: customerFollowUpSchema,
+  CREATE_CUSTOMER_RELATIONSHIP_FOLLOW_UP: createRelationshipFollowUpSchema,
   CREATE_AI_WORK_ITEM_DRAFT: aiWorkItemDraftSchema,
   ACCEPT_AI_DRAFT: aiDraftAcceptSchema,
   REJECT_AI_DRAFT: aiDraftRejectSchema,
@@ -425,6 +438,15 @@ function sanitizeSuccess(command: CpcMutationCommand, raw: unknown): Record<stri
     };
   }
 
+  if (command === 'CREATE_CUSTOMER_RELATIONSHIP_FOLLOW_UP') {
+    const id = safeString(data.work_item_id);
+    const workItemType = safeString(data.work_item_type);
+    const status = safeString(data.status);
+    const version = safePositiveInteger(data.version);
+    if (!id || workItemType !== 'FOLLOW_UP' || !status || !version) return null;
+    return { workItemId: id, workItemType, status, version };
+  }
+
   if (command === 'RECORD_CUSTOMER_FOLLOW_UP') {
     const customerReferenceId = safeString(data.customer_reference_id);
     const eventId = safeString(data.event_id);
@@ -527,6 +549,7 @@ export async function runCpcMutation(
     || command === 'RESCHEDULE_WORK_ITEM'
     || command === 'TRANSITION_PROJECT'
     || command === 'RECORD_CUSTOMER_FOLLOW_UP'
+    || command === 'CREATE_CUSTOMER_RELATIONSHIP_FOLLOW_UP'
     || command === 'ACCEPT_AI_DRAFT'
     || command === 'REJECT_AI_DRAFT'
     || command === 'SUBMIT_REPORT'
@@ -558,10 +581,44 @@ export async function runCpcMutation(
   }
 
   const requestId = crypto.randomUUID();
+  const body: any = parsed.data;
+  let conversionSourceFollowUpEventId: string | null = null;
   let result: RpcResult;
 
   try {
-    const body: any = parsed.data;
+    if (command === 'CREATE_PROJECT' && body.sourceFollowUpEventId) {
+      const sourceResult = await supabase
+        .from('cpc_project_events')
+        .select('id,customer_reference_id,project_id,event_type,payload')
+        .eq('org_id', profileResult.profile.orgId)
+        .eq('id', body.sourceFollowUpEventId)
+        .maybeSingle();
+
+      if (sourceResult.error) throw new Error('conversion source read failed');
+
+      const source = sourceResult.data as any;
+      const sourcePayload = source?.payload
+        && typeof source.payload === 'object'
+        && !Array.isArray(source.payload)
+        ? source.payload as Record<string, unknown>
+        : {};
+      const validSource = source
+        && source.customer_reference_id === body.customerReferenceId
+        && source.project_id === null
+        && RELATIONSHIP_EVENT_TYPES.includes(source.event_type)
+        && sourcePayload.relationship_follow_up === true;
+
+      if (!validSource) {
+        return NextResponse.json({
+          ok: false,
+          code: 'INVALID_CONVERSION_SOURCE',
+          message: '项目转化的来源回访事实无效或不再可见。',
+          data: null,
+        }, { status: 422 });
+      }
+
+      conversionSourceFollowUpEventId = source.id;
+    }
 
     if (command === 'GENERATE_DAILY_REPORT') {
       result = await supabase.rpc('cpc_generate_daily_report_draft', {
@@ -602,6 +659,59 @@ export async function runCpcMutation(
         p_next_check_at: body.nextCheckAt ?? null,
         p_request_id: requestId,
       });
+
+      if (conversionSourceFollowUpEventId) {
+        const createdProject = result.data?.ok === true
+          ? sanitizeSuccess('CREATE_PROJECT', result.data?.data)
+          : null;
+        if (!createdProject) {
+          const mapped = mapCpcRpcResult(command, result);
+          return NextResponse.json(mapped.body, { status: mapped.status });
+        }
+
+        const provenanceResult = await supabase.rpc('cpc_record_progress', {
+          p_project_id: createdProject.projectId,
+          p_expected_version: createdProject.version,
+          p_event_type: 'CONTACT_LOGGED',
+          p_raw_input: '由已确认客户回访产生的具体项目机会',
+          p_payload: {
+            [RELATIONSHIP_CONVERSION_SOURCE_KEY]: conversionSourceFollowUpEventId,
+          },
+          p_occurred_at: null,
+          p_new_stage: null,
+          p_next_action_title: null,
+          p_next_action_due_at: null,
+          p_waiting_on: null,
+          p_next_check_at: null,
+          p_request_id: requestId,
+        });
+        const mappedProvenance = mapCpcRpcResult('RECORD_PROGRESS', provenanceResult);
+        if (mappedProvenance.status !== 200) {
+          return NextResponse.json(
+            mappedProvenance.body,
+            { status: mappedProvenance.status },
+          );
+        }
+        const provenanceData = mappedProvenance.body.data as Record<string, unknown>;
+        const provenanceVersion = safePositiveInteger(provenanceData.version);
+        const conversionEventId = safeString(provenanceData.eventId);
+        if (!provenanceVersion || !conversionEventId) {
+          const mapped = internalError();
+          return NextResponse.json(mapped.body, { status: mapped.status });
+        }
+
+        return NextResponse.json({
+          ok: true,
+          code: 'OK',
+          message: 'success',
+          data: {
+            projectId: createdProject.projectId,
+            version: provenanceVersion,
+            conversionEventId,
+            conversionProvenanceRecorded: true,
+          },
+        });
+      }
     } else if (command === 'RECORD_PROGRESS') {
       result = await supabase.rpc('cpc_record_progress', {
         p_project_id: resourceId,
@@ -678,6 +788,17 @@ export async function runCpcMutation(
         p_next_follow_up_title: body.nextFollowUpTitle ?? null,
         p_next_follow_up_due_at: body.nextFollowUpDueAt ?? null,
         p_next_follow_up_priority: body.nextFollowUpPriority,
+        p_request_id: requestId,
+      });
+    } else if (command === 'CREATE_CUSTOMER_RELATIONSHIP_FOLLOW_UP') {
+      result = await supabase.rpc('cpc_create_work_item', {
+        p_customer_reference_id: resourceId,
+        p_project_id: null,
+        p_work_item_type: 'FOLLOW_UP',
+        p_title: body.title,
+        p_description: null,
+        p_due_at: body.dueAt,
+        p_priority: body.priority,
         p_request_id: requestId,
       });
     } else {

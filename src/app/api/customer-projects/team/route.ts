@@ -46,7 +46,8 @@ export async function GET(_req: NextRequest) {
       customersResult,
       profilesResult,
       reportsResult,
-      eventsResult,
+      outcomeEventsResult,
+      relationshipEventsResult,
     ] = await Promise.all([
       supabase
         .from('cpc_projects')
@@ -87,11 +88,22 @@ export async function GET(_req: NextRequest) {
         .range(0, MAX_REPORT_ROWS - 1),
       supabase
         .from('cpc_project_events')
-        .select('id,org_id,project_id,customer_reference_id,event_type,occurred_at')
+        .select('id,org_id,project_id,customer_reference_id,event_type,occurred_at,payload')
         .eq('org_id', profile.orgId)
         .in('event_type', [
           'EFFECTIVE_PROGRESS_RECORDED',
           'ORDER_CONFIRMED',
+          'PROJECT_WON',
+        ])
+        .order('event_seq', { ascending: false })
+        .range(0, MAX_EVENT_ROWS - 1),
+      supabase
+        .from('cpc_project_events')
+        .select('id,org_id,project_id,customer_reference_id,event_type,occurred_at,payload')
+        .eq('org_id', profile.orgId)
+        .in('event_type', [
+          'CONTACT_LOGGED',
+          'CUSTOMER_RESPONSE_RECEIVED',
         ])
         .order('event_seq', { ascending: false })
         .range(0, MAX_EVENT_ROWS - 1),
@@ -103,7 +115,8 @@ export async function GET(_req: NextRequest) {
       || customersResult.error
       || profilesResult.error
       || reportsResult.error
-      || eventsResult.error
+      || outcomeEventsResult.error
+      || relationshipEventsResult.error
     ) {
       throw new Error('team board read failed');
     }
@@ -114,7 +127,8 @@ export async function GET(_req: NextRequest) {
       || (customersResult.data?.length ?? 0) >= MAX_CUSTOMER_ROWS
       || (profilesResult.data?.length ?? 0) >= MAX_PROFILE_ROWS
       || (reportsResult.data?.length ?? 0) >= MAX_REPORT_ROWS
-      || (eventsResult.data?.length ?? 0) >= MAX_EVENT_ROWS
+      || (outcomeEventsResult.data?.length ?? 0) >= MAX_EVENT_ROWS
+      || (relationshipEventsResult.data?.length ?? 0) >= MAX_EVENT_ROWS
     ) {
       return jsonError('团队看板数据量超出当前安全上限，请联系管理员处理。', 409);
     }
@@ -127,7 +141,10 @@ export async function GET(_req: NextRequest) {
       customers: (customersResult.data ?? []) as TeamBoardCustomerRow[],
       profiles: (profilesResult.data ?? []) as TeamBoardProfileRow[],
       reports: (reportsResult.data ?? []) as TeamBoardReportRow[],
-      events: (eventsResult.data ?? []) as TeamBoardEventRow[],
+      events: [
+        ...((outcomeEventsResult.data ?? []) as TeamBoardEventRow[]),
+        ...((relationshipEventsResult.data ?? []) as TeamBoardEventRow[]),
+      ],
     });
 
     return NextResponse.json({

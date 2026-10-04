@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { resolveCpcProfile } from '@/lib/customer-projects/api';
 import { uuidSchema } from '@/lib/customer-projects/schemas';
+import { buildOldCustomerRecommendation } from '@/lib/customer-projects/old-customer-proactive';
 
 export const dynamic = 'force-dynamic';
 
@@ -44,17 +45,23 @@ export async function GET(
 
     const customer = customerResult.data as any;
 
-    const [projectsResult, followUpsResult, eventsResult, canFollowResult] = await Promise.all([
+    const [
+      projectsResult,
+      followUpsResult,
+      relationshipEventsResult,
+      transactionEventsResult,
+      canFollowResult,
+    ] = await Promise.all([
       supabase
         .from('cpc_projects')
-        .select('id,title,project_type,status,stage,waiting_on,next_check_at,risk_level,priority,owner_profile_id,updated_at')
+        .select('id,customer_reference_id,title,project_type,status,stage,waiting_on,next_check_at,risk_level,priority,owner_profile_id,updated_at')
         .eq('org_id', profile.orgId)
         .eq('customer_reference_id', parsedId.data)
         .order('updated_at', { ascending: false })
         .limit(30),
       supabase
         .from('cpc_work_items')
-        .select('id,title,assignee_profile_id,due_at,status,priority,blocked_reason,version,updated_at')
+        .select('id,customer_reference_id,project_id,work_item_type,title,assignee_profile_id,due_at,status,priority,blocked_reason,version,updated_at')
         .eq('org_id', profile.orgId)
         .eq('customer_reference_id', parsedId.data)
         .is('project_id', null)
@@ -63,11 +70,19 @@ export async function GET(
         .limit(50),
       supabase
         .from('cpc_project_events')
-        .select('id,event_type,occurred_at,raw_input')
+        .select('id,customer_reference_id,project_id,event_type,occurred_at,raw_input,payload')
         .eq('org_id', profile.orgId)
         .eq('customer_reference_id', parsedId.data)
         .is('project_id', null)
         .in('event_type', ['CONTACT_LOGGED', 'CUSTOMER_RESPONSE_RECEIVED'])
+        .order('event_seq', { ascending: false })
+        .limit(50),
+      supabase
+        .from('cpc_project_events')
+        .select('id,customer_reference_id,project_id,event_type,occurred_at,raw_input,payload')
+        .eq('org_id', profile.orgId)
+        .eq('customer_reference_id', parsedId.data)
+        .in('event_type', ['ORDER_CONFIRMED', 'PROJECT_WON'])
         .order('event_seq', { ascending: false })
         .limit(50),
       supabase.rpc('cpc_can_follow_customer', {
@@ -79,7 +94,8 @@ export async function GET(
     if (
       projectsResult.error
       || followUpsResult.error
-      || eventsResult.error
+      || relationshipEventsResult.error
+      || transactionEventsResult.error
       || canFollowResult.error
     ) {
       throw new Error('customer detail relation read failed');
@@ -87,7 +103,11 @@ export async function GET(
 
     const projects = (projectsResult.data ?? []) as any[];
     const followUps = (followUpsResult.data ?? []) as any[];
-    const events = (eventsResult.data ?? []) as any[];
+    const relationshipEvents = (relationshipEventsResult.data ?? []) as any[];
+    const events = [
+      ...relationshipEvents,
+      ...((transactionEventsResult.data ?? []) as any[]),
+    ];
 
     const openFollowUps = followUps
       .filter(item => ['pending', 'in_progress', 'blocked'].includes(item.status))
@@ -102,7 +122,15 @@ export async function GET(
       });
 
     const currentFollowUp = openFollowUps[0] ?? null;
-    const latestEvent = events[0] ?? null;
+    const latestEvent = relationshipEvents
+      .sort((left, right) => toMs(right.occurred_at) - toMs(left.occurred_at))[0] ?? null;
+    const recommendation = buildOldCustomerRecommendation({
+      now: new Date(),
+      customer,
+      projects,
+      workItems: followUps,
+      events,
+    });
 
     return NextResponse.json({
       ok: true,
@@ -129,6 +157,7 @@ export async function GET(
           updatedAt: customer.updated_at,
           canRecordFollowUp: canFollowResult.data === true,
         },
+        relationshipRecommendation: recommendation,
         currentFollowUp: currentFollowUp ? {
           id: currentFollowUp.id,
           title: currentFollowUp.title,
@@ -155,7 +184,7 @@ export async function GET(
           isOwnedByMe: project.owner_profile_id === profile.id,
           updatedAt: project.updated_at,
         })),
-        events: events.map(event => ({
+        events: relationshipEvents.map(event => ({
           id: event.id,
           eventType: event.event_type,
           occurredAt: event.occurred_at,

@@ -7,6 +7,11 @@ import type {
   WorkItemPriority,
   WorkItemStatus,
 } from './domain';
+import {
+  buildOldCustomerRecommendation,
+  RELATIONSHIP_EVENT_TYPES,
+  type OldCustomerRecommendation,
+} from './old-customer-proactive';
 import { getShanghaiBusinessWindow } from './read-models';
 
 export interface CustomerReferenceRow {
@@ -57,6 +62,7 @@ export interface CustomerEventRow {
   event_type: string;
   occurred_at: string;
   raw_input: string | null;
+  payload?: Record<string, unknown> | null;
 }
 
 export interface CustomerListItem {
@@ -85,6 +91,7 @@ export interface CustomerListItem {
     occurredAt: string;
     summary: string | null;
   } | null;
+  recommendation: OldCustomerRecommendation;
   updatedAt: string;
 }
 
@@ -124,9 +131,14 @@ export function buildCustomerList(input: {
     followUpsByCustomer.set(followUp.customer_reference_id, list);
   }
 
+  const relationshipEventTypes = new Set<string>(RELATIONSHIP_EVENT_TYPES);
   const latestEventByCustomer = new Map<string, CustomerEventRow>();
   for (const event of input.events) {
-    if (!event.customer_reference_id || event.project_id !== null) continue;
+    if (
+      !event.customer_reference_id
+      || event.project_id !== null
+      || !relationshipEventTypes.has(event.event_type)
+    ) continue;
     const existing = latestEventByCustomer.get(event.customer_reference_id);
     if (!existing || toMs(event.occurred_at) > toMs(existing.occurred_at)) {
       latestEventByCustomer.set(event.customer_reference_id, event);
@@ -150,6 +162,17 @@ export function buildCustomerList(input: {
 
     const next = openFollowUps[0] ?? null;
     const latestEvent = latestEventByCustomer.get(customer.id) ?? null;
+    const recommendation = buildOldCustomerRecommendation({
+      now: input.now,
+      customer,
+      projects: input.projects.filter(
+        project => project.customer_reference_id === customer.id,
+      ),
+      workItems: input.followUps,
+      events: input.events.filter(
+        event => event.customer_reference_id === customer.id,
+      ),
+    });
 
     return {
       id: customer.id,
@@ -183,6 +206,7 @@ export function buildCustomerList(input: {
         occurredAt: latestEvent.occurred_at,
         summary: latestEvent.raw_input,
       } : null,
+      recommendation,
       updatedAt: customer.updated_at,
     };
   });

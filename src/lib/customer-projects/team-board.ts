@@ -8,6 +8,11 @@ import type {
   WorkItemStatus,
   WorkItemType,
 } from './domain';
+import {
+  buildOldCustomerRecommendations,
+  buildPhase10SourceCategoryReport,
+  type Phase10SourceCategoryReport,
+} from './old-customer-proactive';
 import { getShanghaiBusinessWindow } from './read-models';
 
 export type TeamBoardRole = 'admin' | 'manager' | 'sales';
@@ -82,6 +87,7 @@ export interface TeamBoardEventRow {
   customer_reference_id: string | null;
   event_type: string;
   occurred_at: string;
+  payload?: Record<string, unknown> | null;
 }
 
 export interface TeamBoardIdentity {
@@ -206,16 +212,27 @@ export interface TeamBoardSnapshot {
     members: TeamMemberSupportContext[];
   };
   oldCustomerCoverage: {
-    state: 'not_evaluated';
+    state: 'evaluated';
     reason: string;
-    phase10PolicyApplied: false;
+    phase10PolicyApplied: true;
     confirmedFacts: {
       canonicalCustomerCount: number;
       customersWithActiveProjectCount: number;
       openCustomerFollowUpCount: number;
       dueCustomerFollowUpCount: number;
     };
-    coverageRate: { state: 'unknown'; reason: string };
+    recommendations: {
+      eligibleKnownCustomerCount: number;
+      dueRecommendationCount: number;
+      suppressedActiveProjectCount: number;
+      suppressedOpenFollowUpCount: number;
+      needsBaselineCount: number;
+      evidenceUnknownCount: number;
+    };
+    sourceCategories: Phase10SourceCategoryReport;
+    coverageRate:
+      | { state: 'known'; value: number }
+      | { state: 'unknown'; reason: string };
     conversionRate: { state: 'unknown'; reason: string };
   };
   businessProgress: {
@@ -613,7 +630,41 @@ export function buildTeamBoardSnapshot(input: {
     event.event_type === 'ORDER_CONFIRMED'
   )).length;
 
-  const coverageReason = 'Phase 10 尚未批准老客户覆盖与转化口径；本页不发明cadence、覆盖率或转化定义。';
+  const oldCustomerRecommendations = buildOldCustomerRecommendations({
+    now: input.now,
+    customers,
+    projects,
+    workItems,
+    events,
+  });
+  const sourceCategories = buildPhase10SourceCategoryReport({
+    recommendations: oldCustomerRecommendations,
+    workItems,
+    events,
+  });
+  const eligibleKnownCustomerIds = new Set(
+    oldCustomerRecommendations
+      .filter(recommendation => recommendation.segment !== 'UNKNOWN')
+      .map(recommendation => recommendation.customerReferenceId),
+  );
+  const eligibleFollowUpCustomerIds = new Set(
+    openCustomerFollowUps
+      .map(item => item.customer_reference_id)
+      .filter((customerId): customerId is string => (
+        customerId !== null && eligibleKnownCustomerIds.has(customerId)
+      )),
+  );
+  const coverageRate = eligibleKnownCustomerIds.size === 0
+    ? {
+        state: 'unknown' as const,
+        reason: '当前没有可用于确定性老客户周期的 active 正式客户。',
+      }
+    : {
+        state: 'known' as const,
+        value: eligibleFollowUpCustomerIds.size / eligibleKnownCustomerIds.size,
+      };
+  const coverageReason = 'Phase 10 已按已确认 CPC 事实启用 A/B/C 老客户建议；建议不是逾期任务，接受后才进入正式回访。';
+  const conversionUnknownReason = '历史转化是否具备显式回访到项目来源尚未补齐；只统计已记录显式 provenance 的转化数，不推断历史转化率。';
   const externalReason = '外部订单、报价、回款与财务权威源尚未集成；缺失数据保持 UNKNOWN，不按 0 处理。';
 
   return {
@@ -632,9 +683,9 @@ export function buildTeamBoardSnapshot(input: {
       members: teamSupportMembers,
     },
     oldCustomerCoverage: {
-      state: 'not_evaluated',
+      state: 'evaluated',
       reason: coverageReason,
-      phase10PolicyApplied: false,
+      phase10PolicyApplied: true,
       confirmedFacts: {
         canonicalCustomerCount: customers.filter(customer => (
           customer.reference_kind === 'canonical'
@@ -643,13 +694,29 @@ export function buildTeamBoardSnapshot(input: {
         openCustomerFollowUpCount: openCustomerFollowUps.length,
         dueCustomerFollowUpCount: dueCustomerFollowUps.length,
       },
-      coverageRate: {
-        state: 'unknown',
-        reason: '覆盖口径未获批准。',
+      recommendations: {
+        eligibleKnownCustomerCount: eligibleKnownCustomerIds.size,
+        dueRecommendationCount: oldCustomerRecommendations.filter(
+          recommendation => recommendation.state === 'due',
+        ).length,
+        suppressedActiveProjectCount: oldCustomerRecommendations.filter(
+          recommendation => recommendation.state === 'suppressed_active_project',
+        ).length,
+        suppressedOpenFollowUpCount: oldCustomerRecommendations.filter(
+          recommendation => recommendation.state === 'suppressed_open_follow_up',
+        ).length,
+        needsBaselineCount: oldCustomerRecommendations.filter(
+          recommendation => recommendation.state === 'needs_baseline',
+        ).length,
+        evidenceUnknownCount: oldCustomerRecommendations.filter(
+          recommendation => recommendation.state === 'evidence_unknown',
+        ).length,
       },
+      sourceCategories,
+      coverageRate,
       conversionRate: {
         state: 'unknown',
-        reason: '转化口径未获批准。',
+        reason: conversionUnknownReason,
       },
     },
     businessProgress: {
@@ -683,9 +750,9 @@ export function buildTeamBoardSnapshot(input: {
         reason: '尚未批准确定性 stale threshold；本页不推断停滞项目。',
       },
       {
-        key: 'old_customer_coverage_conversion',
+        key: 'historical_customer_conversion_provenance',
         state: 'unknown',
-        reason: coverageReason,
+        reason: conversionUnknownReason,
       },
       {
         key: 'external_order_quote_payment_finance',

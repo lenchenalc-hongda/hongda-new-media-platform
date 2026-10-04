@@ -75,6 +75,18 @@ function Metric({
   );
 }
 
+function sourceCategoryMetric(
+  metric: TeamBoardSnapshot['oldCustomerCoverage']['sourceCategories']['old_customer_reactivation'],
+): { value: string | number; reason?: string | null } {
+  if (metric.state === 'unknown') {
+    return { value: '未知', reason: metric.reason };
+  }
+  return {
+    value: metric.value.explicitFollowUpToProjectConversionCount,
+    reason: '仅统计已显式记录“回访事件 -> Project”来源的转化。',
+  };
+}
+
 function workPriorityTone(priority: string): string {
   if (priority === 'critical') return 'bg-red-50 text-red-700';
   if (priority === 'high') return 'bg-amber-50 text-amber-700';
@@ -479,9 +491,9 @@ export default function CustomerProjectTeamPage() {
           <Section
             id="old-customer-coverage"
             title="5. 老客户覆盖 / 转化"
-            description="Phase 9 只展示已有确认事实；Phase 10 政策未批准前不生成覆盖率、转化率或固定跟进周期。"
+            description="Phase 10 使用已确认 CPC 事实计算 A/B/C 建议；建议不进入逾期或人员工作队列，接受后才形成正式 FOLLOW_UP。"
           >
-            <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+            <div className="rounded-lg border border-cyan-200 bg-cyan-50 px-4 py-3 text-sm text-cyan-800">
               {snapshot.oldCustomerCoverage.reason}
             </div>
             <div className="mt-3 grid grid-cols-2 gap-3 lg:grid-cols-5">
@@ -494,24 +506,101 @@ export default function CustomerProjectTeamPage() {
                 value={snapshot.oldCustomerCoverage.confirmedFacts.customersWithActiveProjectCount}
               />
               <Metric
-                label="开放客户回访"
-                value={snapshot.oldCustomerCoverage.confirmedFacts.openCustomerFollowUpCount}
+                label="可评估老客户"
+                value={snapshot.oldCustomerCoverage.recommendations.eligibleKnownCustomerCount}
               />
               <Metric
-                label="已到期客户回访"
+                label="到建议周期"
+                value={snapshot.oldCustomerCoverage.recommendations.dueRecommendationCount}
+                reason="建议不是逾期任务。"
+              />
+              <Metric
+                label="正式开放回访"
+                value={snapshot.oldCustomerCoverage.confirmedFacts.openCustomerFollowUpCount}
+              />
+            </div>
+            <div className="mt-3 grid grid-cols-2 gap-3 lg:grid-cols-5">
+              <Metric
+                label="因项目暂停建议"
+                value={snapshot.oldCustomerCoverage.recommendations.suppressedActiveProjectCount}
+              />
+              <Metric
+                label="因回访暂停建议"
+                value={snapshot.oldCustomerCoverage.recommendations.suppressedOpenFollowUpCount}
+              />
+              <Metric
+                label="缺少关系基线"
+                value={snapshot.oldCustomerCoverage.recommendations.needsBaselineCount}
+              />
+              <Metric
+                label="证据未知"
+                value={snapshot.oldCustomerCoverage.recommendations.evidenceUnknownCount}
+              />
+              <Metric
+                label="已到期正式回访"
                 value={snapshot.oldCustomerCoverage.confirmedFacts.dueCustomerFollowUpCount}
               />
             </div>
-            <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <Metric
+                label="新媒线索"
+                value={
+                  snapshot.oldCustomerCoverage.sourceCategories.new_media_lead.state === 'unknown'
+                    ? '未知'
+                    : snapshot.oldCustomerCoverage.sourceCategories.new_media_lead.value.explicitFollowUpToProjectConversionCount
+                }
+                reason={
+                  snapshot.oldCustomerCoverage.sourceCategories.new_media_lead.state === 'unknown'
+                    ? snapshot.oldCustomerCoverage.sourceCategories.new_media_lead.reason
+                    : null
+                }
+              />
+              <Metric
+                label="主动外呼"
+                value={
+                  snapshot.oldCustomerCoverage.sourceCategories.proactive_outbound.state === 'unknown'
+                    ? '未知'
+                    : snapshot.oldCustomerCoverage.sourceCategories.proactive_outbound.value.explicitFollowUpToProjectConversionCount
+                }
+                reason={
+                  snapshot.oldCustomerCoverage.sourceCategories.proactive_outbound.state === 'unknown'
+                    ? snapshot.oldCustomerCoverage.sourceCategories.proactive_outbound.reason
+                    : null
+                }
+              />
+              <Metric
+                label="老客户显式转化"
+                {...sourceCategoryMetric(
+                  snapshot.oldCustomerCoverage.sourceCategories.old_customer_reactivation,
+                )}
+              />
+            </div>
+            <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
               <Metric
                 label="覆盖率"
-                value="未知"
-                reason={snapshot.oldCustomerCoverage.coverageRate.reason}
+                value={
+                  snapshot.oldCustomerCoverage.coverageRate.state === 'known'
+                    ? Math.round(snapshot.oldCustomerCoverage.coverageRate.value * 100) + '%'
+                    : '未知'
+                }
+                reason={
+                  snapshot.oldCustomerCoverage.coverageRate.state === 'known'
+                    ? '正式开放回访 / 可评估老客户。'
+                    : snapshot.oldCustomerCoverage.coverageRate.reason
+                }
               />
               <Metric
                 label="转化率"
                 value="未知"
                 reason={snapshot.oldCustomerCoverage.conversionRate.reason}
+              />
+              <Metric
+                label="确认关系回访事实"
+                value={
+                  snapshot.oldCustomerCoverage.sourceCategories.old_customer_reactivation.state === 'known'
+                    ? snapshot.oldCustomerCoverage.sourceCategories.old_customer_reactivation.value.confirmedRelationshipFollowUpCount
+                    : '未知'
+                }
               />
             </div>
           </Section>

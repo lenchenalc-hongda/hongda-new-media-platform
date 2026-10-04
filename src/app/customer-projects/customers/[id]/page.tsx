@@ -15,6 +15,7 @@ import type {
   WorkItemPriority,
   WorkItemStatus,
 } from '@/lib/customer-projects/domain';
+import type { OldCustomerRecommendation } from '@/lib/customer-projects/old-customer-proactive';
 import {
   PROJECT_PRIORITY_LABELS,
   PROJECT_STATUS_LABELS,
@@ -51,6 +52,7 @@ interface CustomerDetailDto {
     isAssignedToMe: boolean;
     canClose: boolean;
   } | null;
+  relationshipRecommendation: OldCustomerRecommendation;
   projects: Array<{
     id: string;
     title: string;
@@ -83,6 +85,46 @@ function eventLabel(eventType: string): string {
   if (eventType === 'CUSTOMER_RESPONSE_RECEIVED') return '收到客户反馈';
   if (eventType === 'CONTACT_LOGGED') return '客户联系记录';
   return eventType;
+}
+
+function recommendationStateLabel(state: OldCustomerRecommendation['state']): string {
+  if (state === 'due') return '到建议周期';
+  if (state === 'not_due') return '未到建议周期';
+  if (state === 'suppressed_active_project') return '已有推进中项目';
+  if (state === 'suppressed_open_follow_up') return '已有正式回访';
+  if (state === 'needs_baseline') return '缺少关系基线';
+  return '证据未知';
+}
+
+function shanghaiDateTimeInput(value: string): string {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).formatToParts(new Date(value));
+  const values = new Map(parts.map(part => [part.type, part.value]));
+  return [
+    values.get('year'),
+    values.get('month'),
+    values.get('day'),
+  ].join('-') + 'T' + [values.get('hour'), values.get('minute')].join(':');
+}
+
+function defaultRelationshipDueAt(
+  recommendation: OldCustomerRecommendation,
+  now: Date,
+): string {
+  const suggestedMs = recommendation.nextSuggestedFollowUpAt
+    ? new Date(recommendation.nextSuggestedFollowUpAt).getTime()
+    : Number.NaN;
+  const selected = Number.isFinite(suggestedMs) && suggestedMs > now.getTime()
+    ? new Date(suggestedMs)
+    : now;
+  return shanghaiDateTimeInput(selected.toISOString());
 }
 
 function Panel({
@@ -123,6 +165,10 @@ export default function CustomerDetailPage() {
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState('');
   const [submitSuccess, setSubmitSuccess] = useState('');
+  const [scheduleDueAt, setScheduleDueAt] = useState('');
+  const [scheduling, setScheduling] = useState(false);
+  const [scheduleError, setScheduleError] = useState('');
+  const [scheduleSuccess, setScheduleSuccess] = useState('');
 
   const loadCustomer = useCallback(async (showLoading = true) => {
     if (!id) return;
@@ -173,6 +219,14 @@ export default function CustomerDetailPage() {
     }
   }, [detail]);
 
+  useEffect(() => {
+    if (!detail?.relationshipRecommendation) return;
+    setScheduleDueAt(defaultRelationshipDueAt(
+      detail.relationshipRecommendation,
+      new Date(),
+    ));
+  }, [detail]);
+
   const createProjectHref = useMemo(() => {
     if (!detail) return '/customer-projects/projects/new';
     const params = new URLSearchParams({
@@ -183,6 +237,64 @@ export default function CustomerDetailPage() {
     }
     return '/customer-projects/projects/new?' + params.toString();
   }, [detail]);
+
+  async function scheduleRelationshipFollowUp(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!detail || !id || scheduling) return;
+
+    const dueAt = toIsoFromShanghaiDateTime(scheduleDueAt);
+    if (!dueAt) {
+      setScheduleError('请设置明确的回访时间。');
+      return;
+    }
+
+    setScheduling(true);
+    setScheduleError('');
+    setScheduleSuccess('');
+
+    try {
+      const response = await fetch(
+        '/api/customer-projects/customers/'
+          + encodeURIComponent(id)
+          + '/relationship-follow-up',
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            title: '客户关系回访',
+            dueAt,
+            priority: 'medium',
+          }),
+        },
+      );
+      const result = await response.json().catch(() => null);
+
+      if (response.ok && result?.ok === true) {
+        setScheduleSuccess('已按你的确认创建正式客户回访，并进入任务与提醒。');
+        await loadCustomer(false);
+        return;
+      }
+
+      if (response.status === 409) {
+        setScheduleError(typeof result?.message === 'string'
+          ? result.message
+          : '客户已有开放回访任务，请刷新后处理现有任务。');
+        await loadCustomer(false);
+      } else if (response.status === 403) {
+        setScheduleError('你当前没有为该客户安排正式回访的权限。');
+      } else if (response.status === 422 || response.status === 400) {
+        setScheduleError(typeof result?.message === 'string'
+          ? result.message
+          : '回访时间或内容无效。');
+      } else {
+        setScheduleError('正式回访创建失败，请稍后重试。');
+      }
+    } catch {
+      setScheduleError('正式回访创建失败，请稍后重试。');
+    } finally {
+      setScheduling(false);
+    }
+  }
 
   async function submitFollowUp(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -301,7 +413,13 @@ export default function CustomerDetailPage() {
     );
   }
 
-  const { customer, currentFollowUp, projects, events } = detail;
+  const {
+    customer,
+    currentFollowUp,
+    relationshipRecommendation,
+    projects,
+    events,
+  } = detail;
 
   return (
     <AppLayout>
@@ -355,6 +473,93 @@ export default function CustomerDetailPage() {
         </section>
 
         <Panel
+          title="老客户 proactive建议"
+          description="建议只依据已确认 CPC 事实，不推断关键客户、交易历史或来源分类；员工确认后才创建正式回访。"
+        >
+          <div
+            id="old-customer-recommendation"
+            className="rounded-lg border border-cyan-200 bg-cyan-50 p-4"
+          >
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-medium text-cyan-800">
+                {relationshipRecommendation.segment} 类
+                {relationshipRecommendation.cadenceDays
+                  ? ' · 每 ' + relationshipRecommendation.cadenceDays + ' 天建议'
+                  : ''}
+              </span>
+              <span className="rounded-full bg-white px-2 py-0.5 text-[11px] text-gray-700">
+                {recommendationStateLabel(relationshipRecommendation.state)}
+              </span>
+              <span className="text-[11px] text-gray-500">
+                仅建议，不计为逾期、任务或人员 KPI
+              </span>
+            </div>
+            <p className="mt-2 text-sm text-gray-700">
+              {relationshipRecommendation.segmentBasis}
+            </p>
+            <div className="mt-2 grid grid-cols-1 gap-1 text-xs text-gray-500 sm:grid-cols-3">
+              <span>
+                最近关系互动：
+                {formatBusinessDateTime(relationshipRecommendation.lastConfirmedRelationshipAt)}
+              </span>
+              <span>
+                最近可信交易：
+                {formatBusinessDateTime(relationshipRecommendation.lastTrustedTransactionAt)}
+              </span>
+              <span>
+                下次建议日期：
+                {formatBusinessDateTime(relationshipRecommendation.nextSuggestedFollowUpAt)}
+              </span>
+            </div>
+            {relationshipRecommendation.suppressionReason && (
+              <p className="mt-2 text-xs text-amber-700">
+                {relationshipRecommendation.suppressionReason}
+              </p>
+            )}
+          </div>
+
+          {customer.canRecordFollowUp && relationshipRecommendation.canArrangeFollowUp ? (
+            <form
+              onSubmit={scheduleRelationshipFollowUp}
+              className="mt-4 flex flex-col gap-3 rounded-lg border border-gray-200 p-4 sm:flex-row sm:items-end"
+            >
+              <div className="flex-1">
+                <label className="mb-1 block text-xs font-medium text-gray-600">
+                  明确回访时间（东莞时间）
+                </label>
+                <input
+                  type="datetime-local"
+                  value={scheduleDueAt}
+                  onChange={event => setScheduleDueAt(event.target.value)}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                />
+                <p className="mt-1 text-[11px] text-gray-400">
+                  建议日期可作为默认值，最终时间由你确认。
+                </p>
+              </div>
+              <button type="submit" className="btn-primary" disabled={scheduling}>
+                {scheduling ? '正在安排...' : '安排回访'}
+              </button>
+            </form>
+          ) : (
+            <p className="mt-4 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-500">
+              当前状态不创建重复建议。出现具体商业机会时，仍可通过下方入口创建 Project。
+            </p>
+          )}
+
+          {scheduleError && (
+            <div className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+              {scheduleError}
+            </div>
+          )}
+          {scheduleSuccess && (
+            <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
+              {scheduleSuccess}
+            </div>
+          )}
+        </Panel>
+
+        <Panel
           title="下一次客户级回访"
           description="普通老客户维护留在客户层，不需要为了提醒自己而创建假项目。"
         >
@@ -388,7 +593,7 @@ export default function CustomerDetailPage() {
           ) : (
             <EmptyState
               title="当前没有已安排的客户级回访"
-              description="系统不会在没有批准规则的情况下自动生成老客户回访周期。"
+              description="可根据上方已批准的 A/B/C 建议由员工明确安排；未确认建议不会自动生成任务。"
             />
           )}
         </Panel>
