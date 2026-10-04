@@ -14,6 +14,7 @@ export const metadata: Metadata = {
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   let canCreate = false;
   let canAccessCustomerProjectCenter = false;
+  let canAccessCustomerProjectTeam = false;
   let canReviewDailyReports = false;
   try {
     const user = await getCurrentUserReadOnly();
@@ -22,6 +23,10 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       canAccessCustomerProjectCenter = canRoleAccessPage(
         user.role,
         'customer_project_center',
+      );
+      canAccessCustomerProjectTeam = canRoleAccessPage(
+        user.role,
+        'customer_project_center_team',
       );
       canReviewDailyReports = canReviewSubmittedDailyReports(user.role);
     }
@@ -33,6 +38,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <RoleProvider
           canCreateReview={canCreate}
           canAccessCustomerProjectCenter={canAccessCustomerProjectCenter}
+          canAccessCustomerProjectTeam={canAccessCustomerProjectTeam}
           canReviewDailyReports={canReviewDailyReports}
         >
           {children}

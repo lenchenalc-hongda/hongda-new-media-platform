@@ -11,6 +11,7 @@ import {
 import { isFeatureEnabled, FEATURES } from '@/lib/features';
 import {
   useCanAccessCustomerProjectCenter,
+  useCanAccessCustomerProjectTeam,
   useCanCreateReview,
 } from './RoleProvider';
 import { applyCreateVisibility } from '@/lib/review-center/navigation';
@@ -19,12 +20,14 @@ export default function Sidebar() {
   const pathname = usePathname();
   const canCreateReview = useCanCreateReview();
   const canAccessCustomerProjectCenter = useCanAccessCustomerProjectCenter();
+  const canAccessCustomerProjectTeam = useCanAccessCustomerProjectTeam();
 
   // Determine which portal is active based on current path
   const baseGroups = getVisiblePortalGroups({
     projectReviewCenterEnabled: isFeatureEnabled(FEATURES.PROJECT_REVIEW_CENTER),
     customerProjectCenterEnabled: isFeatureEnabled(FEATURES.CUSTOMER_PROJECT_CENTER),
     canAccessCustomerProjectCenter,
+    canAccessCustomerProjectTeam,
   });
   const enabledGroups = applyCreateVisibility(baseGroups, canCreateReview);
   const activePortal = getPortalForPath(pathname);
