@@ -7,7 +7,8 @@ export type PageSlug =
   | 'teardowns' | 'calendar' | 'posts' | 'leads' | 'knowledge'
   | 'reports' | 'settings'
   | 'review_center' | 'review_center_settings'
-  | 'customer_project_center' | 'customer_project_center_settings';
+  | 'customer_project_center' | 'customer_project_center_team'
+  | 'customer_project_center_settings';
 
 // ===== Page Access Matrix =====
 // Each page defines which roles can access it, and optional sub-resource restrictions.
@@ -28,6 +29,7 @@ const PAGE_ACCESS: Record<PageSlug, { roles: Role[]; description: string; resour
   review_center:   { roles: ['admin', 'manager', 'operator', 'sales', 'viewer'], description: '项目复盘与改善中心' },
   review_center_settings: { roles: ['admin'], description: '复盘中心系统设置' },
   customer_project_center: { roles: ['admin', 'manager', 'sales'], description: '客户项目中心' },
+  customer_project_center_team: { roles: ['admin', 'manager'], description: '客户项目团队看板' },
   customer_project_center_settings: { roles: ['admin'], description: '客户项目中心设置' },
 };
 
@@ -102,6 +104,7 @@ export function getRouteFromPage(page: PageSlug): string {
     knowledge: '/knowledge', reports: '/reports', settings: '/settings',
     review_center: '/review-center', review_center_settings: '/review-center/settings',
     customer_project_center: '/customer-projects',
+    customer_project_center_team: '/customer-projects/team',
     customer_project_center_settings: '/customer-projects/settings',
   };
   return routeMap[page] || '/';
@@ -124,6 +127,7 @@ export function getPageSlugFromRoute(pathname: string): PageSlug | null {
   if (route === '/review-center/settings') return 'review_center_settings';
   if (route === '/review-center' || route.startsWith('/review-center/')) return 'review_center';
   if (route === '/customer-projects/settings') return 'customer_project_center_settings';
+  if (route === '/customer-projects/team') return 'customer_project_center_team';
   if (route === '/customer-projects' || route.startsWith('/customer-projects/')) {
     return 'customer_project_center';
   }
