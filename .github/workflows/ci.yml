@@ -91,6 +91,21 @@ jobs:
       - name: Customer Project Center Phase 7A report surface contract tests
         run: pnpm exec tsx tests/unit/customer-project-center-phase7a-surfaces.test.ts
 
+      - name: Customer Project Center Phase 7B narrative contract tests
+        run: pnpm exec tsx tests/unit/customer-project-center-phase7b-narrative.test.ts
+
+      - name: Customer Project Center Phase 7B surface contract tests
+        run: pnpm exec tsx tests/unit/customer-project-center-phase7b-surfaces.test.ts
+
+      - name: Customer Project Center Phase 7C report review contract tests
+        run: pnpm exec tsx tests/unit/customer-project-center-phase7c-report-review.test.ts
+
+      - name: Customer Project Center Phase 8 weekly report contract tests
+        run: pnpm exec tsx tests/unit/customer-project-center-phase8-weekly.test.ts
+
+      - name: Customer Project Center Phase 8 surface contract tests
+        run: pnpm exec tsx tests/unit/customer-project-center-phase8-surfaces.test.ts
+
       - name: Agent Control tests
         run: pnpm exec tsx tests/unit/agent-control.test.ts
 
