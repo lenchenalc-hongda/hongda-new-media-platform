@@ -10,6 +10,7 @@ import { isFeatureEnabled, FEATURES } from '@/lib/features';
 import EnvStatusBadge from '@/components/system/EnvStatusBadge';
 import {
   useCanAccessCustomerProjectCenter,
+  useCanAccessCustomerProjectSettings,
   useCanAccessCustomerProjectTeam,
   useCanCreateReview,
 } from '@/components/layout/RoleProvider';
@@ -26,6 +27,7 @@ export default function WorkspaceHome() {
   const canCreateReview = useCanCreateReview();
   const canAccessCustomerProjectCenter = useCanAccessCustomerProjectCenter();
   const canAccessCustomerProjectTeam = useCanAccessCustomerProjectTeam();
+  const canAccessCustomerProjectSettings = useCanAccessCustomerProjectSettings();
   const [user] = useState(() => {
     if (typeof window !== 'undefined') {
       const u = localStorage.getItem('nmc_user');
@@ -39,6 +41,7 @@ export default function WorkspaceHome() {
     customerProjectCenterEnabled: isFeatureEnabled(FEATURES.CUSTOMER_PROJECT_CENTER),
     canAccessCustomerProjectCenter,
     canAccessCustomerProjectTeam,
+    canAccessCustomerProjectSettings,
   });
   const enabledGroups = applyCreateVisibility(baseGroups, canCreateReview);
   const totalTodos = enabledGroups.reduce((sum, g) => sum + g.items.length, 0);

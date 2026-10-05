@@ -22,6 +22,7 @@ export interface PortalVisibilityOptions {
   customerProjectCenterEnabled: boolean;
   canAccessCustomerProjectCenter: boolean;
   canAccessCustomerProjectTeam?: boolean;
+  canAccessCustomerProjectSettings?: boolean;
 }
 
 export const WORKSPACE_PORTAL_STYLES: Record<
@@ -171,6 +172,7 @@ export function getVisiblePortalGroups({
   customerProjectCenterEnabled,
   canAccessCustomerProjectCenter,
   canAccessCustomerProjectTeam = false,
+  canAccessCustomerProjectSettings = false,
 }: PortalVisibilityOptions): PortalGroup[] {
   return PORTAL_GROUPS.filter(group => {
     if (group.id === 'review') return projectReviewCenterEnabled;
@@ -191,7 +193,9 @@ export function getVisiblePortalGroups({
         .map(item => (
           item.path === '/customer-projects/team'
             ? { ...item, disabled: false }
-            : item
+            : item.path === '/customer-projects/settings' && canAccessCustomerProjectSettings
+              ? { ...item, disabled: false }
+              : item
         )),
     };
   });

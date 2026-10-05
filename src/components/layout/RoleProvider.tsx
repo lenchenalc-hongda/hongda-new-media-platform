@@ -5,6 +5,7 @@ interface RoleContextValue {
   canCreateReview: boolean;
   canAccessCustomerProjectCenter: boolean;
   canAccessCustomerProjectTeam: boolean;
+  canAccessCustomerProjectSettings: boolean;
   canReviewDailyReports: boolean;
 }
 
@@ -12,6 +13,7 @@ const RoleContext = createContext<RoleContextValue>({
   canCreateReview: false,
   canAccessCustomerProjectCenter: false,
   canAccessCustomerProjectTeam: false,
+  canAccessCustomerProjectSettings: false,
   canReviewDailyReports: false,
 });
 
@@ -19,6 +21,7 @@ export function RoleProvider({
   canCreateReview,
   canAccessCustomerProjectCenter,
   canAccessCustomerProjectTeam,
+  canAccessCustomerProjectSettings,
   canReviewDailyReports,
   children,
 }: RoleContextValue & { children: ReactNode }) {
@@ -28,6 +31,7 @@ export function RoleProvider({
         canCreateReview,
         canAccessCustomerProjectCenter,
         canAccessCustomerProjectTeam,
+        canAccessCustomerProjectSettings,
         canReviewDailyReports,
       }}
     >
@@ -46,6 +50,10 @@ export function useCanAccessCustomerProjectCenter(): boolean {
 
 export function useCanAccessCustomerProjectTeam(): boolean {
   return useContext(RoleContext).canAccessCustomerProjectTeam;
+}
+
+export function useCanAccessCustomerProjectSettings(): boolean {
+  return useContext(RoleContext).canAccessCustomerProjectSettings;
 }
 
 export function useCanReviewDailyReports(): boolean {
