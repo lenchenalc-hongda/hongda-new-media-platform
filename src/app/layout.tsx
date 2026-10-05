@@ -15,6 +15,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   let canCreate = false;
   let canAccessCustomerProjectCenter = false;
   let canAccessCustomerProjectTeam = false;
+  let canAccessCustomerProjectSettings = false;
   let canReviewDailyReports = false;
   try {
     const user = await getCurrentUserReadOnly();
@@ -28,6 +29,10 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         user.role,
         'customer_project_center_team',
       );
+      canAccessCustomerProjectSettings = canRoleAccessPage(
+        user.role,
+        'customer_project_center_settings',
+      );
       canReviewDailyReports = canReviewSubmittedDailyReports(user.role);
     }
   } catch {}
@@ -39,6 +44,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           canCreateReview={canCreate}
           canAccessCustomerProjectCenter={canAccessCustomerProjectCenter}
           canAccessCustomerProjectTeam={canAccessCustomerProjectTeam}
+          canAccessCustomerProjectSettings={canAccessCustomerProjectSettings}
           canReviewDailyReports={canReviewDailyReports}
         >
           {children}

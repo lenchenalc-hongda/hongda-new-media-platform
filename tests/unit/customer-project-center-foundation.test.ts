@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import './customer-project-center-phase11-integration.test';
 import './customer-project-center-phase9-team-board.test';
 import './customer-project-center-phase9-surfaces.test';
 import './customer-project-center-phase8-weekly.test';
