@@ -15,6 +15,7 @@ import {
   isoDateTimeSchema,
   uuidSchema,
 } from './schemas';
+import { RELATIONSHIP_CONVERSION_SOURCE_KEY } from './old-customer-proactive';
 
 export type CpcProfile = {
   id: string;
@@ -31,6 +32,7 @@ export type CpcMutationCommand =
   | 'RESCHEDULE_WORK_ITEM'
   | 'TRANSITION_PROJECT'
   | 'RECORD_CUSTOMER_FOLLOW_UP'
+  | 'CREATE_CUSTOMER_RELATIONSHIP_FOLLOW_UP'
   | 'CREATE_AI_WORK_ITEM_DRAFT'
   | 'ACCEPT_AI_DRAFT'
   | 'REJECT_AI_DRAFT'
@@ -91,11 +93,25 @@ const progressEventTypes = PROJECT_EVENT_TYPES.filter(eventType => [
   >,
 ];
 
+const progressPayloadSchema = z.record(z.string(), z.unknown())
+  .default({})
+  .superRefine((payload, context) => {
+    if (Object.prototype.hasOwnProperty.call(
+      payload,
+      RELATIONSHIP_CONVERSION_SOURCE_KEY,
+    )) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'reserved relationship conversion provenance key',
+      });
+    }
+  });
+
 const progressSchema = z.object({
   expectedVersion: expectedVersionSchema,
   eventType: z.enum(progressEventTypes),
   rawInput: z.string().trim().min(1).max(10000).nullable().optional(),
-  payload: z.record(z.string(), z.unknown()).default({}),
+  payload: progressPayloadSchema,
   occurredAt: isoDateTimeSchema.nullable().optional(),
   newStage: z.string().trim().min(1).max(100).nullable().optional(),
   nextActionTitle: z.string().trim().min(1).max(300).nullable().optional(),
@@ -140,6 +156,12 @@ const customerFollowUpSchema = z.object({
   nextFollowUpTitle: z.string().trim().min(1).max(300).nullable().optional(),
   nextFollowUpDueAt: isoDateTimeSchema.nullable().optional(),
   nextFollowUpPriority: z.enum(PROJECT_PRIORITIES).default('medium'),
+}).strict();
+
+const createRelationshipFollowUpSchema = z.object({
+  title: z.string().trim().min(1).max(300).default('客户关系回访'),
+  dueAt: isoDateTimeSchema,
+  priority: z.enum(PROJECT_PRIORITIES).default('medium'),
 }).strict();
 
 const aiWorkItemDraftSchema = z.object({
@@ -200,6 +222,7 @@ const COMMAND_SCHEMA = {
   RESCHEDULE_WORK_ITEM: workItemRescheduleSchema,
   TRANSITION_PROJECT: projectTransitionSchema,
   RECORD_CUSTOMER_FOLLOW_UP: customerFollowUpSchema,
+  CREATE_CUSTOMER_RELATIONSHIP_FOLLOW_UP: createRelationshipFollowUpSchema,
   CREATE_AI_WORK_ITEM_DRAFT: aiWorkItemDraftSchema,
   ACCEPT_AI_DRAFT: aiDraftAcceptSchema,
   REJECT_AI_DRAFT: aiDraftRejectSchema,
@@ -425,6 +448,15 @@ function sanitizeSuccess(command: CpcMutationCommand, raw: unknown): Record<stri
     };
   }
 
+  if (command === 'CREATE_CUSTOMER_RELATIONSHIP_FOLLOW_UP') {
+    const id = safeString(data.work_item_id);
+    const workItemType = safeString(data.work_item_type);
+    const status = safeString(data.status);
+    const version = safePositiveInteger(data.version);
+    if (!id || workItemType !== 'FOLLOW_UP' || !status || !version) return null;
+    return { workItemId: id, workItemType, status, version };
+  }
+
   if (command === 'RECORD_CUSTOMER_FOLLOW_UP') {
     const customerReferenceId = safeString(data.customer_reference_id);
     const eventId = safeString(data.event_id);
@@ -527,6 +559,7 @@ export async function runCpcMutation(
     || command === 'RESCHEDULE_WORK_ITEM'
     || command === 'TRANSITION_PROJECT'
     || command === 'RECORD_CUSTOMER_FOLLOW_UP'
+    || command === 'CREATE_CUSTOMER_RELATIONSHIP_FOLLOW_UP'
     || command === 'ACCEPT_AI_DRAFT'
     || command === 'REJECT_AI_DRAFT'
     || command === 'SUBMIT_REPORT'
@@ -558,11 +591,10 @@ export async function runCpcMutation(
   }
 
   const requestId = crypto.randomUUID();
+  const body: any = parsed.data;
   let result: RpcResult;
 
   try {
-    const body: any = parsed.data;
-
     if (command === 'GENERATE_DAILY_REPORT') {
       result = await supabase.rpc('cpc_generate_daily_report_draft', {
         p_business_date: body.businessDate,
@@ -678,6 +710,17 @@ export async function runCpcMutation(
         p_next_follow_up_title: body.nextFollowUpTitle ?? null,
         p_next_follow_up_due_at: body.nextFollowUpDueAt ?? null,
         p_next_follow_up_priority: body.nextFollowUpPriority,
+        p_request_id: requestId,
+      });
+    } else if (command === 'CREATE_CUSTOMER_RELATIONSHIP_FOLLOW_UP') {
+      result = await supabase.rpc('cpc_create_work_item', {
+        p_customer_reference_id: resourceId,
+        p_project_id: null,
+        p_work_item_type: 'FOLLOW_UP',
+        p_title: body.title,
+        p_description: null,
+        p_due_at: body.dueAt,
+        p_priority: body.priority,
         p_request_id: requestId,
       });
     } else {

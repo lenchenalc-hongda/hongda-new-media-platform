@@ -395,6 +395,38 @@ assert(
   'invalid resource id rejected before RPC',
 );
 
+const forgedProgressHolder = makeClient({});
+(globalThis as any).__cpcPhase5CFakeSupabaseClient = forgedProgressHolder.client;
+const forgedProgress = await progressPost(
+  request('/api/customer-projects/projects/' + PROJECT_ID + '/progress', {
+    expectedVersion: 1,
+    eventType: 'CONTACT_LOGGED',
+    payload: {
+      relationship_conversion_source_event_id:
+        '00000000-0000-0000-0000-000000000501',
+    },
+  }),
+  { params: { id: PROJECT_ID } },
+);
+assert(
+  forgedProgress.status === 400 && forgedProgressHolder.rpcCalls.length === 0,
+  'generic progress input rejects reserved conversion provenance keys',
+);
+
+const forgedProjectHolder = makeClient({});
+(globalThis as any).__cpcPhase5CFakeSupabaseClient = forgedProjectHolder.client;
+const forgedProjectResponse = await createProjectPost(
+  request('/api/customer-projects/projects', {
+    ...validCreate,
+    sourceFollowUpEventId: '00000000-0000-0000-0000-000000000501',
+  }),
+);
+assert(
+  forgedProjectResponse.status === 400
+    && forgedProjectHolder.rpcCalls.length === 0,
+  'CREATE_PROJECT rejects sourceFollowUpEventId instead of claiming conversion attribution',
+);
+
 const mutationOnlyRouteFiles = [
   'src/app/api/customer-projects/customers/provisional/route.ts',
   'src/app/api/customer-projects/customers/[id]/follow-up/route.ts',

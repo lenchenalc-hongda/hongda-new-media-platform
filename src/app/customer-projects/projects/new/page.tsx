@@ -461,7 +461,7 @@ export default function NewCustomerProjectPage() {
               />
               {carriedContext && (
                 <p className="mt-1 text-[11px] text-cyan-700">
-                  已带入最近一次已确认的客户回访摘要，请确认并按具体机会修改。
+                  已带入最近一次已确认的客户回访摘要，仅用于填写当前机会；系统不会据此声明项目转化归因。
                 </p>
               )}
             </div>

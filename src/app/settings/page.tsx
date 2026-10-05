@@ -199,7 +199,7 @@ export default function SettingsPage() {
               <p className="font-medium text-amber-800 mb-2">接入步骤</p>
               <ol className="list-decimal ml-4 space-y-2 text-xs text-amber-700">
                 <li>在微信公众平台 → 设置与开发 → 开发接口管理，获取 AppID 和 AppSecret</li>
-                <li>在 Vercel 项目设置环境变量：WECHAT_APP_ID、WECHAT_APP_SECRET、WECHAT_ACCOUNT_NAME</li>
+                <li>在 Vercel 项目设置环境变量：微信 App ID、公众号密钥和账号名称</li>
                 <li>已在 IP 白名单添加 DigitalOcean 固定 IP：139.59.112.84</li>
                 <li>部署完成后可在文章库中保存草稿和发布</li>
               </ol>

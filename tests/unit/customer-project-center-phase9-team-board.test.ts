@@ -386,16 +386,26 @@ assert(
 );
 
 assert(
-  snapshot.oldCustomerCoverage.state === 'not_evaluated'
-    && snapshot.oldCustomerCoverage.phase10PolicyApplied === false
-    && snapshot.oldCustomerCoverage.coverageRate.state === 'unknown'
-    && snapshot.oldCustomerCoverage.conversionRate.state === 'unknown',
-  'old-customer coverage/conversion remains unapproved and explicit',
+  snapshot.oldCustomerCoverage.state === 'evaluated'
+    && snapshot.oldCustomerCoverage.phase10PolicyApplied === true
+    && snapshot.oldCustomerCoverage.recommendations.dueRecommendationCount === 0
+    && snapshot.oldCustomerCoverage.conversionRate.state === 'unknown'
+    && snapshot.oldCustomerCoverage.conversionRate.reason
+      .includes('atomic trusted conversion provenance is not yet implemented'),
+  'old-customer coverage applies Phase 10 without inventing due work or conversion',
 );
 assert(
   snapshot.oldCustomerCoverage.confirmedFacts.canonicalCustomerCount === 1
     && snapshot.oldCustomerCoverage.confirmedFacts.openCustomerFollowUpCount === 1,
-  'old-customer section only exposes confirmed facts already in CPC',
+  'old-customer section exposes confirmed facts already in CPC',
+);
+assert(
+  snapshot.oldCustomerCoverage.sourceCategories.old_customer_reactivation.state === 'known'
+    && snapshot.oldCustomerCoverage.sourceCategories.old_customer_reactivation.value
+      .explicitFollowUpToProjectConversion.state === 'unknown'
+    && snapshot.oldCustomerCoverage.sourceCategories.new_media_lead.state === 'unknown'
+    && snapshot.oldCustomerCoverage.sourceCategories.proactive_outbound.state === 'unknown',
+  'Phase 10 source buckets stay separate with UNKNOWN conversion and external categories',
 );
 assert(
   snapshot.businessProgress.projectStateCounts.active === 3
@@ -432,3 +442,6 @@ for (const forbidden of [
 
 console.log('Phase 9 team board tests: ' + passed + ' passed, ' + failed + ' failed');
 if (failed > 0) process.exit(1);
+
+// Phase 10 contract coverage is executed through the existing Phase 9 CI step.
+await import('./customer-project-center-phase10.test');

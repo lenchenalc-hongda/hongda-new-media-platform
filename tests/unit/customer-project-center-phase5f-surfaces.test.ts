@@ -137,10 +137,10 @@ assert(
   'Customer detail cannot silently close another salesperson follow-up',
 );
 assert(
-  customerDetailPage.includes('系统不会在没有批准规则的情况下自动生成老客户回访周期')
-    && !customerDetailPage.includes('每30天自动')
-    && !customerDetailPage.includes('每60天自动'),
-  'Phase 5F does not invent an old-customer cadence policy',
+  customerDetailPage.includes('老客户 proactive建议')
+    && customerDetailPage.includes('relationshipRecommendation.canArrangeFollowUp')
+    && customerDetailPage.includes('仅建议，不计为逾期、任务或人员 KPI'),
+  'Customer detail surfaces approved Phase 10 cadence only as an explicit recommendation',
 );
 
 assert(

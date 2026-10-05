@@ -156,11 +156,12 @@ assert(
   'Team Board read model preserves UNKNOWN external semantics',
 );
 assert(
-  model.includes('phase10PolicyApplied: false')
+  model.includes('phase10PolicyApplied: true')
     && model.includes('coverageRate')
     && model.includes('conversionRate')
-    && model.includes('Phase 10 尚未批准'),
-  'old-customer section does not implement Phase 10 policy',
+    && model.includes('buildOldCustomerRecommendations')
+    && model.includes('buildPhase10SourceCategoryReport'),
+  'old-customer section delegates Phase 10 policy to the shared deterministic model',
 );
 assert(
   model.includes('stale_project_evaluation')
@@ -177,3 +178,6 @@ assert(
 
 console.log('Phase 9 surface tests: ' + passed + ' passed, ' + failed + ' failed');
 if (failed > 0) process.exit(1);
+
+// Phase 10 surface coverage is executed through the existing Phase 9 CI step.
+await import('./customer-project-center-phase10-surfaces.test');

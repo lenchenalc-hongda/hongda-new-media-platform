@@ -54,7 +54,12 @@ export async function GET(_req: NextRequest) {
       });
     }
 
-    const [projectsResult, followUpsResult, eventsResult] = await Promise.all([
+    const [
+      projectsResult,
+      followUpsResult,
+      relationshipEventsResult,
+      transactionEventsResult,
+    ] = await Promise.all([
       supabase
         .from('cpc_projects')
         .select('id,customer_reference_id,title,project_type,status,stage,waiting_on,next_check_at,risk_level,priority,updated_at')
@@ -75,27 +80,44 @@ export async function GET(_req: NextRequest) {
         .limit(MAX_RELATION_ROWS),
       supabase
         .from('cpc_project_events')
-        .select('id,customer_reference_id,project_id,event_type,occurred_at,raw_input')
+        .select('id,customer_reference_id,project_id,event_type,occurred_at,raw_input,payload')
         .eq('org_id', profile.orgId)
         .in('customer_reference_id', customerIds)
         .is('project_id', null)
         .in('event_type', ['CONTACT_LOGGED', 'CUSTOMER_RESPONSE_RECEIVED'])
         .order('event_seq', { ascending: false })
         .limit(MAX_RELATION_ROWS),
+      supabase
+        .from('cpc_project_events')
+        .select('id,customer_reference_id,project_id,event_type,occurred_at,raw_input,payload')
+        .eq('org_id', profile.orgId)
+        .in('customer_reference_id', customerIds)
+        .in('event_type', ['ORDER_CONFIRMED', 'PROJECT_WON'])
+        .order('event_seq', { ascending: false })
+        .limit(MAX_RELATION_ROWS),
     ]);
 
-    if (projectsResult.error || followUpsResult.error || eventsResult.error) {
+    if (
+      projectsResult.error
+      || followUpsResult.error
+      || relationshipEventsResult.error
+      || transactionEventsResult.error
+    ) {
       throw new Error('customer relation read failed');
     }
 
     const projects = (projectsResult.data ?? []) as CustomerProjectRow[];
     const followUps = (followUpsResult.data ?? []) as CustomerFollowUpRow[];
-    const events = (eventsResult.data ?? []) as CustomerEventRow[];
+    const events = [
+      ...((relationshipEventsResult.data ?? []) as CustomerEventRow[]),
+      ...((transactionEventsResult.data ?? []) as CustomerEventRow[]),
+    ];
 
     if (
       projects.length >= MAX_RELATION_ROWS
       || followUps.length >= MAX_RELATION_ROWS
-      || events.length >= MAX_RELATION_ROWS
+      || (relationshipEventsResult.data?.length ?? 0) >= MAX_RELATION_ROWS
+      || (transactionEventsResult.data?.length ?? 0) >= MAX_RELATION_ROWS
     ) {
       return jsonError('客户关系数据量超出当前安全上限，请使用后续筛选能力。', 409);
     }

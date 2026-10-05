@@ -356,3 +356,54 @@ The following remain deferred until a later explicit decision:
 - escalation-after-N-reminders rules.
 
 The absence of these policy values does not block deterministic due/overdue reminders for already-confirmed obligations.
+
+
+## Phase 10 owner-approved decisions
+
+Approval rule for `CPC-P10-OLD-CUSTOMER-PROACTIVE-001`: the owner approved
+these policy values on 2026-10-04. They supersede only the previously deferred
+old-customer cadence item; the remaining DEC-055 values stay deferred.
+
+### DEC-056: Old-customer cadence uses A/B/C 30/60/90 day recommendations
+
+Segment A uses confirmed trusted transaction evidence within 365 days and
+recommends a 30-day relationship cadence. Segment B uses confirmed historical
+transaction evidence outside that window and recommends a 60-day cadence.
+Segment C uses an active canonical customer with a confirmed customer-level
+relationship baseline and recommends a 90-day cadence.
+
+Key-customer flags, transaction history, and source categories are never
+inferred from names, amounts, activity counts, generic customer timestamps, or
+free text. Missing evidence remains UNKNOWN.
+
+### DEC-057: A cadence recommendation is not a formal FOLLOW_UP or KPI
+
+Before an employee explicitly accepts a cadence recommendation, it is not a
+WorkItem, reminder, overdue item, missed commitment, or performance fact.
+Acceptance must set a customer-level `FOLLOW_UP` with `project_id = null`
+through the existing controlled `cpc_create_work_item` mutation.
+
+Only the accepted formal WorkItem may enter the existing P3/reminder path.
+
+### DEC-058: Active Project or open customer FOLLOW_UP suppresses suggestions
+
+An active Project or an open customer-level `FOLLOW_UP` suppresses duplicate
+old-customer cadence suggestions. Suppression is visible as a reason and does
+not cancel or replace the existing obligation.
+
+### DEC-059: Conversion requires explicit follow-up to Project provenance
+
+Old-customer conversion is counted only when an explicit relationship
+follow-up event is recorded as the source of a Project. A customer reply,
+contact, generic timing proximity, or free-text statement is not conversion.
+
+Historical rows without explicit provenance remain UNKNOWN at aggregate level;
+the system does not guess conversion attribution.
+
+### DEC-060: Acquisition categories remain structurally separate
+
+`new_media_lead`, `proactive_outbound`, and `old_customer_reactivation` remain
+separate reporting buckets. Phase 10 can derive old-customer facts from its
+approved flow. Before Phase 11 authoritative mappings exist, new-media and
+proactive-outbound source categories remain UNKNOWN and are not merged into
+old-customer metrics.
