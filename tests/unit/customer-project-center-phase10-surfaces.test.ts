@@ -85,23 +85,23 @@ assert(
 );
 assert(
   api.includes("supabase.rpc('cpc_create_project'")
-    && api.includes('sourceFollowUpEventId')
-    && api.includes('requestId = source.id')
-    && api.includes('findExistingTrustedProjectConversion')
+    && !api.includes('sourceFollowUpEventId')
+    && !api.includes('requestId = source.id')
+    && !api.includes('findExistingTrustedProjectConversion')
+    && !api.includes('conversionProvenanceRecorded')
     && (api.split("supabase.rpc('cpc_record_progress'").length - 1) === 1,
-  'Project promotion persists audit-backed provenance in one create RPC with recovery',
+  'CREATE_PROJECT cannot claim or recover conversion attribution from request identifiers',
 );
 assert(
-  api.includes('trustedProjectConversionProvenanceFromAudit')
-    && teamRoute.includes(".from('cpc_audit_log')")
-    && teamRoute.includes('projectCreationAudits'),
-  'conversion facts come from trusted Project creation audit provenance',
+  !api.includes('trustedProjectConversionProvenanceFromAudit')
+    && !teamRoute.includes("cpc_audit_log")
+    && !teamRoute.includes('projectCreationAudits'),
+  'Project creation audits are not treated as trusted conversion provenance',
 );
 assert(
-  api.includes("sourcePayload.relationship_follow_up === true")
-    && api.includes("source.project_id === null")
-    && api.includes("RELATIONSHIP_EVENT_TYPES.includes(source.event_type)"),
-  'server validates conversion source as a confirmed customer-level follow-up event',
+  !api.includes('INVALID_CONVERSION_SOURCE')
+    && !api.includes('conversionSourceFollowUpEventId'),
+  'CREATE_PROJECT has no client-supplied conversion source path',
 );
 assert(
   !proactiveModel.includes('updated_at')
@@ -142,16 +142,22 @@ assert(
   'Customer detail explains recommendation and requires explicit employee acceptance',
 );
 assert(
-  newProjectPage.includes('body.sourceFollowUpEventId = contextEventId'),
-  'Project creation carries the exact customer follow-up event when started from Customer context',
+  !newProjectPage.includes('sourceFollowUpEventId')
+    && newProjectPage.includes('不会据此声明项目转化归因'),
+  'Project creation carries Customer context without claiming conversion attribution',
 );
 
 assert(
   teamBoardModel.includes('buildOldCustomerRecommendations')
     && teamBoardModel.includes('buildPhase10SourceCategoryReport')
     && teamBoardModel.includes('phase10PolicyApplied: true')
-    && teamBoardModel.includes('explicitFollowUpToProjectConversionCount'),
-  'Team Board uses shared Phase 10 facts without private recommendation logic',
+    && proactiveModel.includes('explicitFollowUpToProjectConversion')
+    && proactiveModel.includes(
+      'atomic trusted conversion provenance is not yet implemented',
+    )
+    && !proactiveModel.includes('explicitFollowUpToProjectConversionCount')
+    && !teamBoardModel.includes('trustedProjectConversions'),
+  'Team Board uses shared Phase 10 facts and reports conversion as UNKNOWN',
 );
 assert(
   teamBoardPage.includes('老客户 proactive')

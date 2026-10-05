@@ -11,10 +11,8 @@ import type {
 import {
   buildOldCustomerRecommendations,
   buildPhase10SourceCategoryReport,
-  trustedProjectConversionProvenanceFromAudit,
-  type ProjectCreationAuditRow,
   type Phase10SourceCategoryReport,
-  type TrustedProjectConversionProvenance,
+  TRUSTED_CONVERSION_PROVENANCE_UNAVAILABLE_REASON,
 } from './old-customer-proactive';
 import { getShanghaiBusinessWindow } from './read-models';
 
@@ -365,7 +363,6 @@ export function buildTeamBoardSnapshot(input: {
   profiles: TeamBoardProfileRow[];
   reports: TeamBoardReportRow[];
   events: TeamBoardEventRow[];
-  projectCreationAudits?: ProjectCreationAuditRow[];
 }): TeamBoardSnapshot {
   const { businessDate, startMs, endMs } = getShanghaiBusinessWindow(input.now);
   const nowMs = input.now.getTime();
@@ -380,14 +377,6 @@ export function buildTeamBoardSnapshot(input: {
     && row.status === 'submitted'
   ));
   const events = input.events.filter(row => row.org_id === input.orgId);
-  const trustedProjectConversions = (input.projectCreationAudits ?? [])
-    .filter(row => row.org_id === input.orgId)
-    .map(trustedProjectConversionProvenanceFromAudit)
-    .filter(
-      (provenance): provenance is TrustedProjectConversionProvenance => (
-        provenance !== null
-      ),
-    );
 
   const projectsById = new Map(projects.map(project => [project.id, project]));
   const customersById = new Map(customers.map(customer => [customer.id, customer]));
@@ -653,13 +642,7 @@ export function buildTeamBoardSnapshot(input: {
     recommendations: oldCustomerRecommendations,
     workItems,
     events,
-    trustedProjectConversions,
   });
-  const explicitFollowUpToProjectConversionCount =
-    sourceCategories.old_customer_reactivation.state === 'known'
-      ? sourceCategories.old_customer_reactivation.value
-        .explicitFollowUpToProjectConversionCount
-      : 0;
   const eligibleKnownCustomerIds = new Set(
     oldCustomerRecommendations
       .filter(recommendation => recommendation.segment !== 'UNKNOWN')
@@ -682,7 +665,8 @@ export function buildTeamBoardSnapshot(input: {
         value: eligibleFollowUpCustomerIds.size / eligibleKnownCustomerIds.size,
       };
   const coverageReason = 'Phase 10 已按已确认 CPC 事实启用 A/B/C 老客户建议；建议不是逾期任务，接受后才进入正式回访。';
-  const conversionUnknownReason = `历史转化是否具备显式回访到项目来源尚未补齐；已识别 ${explicitFollowUpToProjectConversionCount} 个可信显式转化，不据此推断历史转化率。`;
+  const conversionUnknownReason =
+    TRUSTED_CONVERSION_PROVENANCE_UNAVAILABLE_REASON;
   const externalReason = '外部订单、报价、回款与财务权威源尚未集成；缺失数据保持 UNKNOWN，不按 0 处理。';
 
   return {

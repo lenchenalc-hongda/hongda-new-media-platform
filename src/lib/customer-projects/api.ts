@@ -15,12 +15,7 @@ import {
   isoDateTimeSchema,
   uuidSchema,
 } from './schemas';
-import {
-  RELATIONSHIP_CONVERSION_SOURCE_KEY,
-  RELATIONSHIP_EVENT_TYPES,
-  trustedProjectConversionProvenanceFromAudit,
-  type ProjectCreationAuditRow,
-} from './old-customer-proactive';
+import { RELATIONSHIP_CONVERSION_SOURCE_KEY } from './old-customer-proactive';
 
 export type CpcProfile = {
   id: string;
@@ -74,7 +69,6 @@ const createProjectSchema = z.object({
   initialNextActionDueAt: isoDateTimeSchema.nullable().optional(),
   waitingOn: z.enum(WAITING_ON_VALUES).default('none'),
   nextCheckAt: isoDateTimeSchema.nullable().optional(),
-  sourceFollowUpEventId: uuidSchema.nullable().optional(),
 }).strict();
 
 const progressEventTypes = PROJECT_EVENT_TYPES.filter(eventType => [
@@ -554,76 +548,6 @@ function commandSchema(command: CpcMutationCommand): z.ZodTypeAny {
   return COMMAND_SCHEMA[command] as z.ZodTypeAny;
 }
 
-async function findExistingTrustedProjectConversion(
-  supabase: any,
-  orgId: string,
-  sourceFollowUpEventId: string,
-  customerReferenceId: string,
-): Promise<{
-  projectId: string;
-  version: number;
-  nextActionId: string | null;
-} | null> {
-  const auditResult = await supabase
-    .from('cpc_audit_log')
-    .select('id,org_id,entity_type,entity_id,action,request_id,metadata,recorded_at')
-    .eq('org_id', orgId)
-    .eq('entity_type', 'PROJECT')
-    .eq('action', 'PROJECT_CREATED')
-    .eq('request_id', sourceFollowUpEventId)
-    .maybeSingle();
-
-  if (auditResult.error || !auditResult.data) return null;
-
-  const provenance = trustedProjectConversionProvenanceFromAudit(
-    auditResult.data as ProjectCreationAuditRow,
-  );
-  if (
-    !provenance
-    || provenance.sourceFollowUpEventId !== sourceFollowUpEventId
-    || provenance.customerReferenceId !== customerReferenceId
-  ) {
-    return null;
-  }
-
-  const projectResult = await supabase
-    .from('cpc_projects')
-    .select('id,version,customer_reference_id')
-    .eq('org_id', orgId)
-    .eq('id', provenance.projectId)
-    .maybeSingle();
-
-  if (projectResult.error || !projectResult.data) return null;
-  if (
-    projectResult.data.customer_reference_id
-    !== provenance.customerReferenceId
-  ) {
-    return null;
-  }
-
-  const version = safePositiveInteger(projectResult.data.version);
-  const projectId = safeString(projectResult.data.id);
-  if (!version || !projectId) return null;
-
-  const nextActionResult = await supabase
-    .from('cpc_work_items')
-    .select('id,created_at')
-    .eq('org_id', orgId)
-    .eq('project_id', projectId)
-    .eq('work_item_type', 'NEXT_ACTION')
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  return {
-    projectId,
-    version,
-    nextActionId: nextActionResult.error
-      ? null
-      : safeString(nextActionResult.data?.id),
-  };
-}
-
 export async function runCpcMutation(
   req: NextRequest,
   params: Record<string, string>,
@@ -666,47 +590,11 @@ export async function runCpcMutation(
     return jsonError(profileResult.message, profileResult.status);
   }
 
-  let requestId = crypto.randomUUID();
+  const requestId = crypto.randomUUID();
   const body: any = parsed.data;
-  let conversionSourceFollowUpEventId: string | null = null;
   let result: RpcResult;
 
   try {
-    if (command === 'CREATE_PROJECT' && body.sourceFollowUpEventId) {
-      const sourceResult = await supabase
-        .from('cpc_project_events')
-        .select('id,customer_reference_id,project_id,event_type,payload')
-        .eq('org_id', profileResult.profile.orgId)
-        .eq('id', body.sourceFollowUpEventId)
-        .maybeSingle();
-
-      if (sourceResult.error) throw new Error('conversion source read failed');
-
-      const source = sourceResult.data as any;
-      const sourcePayload = source?.payload
-        && typeof source.payload === 'object'
-        && !Array.isArray(source.payload)
-        ? source.payload as Record<string, unknown>
-        : {};
-      const validSource = source
-        && source.customer_reference_id === body.customerReferenceId
-        && source.project_id === null
-        && RELATIONSHIP_EVENT_TYPES.includes(source.event_type)
-        && sourcePayload.relationship_follow_up === true;
-
-      if (!validSource) {
-        return NextResponse.json({
-          ok: false,
-          code: 'INVALID_CONVERSION_SOURCE',
-          message: '项目转化的来源回访事实无效或不再可见。',
-          data: null,
-        }, { status: 422 });
-      }
-
-      conversionSourceFollowUpEventId = source.id;
-      requestId = source.id;
-    }
-
     if (command === 'GENERATE_DAILY_REPORT') {
       result = await supabase.rpc('cpc_generate_daily_report_draft', {
         p_business_date: body.businessDate,
@@ -732,28 +620,6 @@ export async function runCpcMutation(
         p_request_id: requestId,
       });
     } else if (command === 'CREATE_PROJECT') {
-      if (conversionSourceFollowUpEventId) {
-        const recovered = await findExistingTrustedProjectConversion(
-          supabase,
-          profileResult.profile.orgId,
-          conversionSourceFollowUpEventId,
-          body.customerReferenceId,
-        );
-        if (recovered) {
-          return NextResponse.json({
-            ok: true,
-            code: 'OK',
-            message: 'success',
-            data: {
-              ...recovered,
-              conversionSourceEventId: conversionSourceFollowUpEventId,
-              conversionProvenanceRecorded: true,
-              recoveredExistingProject: true,
-            },
-          });
-        }
-      }
-
       result = await supabase.rpc('cpc_create_project', {
         p_customer_reference_id: body.customerReferenceId,
         p_title: body.title,
@@ -768,51 +634,6 @@ export async function runCpcMutation(
         p_next_check_at: body.nextCheckAt ?? null,
         p_request_id: requestId,
       });
-
-      if (conversionSourceFollowUpEventId) {
-        if (result.error) {
-          const recovered = await findExistingTrustedProjectConversion(
-            supabase,
-            profileResult.profile.orgId,
-            conversionSourceFollowUpEventId,
-            body.customerReferenceId,
-          );
-          if (recovered) {
-            return NextResponse.json({
-              ok: true,
-              code: 'OK',
-              message: 'success',
-              data: {
-                ...recovered,
-                conversionSourceEventId: conversionSourceFollowUpEventId,
-                conversionProvenanceRecorded: true,
-                recoveredExistingProject: true,
-              },
-            });
-          }
-          const mapped = mapCpcRpcResult(command, result);
-          return NextResponse.json(mapped.body, { status: mapped.status });
-        }
-
-        const createdProject = result.data?.ok === true
-          ? sanitizeSuccess('CREATE_PROJECT', result.data?.data)
-          : null;
-        if (!createdProject) {
-          const mapped = mapCpcRpcResult(command, result);
-          return NextResponse.json(mapped.body, { status: mapped.status });
-        }
-
-        return NextResponse.json({
-          ok: true,
-          code: 'OK',
-          message: 'success',
-          data: {
-            ...createdProject,
-            conversionSourceEventId: conversionSourceFollowUpEventId,
-            conversionProvenanceRecorded: true,
-          },
-        });
-      }
     } else if (command === 'RECORD_PROGRESS') {
       result = await supabase.rpc('cpc_record_progress', {
         p_project_id: resourceId,

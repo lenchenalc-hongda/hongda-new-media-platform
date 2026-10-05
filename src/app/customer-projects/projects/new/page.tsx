@@ -247,13 +247,6 @@ export default function NewCustomerProjectPage() {
       waitingOn: 'none',
     };
 
-    if (
-      contextEventId
-      && selectedCustomerId === preselectedCustomerReferenceId
-    ) {
-      body.sourceFollowUpEventId = contextEventId;
-    }
-
     if (startMode === 'action') {
       if (!nextActionTitle.trim()) {
         setSubmitError('活跃项目创建时必须填写第一步要做什么。');
@@ -468,7 +461,7 @@ export default function NewCustomerProjectPage() {
               />
               {carriedContext && (
                 <p className="mt-1 text-[11px] text-cyan-700">
-                  已带入最近一次已确认的客户回访摘要，并在创建项目时记录该回访来源；请确认并按具体机会修改。
+                  已带入最近一次已确认的客户回访摘要，仅用于填写当前机会；系统不会据此声明项目转化归因。
                 </p>
               )}
             </div>

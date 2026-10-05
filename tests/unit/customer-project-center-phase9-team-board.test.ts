@@ -389,7 +389,9 @@ assert(
   snapshot.oldCustomerCoverage.state === 'evaluated'
     && snapshot.oldCustomerCoverage.phase10PolicyApplied === true
     && snapshot.oldCustomerCoverage.recommendations.dueRecommendationCount === 0
-    && snapshot.oldCustomerCoverage.conversionRate.state === 'unknown',
+    && snapshot.oldCustomerCoverage.conversionRate.state === 'unknown'
+    && snapshot.oldCustomerCoverage.conversionRate.reason
+      .includes('atomic trusted conversion provenance is not yet implemented'),
   'old-customer coverage applies Phase 10 without inventing due work or conversion',
 );
 assert(
@@ -399,9 +401,11 @@ assert(
 );
 assert(
   snapshot.oldCustomerCoverage.sourceCategories.old_customer_reactivation.state === 'known'
+    && snapshot.oldCustomerCoverage.sourceCategories.old_customer_reactivation.value
+      .explicitFollowUpToProjectConversion.state === 'unknown'
     && snapshot.oldCustomerCoverage.sourceCategories.new_media_lead.state === 'unknown'
     && snapshot.oldCustomerCoverage.sourceCategories.proactive_outbound.state === 'unknown',
-  'Phase 10 source buckets stay separate with UNKNOWN external categories',
+  'Phase 10 source buckets stay separate with UNKNOWN conversion and external categories',
 );
 assert(
   snapshot.businessProgress.projectStateCounts.active === 3

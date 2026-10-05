@@ -76,13 +76,19 @@ function Metric({
 }
 
 function sourceCategoryMetric(
-  metric: TeamBoardSnapshot['oldCustomerCoverage']['sourceCategories']['old_customer_reactivation'],
+  metric: TeamBoardSnapshot['oldCustomerCoverage']['sourceCategories'][
+    keyof TeamBoardSnapshot['oldCustomerCoverage']['sourceCategories']
+  ],
 ): { value: string | number; reason?: string | null } {
   if (metric.state === 'unknown') {
     return { value: '未知', reason: metric.reason };
   }
+  const conversion = metric.value.explicitFollowUpToProjectConversion;
+  if (conversion.state === 'unknown') {
+    return { value: '未知', reason: conversion.reason };
+  }
   return {
-    value: metric.value.explicitFollowUpToProjectConversionCount,
+    value: conversion.value,
     reason: '仅统计已显式记录“回访事件 -> Project”来源的转化。',
   };
 }
@@ -544,29 +550,15 @@ export default function CustomerProjectTeamPage() {
             <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
               <Metric
                 label="新媒线索"
-                value={
-                  snapshot.oldCustomerCoverage.sourceCategories.new_media_lead.state === 'unknown'
-                    ? '未知'
-                    : snapshot.oldCustomerCoverage.sourceCategories.new_media_lead.value.explicitFollowUpToProjectConversionCount
-                }
-                reason={
-                  snapshot.oldCustomerCoverage.sourceCategories.new_media_lead.state === 'unknown'
-                    ? snapshot.oldCustomerCoverage.sourceCategories.new_media_lead.reason
-                    : null
-                }
+                {...sourceCategoryMetric(
+                  snapshot.oldCustomerCoverage.sourceCategories.new_media_lead,
+                )}
               />
               <Metric
                 label="主动外呼"
-                value={
-                  snapshot.oldCustomerCoverage.sourceCategories.proactive_outbound.state === 'unknown'
-                    ? '未知'
-                    : snapshot.oldCustomerCoverage.sourceCategories.proactive_outbound.value.explicitFollowUpToProjectConversionCount
-                }
-                reason={
-                  snapshot.oldCustomerCoverage.sourceCategories.proactive_outbound.state === 'unknown'
-                    ? snapshot.oldCustomerCoverage.sourceCategories.proactive_outbound.reason
-                    : null
-                }
+                {...sourceCategoryMetric(
+                  snapshot.oldCustomerCoverage.sourceCategories.proactive_outbound,
+                )}
               />
               <Metric
                 label="老客户显式转化"

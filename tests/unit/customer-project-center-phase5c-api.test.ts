@@ -108,124 +108,6 @@ function makeClient(options: {
   return { client, rpcCalls };
 }
 
-function makeConversionClient(options: {
-  rpcError?: boolean;
-  recoverExistingProject?: boolean;
-}) {
-  const rpcCalls: Array<{ name: string; args: any }> = [];
-  let auditCallCount = 0;
-  const sourceEventId = '00000000-0000-0000-0000-000000000501';
-  const auditRow = {
-    id: '00000000-0000-0000-0000-000000000502',
-    org_id: ORG_ID,
-    entity_type: 'PROJECT',
-    entity_id: PROJECT_ID,
-    action: 'PROJECT_CREATED',
-    request_id: sourceEventId,
-    metadata: { customer_reference_id: CUSTOMER_ID },
-    recorded_at: '2026-10-05T02:00:00.000Z',
-  };
-
-  const client: any = {
-    auth: {
-      getUser: async () => ({
-        data: { user: { id: 'auth-user-1' } },
-        error: null,
-      }),
-    },
-    from: (table: string) => {
-      const builder: any = {
-        select: () => builder,
-        eq: () => builder,
-        in: () => builder,
-        order: () => builder,
-        limit: () => builder,
-        maybeSingle: async () => {
-          if (table === 'profiles') {
-            return {
-              data: {
-                id: PROFILE_ID,
-                org_id: ORG_ID,
-                role: 'sales',
-                is_active: true,
-              },
-              error: null,
-            };
-          }
-          if (table === 'cpc_project_events') {
-            return {
-              data: {
-                id: sourceEventId,
-                customer_reference_id: CUSTOMER_ID,
-                project_id: null,
-                event_type: 'CONTACT_LOGGED',
-                payload: { relationship_follow_up: true },
-              },
-              error: null,
-            };
-          }
-          if (table === 'cpc_audit_log') {
-            auditCallCount += 1;
-            const shouldRecover = options.recoverExistingProject
-              && auditCallCount > 1;
-            return {
-              data: shouldRecover ? auditRow : null,
-              error: null,
-            };
-          }
-          if (table === 'cpc_projects') {
-            return {
-              data: {
-                id: PROJECT_ID,
-                version: 1,
-                customer_reference_id: CUSTOMER_ID,
-              },
-              error: null,
-            };
-          }
-          if (table === 'cpc_work_items') {
-            return {
-              data: {
-                id: '00000000-0000-0000-0000-000000000503',
-              },
-              error: null,
-            };
-          }
-          throw new Error('unexpected table: ' + table);
-        },
-      };
-      return builder;
-    },
-    rpc: async (name: string, args: any) => {
-      rpcCalls.push({ name, args });
-      if (options.rpcError) {
-        return {
-          data: null,
-          error: {
-            code: 'PGRST500',
-            message: 'RAW DATABASE MESSAGE',
-          },
-        };
-      }
-      return {
-        data: {
-          ok: true,
-          code: 'OK',
-          message: 'success',
-          data: {
-            project_id: PROJECT_ID,
-            version: 1,
-            next_action_id: '00000000-0000-0000-0000-000000000503',
-          },
-        },
-        error: null,
-      };
-    },
-  };
-
-  return { client, rpcCalls, sourceEventId };
-}
-
 console.log('\n=== Customer Project Center Phase 5C API Contract ===');
 
 const anonymous = await resolveCpcProfile(makeClient({ authUserId: null }).client);
@@ -531,48 +413,18 @@ assert(
   'generic progress input rejects reserved conversion provenance keys',
 );
 
-const conversionHolder = makeConversionClient({});
-(globalThis as any).__cpcPhase5CFakeSupabaseClient = conversionHolder.client;
-const conversionResponse = await createProjectPost(
+const forgedProjectHolder = makeClient({});
+(globalThis as any).__cpcPhase5CFakeSupabaseClient = forgedProjectHolder.client;
+const forgedProjectResponse = await createProjectPost(
   request('/api/customer-projects/projects', {
     ...validCreate,
-    sourceFollowUpEventId: conversionHolder.sourceEventId,
+    sourceFollowUpEventId: '00000000-0000-0000-0000-000000000501',
   }),
 );
-const conversionBody: any = await conversionResponse.json();
 assert(
-  conversionResponse.status === 200
-    && conversionBody.data.conversionProvenanceRecorded === true
-    && conversionBody.data.conversionSourceEventId
-      === conversionHolder.sourceEventId,
-  'conversion Project creation records trusted provenance in the create response',
-);
-assert(
-  conversionHolder.rpcCalls.length === 1
-    && conversionHolder.rpcCalls[0].name === 'cpc_create_project'
-    && conversionHolder.rpcCalls[0].args.p_request_id
-      === conversionHolder.sourceEventId,
-  'conversion provenance uses the atomic Project creation audit request id',
-);
-
-const recoveryHolder = makeConversionClient({
-  rpcError: true,
-  recoverExistingProject: true,
-});
-(globalThis as any).__cpcPhase5CFakeSupabaseClient = recoveryHolder.client;
-const recoveryResponse = await createProjectPost(
-  request('/api/customer-projects/projects', {
-    ...validCreate,
-    sourceFollowUpEventId: recoveryHolder.sourceEventId,
-  }),
-);
-const recoveryBody: any = await recoveryResponse.json();
-assert(
-  recoveryResponse.status === 200
-    && recoveryBody.data.recoveredExistingProject === true
-    && recoveryBody.data.projectId === PROJECT_ID
-    && recoveryHolder.rpcCalls.length === 1,
-  'ambiguous create failure recovers the committed Project without a duplicate RPC',
+  forgedProjectResponse.status === 400
+    && forgedProjectHolder.rpcCalls.length === 0,
+  'CREATE_PROJECT rejects sourceFollowUpEventId instead of claiming conversion attribution',
 );
 
 const mutationOnlyRouteFiles = [
