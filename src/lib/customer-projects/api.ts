@@ -18,6 +18,8 @@ import {
 import {
   RELATIONSHIP_CONVERSION_SOURCE_KEY,
   RELATIONSHIP_EVENT_TYPES,
+  trustedProjectConversionProvenanceFromAudit,
+  type ProjectCreationAuditRow,
 } from './old-customer-proactive';
 
 export type CpcProfile = {
@@ -97,11 +99,25 @@ const progressEventTypes = PROJECT_EVENT_TYPES.filter(eventType => [
   >,
 ];
 
+const progressPayloadSchema = z.record(z.string(), z.unknown())
+  .default({})
+  .superRefine((payload, context) => {
+    if (Object.prototype.hasOwnProperty.call(
+      payload,
+      RELATIONSHIP_CONVERSION_SOURCE_KEY,
+    )) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'reserved relationship conversion provenance key',
+      });
+    }
+  });
+
 const progressSchema = z.object({
   expectedVersion: expectedVersionSchema,
   eventType: z.enum(progressEventTypes),
   rawInput: z.string().trim().min(1).max(10000).nullable().optional(),
-  payload: z.record(z.string(), z.unknown()).default({}),
+  payload: progressPayloadSchema,
   occurredAt: isoDateTimeSchema.nullable().optional(),
   newStage: z.string().trim().min(1).max(100).nullable().optional(),
   nextActionTitle: z.string().trim().min(1).max(300).nullable().optional(),
@@ -538,6 +554,76 @@ function commandSchema(command: CpcMutationCommand): z.ZodTypeAny {
   return COMMAND_SCHEMA[command] as z.ZodTypeAny;
 }
 
+async function findExistingTrustedProjectConversion(
+  supabase: any,
+  orgId: string,
+  sourceFollowUpEventId: string,
+  customerReferenceId: string,
+): Promise<{
+  projectId: string;
+  version: number;
+  nextActionId: string | null;
+} | null> {
+  const auditResult = await supabase
+    .from('cpc_audit_log')
+    .select('id,org_id,entity_type,entity_id,action,request_id,metadata,recorded_at')
+    .eq('org_id', orgId)
+    .eq('entity_type', 'PROJECT')
+    .eq('action', 'PROJECT_CREATED')
+    .eq('request_id', sourceFollowUpEventId)
+    .maybeSingle();
+
+  if (auditResult.error || !auditResult.data) return null;
+
+  const provenance = trustedProjectConversionProvenanceFromAudit(
+    auditResult.data as ProjectCreationAuditRow,
+  );
+  if (
+    !provenance
+    || provenance.sourceFollowUpEventId !== sourceFollowUpEventId
+    || provenance.customerReferenceId !== customerReferenceId
+  ) {
+    return null;
+  }
+
+  const projectResult = await supabase
+    .from('cpc_projects')
+    .select('id,version,customer_reference_id')
+    .eq('org_id', orgId)
+    .eq('id', provenance.projectId)
+    .maybeSingle();
+
+  if (projectResult.error || !projectResult.data) return null;
+  if (
+    projectResult.data.customer_reference_id
+    !== provenance.customerReferenceId
+  ) {
+    return null;
+  }
+
+  const version = safePositiveInteger(projectResult.data.version);
+  const projectId = safeString(projectResult.data.id);
+  if (!version || !projectId) return null;
+
+  const nextActionResult = await supabase
+    .from('cpc_work_items')
+    .select('id,created_at')
+    .eq('org_id', orgId)
+    .eq('project_id', projectId)
+    .eq('work_item_type', 'NEXT_ACTION')
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  return {
+    projectId,
+    version,
+    nextActionId: nextActionResult.error
+      ? null
+      : safeString(nextActionResult.data?.id),
+  };
+}
+
 export async function runCpcMutation(
   req: NextRequest,
   params: Record<string, string>,
@@ -580,7 +666,7 @@ export async function runCpcMutation(
     return jsonError(profileResult.message, profileResult.status);
   }
 
-  const requestId = crypto.randomUUID();
+  let requestId = crypto.randomUUID();
   const body: any = parsed.data;
   let conversionSourceFollowUpEventId: string | null = null;
   let result: RpcResult;
@@ -618,6 +704,7 @@ export async function runCpcMutation(
       }
 
       conversionSourceFollowUpEventId = source.id;
+      requestId = source.id;
     }
 
     if (command === 'GENERATE_DAILY_REPORT') {
@@ -645,6 +732,28 @@ export async function runCpcMutation(
         p_request_id: requestId,
       });
     } else if (command === 'CREATE_PROJECT') {
+      if (conversionSourceFollowUpEventId) {
+        const recovered = await findExistingTrustedProjectConversion(
+          supabase,
+          profileResult.profile.orgId,
+          conversionSourceFollowUpEventId,
+          body.customerReferenceId,
+        );
+        if (recovered) {
+          return NextResponse.json({
+            ok: true,
+            code: 'OK',
+            message: 'success',
+            data: {
+              ...recovered,
+              conversionSourceEventId: conversionSourceFollowUpEventId,
+              conversionProvenanceRecorded: true,
+              recoveredExistingProject: true,
+            },
+          });
+        }
+      }
+
       result = await supabase.rpc('cpc_create_project', {
         p_customer_reference_id: body.customerReferenceId,
         p_title: body.title,
@@ -661,6 +770,30 @@ export async function runCpcMutation(
       });
 
       if (conversionSourceFollowUpEventId) {
+        if (result.error) {
+          const recovered = await findExistingTrustedProjectConversion(
+            supabase,
+            profileResult.profile.orgId,
+            conversionSourceFollowUpEventId,
+            body.customerReferenceId,
+          );
+          if (recovered) {
+            return NextResponse.json({
+              ok: true,
+              code: 'OK',
+              message: 'success',
+              data: {
+                ...recovered,
+                conversionSourceEventId: conversionSourceFollowUpEventId,
+                conversionProvenanceRecorded: true,
+                recoveredExistingProject: true,
+              },
+            });
+          }
+          const mapped = mapCpcRpcResult(command, result);
+          return NextResponse.json(mapped.body, { status: mapped.status });
+        }
+
         const createdProject = result.data?.ok === true
           ? sanitizeSuccess('CREATE_PROJECT', result.data?.data)
           : null;
@@ -669,45 +802,13 @@ export async function runCpcMutation(
           return NextResponse.json(mapped.body, { status: mapped.status });
         }
 
-        const provenanceResult = await supabase.rpc('cpc_record_progress', {
-          p_project_id: createdProject.projectId,
-          p_expected_version: createdProject.version,
-          p_event_type: 'CONTACT_LOGGED',
-          p_raw_input: '由已确认客户回访产生的具体项目机会',
-          p_payload: {
-            [RELATIONSHIP_CONVERSION_SOURCE_KEY]: conversionSourceFollowUpEventId,
-          },
-          p_occurred_at: null,
-          p_new_stage: null,
-          p_next_action_title: null,
-          p_next_action_due_at: null,
-          p_waiting_on: null,
-          p_next_check_at: null,
-          p_request_id: requestId,
-        });
-        const mappedProvenance = mapCpcRpcResult('RECORD_PROGRESS', provenanceResult);
-        if (mappedProvenance.status !== 200) {
-          return NextResponse.json(
-            mappedProvenance.body,
-            { status: mappedProvenance.status },
-          );
-        }
-        const provenanceData = mappedProvenance.body.data as Record<string, unknown>;
-        const provenanceVersion = safePositiveInteger(provenanceData.version);
-        const conversionEventId = safeString(provenanceData.eventId);
-        if (!provenanceVersion || !conversionEventId) {
-          const mapped = internalError();
-          return NextResponse.json(mapped.body, { status: mapped.status });
-        }
-
         return NextResponse.json({
           ok: true,
           code: 'OK',
           message: 'success',
           data: {
-            projectId: createdProject.projectId,
-            version: provenanceVersion,
-            conversionEventId,
+            ...createdProject,
+            conversionSourceEventId: conversionSourceFollowUpEventId,
             conversionProvenanceRecorded: true,
           },
         });

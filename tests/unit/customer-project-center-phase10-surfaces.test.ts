@@ -58,6 +58,10 @@ const workbenchPage = fs.readFileSync(
   'src/app/customer-projects/page.tsx',
   'utf8',
 );
+const teamRoute = fs.readFileSync(
+  'src/app/api/customer-projects/team/route.ts',
+  'utf8',
+);
 
 assert(
   acceptanceRoute.includes(
@@ -74,10 +78,24 @@ assert(
   'acceptance creates a customer-level FOLLOW_UP through cpc_create_work_item',
 );
 assert(
-  api.includes("supabase.rpc('cpc_record_progress'")
+  api.includes('progressPayloadSchema')
     && api.includes('RELATIONSHIP_CONVERSION_SOURCE_KEY')
-    && api.includes('sourceFollowUpEventId'),
-  'Project promotion carries explicit follow-up event provenance through controlled progress mutation',
+    && api.includes('.superRefine('),
+  'generic RECORD_PROGRESS rejects the reserved conversion provenance key',
+);
+assert(
+  api.includes("supabase.rpc('cpc_create_project'")
+    && api.includes('sourceFollowUpEventId')
+    && api.includes('requestId = source.id')
+    && api.includes('findExistingTrustedProjectConversion')
+    && (api.split("supabase.rpc('cpc_record_progress'").length - 1) === 1,
+  'Project promotion persists audit-backed provenance in one create RPC with recovery',
+);
+assert(
+  api.includes('trustedProjectConversionProvenanceFromAudit')
+    && teamRoute.includes(".from('cpc_audit_log')")
+    && teamRoute.includes('projectCreationAudits'),
+  'conversion facts come from trusted Project creation audit provenance',
 );
 assert(
   api.includes("sourcePayload.relationship_follow_up === true")
@@ -102,7 +120,12 @@ assert(
   detailApi.includes('buildOldCustomerRecommendation')
     && detailApi.includes('relationshipRecommendation')
     && detailApi.includes('latestEvent?.raw_input'),
-  'Customer detail exposes recommendation and exact promotion context',
+  'Customer detail exposes recommendation and exact confirmed promotion context',
+);
+assert(
+  detailApi.includes('RELATIONSHIP_FOLLOW_UP_MARKER_KEY')
+    && detailApi.includes('event.payload?.[RELATIONSHIP_FOLLOW_UP_MARKER_KEY]'),
+  'Customer detail does not offer promotion from unmarked contact/reply facts',
 );
 
 assert(

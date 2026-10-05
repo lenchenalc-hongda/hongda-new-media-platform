@@ -3,6 +3,7 @@ import {
   buildPhase10SourceCategoryReport,
   countExplicitFollowUpToProjectConversions,
   RELATIONSHIP_CONVERSION_SOURCE_KEY,
+  trustedProjectConversionProvenanceFromAudit,
   type ProactiveCustomerRow,
   type ProactiveEventRow,
   type ProactiveProjectRow,
@@ -186,7 +187,7 @@ const projectConversionEvent: ProactiveEventRow = {
   project_id: PROJECT_ID,
   event_type: 'CONTACT_LOGGED',
   occurred_at: '2026-09-21T00:00:00.000Z',
-  payload: { [RELATIONSHIP_CONVERSION_SOURCE_KEY]: sourceEvent.id },
+  payload: {},
 };
 const replyOnlyProjectEvent: ProactiveEventRow = {
   id: '00000000-0000-0000-0000-000000000309',
@@ -201,16 +202,78 @@ assert(
     sourceEvent,
     projectConversionEvent,
     replyOnlyProjectEvent,
-  ]) === 1,
-  'only explicit follow-up event to Project provenance counts as conversion',
+  ]) === 0,
+  'event payload keys alone cannot forge explicit Project conversion provenance',
+);
+
+const trustedProjectConversion = {
+  auditId: '00000000-0000-0000-0000-000000000310',
+  projectId: PROJECT_ID,
+  customerReferenceId: CUSTOMER_ID,
+  sourceFollowUpEventId: sourceEvent.id,
+  recordedAt: '2026-09-21T00:00:00.000Z',
+};
+assert(
+  countExplicitFollowUpToProjectConversions(
+    [sourceEvent, projectConversionEvent, replyOnlyProjectEvent],
+    [trustedProjectConversion],
+  ) === 1,
+  'only trusted server-created Project creation provenance counts as conversion',
+);
+assert(
+  countExplicitFollowUpToProjectConversions(
+    [sourceEvent, projectConversionEvent],
+    [
+      trustedProjectConversion,
+      {
+        ...trustedProjectConversion,
+        auditId: '00000000-0000-0000-0000-000000000313',
+      },
+    ],
+  ) === 1,
+  'duplicate Project creation provenance for one follow-up counts once',
 );
 assert(
   countExplicitFollowUpToProjectConversions([
     { ...sourceEvent, payload: {} },
     projectConversionEvent,
-  ]) === 0,
+  ], [trustedProjectConversion]) === 0,
   'reply-only or weakly linked source does not count as conversion',
 );
+assert(
+  countExplicitFollowUpToProjectConversions([
+    {
+      ...sourceEvent,
+      payload: {
+        [RELATIONSHIP_CONVERSION_SOURCE_KEY]: sourceEvent.id,
+      },
+    },
+    projectConversionEvent,
+  ]) === 0,
+  'a reserved provenance key in an event payload is never trusted',
+);
+assert(
+  trustedProjectConversionProvenanceFromAudit({
+    id: '00000000-0000-0000-0000-000000000311',
+    org_id: '00000000-0000-0000-0000-000000000001',
+    entity_type: 'PROJECT',
+    entity_id: PROJECT_ID,
+    action: 'PROJECT_CREATED',
+    request_id: sourceEvent.id,
+    metadata: { customer_reference_id: CUSTOMER_ID },
+    recorded_at: '2026-09-21T00:00:00.000Z',
+  })?.sourceFollowUpEventId === sourceEvent.id,
+  'Project creation audit rows are mapped to trusted conversion provenance',
+);
+
+const unmarkedReply: ProactiveEventRow = {
+  id: '00000000-0000-0000-0000-000000000312',
+  customer_reference_id: CUSTOMER_ID,
+  project_id: null,
+  event_type: 'CUSTOMER_RESPONSE_RECEIVED',
+  occurred_at: '2026-09-22T00:00:00.000Z',
+  payload: {},
+};
 
 const sourceReport = buildPhase10SourceCategoryReport({
   recommendations: [
@@ -218,7 +281,8 @@ const sourceReport = buildPhase10SourceCategoryReport({
     { ...missingBaseline, customerReferenceId: SECOND_CUSTOMER_ID },
   ],
   workItems: [],
-  events: [sourceEvent, projectConversionEvent],
+  events: [sourceEvent, projectConversionEvent, unmarkedReply],
+  trustedProjectConversions: [trustedProjectConversion],
 });
 assert(
   sourceReport.new_media_lead.state === 'unknown'
@@ -227,8 +291,23 @@ assert(
 );
 assert(
   sourceReport.old_customer_reactivation.state === 'known'
-    && sourceReport.old_customer_reactivation.value.explicitFollowUpToProjectConversionCount === 1,
-  'old-customer reactivation reports only explicit conversion provenance',
+    && sourceReport.old_customer_reactivation.value
+      .explicitFollowUpToProjectConversionCount === 1
+    && sourceReport.old_customer_reactivation.value
+      .confirmedRelationshipFollowUpCount === 1,
+  'old-customer reactivation excludes unmarked contact/reply facts',
+);
+
+const unmarkedOnlyReport = buildPhase10SourceCategoryReport({
+  recommendations: [],
+  workItems: [],
+  events: [unmarkedReply],
+});
+assert(
+  unmarkedOnlyReport.old_customer_reactivation.state === 'known'
+    && unmarkedOnlyReport.old_customer_reactivation.value
+      .confirmedRelationshipFollowUpCount === 0,
+  'an unmarked contact/reply is never relabeled as old_customer_reactivation',
 );
 
 console.log('Phase 10 proactive tests: ' + passed + ' passed, ' + failed + ' failed');

@@ -11,6 +11,7 @@ import {
   type TeamBoardReportRow,
   type TeamBoardWorkItemRow,
 } from '@/lib/customer-projects/team-board';
+import type { ProjectCreationAuditRow } from '@/lib/customer-projects/old-customer-proactive';
 
 export const dynamic = 'force-dynamic';
 
@@ -20,6 +21,7 @@ const MAX_CUSTOMER_ROWS = 1000;
 const MAX_PROFILE_ROWS = 500;
 const MAX_REPORT_ROWS = 500;
 const MAX_EVENT_ROWS = 1000;
+const MAX_PROJECT_CREATION_AUDIT_ROWS = 1000;
 
 function jsonError(message: string, status: number) {
   return NextResponse.json({ error: message }, { status });
@@ -48,6 +50,7 @@ export async function GET(_req: NextRequest) {
       reportsResult,
       outcomeEventsResult,
       relationshipEventsResult,
+      projectCreationAuditResult,
     ] = await Promise.all([
       supabase
         .from('cpc_projects')
@@ -107,6 +110,14 @@ export async function GET(_req: NextRequest) {
         ])
         .order('event_seq', { ascending: false })
         .range(0, MAX_EVENT_ROWS - 1),
+      supabase
+        .from('cpc_audit_log')
+        .select('id,audit_seq,org_id,entity_type,entity_id,action,request_id,metadata,recorded_at')
+        .eq('org_id', profile.orgId)
+        .eq('entity_type', 'PROJECT')
+        .eq('action', 'PROJECT_CREATED')
+        .order('audit_seq', { ascending: false })
+        .range(0, MAX_PROJECT_CREATION_AUDIT_ROWS - 1),
     ]);
 
     if (
@@ -117,6 +128,7 @@ export async function GET(_req: NextRequest) {
       || reportsResult.error
       || outcomeEventsResult.error
       || relationshipEventsResult.error
+      || projectCreationAuditResult.error
     ) {
       throw new Error('team board read failed');
     }
@@ -129,6 +141,8 @@ export async function GET(_req: NextRequest) {
       || (reportsResult.data?.length ?? 0) >= MAX_REPORT_ROWS
       || (outcomeEventsResult.data?.length ?? 0) >= MAX_EVENT_ROWS
       || (relationshipEventsResult.data?.length ?? 0) >= MAX_EVENT_ROWS
+      || (projectCreationAuditResult.data?.length ?? 0)
+        >= MAX_PROJECT_CREATION_AUDIT_ROWS
     ) {
       return jsonError('团队看板数据量超出当前安全上限，请联系管理员处理。', 409);
     }
@@ -145,6 +159,9 @@ export async function GET(_req: NextRequest) {
         ...((outcomeEventsResult.data ?? []) as TeamBoardEventRow[]),
         ...((relationshipEventsResult.data ?? []) as TeamBoardEventRow[]),
       ],
+      projectCreationAudits: (
+        projectCreationAuditResult.data ?? []
+      ) as ProjectCreationAuditRow[],
     });
 
     return NextResponse.json({

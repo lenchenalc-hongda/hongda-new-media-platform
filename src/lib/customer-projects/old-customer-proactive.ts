@@ -106,6 +106,26 @@ export const TRUSTED_TRANSACTION_EVENT_TYPES = [
 
 export const RELATIONSHIP_CONVERSION_SOURCE_KEY =
   'relationship_conversion_source_event_id';
+export const RELATIONSHIP_FOLLOW_UP_MARKER_KEY = 'relationship_follow_up';
+
+export interface TrustedProjectConversionProvenance {
+  auditId: string;
+  projectId: string;
+  customerReferenceId: string;
+  sourceFollowUpEventId: string;
+  recordedAt: string;
+}
+
+export interface ProjectCreationAuditRow {
+  id: string;
+  org_id: string;
+  entity_type: string;
+  entity_id: string;
+  action: string;
+  request_id: string | null;
+  metadata?: Record<string, unknown> | null;
+  recorded_at: string;
+}
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const A_SEGMENT_WINDOW_MS = 365 * DAY_MS;
@@ -126,9 +146,56 @@ function isRelationshipEvent(event: ProactiveEventRow): boolean {
     && RELATIONSHIP_EVENT_SET.has(event.event_type);
 }
 
+function isConfirmedRelationshipFollowUpEvent(
+  event: ProactiveEventRow,
+): boolean {
+  return isRelationshipEvent(event)
+    && event.payload?.[RELATIONSHIP_FOLLOW_UP_MARKER_KEY] === true;
+}
+
 function isTrustedTransactionEvent(event: ProactiveEventRow): boolean {
   return event.project_id !== null
     && TRUSTED_TRANSACTION_EVENT_SET.has(event.event_type);
+}
+
+export function trustedProjectConversionProvenanceFromAudit(
+  row: ProjectCreationAuditRow,
+): TrustedProjectConversionProvenance | null {
+  if (
+    row.entity_type !== 'PROJECT'
+    || row.action !== 'PROJECT_CREATED'
+    || typeof row.id !== 'string'
+    || row.id.length === 0
+    || typeof row.entity_id !== 'string'
+    || row.entity_id.length === 0
+    || typeof row.request_id !== 'string'
+    || row.request_id.length === 0
+    || typeof row.recorded_at !== 'string'
+    || row.recorded_at.length === 0
+  ) {
+    return null;
+  }
+
+  const metadata: Record<string, unknown> = row.metadata
+    && typeof row.metadata === 'object'
+    && !Array.isArray(row.metadata)
+    ? row.metadata
+    : {};
+  const customerReferenceId = metadata.customer_reference_id;
+  if (
+    typeof customerReferenceId !== 'string'
+    || customerReferenceId.length === 0
+  ) {
+    return null;
+  }
+
+  return {
+    auditId: row.id,
+    projectId: row.entity_id,
+    customerReferenceId,
+    sourceFollowUpEventId: row.request_id,
+    recordedAt: row.recorded_at,
+  };
 }
 
 function latestEvent(
@@ -328,20 +395,32 @@ export function buildOldCustomerRecommendations(input: {
 
 export function countExplicitFollowUpToProjectConversions(
   events: ProactiveEventRow[],
+  trustedProvenance: TrustedProjectConversionProvenance[] = [],
 ): number {
   const eventsById = new Map(events.map(event => [event.id, event]));
   const convertedSourceEventIds = new Set<string>();
 
-  for (const event of events) {
-    if (event.project_id === null) continue;
-    const sourceEventId = event.payload?.[RELATIONSHIP_CONVERSION_SOURCE_KEY];
-    if (typeof sourceEventId !== 'string' || sourceEventId.length === 0) continue;
+  for (const provenance of trustedProvenance) {
+    const sourceEventId = provenance.sourceFollowUpEventId;
+    if (!sourceEventId || !provenance.projectId) continue;
 
     const sourceEvent = eventsById.get(sourceEventId);
-    if (!sourceEvent) continue;
-    if (!isRelationshipEvent(sourceEvent)) continue;
-    if (sourceEvent.payload?.relationship_follow_up !== true) continue;
-    if (sourceEvent.customer_reference_id !== event.customer_reference_id) continue;
+    if (!sourceEvent || !isConfirmedRelationshipFollowUpEvent(sourceEvent)) {
+      continue;
+    }
+    if (sourceEvent.customer_reference_id !== provenance.customerReferenceId) {
+      continue;
+    }
+
+    const sourceAtMs = timestampMs(sourceEvent.occurred_at);
+    const recordedAtMs = timestampMs(provenance.recordedAt);
+    if (
+      sourceAtMs === null
+      || recordedAtMs === null
+      || sourceAtMs > recordedAtMs
+    ) {
+      continue;
+    }
 
     convertedSourceEventIds.add(sourceEventId);
   }
@@ -353,6 +432,7 @@ export function buildPhase10SourceCategoryReport(input: {
   recommendations: OldCustomerRecommendation[];
   workItems: ProactiveWorkItemRow[];
   events: ProactiveEventRow[];
+  trustedProjectConversions?: TrustedProjectConversionProvenance[];
 }): Phase10SourceCategoryReport {
   const oldCustomerFacts: OldCustomerReactivationFacts = {
     eligibleKnownCustomerCount: input.recommendations.filter(
@@ -367,10 +447,13 @@ export function buildPhase10SourceCategoryReport(input: {
       && OPEN_WORK_ITEM_STATUSES.has(item.status)
     )).length,
     confirmedRelationshipFollowUpCount: input.events.filter(
-      isRelationshipEvent,
+      isConfirmedRelationshipFollowUpEvent,
     ).length,
     explicitFollowUpToProjectConversionCount:
-      countExplicitFollowUpToProjectConversions(input.events),
+      countExplicitFollowUpToProjectConversions(
+        input.events,
+        input.trustedProjectConversions,
+      ),
   };
 
   const externalUnknown = evidenceUnknown<OldCustomerReactivationFacts>(

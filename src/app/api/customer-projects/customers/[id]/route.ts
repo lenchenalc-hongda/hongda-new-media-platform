@@ -2,7 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { resolveCpcProfile } from '@/lib/customer-projects/api';
 import { uuidSchema } from '@/lib/customer-projects/schemas';
-import { buildOldCustomerRecommendation } from '@/lib/customer-projects/old-customer-proactive';
+import {
+  buildOldCustomerRecommendation,
+  RELATIONSHIP_FOLLOW_UP_MARKER_KEY,
+} from '@/lib/customer-projects/old-customer-proactive';
 
 export const dynamic = 'force-dynamic';
 
@@ -123,6 +126,9 @@ export async function GET(
 
     const currentFollowUp = openFollowUps[0] ?? null;
     const latestEvent = relationshipEvents
+      .filter(event => (
+        event.payload?.[RELATIONSHIP_FOLLOW_UP_MARKER_KEY] === true
+      ))
       .sort((left, right) => toMs(right.occurred_at) - toMs(left.occurred_at))[0] ?? null;
     const recommendation = buildOldCustomerRecommendation({
       now: new Date(),
