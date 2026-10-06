@@ -342,6 +342,9 @@ const phase6cSql = read(
 const phase7aSql = read(
   'supabase/migrations/20261002090000_customer_project_center_phase7a_reports.sql',
 );
+const phase12ProjectReplaySql = read(
+  'supabase/migrations/20261007020000_customer_project_center_project_create_replay_guard.sql',
+);
 
 const versionedMutationBlocks = [
   ['cpc_record_progress', functionBlock(phase5dSql, 'cpc_record_progress')],
@@ -385,6 +388,25 @@ assert(
   functionBlock(phase6cSql, 'cpc_accept_ai_draft')
     .includes("v_draft.status <> 'draft'"),
   'accepted/replayed AI draft cannot be formalized twice',
+);
+
+const projectCreateReplayBlock = functionBlock(
+  phase12ProjectReplaySql,
+  'cpc_create_project',
+);
+assert(
+  phase12ProjectReplaySql.includes('uq_cpc_project_created_request_replay')
+    && phase12ProjectReplaySql.includes("action = 'PROJECT_CREATED'")
+    && phase12ProjectReplaySql.includes('request_id IS NOT NULL'),
+  'project creation has a database-level replay uniqueness guard',
+);
+assert(
+  projectCreateReplayBlock.includes('p_request_id IS NOT NULL')
+    && projectCreateReplayBlock.includes("al.action = 'PROJECT_CREATED'")
+    && projectCreateReplayBlock.includes('al.request_id = p_request_id')
+    && projectCreateReplayBlock.includes('v_replay_project_id')
+    && projectCreateReplayBlock.includes('WHEN unique_violation THEN'),
+  'replayed/concurrent project creation returns the original formal result',
 );
 
 // ---------------------------------------------------------------------------
