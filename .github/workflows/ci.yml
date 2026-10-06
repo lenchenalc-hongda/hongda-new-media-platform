@@ -34,6 +34,9 @@ jobs:
       - name: Customer Project Center Phase 12 QA and pilot-readiness tests
         run: pnpm exec tsx tests/unit/customer-project-center-phase12-qa.test.ts
 
+      - name: Customer Project Center pilot environment hardening contract tests
+        run: pnpm exec tsx tests/unit/customer-project-center-pilot-env-hardening.test.ts
+
       - name: Customer Project Center domain tests
         run: pnpm exec tsx tests/unit/customer-project-domain.test.ts
 
