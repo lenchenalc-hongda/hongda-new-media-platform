@@ -21,7 +21,7 @@ LANGUAGE plpgsql
 STABLE
 SECURITY DEFINER
 SET search_path = pg_catalog, public
-AS $
+AS $$
 DECLARE
   v_actor_profile_id UUID := public.auth_profile_id();
   v_actor_org_id TEXT := public.auth_org_id();
@@ -82,7 +82,7 @@ BEGIN
       )
   );
 END;
-$;
+$$;
 
 REVOKE ALL ON FUNCTION public.cpc_can_follow_customer(UUID, UUID)
   FROM PUBLIC, anon;
