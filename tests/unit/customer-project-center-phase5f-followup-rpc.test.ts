@@ -19,6 +19,12 @@ const migrationPath =
 const sql = fs.readFileSync(migrationPath, 'utf8');
 const executableSql = sql.replace(/--.*$/gm, '');
 
+assert(
+  !/^\s*AS \$(?!\$)/m.test(sql)
+    && !/^\s*\$(?!\$);$/m.test(sql),
+  'PL/pgSQL function dollar-quote delimiters are complete',
+);
+
 function functionBlock(name: string): string {
   const marker = 'CREATE OR REPLACE FUNCTION public.' + name;
   const start = sql.indexOf(marker);
