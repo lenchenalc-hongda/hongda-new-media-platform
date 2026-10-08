@@ -39,7 +39,7 @@ assert(agents.includes('Global Lead Hub uses Issue #72'));
 assert(!agents.includes('ONE_ACTIVE_TASK_PER_REPO = true'));
 
 const protocol = read('docs/agent-control/MULTI_PROJECT_PROTOCOL.md');
-assert(protocol.includes('one active coding task per project'));
+assert(protocol.includes('One active coding task per project'));
 assert(protocol.includes('two self-hosted runner instances'));
 assert(protocol.includes('Production'));
 
