@@ -1,0 +1,60 @@
+{
+  "schema_version": 1,
+  "max_parallel_projects": 2,
+  "shared_path_lock": true,
+  "projects": {
+    "customer-project-center": {
+      "control_issue": 10,
+      "task_prefix": "CPC-",
+      "branch_prefix": "codex/cpc-",
+      "owned_prefixes": [
+        "docs/customer-project-center/",
+        "src/app/customer-projects/",
+        "src/lib/customer-projects/",
+        "tests/unit/customer-project-",
+        "tests/e2e/customer-project-"
+      ],
+      "owned_regexes": [
+        "^supabase/migrations/[0-9]+_customer_project_center_[A-Za-z0-9_]+\\.sql$"
+      ]
+    },
+    "global-lead-hub": {
+      "control_issue": 72,
+      "task_prefix": "GLH-",
+      "branch_prefix": "codex/glh-",
+      "owned_prefixes": [
+        "docs/global-lead-hub/",
+        "src/app/global-lead-hub/",
+        "src/app/api/global-lead-hub/",
+        "src/lib/global-lead-hub/",
+        "src/components/global-lead-hub/",
+        "tests/unit/global-lead-hub-",
+        "tests/e2e/global-lead-hub-"
+      ],
+      "owned_regexes": [
+        "^supabase/migrations/[0-9]+_global_lead_hub_[A-Za-z0-9_]+\\.sql$"
+      ]
+    }
+  },
+  "shared_prefixes": [
+    ".github/",
+    "docs/agent-control/",
+    "scripts/agent-control/",
+    "src/lib/agent-control/",
+    "src/components/layout/",
+    "src/lib/supabase/"
+  ],
+  "shared_exact_paths": [
+    "AGENTS.md",
+    ".gitignore",
+    "package.json",
+    "pnpm-lock.yaml",
+    "pnpm-workspace.yaml",
+    "tsconfig.json",
+    "next.config.mjs",
+    "tailwind.config.js",
+    "postcss.config.mjs",
+    "src/app/layout.tsx",
+    "src/middleware.ts"
+  ]
+}
