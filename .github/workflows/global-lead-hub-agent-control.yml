@@ -51,7 +51,7 @@ jobs:
       fix_round: ${{ steps.validate.outputs.fix_round }}
       max_fix_rounds: ${{ steps.validate.outputs.max_fix_rounds }}
       task_comment_id: ${{ steps.validate.outputs.task_comment_id }}
-      objective_b64: ${{ steps.validate.outputs.control_issue }}
+      objective_b64: ${{ steps.validate.outputs.objective_b64 }}
       allowed_paths_b64: ${{ steps.validate.outputs.allowed_paths_b64 }}
       checks: ${{ steps.validate.outputs.checks }}
     steps:

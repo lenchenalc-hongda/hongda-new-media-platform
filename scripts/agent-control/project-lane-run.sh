@@ -110,7 +110,7 @@ for check_name in "${requested_checks[@]}"; do
     build) pnpm build ;;
     secret-audit) bash scripts/audit-bundle-secrets.sh ;;
     smoke)
-      pnam next start -p 3000 > "$RUNNER_TEMP/project-lane-smoke.log" 2>&1 &
+      pnpm next start -p 3000 > "$RUNNER_TEMP/project-lane-smoke.log" 2>&1 &
       smoke_pid=$!
       trap 'kill "$smoke_pid" 2>/dev/null || true' EXIT
       for attempt in {1..25}; do curl -fsS http://localhost:3000 > /dev/null && break; sleep 2; done
