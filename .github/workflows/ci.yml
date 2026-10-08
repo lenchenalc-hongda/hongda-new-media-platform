@@ -142,6 +142,9 @@ jobs:
       - name: Agent Control READY general runner tests
         run: pnpm exec tsx tests/unit/agent-control-ready-general-runner.test.ts
 
+      - name: Agent Control multi-project lane tests
+        run: pnpm exec tsx tests/unit/agent-control-multiproject.test.ts
+
       - name: Check server-only imports
         run: bash scripts/check-server-imports.sh
 

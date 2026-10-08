@@ -1,0 +1,132 @@
+name: Global Lead Hub Agent Control
+
+on:
+  issue_comment:
+    types: [created]
+permissions:
+  contents: read
+  issues: read
+  pull-requests: read
+
+concurrency:
+  group: agent-control-${{ github.repository }}-global-lead-hub
+  cancel-in-progress: false
+
+jobs:
+  gate:
+    if: >-
+      (
+        github.repository == 'lenchenalc-hongda/hongda-new-media-platform' &&
+        github.event.issue.number == 72 &&
+        github.event.issue.pull_request == null &&
+        github.event.sender.login == 'lenchenalc-hongda' &&
+        github.event.comment.user.login == 'lenchenalc-hongda' &&
+        github.event.comment.body == 'AGENT_CONTROL_TRIGGER_V1'
+      )
+    runs-on: ubuntu-latest
+    outputs:
+      trusted: ${{ steps.gate.outputs.trusted }}
+    steps:
+      - id: gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo 'trusted=true' >> "$GITHUB_OUTPUT"
+
+  validate:
+    needs: gate
+    if: needs.gate.outputs.trusted == 'true'
+    runs-on: ubuntu-latest
+    outputs:
+      result: ${{ steps.validate.outputs.result }}
+      project: ${{ steps.validate.outputs.project }}
+      control_issue: ${{ steps.validate.outputs.control_issue }}
+      task_id: ${{ steps.validate.outputs.task_id }}
+      status: ${{ steps.validate.outputs.status }}
+      base_master_sha: ${{ steps.validate.outputs.base_master_sha }}
+      expected_head: ${{ steps.validate.outputs.expected_head }}
+      active_pr: ${{ steps.validate.outputs.active_pr }}
+      active_branch: ${{ steps.validate.outputs.active_branch }}
+      branch: ${{ steps.validate.outputs.branch }}
+      fix_round: ${{ steps.validate.outputs.fix_round }}
+      max_fix_rounds: ${{ steps.validate.outputs.max_fix_rounds }}
+      task_comment_id: ${{ steps.validate.outputs.task_comment_id }}
+      objective_b64: ${{ steps.validate.outputs.objective_b64 }}
+      allowed_paths_b64: ${{ steps.validate.outputs.allowed_paths_b64 }}
+      checks: ${{ steps.validate.outputs.checks }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Validate project lane task
+        id: validate
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          AGENT_CONTROL_PROJECT: global-lead-hub
+          AGENT_CONTROL_ISSUE: '72'
+        run: node scripts/agent-control/project-lane-validate.mjs
+
+  execute:
+    needs: validate
+    if: needs.validate.outputs.result == 'READY'
+    runs-on: [self-hosted, macOS, X64, hongda-agent-control]
+    timeout-minutes: 90
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ needs.validate.outputs.expected_head }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run bounded project task
+        id: run
+        shell: bash
+        env:
+          PROJECT_SLUG: ${{ needs.validate.outputs.project }}
+          TASK_ID: ${{ needs.validate.outputs.task_id }}
+          STATUS: ${{ needs.validate.outputs.status }}
+          BASE_MASTER_SHA: ${{ needs.validate.outputs.base_master_sha }}
+          EXPECTED_HEAD: ${{ needs.validate.outputs.expected_head }}
+          BRANCH_NAME: ${{ needs.validate.outputs.branch }}
+          OBJECTIVE_B64: ${{ needs.validate.outputs.objective_b64 }}
+          ALLOWED_PATHS_B64: ${{ needs.validate.outputs.allowed_paths_b64 }}
+          CHECKS: ${{ needs.validate.outputs.checks }}
+        run: bash scripts/agent-control/project-lane-run.sh
+
+      - name: Mint scoped GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ vars.AGENT_CONTROL_APP_CLIENT_ID }}
+          private-key: ${{ secrets.AGENT_CONTROL_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+
+      - name: Publish project task
+        shell: bash
+        env:
+          GH_APP_TOKEN: ${{ steps.app-token.outputs.token }}
+          APP_SLUG: ${{ steps.app-token.outputs.app-slug }}
+          PROJECT_SLUG: ${{ needs.validate.outputs.project }}
+          TASK_ID: ${{ needs.validate.outputs.task_id }}
+          STATUS: ${{ needs.validate.outputs.status }}
+          BASE_MASTER_SHA: ${{ needs.validate.outputs.base_master_sha }}
+          EXPECTED_HEAD: ${{ needs.validate.outputs.expected_head }}
+          BRANCH_NAME: ${{ needs.validate.outputs.branch }}
+          CONTROL_ISSUE: ${{ needs.validate.outputs.control_issue }}
+          TASK_COMMENT_ID: ${{ needs.validate.outputs.task_comment_id }}
+          ACTIVE_PR: ${{ needs.validate.outputs.active_pr }}
+          REPOSITORY: ${{ github.repository }}
+        run: bash scripts/agent-control/project-lane-publish.sh
