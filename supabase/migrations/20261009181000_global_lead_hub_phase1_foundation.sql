@@ -999,14 +999,20 @@ CREATE POLICY "glh_tasks_select" ON public.glh_tasks
   FOR SELECT TO authenticated
   USING (
     public.glh_can_manage_org(org_id)
-    OR assignee_profile_id = public.glh_current_profile_id()
+    OR (
+      assignee_profile_id = public.glh_current_profile_id()
+      AND public.glh_can_access_lead(lead_id)
+    )
   );
 
 CREATE POLICY "glh_followups_select" ON public.glh_followups
   FOR SELECT TO authenticated
   USING (
     public.glh_can_manage_org(org_id)
-    OR assigned_profile_id = public.glh_current_profile_id()
+    OR (
+      assigned_profile_id = public.glh_current_profile_id()
+      AND public.glh_can_access_lead(lead_id)
+    )
   );
 
 CREATE POLICY "glh_ai_actions_select" ON public.glh_ai_actions

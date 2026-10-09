@@ -344,15 +344,20 @@ const migrationPath =
 const sql = source(migrationPath);
 const executableSql = sql.replace(/--.*$/gm, '');
 const coreTables = Object.values(GLH_CORE_TABLES);
+const createdTables = [...sql.matchAll(/CREATE TABLE public\.([a-z0-9_]+)/g)]
+  .map(match => match[1]);
 
-for (const table of coreTables) {
+assert(createdTables.length > 0, 'Phase 1 creates GLH tables');
+for (const table of createdTables) {
   assert(sql.includes(`CREATE TABLE public.${table}`), `creates core table: ${table}`);
   assert(
     sql.includes(`ALTER TABLE public.${table} ENABLE ROW LEVEL SECURITY`),
     `enables RLS: ${table}`,
   );
   assert(
-    sql.includes(`REVOKE ALL ON TABLE public.${table}`),
+    sql.includes(
+      `REVOKE ALL ON TABLE public.${table} FROM PUBLIC, anon, authenticated`,
+    ),
     `explicitly revokes table access: ${table}`,
   );
   assert(
@@ -361,14 +366,19 @@ for (const table of coreTables) {
   );
 }
 
-const createdTables = [...sql.matchAll(/CREATE TABLE public\.([a-z0-9_]+)/g)]
-  .map(match => match[1]);
-assert(createdTables.length === coreTables.length, 'all created GLH tables are accounted for');
+assert(
+  createdTables.length === coreTables.length
+    && coreTables.every(table => createdTables.includes(table))
+    && createdTables.every(table => (coreTables as readonly string[]).includes(table)),
+  'all created GLH tables are accounted for',
+);
 assert(createdTables.every(table => table.startsWith('glh_')), 'all created tables use the glh_ prefix');
 assert(!sql.includes('auth.users'), 'GLH business identity never references auth.users directly');
 assert(
-  sql.includes('REFERENCES public.profiles(id, org_id)'),
-  'business user FKs use profiles.id with organization scope',
+  [...executableSql.matchAll(/REFERENCES public\.profiles\(id, org_id\)/g)].length > 0
+    && [...executableSql.matchAll(/REFERENCES public\.profiles\(/g)].length
+      === [...executableSql.matchAll(/REFERENCES public\.profiles\(id, org_id\)/g)].length,
+  'every business user FK uses profiles.id with organization scope',
 );
 assert(
   sql.includes('FROM PUBLIC, anon, authenticated')
@@ -387,6 +397,13 @@ assert(
   'RLS uses controlled security-definer helpers with pinned search_path',
 );
 assert(
+  executableSql.includes('p.org_id = l.org_id')
+    && executableSql.includes('l.owner_profile_id = p.id')
+    && executableSql.includes('a.assignee_profile_id = p.id')
+    && executableSql.includes("a.status = 'ACTIVE'"),
+  'Sales lead access requires same-organization ownership or an active assignment',
+);
+assert(
   sql.includes('CREATE UNIQUE INDEX uq_glh_webhook_provider_event')
     && sql.includes('(provider, external_event_id)'),
   'webhook idempotency uses provider + external_event_id',
@@ -403,6 +420,42 @@ assert(
     && !executableSql.includes('DELETE FROM')
     && !executableSql.includes('DISABLE ROW LEVEL SECURITY'),
   'migration contains no destructive or RLS-bypass SQL',
+);
+
+const compactSql = executableSql.replace(/\s+/g, ' ').trim();
+const taskSelectPolicy = [
+  'CREATE POLICY "glh_tasks_select" ON public.glh_tasks',
+  'FOR SELECT TO authenticated',
+  'USING ( public.glh_can_manage_org(org_id)',
+  'OR ( assignee_profile_id = public.glh_current_profile_id()',
+  'AND public.glh_can_access_lead(lead_id) ) );',
+].join(' ');
+const followupSelectPolicy = [
+  'CREATE POLICY "glh_followups_select" ON public.glh_followups',
+  'FOR SELECT TO authenticated',
+  'USING ( public.glh_can_manage_org(org_id)',
+  'OR ( assigned_profile_id = public.glh_current_profile_id()',
+  'AND public.glh_can_access_lead(lead_id) ) );',
+].join(' ');
+
+assert(
+  compactSql.includes(taskSelectPolicy),
+  'Sales A cannot read a task for a restricted Sales B lead through the assignee shortcut',
+);
+assert(
+  compactSql.includes(followupSelectPolicy),
+  'Sales A cannot read a follow-up for a restricted Sales B lead through the assignee shortcut',
+);
+assert(
+  taskSelectPolicy.includes('public.glh_can_manage_org(org_id)')
+    && followupSelectPolicy.includes('public.glh_can_manage_org(org_id)'),
+  'Manager/Admin task and follow-up reads remain organization-bound',
+);
+assert(
+  ['http://', 'https://', 'pg_net', 'net.http_post', 'graph.facebook.com',
+    'api.whatsapp.com', 'SUPABASE_SERVICE_ROLE_KEY', 'service_role']
+    .every(token => !executableSql.includes(token)),
+  'Phase 1 migration introduces no Production or provider call path',
 );
 
 const glhSources = [
