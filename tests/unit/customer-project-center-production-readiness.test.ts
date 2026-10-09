@@ -107,6 +107,12 @@ assert(
   'SQL manifest disclaims execution authorization',
 );
 assert(
+  sqlManifest.includes('Gate A permits catalog, ACL, RLS, migration-history, index, and advisor') &&
+    sqlManifest.includes('Do not call `cpc_create_project` in Production') &&
+    sqlManifest.includes('All write, replay, and concurrency proof is performed in the disposable'),
+  'SQL manifest separates read-only Production assertions from clean-room behavior proof',
+);
+assert(
   devHistory.includes('MIGRATION_REPAIR_EXECUTED = NO'),
   'dev history plan explicitly does not execute repair',
 );
@@ -120,14 +126,48 @@ assert(
   'clean-room plan records separate cost confirmation',
 );
 assert(
+  cleanRoom.includes('Production Gate A remains read-only') &&
+    cleanRoom.includes('write, replay/idempotency, stale-version, and concurrency proof results'),
+  'clean-room plan owns write, replay, and concurrency proof',
+);
+assert(
   vercelManifest.includes('VERCEL_PRODUCTION_CHANGED = NO'),
   'Vercel manifest records no Production mutation',
+);
+assert(
+  vercelManifest.includes('A Preview deployment is not a staged Production build') &&
+    vercelManifest.includes('`vercel --prod --skip-domain`') &&
+    vercelManifest.includes('requires explicit Gate B owner authorization before it is created'),
+  'Vercel manifest distinguishes Preview from authorized staged Production build',
+);
+assert(
+  vercelManifest.includes('separate live-domain promotion approval') &&
+    vercelManifest.includes('This global public') &&
+    vercelManifest.includes('COHORT_GATE_LIMITATION = NONE'),
+  'Vercel manifest separates promotion and constrains the global feature flag',
 );
 assert(
   gateChecklist.includes('Gate A: Production SQL / RLS') &&
     gateChecklist.includes('Gate B: Production Vercel Env / Deployment') &&
     gateChecklist.includes('Gate C: Internal Cohort / Go-Live'),
   'gate checklist contains all three gates',
+);
+assert(
+  gateChecklist.includes('Production Gate A is read-only') &&
+    gateChecklist.includes('No write, RPC replay, or concurrency test was run against Production'),
+  'gate checklist keeps Production Gate A read-only',
+);
+assert(
+  gateChecklist.includes('Preview deployment evidence is not treated as equivalent') &&
+    gateChecklist.includes('Live-domain promotion has separate owner authorization'),
+  'gate checklist separates staged builds and live promotion',
+);
+assert(
+  gateChecklist.includes('independently verified server-side cohort access gate') &&
+    gateChecklist.includes('COHORT_GATE_LIMITATION = NONE') &&
+    gateChecklist.includes('broad activation remains') &&
+    gateChecklist.includes('CLOSED'),
+  'gate checklist does not confuse a public flag with cohort restriction',
 );
 
 let previousIndex = -1;

@@ -155,6 +155,8 @@ All checks are read-only. Any failed check is a stop condition.
 8. Feature flag:
    - `NEXT_PUBLIC_FEATURE_CUSTOMER_PROJECT_CENTER` must remain absent or OFF in
      Production while the database is being migrated.
+   - This global public build flag is not a cohort restriction. Do not enable it
+     to simulate a cohort boundary.
    - Do not enable the Production UI against a partially applied schema.
 
 ## Per-File Post-Apply Assertions
@@ -352,9 +354,17 @@ Assert:
   violation.
 - The function remains executable only by `authenticated`.
 
-## After File 9 Assertions
+## Read-Only Post-Apply Assertions (Production Gate A)
 
 Run these checks in a read-only transaction after the final migration commits.
+Gate A permits catalog, ACL, RLS, migration-history, index, and advisor
+inspection only. It does not authorize synthetic Project creation,
+`cpc_create_project` replay, concurrency proof, or any other write/RPC call in
+Production.
+
+All write, replay, and concurrency proof is performed in the disposable
+clean room defined by `CLEAN_ROOM_REHEARSAL_PLAN.md`. Any future Production
+behavioral write requires a separately approved scope.
 
 1. RLS:
    - Every table below has `relrowsecurity = true`:
@@ -378,10 +388,13 @@ Run these checks in a read-only transaction after the final migration commits.
    - `authenticated` cannot INSERT, UPDATE, DELETE, or TRUNCATE any CPC table.
    - Trigger-mediated internals and SECURITY DEFINER RPCs are the only write
      path.
-6. Replay/idempotency:
+6. Replay-guard catalog state:
    - `uq_cpc_project_created_request_replay` is valid and ready.
-   - Replaying one synthetic create request returns the original project and
-     does not create another Project or initial next action.
+   - `cpc_create_project` retains the reviewed signature and replay-guard body
+     markers.
+   - Do not call `cpc_create_project` in Production. The same-request replay
+     result, duplicate-prevention proof, and concurrency behavior are
+     clean-room evidence only.
 7. Advisor review:
    - Run Supabase Security Advisor after apply.
    - Record every new finding attributable to a CPC object.
@@ -403,6 +416,8 @@ Stop before or during execution if any of these occurs:
 - Backup/PITR recovery evidence is absent or outside policy.
 - A maintenance or rollback owner is not named.
 - The Production feature flag is ON while the database is partially migrated.
+- A Production write, RPC replay, or concurrency test is requested without a
+  separately approved behavioral scope.
 - A migration returns an error or leaves an unexpected partial object set.
 - A per-file assertion fails.
 - A destructive statement is found in executable SQL.

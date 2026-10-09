@@ -17,6 +17,13 @@ non-Production database before Gate A. The rehearsal proves that the SQL,
 assertions, RLS, RPC privileges, and replay behavior work from the required
 legacy baseline without using real business data.
 
+Production Gate A remains read-only. All candidate-file writes,
+`cpc_create_project` replay/idempotency tests, stale-version and concurrency
+proofs, and every other behavior test are performed only in this disposable
+clean room. Do not execute a synthetic write or RPC in Production under this
+plan. A Production behavioral write would require a separate explicitly
+approved scope.
+
 ## Environment Contract
 
 The clean room must:
@@ -53,7 +60,8 @@ or branch identifier. Do not use the Production project ref.
 5. Do not continue after a failed assertion.
 6. Create synthetic organizations, profiles, customer references, Projects,
    WorkItems, events, AI drafts, and reports only.
-7. Run RLS, ACL, replay, concurrency, report, and AI review checks.
+7. Run RLS, ACL, write, replay, concurrency, report, and AI review checks only
+   against the clean room.
 8. Capture migration history, schema, ACL, RLS, trigger, index, and advisor
    evidence.
 9. Compare the final schema contract with the non-Production pilot contract.
@@ -142,6 +150,7 @@ Record:
 - RLS, policy, index, trigger, function signature, and ACL queries;
 - Security Advisor output before and after;
 - synthetic scenario results;
+- write, replay/idempotency, stale-version, and concurrency proof results;
 - comparison notes against the non-Production pilot contract;
 - explicit PASS or FAIL;
 - cleanup or retirement evidence.
