@@ -73,6 +73,18 @@ jobs:
       contents: read
       actions: read
     steps:
+      - name: Harden Git transport for unstable links
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo 'GIT_CONFIG_COUNT=3' >> "$GITHUB_ENV"
+          echo 'GIT_CONFIG_KEY_0=http.version' >> "$GITHUB_ENV"
+          echo 'GIT_CONFIG_VALUE_0=HTTP/1.1' >> "$GITHUB_ENV"
+          echo 'GIT_CONFIG_KEY_1=http.lowSpeedLimit' >> "$GITHUB_ENV"
+          echo 'GIT_CONFIG_VALUE_1=1' >> "$GITHUB_ENV"
+          echo 'GIT_CONFIG_KEY_2=http.lowSpeedTime' >> "$GITHUB_ENV"
+          echo 'GIT_CONFIG_VALUE_2=900' >> "$GITHUB_ENV"
+
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           ref: ${{ needs.validate.outputs.expected_head }}
