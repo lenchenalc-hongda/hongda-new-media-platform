@@ -84,8 +84,8 @@ printf 'CODEX_EXIT_STATUS=%s\n' "$codex_status"
 git diff --cached --exit-code > /dev/null || { printf 'PROJECT_LANE_INDEX=DIRTY\n'; exit 1; }
 
 {
-  git diff --name-only --no-renames
-  git ls-files --others --exclude-standard
+  git -c core.quotepath=false diff --name-only --no-renames
+  git -c core.quotepath=false ls-files --others --exclude-standard
 } | sed '/^$/d' | LC_ALL=C sort -u > "$changed_file"
 changed_count="$(wc -l < "$changed_file" | tr -d ' ')"
 [ "$changed_count" -ge 1 ] && [ "$changed_count" -le 30 ] || { printf 'PROJECT_LANE_CHANGED_COUNT=INVALID\n'; exit 1; }
