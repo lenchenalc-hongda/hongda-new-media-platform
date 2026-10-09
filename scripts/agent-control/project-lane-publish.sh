@@ -44,8 +44,8 @@ remote_head() {
 [ -n "$(git status --porcelain)" ] || { printf 'PROJECT_LANE_PUBLISH=NO_CHANGES\n'; exit 1; }
 
 {
-  git diff --name-only --no-renames
-  git ls-files --others --exclude-standard
+  git -c core.quotepath=false diff --name-only --no-renames
+  git -c core.quotepath=false ls-files --others --exclude-standard
 } | sed '/^$/d' | LC_ALL=C sort -u > "$changed_file"
 
 git diff --cached --exit-code > /dev/null
