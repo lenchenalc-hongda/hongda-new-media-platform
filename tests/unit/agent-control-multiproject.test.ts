@@ -70,10 +70,14 @@ assert(runner.includes('pnpm next start -p 3000'));
 assert(!runner.includes('pnam next'));
 assert(runner.includes('PROJECT_LANE_PATH_OUT_OF_SCOPE'));
 assert(runner.includes('execute Production SQL/RLS/env changes'));
+assert(runner.includes('git -c core.quotepath=false diff --name-only --no-renames'));
+assert(runner.includes('git -c core.quotepath=false ls-files --others --exclude-standard'));
 
 const publisher = read('scripts/agent-control/project-lane-publish.sh');
 assert(publisher.includes('AUTO_PRODUCTION = false'));
 assert(publisher.includes('READY_FOR_PM_REVIEW = YES'));
+assert(publisher.includes('git -c core.quotepath=false diff --name-only --no-renames'));
+assert(publisher.includes('git -c core.quotepath=false ls-files --others --exclude-standard'));
 assert(!publisher.includes('merge_pull_request'));
 assert(!publisher.includes('push origin master'));
 assert(!publisher.includes('push origin main'));
