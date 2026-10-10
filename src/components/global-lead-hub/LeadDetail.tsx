@@ -6,6 +6,11 @@ import {
   summarizeGlhAuditTimeline,
   type GlhLeadDetailView,
 } from '@/lib/global-lead-hub/read-model';
+import {
+  GLH_FOLLOWUP_TYPES,
+  GLH_TASK_TYPES,
+  serializeGlhLocalDateTime,
+} from '@/lib/global-lead-hub/validation';
 
 function display(value: unknown): string {
   if (value === null || value === undefined || value === '') return 'Not supplied';
@@ -38,6 +43,8 @@ export default function LeadDetail({
   const router = useRouter();
   const [actionError, setActionError] = useState('');
   const [working, setWorking] = useState('');
+  const [workKind, setWorkKind] = useState<'TASK' | 'FOLLOWUP'>('TASK');
+  const [workType, setWorkType] = useState<string>(GLH_TASK_TYPES[0]);
   const lead = detail.listItem;
   const audit = summarizeGlhAuditTimeline(detail);
 
@@ -83,7 +90,12 @@ export default function LeadDetail({
     event.preventDefault();
     if (working) return;
     const form = new FormData(event.currentTarget);
-    const kind = String(form.get('kind') || 'TASK');
+    const dueAtInput = String(form.get('dueAt') || '').trim();
+    const dueAt = serializeGlhLocalDateTime(dueAtInput);
+    if (dueAtInput && !dueAt) {
+      setActionError('Enter a valid due date and time.');
+      return;
+    }
     setWorking('work');
     setActionError('');
     try {
@@ -92,16 +104,18 @@ export default function LeadDetail({
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
           leadId: lead.id,
-          kind,
-          type: String(form.get('type') || ''),
+          kind: workKind,
+          type: workType,
           title: String(form.get('title') || '').trim(),
-          dueAt: String(form.get('dueAt') || '').trim() || null,
+          dueAt,
           assigneeProfileId: String(form.get('assigneeProfileId') || '').trim() || null,
         }),
       });
       const body = await response.json().catch(() => null);
       if (response.ok && body?.ok === true) {
         event.currentTarget.reset();
+        setWorkKind('TASK');
+        setWorkType(GLH_TASK_TYPES[0]);
         router.refresh();
         return;
       }
@@ -348,6 +362,15 @@ export default function LeadDetail({
               <select
                 id="kind"
                 name="kind"
+                value={workKind}
+                onChange={event => {
+                  const nextKind = event.target.value as 'TASK' | 'FOLLOWUP';
+                  const allowed = nextKind === 'TASK' ? GLH_TASK_TYPES : GLH_FOLLOWUP_TYPES;
+                  setWorkKind(nextKind);
+                  if (!(allowed as readonly string[]).includes(workType)) {
+                    setWorkType(allowed[0]);
+                  }
+                }}
                 className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm"
               >
                 <option value="TASK">Task</option>
@@ -359,9 +382,11 @@ export default function LeadDetail({
               <select
                 id="workType"
                 name="type"
+                value={workType}
+                onChange={event => setWorkType(event.target.value)}
                 className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm"
               >
-                {['QUALIFICATION', 'FOLLOW_UP', 'QUOTATION', 'SAMPLE', 'NEGOTIATION', 'HANDOFF', 'DORMANT_REVIVAL', 'OTHER']
+                {(workKind === 'TASK' ? GLH_TASK_TYPES : GLH_FOLLOWUP_TYPES)
                   .map(type => <option key={type} value={type}>{type}</option>)}
               </select>
             </div>

@@ -26,10 +26,13 @@ import {
 } from '../../src/lib/global-lead-hub/read-model';
 import {
   evaluateGlhManualCreationGuard,
+  GLH_FOLLOWUP_TYPES,
+  GLH_TASK_TYPES,
   glhLeadAssignmentSchema,
   glhManualLeadCreateSchema,
   glhTaskOrFollowupSchema,
   GLH_MANUAL_CREATION_GUARD_VALUE,
+  serializeGlhLocalDateTime,
 } from '../../src/lib/global-lead-hub/validation';
 
 let passed = 0;
@@ -375,6 +378,30 @@ assert(
     dueAt: null,
   }).success,
   'follow-up validation rejects a task-only type and missing due date',
+);
+const serializedDueAt = serializeGlhLocalDateTime('2026-10-10T12:30');
+assert(
+  serializedDueAt !== null
+    && glhTaskOrFollowupSchema.safeParse({
+      leadId: '11111111-1111-4111-8111-111111111111',
+      kind: 'FOLLOWUP',
+      type: 'QUOTATION',
+      title: 'Send quotation',
+      dueAt: serializedDueAt,
+      assigneeProfileId: null,
+    }).success,
+  'datetime-local values serialize to an RFC3339 instant accepted by validation',
+);
+assert(
+  serializeGlhLocalDateTime('not-a-date') === null,
+  'invalid datetime-local values fail closed before submission',
+);
+assert(
+  GLH_TASK_TYPES.includes('HANDOFF')
+    && !((GLH_FOLLOWUP_TYPES as readonly string[]).includes('HANDOFF'))
+    && GLH_FOLLOWUP_TYPES.includes('DORMANT_REVIVAL')
+    && !((GLH_TASK_TYPES as readonly string[]).includes('DORMANT_REVIVAL')),
+  'task and follow-up selectors expose only schema-compatible work types',
 );
 
 async function testMutationBoundaries() {

@@ -64,6 +64,32 @@ export const glhLeadAssignmentSchema = z.object({
   reason: z.string().trim().max(500).nullable().optional().transform(value => value || null),
 }).strict();
 
+export const GLH_TASK_TYPES = [
+  'QUALIFICATION',
+  'FOLLOW_UP',
+  'QUOTATION',
+  'SAMPLE',
+  'NEGOTIATION',
+  'HANDOFF',
+  'OTHER',
+] as const;
+
+export const GLH_FOLLOWUP_TYPES = [
+  'QUALIFICATION',
+  'QUOTATION',
+  'SAMPLE',
+  'NEGOTIATION',
+  'DORMANT_REVIVAL',
+  'OTHER',
+] as const;
+
+export function serializeGlhLocalDateTime(value: string): string | null {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  const date = new Date(trimmed);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+}
+
 export const glhTaskOrFollowupSchema = z.object({
   leadId: z.string().uuid(),
   kind: z.enum(['TASK', 'FOLLOWUP']),
@@ -81,25 +107,8 @@ export const glhTaskOrFollowupSchema = z.object({
   dueAt: z.string().datetime({ offset: true }).nullable().optional(),
   assigneeProfileId: z.string().uuid().nullable().optional(),
 }).strict().superRefine((value, context) => {
-  const taskTypes = [
-    'QUALIFICATION',
-    'FOLLOW_UP',
-    'QUOTATION',
-    'SAMPLE',
-    'NEGOTIATION',
-    'HANDOFF',
-    'OTHER',
-  ];
-  const followupTypes = [
-    'QUALIFICATION',
-    'QUOTATION',
-    'SAMPLE',
-    'NEGOTIATION',
-    'DORMANT_REVIVAL',
-    'OTHER',
-  ];
-  const allowed = value.kind === 'TASK' ? taskTypes : followupTypes;
-  if (!allowed.includes(value.type)) {
+  const allowed = value.kind === 'TASK' ? GLH_TASK_TYPES : GLH_FOLLOWUP_TYPES;
+  if (!(allowed as readonly string[]).includes(value.type)) {
     context.addIssue({
       code: z.ZodIssueCode.custom,
       path: ['type'],
