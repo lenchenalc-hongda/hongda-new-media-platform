@@ -6,8 +6,8 @@
 - Repository base: `c0f89a407968cb97c65c2bfbe983b5b834451cdb`
 - Production project: `hongda-new-media / amqpvxrurenevniilhtl`
 - Non-Production pilot: `hongda-review-dev / xulmpqaknlwqqculbsek`
-- `DATABASE_EXECUTED = NO`
-- `RLS_EXECUTED = NO`
+- `DATABASE_CHANGED = NO`
+- `RLS_CHANGED = NO`
 - `MIGRATION_REPAIR_EXECUTED = NO`
 - `VERCEL_PRODUCTION_CHANGED = NO`
 - `PRODUCTION_CHANGED = NO`
