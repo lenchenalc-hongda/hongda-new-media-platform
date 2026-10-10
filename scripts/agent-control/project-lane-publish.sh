@@ -36,8 +36,27 @@ chmod 700 "$askpass_file"
 } > "$curl_config"
 chmod 600 "$curl_config"
 
+retry_delay() {
+  case "$1" in
+    1) printf '2' ;;
+    2) printf '5' ;;
+    *) printf '10' ;;
+  esac
+}
+
 remote_head() {
-  GIT_ASKPASS="$askpass_file" GIT_TERMINAL_PROMPT=0 git -c http.version=HTTP/1.1 ls-remote --heads origin "$1" | awk '{print $1}'
+  local ref="$1"
+  local attempt output
+  for attempt in 1 2 3; do
+    if output="$(GIT_ASKPASS="$askpass_file" GIT_TERMINAL_PROMPT=0 git -c http.version=HTTP/1.1 -c http.lowSpeedLimit=1 -c http.lowSpeedTime=900 ls-remote --heads origin "$ref")"; then
+      printf '%s\n' "$output" | awk 'NR == 1 { print $1 }'
+      return 0
+    fi
+    printf 'PROJECT_LANE_REMOTE_HEAD_RETRY=%s/3\n' "$attempt" >&2
+    sleep "$(retry_delay "$attempt")"
+  done
+  printf 'PROJECT_LANE_REMOTE_HEAD_UNAVAILABLE=YES\n' >&2
+  return 1
 }
 
 [ "$(git rev-parse HEAD)" = "$EXPECTED_HEAD" ] || { printf 'PROJECT_LANE_PUBLISH_HEAD=STALE\n'; exit 1; }
@@ -53,11 +72,15 @@ git add -A
 git diff --cached --check
 
 if [ "$STATUS" = "READY_FOR_CODEX" ]; then
-  existing="$(remote_head "refs/heads/$BRANCH_NAME" || true)"
+  if ! existing="$(remote_head "refs/heads/$BRANCH_NAME")"; then
+    exit 1
+  fi
   [ -z "$existing" ] || { printf 'PROJECT_LANE_BRANCH_ALREADY_EXISTS=YES\n'; exit 1; }
   git -c core.hooksPath=/dev/null switch -c "$BRANCH_NAME"
 elif [ "$STATUS" = "FIX_REQUIRED" ]; then
-  existing="$(remote_head "refs/heads/$BRANCH_NAME" || true)"
+  if ! existing="$(remote_head "refs/heads/$BRANCH_NAME")"; then
+    exit 1
+  fi
   [ "$existing" = "$EXPECTED_HEAD" ] || { printf 'PROJECT_LANE_REMOTE_HEAD=STALE\n'; exit 1; }
   git -c core.hooksPath=/dev/null switch -c "$BRANCH_NAME"
 else
