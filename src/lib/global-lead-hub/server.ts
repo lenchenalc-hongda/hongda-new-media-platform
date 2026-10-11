@@ -30,6 +30,10 @@ import type {
 } from './read-model';
 import { buildGlhInboxView, type GlhInboxView } from './inbox-read-model';
 import {
+  buildGlhFollowupDashboard,
+  type GlhManagerDashboard,
+} from './phase6-followup-dashboard';
+import {
   buildGlhLeadDetailSummary,
   buildGlhLeadList,
   buildGlhTaskBoard,
@@ -297,6 +301,25 @@ export async function loadGlhTodayDashboard(
   return {
     ok: true,
     data: buildGlhTodayDashboard({ ...input.data, now: new Date() }),
+  };
+}
+
+export async function loadGlhFollowupDashboard(
+  context: GlhAccessContext,
+): Promise<GlhReadResult<GlhManagerDashboard>> {
+  const input = await loadGlhLeadReadInput(context);
+  if (!input.ok) return input;
+  return {
+    ok: true,
+    data: buildGlhFollowupDashboard({
+      context,
+      leads: input.data.leads,
+      contacts: input.data.contacts,
+      profiles: input.data.profiles,
+      tasks: input.data.tasks,
+      followups: input.data.followups,
+      now: new Date(),
+    }),
   };
 }
 
