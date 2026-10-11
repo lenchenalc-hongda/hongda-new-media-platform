@@ -8,10 +8,11 @@ import {
 } from './domain';
 
 export type GlhRequirementType =
-  | 'FILM_OR_MATERIAL'
-  | 'PROCESSING_OR_PRINTING_SERVICE'
+  | 'FILM'
+  | 'PROCESSING'
   | 'MACHINE'
-  | 'OTHER';
+  | 'PROCESS_CONSULT'
+  | 'UNCLEAR';
 
 export interface GlhQualificationProfileInput {
   product?: unknown;
@@ -118,11 +119,18 @@ export interface GlhQualificationResult {
 }
 
 const REQUIREMENT_TYPES = new Set<GlhRequirementType>([
-  'FILM_OR_MATERIAL',
-  'PROCESSING_OR_PRINTING_SERVICE',
+  'FILM',
+  'PROCESSING',
   'MACHINE',
-  'OTHER',
+  'PROCESS_CONSULT',
+  'UNCLEAR',
 ]);
+
+const REQUIREMENT_TYPE_ALIASES: Readonly<Record<string, GlhRequirementType>> = {
+  FILM_OR_MATERIAL: 'FILM',
+  PROCESSING_OR_PRINTING_SERVICE: 'PROCESSING',
+  OTHER: 'UNCLEAR',
+};
 
 const CORE_FIELDS = [
   'product',
@@ -198,8 +206,12 @@ function normalizedImages(value: unknown): readonly string[] {
 }
 
 function normalizedRequirementType(value: unknown): GlhRequirementType | null {
-  const normalized = normalizedString(value)?.toUpperCase() as GlhRequirementType | undefined;
-  return normalized && REQUIREMENT_TYPES.has(normalized) ? normalized : null;
+  const normalized = normalizedString(value)?.toUpperCase();
+  if (!normalized) return null;
+  const canonical = REQUIREMENT_TYPE_ALIASES[normalized] ?? normalized;
+  return REQUIREMENT_TYPES.has(canonical as GlhRequirementType)
+    ? canonical as GlhRequirementType
+    : null;
 }
 
 export function normalizeGlhQualificationProfile(
@@ -255,12 +267,8 @@ export function calculateGlhScore(profile: GlhQualificationProfile): {
   grade: GlhPriorityGrade;
 } {
   const credibleIdentity = Boolean(profile.company || profile.website || profile.businessIdentity);
-  const clearRequirement = Boolean(
-    profile.requirementType
-    || profile.currentProcess
-    || profile.targetCapacity
-    || profile.automationLevel,
-  );
+  const clearRequirement = profile.requirementType !== null
+    && profile.requirementType !== 'UNCLEAR';
   const sampleOrTest = Boolean(profile.sampleIntent || profile.testRequirements);
   const repeatOrTimeline = Boolean(profile.repeatOrLongTermOrder || profile.purchaseTimeline);
   const score =
