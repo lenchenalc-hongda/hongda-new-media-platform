@@ -25,7 +25,7 @@ const completeProfile = normalizeGlhQualificationProfile({
 
 assert.equal(completeProfile.product, 'cosmetic bottle');
 assert.deepEqual(completeProfile.imageReferences, ['image-1', 'image-2']);
-assert.equal(completeProfile.requirementType, 'PROCESSING_OR_PRINTING_SERVICE');
+assert.equal(completeProfile.requirementType, 'PROCESSING');
 assert.deepEqual(calculateGlhCompleteness(completeProfile), {
   completeness: 100,
   missingCoreFields: [],
@@ -36,10 +36,18 @@ for (const [scoreInput, expected] of [
   [{}, { score: 0, grade: 'D' }],
   [{ imageReferences: ['x'], material: 'PET' }, { score: 30, grade: 'C' }],
   [{ imageReferences: ['x'], material: 'PET', quantity: '1000' }, { score: 45, grade: 'C' }],
-  [{ imageReferences: ['x'], material: 'PET', quantity: '1000', company: 'Buyer', requirementType: 'OTHER' }, { score: 70, grade: 'B' }],
+  [{ imageReferences: ['x'], material: 'PET', quantity: '1000', company: 'Buyer', requirementType: 'PROCESSING' }, { score: 70, grade: 'B' }],
 ] as const) {
   assert.deepEqual(calculateGlhScore(normalizeGlhQualificationProfile(scoreInput)), expected);
 }
+
+const unclearProfile = normalizeGlhQualificationProfile({ requirementType: 'OTHER' });
+assert.equal(unclearProfile.requirementType, 'UNCLEAR');
+assert.deepEqual(
+  calculateGlhScore(unclearProfile),
+  { score: 0, grade: 'D' },
+  'UNCLEAR requirement cannot earn clear-requirement points',
+);
 
 const priceCase = qualifyGlhLead({
   profile: {},
@@ -86,7 +94,7 @@ assert(!selectGlhQualificationQuestions(normalizeGlhQualificationProfile({
 }), 3).some(question => question.field === 'fullSolutionRequired'));
 
 const processingResult = qualifyGlhLead({
-  profile: { requirementType: 'PROCESSING_OR_PRINTING_SERVICE', sampleIntent: true },
+  profile: { requirementType: 'PROCESSING', sampleIntent: true },
   lifecycleState: 'WAITING_CUSTOMER',
   conversationMode: 'AI_ACTIVE',
 });
