@@ -28,6 +28,7 @@ export default function UnifiedInbox({
   const [selectedId, setSelectedId] = useState(inbox.conversations[0]?.id ?? '');
   const [working, setWorking] = useState(false);
   const [actionError, setActionError] = useState('');
+  const [actionNotice, setActionNotice] = useState('');
 
   const visible = useMemo(() => inbox.conversations.filter(conversation => {
     if (queue === 'WAITING_HUMAN') return conversation.conversationMode === 'HANDOFF_PENDING';
@@ -48,36 +49,95 @@ export default function UnifiedInbox({
     })
     : null;
 
+  async function postInboxAction(payload: Record<string, unknown>) {
+    const response = await fetch('/api/global-lead-hub/inbox/actions', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const body = await response.json().catch(() => null);
+    if (!response.ok || body?.ok !== true) {
+      const message = response.status === 409
+        ? 'The conversation changed. Refresh and retry.'
+        : response.status === 403
+          ? 'This action is outside your current access.'
+          : response.status === 503
+            ? 'The reviewed persistence migration is not installed in this environment.'
+            : 'The action failed closed. No provider call was made.';
+      throw new Error(message);
+    }
+    return body.data as Record<string, unknown>;
+  }
+
+  async function takeOver() {
+    if (!selected || working) return;
+    setWorking(true);
+    setActionError('');
+    setActionNotice('');
+    try {
+      await postInboxAction({
+        action: 'TAKE_OVER',
+        conversationId: selected.id,
+        leadId: selected.leadId,
+        expectedMode: selected.conversationMode,
+        expectedLeadVersion: selected.leadVersion,
+        reason: 'Human takeover from unified inbox',
+      });
+      setActionNotice('Human takeover recorded. Customer-facing AI auto-send is off.');
+      router.refresh();
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : 'Take Over failed closed.');
+    } finally {
+      setWorking(false);
+    }
+  }
+
   async function submitTransfer(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!selected || working) return;
     const form = new FormData(event.currentTarget);
     setWorking(true);
     setActionError('');
+    setActionNotice('');
     try {
-      const response = await fetch('/api/global-lead-hub/inbox/actions', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          action: 'TRANSFER',
-          leadId: selected.leadId,
-          assigneeProfileId: String(form.get('assigneeProfileId') || ''),
-          expectedVersion: selected.leadVersion,
-          reason: String(form.get('reason') || '').trim(),
-        }),
+      await postInboxAction({
+        action: 'TRANSFER',
+        leadId: selected.leadId,
+        assigneeProfileId: String(form.get('assigneeProfileId') || ''),
+        expectedVersion: selected.leadVersion,
+        reason: String(form.get('reason') || '').trim(),
       });
-      const body = await response.json().catch(() => null);
-      if (response.ok && body?.ok === true) {
-        router.refresh();
-        return;
-      }
-      setActionError(response.status === 409
-        ? 'The lead changed. Refresh and retry.'
-        : response.status === 403
-          ? 'Only a Manager or Admin may transfer this lead.'
-          : 'Transfer failed closed. No assignment was changed.');
-    } catch {
-      setActionError('Transfer failed closed. No assignment was changed.');
+      setActionNotice('Transfer recorded with assignment and audit history.');
+      router.refresh();
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : 'Transfer failed closed.');
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  async function submitHumanMessage(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!selected || selected.conversationMode !== 'HUMAN_ACTIVE' || working) return;
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
+    setWorking(true);
+    setActionError('');
+    setActionNotice('');
+    try {
+      await postInboxAction({
+        action: 'QUEUE_HUMAN_MESSAGE',
+        conversationId: selected.id,
+        leadId: selected.leadId,
+        conversationMode: 'HUMAN_ACTIVE',
+        text: String(form.get('message') || '').trim(),
+        idempotencyKey: crypto.randomUUID(),
+      });
+      formElement.reset();
+      setActionNotice('Human message intent queued. Provider delivery remains a separate server action.');
+      router.refresh();
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : 'Message queueing failed closed.');
     } finally {
       setWorking(false);
     }
@@ -94,11 +154,12 @@ export default function UnifiedInbox({
 
   return (
     <div className="space-y-3">
-      <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-900">
-        Human work and original messages are available. Take Over and outbound queueing remain disabled
-        until the reviewed additive RPC boundary is installed; no provider call is made from this UI.
+      <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-xs text-blue-900">
+        Human takeover and message intents use controlled server RPCs. Queueing never calls a provider;
+        delivery remains a separate server-side action.
       </div>
       {actionError && <div role="alert" className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{actionError}</div>}
+      {actionNotice && <div role="status" className="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">{actionNotice}</div>}
 
       <div className="grid min-h-[620px] overflow-hidden rounded-xl border border-gray-200 bg-white xl:grid-cols-[300px_minmax(420px,1fr)_340px]">
         <aside className="border-b border-gray-200 xl:border-b-0 xl:border-r">
@@ -145,11 +206,12 @@ export default function UnifiedInbox({
               </div>
               <button
                 type="button"
-                disabled
-                title="Requires reviewed glh_take_over_conversation RPC"
-                className="cursor-not-allowed rounded-lg bg-gray-200 px-3 py-2 text-xs font-semibold text-gray-500"
+                onClick={takeOver}
+                disabled={working || !['AI_ACTIVE', 'HANDOFF_PENDING'].includes(selected.conversationMode)}
+                title="Atomically enter HUMAN_ACTIVE and stop customer-facing AI auto-send"
+                className="rounded-lg bg-gray-900 px-3 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:bg-gray-200 disabled:text-gray-500"
               >
-                Take Over — schema gate
+                {selected.conversationMode === 'HUMAN_ACTIVE' ? 'Human Active' : 'Take Over'}
               </button>
             </div>
           </header>
@@ -168,8 +230,24 @@ export default function UnifiedInbox({
             ))}
           </section>
           <footer className="border-t border-gray-100 p-3">
-            <textarea disabled rows={2} placeholder="Human messaging unlocks after Take Over and additive RPC review" className="w-full resize-none rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm" />
-            <p className="mt-1 text-[11px] text-gray-500">Automatic customer-facing AI sends are off in HUMAN_ACTIVE. Provider sending is not connected here.</p>
+            <form onSubmit={submitHumanMessage} className="space-y-2">
+              <textarea
+                name="message"
+                required
+                maxLength={4000}
+                disabled={working || selected.conversationMode !== 'HUMAN_ACTIVE'}
+                rows={2}
+                placeholder={selected.conversationMode === 'HUMAN_ACTIVE' ? 'Queue a human reply intent' : 'Take Over before writing as human'}
+                className="w-full resize-none rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm"
+              />
+              <button
+                disabled={working || selected.conversationMode !== 'HUMAN_ACTIVE'}
+                className="rounded-md bg-blue-700 px-3 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:bg-gray-200 disabled:text-gray-500"
+              >
+                Queue human reply
+              </button>
+            </form>
+            <p className="mt-1 text-[11px] text-gray-500">Automatic customer-facing AI sends are off in HUMAN_ACTIVE. This action persists QUEUED intent only; it does not call Meta/WhatsApp.</p>
           </footer>
         </main>
 

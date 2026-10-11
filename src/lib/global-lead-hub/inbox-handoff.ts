@@ -19,7 +19,7 @@ export const GLH_PHASE5_CONVERSATION_FLOW = [
   'HUMAN_ACTIVE',
 ] as const satisfies readonly GlhConversationMode[];
 
-export const GLH_PHASE5_PERSISTENCE_GAPS = [
+export const GLH_PHASE5_PERSISTENCE_RPCS = [
   'glh_take_over_conversation',
   'glh_queue_human_message',
 ] as const;
@@ -53,14 +53,11 @@ export function getGlhInboxCapabilities(
   lead: GlhLeadAccessRecord,
 ): GlhInboxCapabilities {
   return {
-    // Existing Phase 1–4 schema intentionally has SELECT-only browser grants and
-    // no controlled RPC for these writes. Keep both controls fail-closed until
-    // the additive RPC task is reviewed and applied.
-    takeOver: false,
+    takeOver: canTakeOverGlhConversation(context, lead),
     transfer: canAssignGlhLead(context, lead.organizationId),
-    humanMessage: false,
+    humanMessage: canViewGlhLead(context, lead),
     aiDraftCopilot: true,
-    missingAdditiveRpcs: GLH_PHASE5_PERSISTENCE_GAPS,
+    missingAdditiveRpcs: [],
   };
 }
 
@@ -77,7 +74,7 @@ export function planGlhHumanTakeover(input: {
     ? 'ACCESS_DENIED'
     : !allowedMode
       ? 'INVALID_TRANSITION'
-      : input.persistenceAvailable !== true
+      : input.persistenceAvailable === false
         ? 'ADDITIVE_RPC_REQUIRED'
         : 'ALLOWED';
   return {
@@ -99,5 +96,5 @@ export function canQueueGlhHumanMessage(input: {
 }): boolean {
   return canViewGlhLead(input.context, input.lead)
     && input.conversationMode === 'HUMAN_ACTIVE'
-    && input.persistenceAvailable === true;
+    && input.persistenceAvailable !== false;
 }

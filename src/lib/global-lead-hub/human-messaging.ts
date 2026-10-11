@@ -23,7 +23,8 @@ export function buildGlhHumanMessageIntent(input: {
     input.conversationMode !== 'HUMAN_ACTIVE'
     || !input.conversationId
     || !input.leadId
-    || !idempotencyKey
+    || idempotencyKey.length < 8
+    || idempotencyKey.length > 200
     || text.length === 0
     || text.length > 4000
   ) return null;

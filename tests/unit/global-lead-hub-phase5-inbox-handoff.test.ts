@@ -26,11 +26,11 @@ const leadAccess = { organizationId: 'org-a', ownerProfileId: 'sales-a' };
 assert.deepEqual(
   getGlhInboxCapabilities(context, leadAccess),
   {
-    takeOver: false,
+    takeOver: true,
     transfer: false,
-    humanMessage: false,
+    humanMessage: true,
     aiDraftCopilot: true,
-    missingAdditiveRpcs: ['glh_take_over_conversation', 'glh_queue_human_message'],
+    missingAdditiveRpcs: [],
   },
 );
 
@@ -38,6 +38,7 @@ const blockedTakeover = planGlhHumanTakeover({
   context,
   lead: leadAccess,
   currentMode: 'HANDOFF_PENDING',
+  persistenceAvailable: false,
 });
 assert.equal(blockedTakeover.allowed, false);
 assert.equal(blockedTakeover.reason, 'ADDITIVE_RPC_REQUIRED');
@@ -168,7 +169,8 @@ assert(actionsRoute.includes('GlhMutationError'));
 assert(!actionsRoute.includes('graph.facebook.com'));
 assert(!actionsRoute.includes('api.whatsapp.com'));
 assert(inboxServer.includes(".eq('org_id', context.organizationId)"));
-assert(component.includes('Take Over — schema gate'));
+assert(component.includes("action: 'TAKE_OVER'"));
+assert(component.includes('Queue human reply'));
 assert(component.includes('AI unavailable'));
 assert(!component.includes('localStorage'));
 
