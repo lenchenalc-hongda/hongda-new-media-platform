@@ -1,0 +1,6 @@
+-- GLH-P5-HANDOFF-PERSISTENCE-002
+-- Bounded repository-only migration contract.
+-- Implement reviewed additive persistence for:
+--   public.glh_take_over_conversation
+--   public.glh_queue_human_message
+-- No Production SQL/RLS/env/data execution is authorized by this file or task.
