@@ -28,6 +28,7 @@ import type {
   GlhTaskRow,
   GlhTodayDashboard,
 } from './read-model';
+import { buildGlhInboxView, type GlhInboxView } from './inbox-read-model';
 import {
   buildGlhLeadDetailSummary,
   buildGlhLeadList,
@@ -296,6 +297,92 @@ export async function loadGlhTodayDashboard(
   return {
     ok: true,
     data: buildGlhTodayDashboard({ ...input.data, now: new Date() }),
+  };
+}
+
+export async function loadGlhInbox(
+  context: GlhAccessContext,
+): Promise<GlhReadResult<GlhInboxView>> {
+  const input = await loadGlhLeadReadInput(context);
+  if (!input.ok) return input;
+  if (input.data.leads.length === 0) {
+    return {
+      ok: true,
+      data: buildGlhInboxView({
+        organizationId: context.organizationId,
+        actorProfileId: context.actorProfileId,
+        leads: [],
+        profiles: [],
+        conversations: [],
+        messages: [],
+        tasks: [],
+        followups: [],
+      }),
+    };
+  }
+
+  const client = await createReadOnlySupabaseClient();
+  if (!client) return readFailure('DATABASE_UNAVAILABLE', 'Global Lead Hub inbox is unavailable');
+
+  const leadIds = input.data.leads.map(row => row.id);
+  const conversationsResult = await client
+    .from('glh_conversations')
+    .select(
+      'id,org_id,lead_id,contact_id,channel_account_id,external_conversation_id,'
+      + 'conversation_mode,conversation_status,assigned_profile_id,last_message_at,'
+      + 'created_at,updated_at',
+    )
+    .eq('org_id', context.organizationId)
+    .in('lead_id', leadIds)
+    .order('last_message_at', { ascending: false, nullsFirst: false })
+    .limit(GLH_READ_LIMIT);
+
+  if (conversationsResult.error) {
+    return readFailure('READ_FAILED', 'Global Lead Hub conversations could not be loaded');
+  }
+  const conversations = asRows<GlhConversationRow>(conversationsResult.data);
+  if (conversations.length >= GLH_READ_LIMIT) {
+    return readFailure('LIMIT_EXCEEDED', 'Conversation data exceeds the safe display limit');
+  }
+
+  const conversationIds = conversations.map(row => row.id);
+  const messagesResult = conversationIds.length > 0
+    ? await client
+      .from('glh_messages')
+      .select(
+        'id,org_id,conversation_id,lead_id,direction,actor_type,actor_profile_id,'
+        + 'message_text,media_metadata,provider_timestamp,delivery_status,created_at',
+      )
+      .eq('org_id', context.organizationId)
+      .in('conversation_id', conversationIds)
+      .order('created_at', { ascending: true })
+      .limit(GLH_READ_LIMIT)
+    : { data: [], error: null };
+
+  if (messagesResult.error) {
+    return readFailure('READ_FAILED', 'Global Lead Hub messages could not be loaded');
+  }
+  const messages = asRows<GlhMessageRow>(messagesResult.data);
+  if (messages.length >= GLH_READ_LIMIT) {
+    return readFailure('LIMIT_EXCEEDED', 'Message data exceeds the safe display limit');
+  }
+
+  const leads = buildGlhLeadList({ ...input.data, now: new Date() });
+  return {
+    ok: true,
+    data: buildGlhInboxView({
+      organizationId: context.organizationId,
+      actorProfileId: context.actorProfileId,
+      leads,
+      profiles: input.data.leadProfiles,
+      conversations,
+      messages,
+      tasks: input.data.tasks,
+      followups: input.data.followups,
+      // The inbox remains fully usable without AI. AI availability is a
+      // presentation detail; original messages and human work are authoritative.
+      aiAvailable: true,
+    }),
   };
 }
 
