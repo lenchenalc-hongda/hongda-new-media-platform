@@ -33,6 +33,7 @@ import {
   buildGlhFollowupDashboard,
   type GlhManagerDashboard,
 } from './phase6-followup-dashboard';
+import { buildGlhAdAttributionDashboard, type GlhAdAttributionDashboard } from './ad-attribution';
 import {
   buildGlhLeadDetailSummary,
   buildGlhLeadList,
@@ -318,6 +319,23 @@ export async function loadGlhFollowupDashboard(
       profiles: input.data.profiles,
       tasks: input.data.tasks,
       followups: input.data.followups,
+      now: new Date(),
+    }),
+  };
+}
+
+export async function loadGlhAdAttributionDashboard(
+  context: GlhAccessContext,
+): Promise<GlhReadResult<GlhAdAttributionDashboard>> {
+  const input = await loadGlhLeadReadInput(context);
+  if (!input.ok) return input;
+  return {
+    ok: true,
+    data: buildGlhAdAttributionDashboard({
+      context,
+      leads: input.data.leads,
+      contacts: input.data.contacts,
+      leadProfiles: input.data.leadProfiles,
       now: new Date(),
     }),
   };

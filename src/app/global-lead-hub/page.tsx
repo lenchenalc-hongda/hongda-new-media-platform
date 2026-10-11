@@ -51,6 +51,7 @@ export default async function GlobalLeadHubPage() {
         <Link href="/global-lead-hub/leads" className="text-gray-500 hover:text-gray-900">Leads</Link>
         <Link href="/global-lead-hub/tasks" className="text-gray-500 hover:text-gray-900">My Tasks</Link>
         <Link href="/global-lead-hub/dashboard" className="text-gray-500 hover:text-gray-900">Dashboard</Link>
+        <Link href="/global-lead-hub/ads" className="text-gray-500 hover:text-gray-900">Ads</Link>
       </nav>
 
       {!dashboard.ok ? (

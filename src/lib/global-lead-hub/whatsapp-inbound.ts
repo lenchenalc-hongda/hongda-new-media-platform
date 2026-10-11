@@ -1,4 +1,5 @@
 import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
+import { normalizeGlhMetaReferral } from './ad-attribution';
 
 export const GLH_WHATSAPP_MAX_WEBHOOK_BYTES = 1_000_000;
 
@@ -150,7 +151,7 @@ export function parseGlhWhatsAppInbound(payload: unknown): GlhWhatsAppParseResul
         if (!externalEventId || !externalContactId || !type) {
           return { kind: 'invalid', reason: 'message identifiers and type are required' };
         }
-        const referral = copyObject(message.referral);
+        const referral = normalizeGlhMetaReferral(message.referral).raw;
         parsed.push({
           provider: 'WHATSAPP',
           externalEventId,
