@@ -47,6 +47,7 @@ export default async function GlobalLeadHubPage() {
 
       <nav aria-label="Global Lead Hub sections" className="mb-4 flex gap-3 text-xs">
         <Link href="/global-lead-hub" className="font-semibold text-gray-900">Today</Link>
+        <Link href="/global-lead-hub/inbox" className="text-gray-500 hover:text-gray-900">Inbox</Link>
         <Link href="/global-lead-hub/leads" className="text-gray-500 hover:text-gray-900">Leads</Link>
         <Link href="/global-lead-hub/tasks" className="text-gray-500 hover:text-gray-900">My Tasks</Link>
       </nav>

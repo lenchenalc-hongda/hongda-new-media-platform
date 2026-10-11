@@ -4,6 +4,8 @@ import {
   type GlhManualLeadCreateInput,
   type GlhTaskOrFollowupInput,
 } from './validation';
+import { buildGlhHumanMessageIntent } from './human-messaging';
+import type { GlhConversationMode } from './domain';
 
 interface GlhRpcError {
   code?: string;
@@ -47,6 +49,13 @@ export class GlhMutationError extends Error {
 
 function mapRpcError(error: GlhRpcError): GlhMutationError {
   const message = error.message ?? '';
+  if (error.code === '42883' || message.includes('does not exist')) {
+    return new GlhMutationError(
+      'RPC_UNAVAILABLE',
+      'The required additive GLH persistence boundary is not available',
+      503,
+    );
+  }
   if (error.code === '42501' || message.includes('ACCESS_DENIED')) {
     return new GlhMutationError('ACCESS_DENIED', 'Access denied', 403);
   }
@@ -136,6 +145,62 @@ export async function createGlhTaskOrFollowup(
     p_title: input.title,
     p_due_at: input.dueAt ?? null,
     p_assignee_profile_id: input.assigneeProfileId ?? null,
+  });
+  return requireRpcData(result);
+}
+
+export async function takeOverGlhConversation(
+  client: GlhMutationClient,
+  context: GlhAccessContext,
+  input: {
+    conversationId: string;
+    leadId: string;
+    expectedMode: 'AI_ACTIVE' | 'HANDOFF_PENDING';
+    expectedLeadVersion: number;
+    reason?: string | null;
+  },
+) {
+  if (!['ADMIN', 'MANAGER', 'SALES'].includes(context.role)) {
+    throw new GlhMutationError('ACCESS_DENIED', 'Access denied', 403);
+  }
+  const result = await client.rpc('glh_take_over_conversation', {
+    p_conversation_id: input.conversationId,
+    p_lead_id: input.leadId,
+    p_expected_mode: input.expectedMode,
+    p_expected_lead_version: input.expectedLeadVersion,
+    p_reason: input.reason ?? null,
+  });
+  return requireRpcData(result);
+}
+
+export async function queueGlhHumanMessage(
+  client: GlhMutationClient,
+  context: GlhAccessContext,
+  input: {
+    conversationId: string;
+    leadId: string;
+    conversationMode: GlhConversationMode;
+    text: string;
+    idempotencyKey: string;
+  },
+) {
+  if (!['ADMIN', 'MANAGER', 'SALES'].includes(context.role)) {
+    throw new GlhMutationError('ACCESS_DENIED', 'Access denied', 403);
+  }
+  const intent = buildGlhHumanMessageIntent(input);
+  if (!intent) {
+    throw new GlhMutationError(
+      'INVALID_INPUT',
+      'Human messages require HUMAN_ACTIVE mode and valid bounded content',
+      400,
+    );
+  }
+  const result = await client.rpc('glh_queue_human_message', {
+    p_conversation_id: intent.conversationId,
+    p_lead_id: intent.leadId,
+    p_expected_mode: intent.expectedMode,
+    p_message_text: intent.text,
+    p_idempotency_key: intent.idempotencyKey,
   });
   return requireRpcData(result);
 }
