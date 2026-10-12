@@ -62,6 +62,13 @@ function read(path: string): string {
   return fs.readFileSync(path, 'utf8');
 }
 
+function walkFiles(dir: string): string[] {
+  return fs.readdirSync(dir, { withFileTypes: true }).flatMap(entry => {
+    const path = dir + '/' + entry.name;
+    return entry.isDirectory() ? walkFiles(path) : [path];
+  });
+}
+
 function functionBlock(sql: string, name: string): string {
   const marker = 'CREATE OR REPLACE FUNCTION public.' + name;
   const start = sql.indexOf(marker);
@@ -284,7 +291,37 @@ assert(
   middleware.includes('getPageSlugFromRoute(pathname)')
     && middleware.includes('canAccessPage(authUser, pageSlug)')
     && middleware.includes("pathname.startsWith('/customer-projects')"),
-  'middleware performs direct CPC route authorization and feature gating',
+  'middleware performs direct CPC page authorization and feature gating',
+);
+assert(
+  middleware.includes('SELF_AUTHENTICATED_API_PREFIXES')
+    && middleware.includes("'/api/customer-projects'")
+    && middleware.includes('SELF_AUTHENTICATED_API_PREFIXES.some'),
+  'CPC API requests avoid duplicate middleware profile resolution',
+);
+
+const cpcApiRoutes = walkFiles('src/app/api/customer-projects')
+  .filter(path => path.endsWith('/route.ts'));
+assert(cpcApiRoutes.length > 0, 'CPC API route inventory is non-empty');
+for (const routePath of cpcApiRoutes) {
+  const source = read(routePath);
+  assert(
+    source.includes('resolveCpcProfile')
+      || source.includes('runCpcMutation')
+      || source.includes('resolveReportNarrativeSession'),
+    routePath + ' self-authenticates before CPC data access',
+  );
+}
+
+const workbenchRoute = read('src/app/api/customer-projects/workbench/route.ts');
+const projectsRoute = read('src/app/api/customer-projects/projects/route.ts');
+assert(
+  workbenchRoute.includes('const [projectsResult, workItemsResult] = await Promise.all(['),
+  'Workbench performs independent project/work-item reads concurrently',
+);
+assert(
+  projectsRoute.includes('const [workItems, customers] = await Promise.all(['),
+  'Project list performs independent relation reads concurrently',
 );
 
 const detailRoutes = [
