@@ -30,6 +30,10 @@ const projectsPage = fs.readFileSync(
   'src/app/customer-projects/projects/page.tsx',
   'utf8',
 );
+const projectsClient = fs.readFileSync(
+  'src/app/customer-projects/projects/ProjectsClient.tsx',
+  'utf8',
+);
 const newProjectPage = fs.readFileSync(
   'src/app/customer-projects/projects/new/page.tsx',
   'utf8',
@@ -92,15 +96,16 @@ assert(
 );
 
 assert(
-  projectsPage.includes("fetch('/api/customer-projects/projects'")
-    && projectsPage.includes('我负责的')
-    && projectsPage.includes('等待中')
-    && projectsPage.includes('需要处理')
-    && projectsPage.includes('新建项目'),
-  'Projects page supports work-oriented filters and creation entry',
+  projectsPage.includes('readProjectList')
+    && projectsClient.includes('我负责的')
+    && projectsClient.includes('等待中')
+    && projectsClient.includes('需要处理')
+    && projectsClient.includes('新建项目'),
+  'Projects page supports server-first read, work-oriented filters, and creation entry',
 );
 assert(
-  projectsPage.includes('project.isOwnedByMe')
+  projectsClient.includes('project.isOwnedByMe')
+    && !projectsClient.includes('external_owner_reference')
     && !projectsPage.includes('external_owner_reference'),
   'Projects page does not invent CPC customer ownership',
 );

@@ -14,7 +14,8 @@ function assert(condition: boolean, message: string) {
 console.log('\n=== Customer Project Center Phase 6B Surface Contract ===');
 
 const readModels = fs.readFileSync('src/lib/customer-projects/read-models.ts', 'utf8');
-const workbench = fs.readFileSync('src/app/customer-projects/page.tsx', 'utf8');
+const workbenchPage = fs.readFileSync('src/app/customer-projects/page.tsx', 'utf8');
+const workbench = fs.readFileSync('src/app/customer-projects/WorkbenchClient.tsx', 'utf8');
 const tasks = fs.readFileSync('src/app/customer-projects/tasks/page.tsx', 'utf8');
 const rescheduleRoute = fs.readFileSync(
   'src/app/api/customer-projects/work-items/[id]/reschedule/route.ts',

@@ -173,6 +173,7 @@ assert(
 );
 
 const pageSource = fs.readFileSync('src/app/customer-projects/page.tsx', 'utf8');
+const workbenchClientSource = fs.readFileSync('src/app/customer-projects/WorkbenchClient.tsx', 'utf8');
 for (const text of [
   '我的工作台',
   '今日工作',
@@ -181,24 +182,25 @@ for (const text of [
   '等待 / 检查',
   '今天的业务摘要',
 ]) {
-  assert(pageSource.includes(text), 'workbench page contains: ' + text);
+  assert(workbenchClientSource.includes(text), 'workbench page contains: ' + text);
 }
 assert(
-  pageSource.includes("fetch('/api/customer-projects/workbench'"),
-  'workbench page uses formal CPC workbench API',
+  pageSource.includes('readWorkbenchSnapshot')
+    && workbenchClientSource.includes("fetch('/api/customer-projects/workbench'"),
+  'workbench uses server-first formal read plus formal CPC refresh API',
 );
 assert(
-  !pageSource.includes('当前尚未接入项目任务数据。')
-  && !pageSource.includes('即将开放'),
+  !workbenchClientSource.includes('当前尚未接入项目任务数据。')
+  && !workbenchClientSource.includes('即将开放'),
   'foundation shell placeholders removed after Phase 5D',
 );
 assert(
-  !/(成交20万|今天8个客户|3个逾期)/.test(pageSource),
+  !/(成交20万|今天8个客户|3个逾期)/.test(workbenchClientSource),
   'workbench page contains no mock business metrics',
 );
 assert(
-  pageSource.includes("from '@/components/ui/EmptyState'")
-  && !pageSource.includes('ReviewCenterEmpty'),
+  workbenchClientSource.includes("from '@/components/ui/EmptyState'")
+  && !workbenchClientSource.includes('ReviewCenterEmpty'),
   'workbench uses generic EmptyState instead of Review Center UI',
 );
 

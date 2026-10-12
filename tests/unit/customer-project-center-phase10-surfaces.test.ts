@@ -58,6 +58,10 @@ const workbenchPage = fs.readFileSync(
   'src/app/customer-projects/page.tsx',
   'utf8',
 );
+const workbenchClient = fs.readFileSync(
+  'src/app/customer-projects/WorkbenchClient.tsx',
+  'utf8',
+);
 const teamRoute = fs.readFileSync(
   'src/app/api/customer-projects/team/route.ts',
   'utf8',
@@ -174,7 +178,8 @@ assert(
 
 assert(
   !workbenchRoute.includes('old-customer-proactive')
-    && !workbenchPage.includes('relationshipRecommendation'),
+    && !workbenchPage.includes('relationshipRecommendation')
+    && !workbenchClient.includes('relationshipRecommendation'),
   'unaccepted recommendations do not enter the Workbench/Today queue',
 );
 

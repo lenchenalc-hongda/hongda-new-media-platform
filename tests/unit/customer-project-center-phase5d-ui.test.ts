@@ -18,7 +18,8 @@ function assert(condition: boolean, message: string) {
 
 console.log('\n=== Customer Project Center Phase 5D UI Contract ===');
 
-const workbench = fs.readFileSync('src/app/customer-projects/page.tsx', 'utf8');
+const workbenchPage = fs.readFileSync('src/app/customer-projects/page.tsx', 'utf8');
+const workbench = fs.readFileSync('src/app/customer-projects/WorkbenchClient.tsx', 'utf8');
 const projectDetail = fs.readFileSync(
   'src/app/customer-projects/projects/[id]/page.tsx',
   'utf8',
@@ -29,9 +30,10 @@ const presentation = fs.readFileSync(
 );
 
 assert(
-  workbench.includes("fetch('/api/customer-projects/workbench'")
+  workbenchPage.includes('readWorkbenchSnapshot')
+    && workbench.includes("fetch('/api/customer-projects/workbench'")
     && workbench.includes("cache: 'no-store'"),
-  'Workbench reads the Phase 5C workbench API without browser cache',
+  'Workbench uses server-first read and retains no-store refresh API',
 );
 assert(
   workbench.includes('我的工作台')

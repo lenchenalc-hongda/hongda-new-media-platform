@@ -629,9 +629,7 @@ assert(
 );
 
 const loadingStateFiles = [
-  'src/app/customer-projects/page.tsx',
   'src/app/customer-projects/customers/page.tsx',
-  'src/app/customer-projects/projects/page.tsx',
   'src/app/customer-projects/tasks/page.tsx',
   'src/app/customer-projects/reports/page.tsx',
   'src/app/customer-projects/team/page.tsx',
@@ -654,6 +652,37 @@ for (const pagePath of loadingStateFiles) {
   );
 }
 
+const workbenchServerPage = read('src/app/customer-projects/page.tsx');
+const projectsServerPage = read('src/app/customer-projects/projects/page.tsx');
+const workbenchClient = read('src/app/customer-projects/WorkbenchClient.tsx');
+const projectsClient = read('src/app/customer-projects/projects/ProjectsClient.tsx');
+const serverReads = read('src/lib/customer-projects/server-reads.ts');
+assert(
+  !workbenchServerPage.includes("'use client'")
+    && workbenchServerPage.includes('readWorkbenchSnapshot')
+    && workbenchServerPage.includes('initialSnapshot'),
+  'Workbench renders confirmed initial data on the server before hydration',
+);
+assert(
+  !projectsServerPage.includes("'use client'")
+    && projectsServerPage.includes('readProjectList')
+    && projectsServerPage.includes('initialProjects'),
+  'Project list renders confirmed initial data on the server before hydration',
+);
+assert(
+  workbenchClient.includes('initialSnapshot')
+    && workbenchClient.includes('if (workbenchRefreshKey === 0) return;')
+    && projectsClient.includes('initialProjects')
+    && !projectsClient.includes("fetch('/api/customer-projects/projects'"),
+  'CPC primary navigation no longer waits for an initial client-side data fetch',
+);
+assert(
+  serverReads.includes("import 'server-only'")
+    && serverReads.includes('resolveCpcProfile')
+    && serverReads.includes(".eq('org_id', profile.orgId)"),
+  'Server-first reads preserve trusted profile resolution and organization scoping',
+);
+
 const reportsPage = read('src/app/customer-projects/reports/page.tsx');
 const teamPage = read('src/app/customer-projects/team/page.tsx');
 const integrationPanel = read(
@@ -668,7 +697,7 @@ assert(
 );
 
 const mobileCriticalFiles = [
-  'src/app/customer-projects/page.tsx',
+  'src/app/customer-projects/WorkbenchClient.tsx',
   'src/app/customer-projects/customers/[id]/page.tsx',
   'src/app/customer-projects/projects/[id]/page.tsx',
   'src/app/customer-projects/tasks/page.tsx',
