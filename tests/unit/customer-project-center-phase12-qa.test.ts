@@ -629,9 +629,7 @@ assert(
 );
 
 const loadingStateFiles = [
-  'src/app/customer-projects/WorkbenchClient.tsx',
   'src/app/customer-projects/customers/page.tsx',
-  'src/app/customer-projects/projects/ProjectsClient.tsx',
   'src/app/customer-projects/tasks/page.tsx',
   'src/app/customer-projects/reports/page.tsx',
   'src/app/customer-projects/team/page.tsx',
