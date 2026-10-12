@@ -46,7 +46,7 @@ const bundle: GlhPhase8PilotEvidenceBundle = {
   mode: 'REPOSITORY_ONLY_SYNTHETIC',
   productionAccess: false,
   realProviderCalls: false,
-  generatedAt: '2026-10-11T23:00:00.000Z',
+  generatedAt: '2026-10-11T23:45:00.000Z',
   expiresAt: '2026-10-13T00:00:00.000Z',
   sources: [
     source('source-rls', 'ACCESS_CONTRACT'),
@@ -343,9 +343,19 @@ const jsonReport = validateGlhPhase8PilotEvidenceBundleJson(
 );
 assert.equal(jsonReport.overallStatus, 'PASS');
 
+const invalidJsonReport = validateGlhPhase8PilotEvidenceBundleJson('{', {
+  evaluatedAt: EVALUATED_AT,
+});
+assert.equal(invalidJsonReport.overallStatus, 'FAIL');
+assert.equal(invalidJsonReport.failed, 9);
+assert(invalidJsonReport.checks.every(check => check.status === 'FAIL'));
+
 const production = structuredClone(bundle);
 (production as unknown as Record<string, unknown>).environment = 'PRODUCTION';
-assertIssue(validate(resign(production)), 'PRODUCTION_ENVIRONMENT');
+const productionReport = validate(resign(production));
+assertIssue(productionReport, 'PRODUCTION_ENVIRONMENT');
+assert.equal(productionReport.failed, 9);
+assert(productionReport.checks.every(check => check.status === 'FAIL'));
 
 const tampered = structuredClone(bundle);
 mutableFacts(tampered, 'WEBHOOK_REPLAY_IDEMPOTENCY').duplicateAutoReplies = 1;
@@ -417,5 +427,28 @@ stale.checks = stale.checks.map(item => ({
   observedAt: '2026-10-01T12:00:00.000Z',
 }));
 assertIssue(validate(resign(stale)), 'EVIDENCE_EXPIRED');
+
+const futureSource = structuredClone(bundle);
+futureSource.sources[0].capturedAt = '2026-10-11T23:50:00.000Z';
+assertIssue(validate(resign(futureSource)), 'INVALID_TIME_RANGE');
+
+const staleCheck = structuredClone(bundle);
+const staleReplay = staleCheck.checks.find(
+  check => check.id === 'WEBHOOK_REPLAY_IDEMPOTENCY',
+);
+assert.ok(staleReplay);
+staleReplay.observedAt = '2026-10-01T00:00:00.000Z';
+assertIssue(
+  validate(resign(staleCheck)),
+  'INVALID_TIME_RANGE',
+  'WEBHOOK_REPLAY_IDEMPOTENCY',
+);
+
+const invalidMaxAgeReport = validateGlhPhase8PilotEvidenceBundle(bundle, {
+  evaluatedAt: EVALUATED_AT,
+  maxAgeMs: -1,
+});
+assertIssue(invalidMaxAgeReport, 'INVALID_TIME_RANGE');
+assert.equal(invalidMaxAgeReport.failed, 9);
 
 console.log('Global Lead Hub Phase 8 pilot evidence bundle tests passed');
