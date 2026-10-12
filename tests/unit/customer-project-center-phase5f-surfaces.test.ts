@@ -42,6 +42,10 @@ const workbenchPage = fs.readFileSync(
   'src/app/customer-projects/page.tsx',
   'utf8',
 );
+const workbenchClient = fs.readFileSync(
+  'src/app/customer-projects/WorkbenchClient.tsx',
+  'utf8',
+);
 const tasksPage = fs.readFileSync(
   'src/app/customer-projects/tasks/page.tsx',
   'utf8',
@@ -158,8 +162,9 @@ assert(
 );
 
 assert(
-  workbenchPage.includes('href={"/customer-projects/customers/" + item.customerReferenceId}')
-    && workbenchPage.includes('打开客户 →'),
+  workbenchPage.includes('readWorkbenchSnapshot')
+    && workbenchClient.includes('href={"/customer-projects/customers/" + item.customerReferenceId}')
+    && workbenchClient.includes('打开客户 →'),
   'Workbench P3 customer-level work drills into Customer Detail',
 );
 assert(
