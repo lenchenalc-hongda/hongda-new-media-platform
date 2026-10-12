@@ -173,6 +173,7 @@ export function buildGlhAdAttributionDashboard(input: { context: GlhAccessContex
     const referralIdentifier = facts?.referralIdentifier || lead.referral_identifier;
     const identifier = creativeId
       || facts?.adExternalId
+      || facts?.adsetExternalId
       || campaignId
       || referralIdentifier;
     const key = identifier ? `${sourcePlatform}:${identifier}` : `${sourcePlatform}:UNATTRIBUTED`;
