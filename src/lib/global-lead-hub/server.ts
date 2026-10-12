@@ -329,6 +329,25 @@ export async function loadGlhAdAttributionDashboard(
 ): Promise<GlhReadResult<GlhAdAttributionDashboard>> {
   const input = await loadGlhLeadReadInput(context);
   if (!input.ok) return input;
+  const client = await createReadOnlySupabaseClient();
+  if (!client) return readFailure('DATABASE_UNAVAILABLE', 'Ad attribution data is unavailable');
+  const leadIds = input.data.leads.map(lead => lead.id);
+  const messagesResult = leadIds.length > 0
+    ? await client
+      .from('glh_messages')
+      .select('id,org_id,lead_id,media_metadata,provider_timestamp,created_at')
+      .eq('org_id', context.organizationId)
+      .in('lead_id', leadIds)
+      .order('created_at', { ascending: false })
+      .limit(GLH_READ_LIMIT)
+    : { data: [], error: null };
+  if (messagesResult.error) {
+    return readFailure('READ_FAILED', 'Persisted attribution facts could not be loaded');
+  }
+  const messages = asRows<GlhMessageRow>(messagesResult.data);
+  if (messages.length >= GLH_READ_LIMIT) {
+    return readFailure('LIMIT_EXCEEDED', 'Attribution messages exceed the safe display limit');
+  }
   return {
     ok: true,
     data: buildGlhAdAttributionDashboard({
@@ -336,6 +355,7 @@ export async function loadGlhAdAttributionDashboard(
       leads: input.data.leads,
       contacts: input.data.contacts,
       leadProfiles: input.data.leadProfiles,
+      messages,
       now: new Date(),
     }),
   };
