@@ -5,6 +5,10 @@
 import type { NextRequest, NextResponse } from 'next/server';
 import { createMiddlewareSupabaseClient } from '@/lib/supabase/middleware';
 import { createClient as createServerSupabaseClient } from '@/lib/supabase/server';
+import {
+  resolveVerifiedSupabaseIdentity,
+  type SupabaseIdentityClient,
+} from './supabase-identity';
 import { CurrentUser, normalizeRole } from './types';
 
 interface SupabaseUserRow {
@@ -17,13 +21,7 @@ interface SupabaseUserRow {
   is_active?: boolean | null;
 }
 
-export interface SupabaseLikeClient {
-  auth: {
-    getUser: () => Promise<{
-      data: { user: { id: string; email?: string | null } | null } | null;
-      error: { message: string } | null;
-    }>;
-  };
+export interface SupabaseLikeClient extends SupabaseIdentityClient {
   from: (table: string) => {
     select: (cols: string) => {
       eq: (col: string, val: string) => {
@@ -34,9 +32,9 @@ export interface SupabaseLikeClient {
 }
 
 export async function resolveSupabaseCurrentUser(client: SupabaseLikeClient): Promise<CurrentUser | null> {
-  const { data, error } = await client.auth.getUser();
-  if (error || !data?.user?.id) return null;
-  const authId = data.user.id;
+  const identity = await resolveVerifiedSupabaseIdentity(client);
+  if (!identity) return null;
+  const authId = identity.id;
 
   const { data: profile, error: profileError } = await client
     .from('profiles')
@@ -52,10 +50,10 @@ export async function resolveSupabaseCurrentUser(client: SupabaseLikeClient): Pr
 
   return {
     id: authId,
-    name: profile.full_name || data.user.email || '用户',
+    name: profile.full_name || identity.email || '用户',
     role,
     department: profile.department ?? null,
-    email: data.user.email ?? profile.email ?? null,
+    email: identity.email ?? profile.email ?? null,
     active: true,
     authSource: 'supabase',
   };

@@ -57,16 +57,31 @@ function makeClient(options: {
   rpcResult?: any;
 }) {
   const rpcCalls: Array<{ name: string; args: any }> = [];
+  const authCalls = { getClaims: 0, getUser: 0 };
   const client: any = {
     auth: {
-      getUser: async () => ({
-        data: {
-          user: options.authUserId === null
-            ? null
-            : { id: options.authUserId ?? 'auth-user-1' },
-        },
-        error: null,
-      }),
+      getClaims: async () => {
+        authCalls.getClaims += 1;
+        return {
+          data: {
+            claims: options.authUserId === null
+              ? {}
+              : { sub: options.authUserId ?? 'auth-user-1', email: 'user@example.test' },
+          },
+          error: null,
+        };
+      },
+      getUser: async () => {
+        authCalls.getUser += 1;
+        return {
+          data: {
+            user: options.authUserId === null
+              ? null
+              : { id: options.authUserId ?? 'auth-user-1' },
+          },
+          error: null,
+        };
+      },
     },
     from: (table: string) => {
       if (table !== 'profiles') throw new Error('unexpected table: ' + table);
@@ -105,13 +120,19 @@ function makeClient(options: {
       };
     },
   };
-  return { client, rpcCalls };
+  return { client, rpcCalls, authCalls };
 }
 
 console.log('\n=== Customer Project Center Phase 5C API Contract ===');
 
-const anonymous = await resolveCpcProfile(makeClient({ authUserId: null }).client);
+const anonymousHolder = makeClient({ authUserId: null });
+const anonymous = await resolveCpcProfile(anonymousHolder.client);
 assert(!anonymous.ok && anonymous.status === 401, 'missing auth user rejected');
+assert(
+  anonymousHolder.authCalls.getClaims === 1
+    && anonymousHolder.authCalls.getUser === 0,
+  'invalid/missing claims fail closed without a second remote auth request',
+);
 
 const viewer = await resolveCpcProfile(makeClient({
   profile: {
@@ -126,13 +147,19 @@ const viewer = await resolveCpcProfile(makeClient({
 }).client);
 assert(!viewer.ok && viewer.status === 403, 'viewer cannot enter CPC API');
 
-const sales = await resolveCpcProfile(makeClient({}).client);
+const salesHolder = makeClient({});
+const sales = await resolveCpcProfile(salesHolder.client);
 assert(
   sales.ok
     && sales.profile.id === PROFILE_ID
     && sales.profile.orgId === ORG_ID
     && sales.profile.role === 'sales',
   'active sales profile resolved',
+);
+assert(
+  salesHolder.authCalls.getClaims === 1
+    && salesHolder.authCalls.getUser === 0,
+  'CPC trusted identity prefers getClaims over remote getUser',
 );
 
 const successMap = mapCpcRpcResult('CREATE_PROJECT', {

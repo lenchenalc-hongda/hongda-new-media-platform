@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { createClient } from '@/lib/supabase/server';
+import { resolveVerifiedSupabaseIdentity } from '@/lib/auth/supabase-identity';
 import {
   PROJECT_EVENT_TYPES,
   PROJECT_LIFECYCLE_STATUSES,
@@ -279,19 +280,11 @@ export async function resolveCpcProfile(client: any): Promise<
   | { ok: true; profile: CpcProfile }
   | { ok: false; status: number; message: string }
 > {
-  let authUserId: string | null = null;
-  try {
-    const authResult = await client.auth.getUser();
-    authUserId = typeof authResult?.data?.user?.id === 'string'
-      ? authResult.data.user.id
-      : null;
-  } catch {
+  const identity = await resolveVerifiedSupabaseIdentity(client);
+  if (!identity) {
     return { ok: false, status: 401, message: '未登录或无权限' };
   }
-
-  if (!authUserId) {
-    return { ok: false, status: 401, message: '未登录或无权限' };
-  }
+  const authUserId = identity.id;
 
   const profileResult = await client
     .from('profiles')
