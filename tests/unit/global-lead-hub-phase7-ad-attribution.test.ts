@@ -42,6 +42,15 @@ assert(persistedGroup?.sourcePlatform === 'INSTAGRAM', 'Explicit persisted sourc
 assert(persistedGroup?.campaignId === 'campaign-external' && persistedGroup.adsetId === 'adset-external' && persistedGroup.adId === 'ad-external', 'Persisted campaign, adset and ad identifiers remain auditable');
 assert(persistedGroup?.clickId === 'click-external' && persistedGroup.leads === 1, 'Latest valid referral is selected and each lead is counted once');
 assert(!dashboard.groups.some(group => group.creativeId === 'stale-creative'), 'Older referral facts do not override the latest valid referral');
+const adsetOnlyLead: GlhLeadRow = { ...base, id: 'lead-adset-only', source_platform: 'UNKNOWN', campaign_id: null, creative_id: null, referral_identifier: null };
+const adsetOnlyDashboard = buildGlhAdAttributionDashboard({
+  context,
+  leads: [adsetOnlyLead],
+  contacts,
+  leadProfiles: profiles,
+  messages: [message({ id: 'message-adset-only', lead_id: adsetOnlyLead.id, media_metadata: { referral: { adset_id: 'adset-only' } } })],
+});
+assert(adsetOnlyDashboard.groups[0]?.adsetId === 'adset-only' && adsetOnlyDashboard.groups[0]?.label === 'adset-only', 'Adset-only referral facts retain a distinct reportable attribution group');
 assert(dashboard.country[0]?.value === 'NG', 'Country breakdown uses existing facts');
 const sales = buildGlhAdAttributionDashboard({ context: { ...context, role: 'SALES' }, leads: [base], contacts, leadProfiles: profiles });
 assert(sales.scope === 'MY_ACCESSIBLE_RECORDS' && !sales.managerView, 'Sales output labels its RLS-scoped view');
