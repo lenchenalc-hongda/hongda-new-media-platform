@@ -2,6 +2,7 @@ import 'server-only';
 
 import { createClient } from '@/lib/supabase/server';
 import { resolveCpcProfile } from '@/lib/customer-projects/api';
+import { createCpcReadTiming } from '@/lib/customer-projects/performance';
 import {
   buildWorkbenchSnapshot,
   type WorkbenchCustomerRow,
@@ -42,16 +43,25 @@ export type ProjectListPageItem = ProjectListItem & {
 };
 
 export async function readWorkbenchSnapshot(): Promise<ServerReadResult<WorkbenchSnapshot>> {
+  const timing = createCpcReadTiming('workbench');
+  const authStartedAt = Date.now();
   const supabase = await createClient();
-  if (!supabase) return { ok: false, status: 500, message: '数据库不可用' };
+  if (!supabase) {
+    timing.mark('auth', authStartedAt);
+    timing.finish('db_unavailable');
+    return { ok: false, status: 500, message: '数据库不可用' };
+  }
 
   const profileResult = await resolveCpcProfile(supabase);
+  timing.mark('auth', authStartedAt);
   if (!profileResult.ok) {
+    timing.finish(profileResult.status === 401 ? 'unauthorized' : 'forbidden');
     return { ok: false, status: profileResult.status, message: profileResult.message };
   }
   const profile = profileResult.profile;
 
   try {
+    const primaryStartedAt = Date.now();
     const [projectsResult, workItemsResult] = await Promise.all([
       supabase
         .from('cpc_projects')
@@ -71,6 +81,7 @@ export async function readWorkbenchSnapshot(): Promise<ServerReadResult<Workbenc
         .range(0, MAX_PERSONAL_ROWS - 1),
     ]);
 
+    timing.mark('primary', primaryStartedAt);
     if (projectsResult.error) throw new Error('project read failed');
     if (workItemsResult.error) throw new Error('work item read failed');
 
@@ -78,6 +89,7 @@ export async function readWorkbenchSnapshot(): Promise<ServerReadResult<Workbenc
     const workItems = (workItemsResult.data ?? []) as WorkbenchWorkItemRow[];
 
     if (projects.length >= MAX_PERSONAL_ROWS || workItems.length >= MAX_PERSONAL_ROWS) {
+      timing.finish('limit', { projects: projects.length, workItems: workItems.length });
       return {
         ok: false,
         status: 409,
@@ -92,6 +104,7 @@ export async function readWorkbenchSnapshot(): Promise<ServerReadResult<Workbenc
         .filter((value): value is string => typeof value === 'string'),
     ]));
 
+    const relationsStartedAt = Date.now();
     let customers: WorkbenchCustomerRow[] = [];
     if (customerIds.length > 0) {
       const customersResult = await supabase
@@ -104,32 +117,46 @@ export async function readWorkbenchSnapshot(): Promise<ServerReadResult<Workbenc
       if (customersResult.error) throw new Error('customer read failed');
       customers = (customersResult.data ?? []) as WorkbenchCustomerRow[];
     }
+    timing.mark('relations', relationsStartedAt);
 
-    return {
-      ok: true,
-      data: buildWorkbenchSnapshot({
+    const data = buildWorkbenchSnapshot({
         now: new Date(),
         projects,
         workItems,
         customers,
-      }),
-    };
+      });
+    timing.finish('ok', {
+      projects: projects.length,
+      workItems: workItems.length,
+      customers: customers.length,
+    });
+    return { ok: true, data };
   } catch {
+    timing.finish('error');
     return { ok: false, status: 500, message: '今日工作加载失败，请稍后重试。' };
   }
 }
 
 export async function readProjectList(): Promise<ServerReadResult<ProjectListPageItem[]>> {
+  const timing = createCpcReadTiming('projects');
+  const authStartedAt = Date.now();
   const supabase = await createClient();
-  if (!supabase) return { ok: false, status: 500, message: '数据库不可用' };
+  if (!supabase) {
+    timing.mark('auth', authStartedAt);
+    timing.finish('db_unavailable');
+    return { ok: false, status: 500, message: '数据库不可用' };
+  }
 
   const profileResult = await resolveCpcProfile(supabase);
+  timing.mark('auth', authStartedAt);
   if (!profileResult.ok) {
+    timing.finish(profileResult.status === 401 ? 'unauthorized' : 'forbidden');
     return { ok: false, status: profileResult.status, message: profileResult.message };
   }
   const profile = profileResult.profile;
 
   try {
+    const primaryStartedAt = Date.now();
     const projectsResult = await supabase
       .from('cpc_projects')
       .select('id,customer_reference_id,title,project_type,status,stage,waiting_on,next_check_at,risk_level,priority,owner_profile_id,version,updated_at')
@@ -137,10 +164,12 @@ export async function readProjectList(): Promise<ServerReadResult<ProjectListPag
       .order('updated_at', { ascending: false })
       .range(0, MAX_PROJECT_ROWS - 1);
 
+    timing.mark('primary', primaryStartedAt);
     if (projectsResult.error) throw new Error('project read failed');
 
     const projects = (projectsResult.data ?? []) as ListProjectRow[];
     if (projects.length >= MAX_PROJECT_ROWS) {
+      timing.finish('limit', { projects: projects.length });
       return {
         ok: false,
         status: 409,
@@ -151,6 +180,7 @@ export async function readProjectList(): Promise<ServerReadResult<ProjectListPag
     const projectIds = projects.map(project => project.id);
     const customerIds = Array.from(new Set(projects.map(project => project.customer_reference_id)));
 
+    const relationsStartedAt = Date.now();
     const [workItems, customers] = await Promise.all([
       (async (): Promise<ListWorkItemRow[]> => {
         if (projectIds.length === 0) return [];
@@ -181,29 +211,45 @@ export async function readProjectList(): Promise<ServerReadResult<ProjectListPag
       })(),
     ]);
 
+    timing.mark('relations', relationsStartedAt);
     const list = buildProjectList({ projects, workItems, customers }).map(project => ({
       ...project,
       isOwnedByMe: project.ownerProfileId === profile.id,
     }));
 
+    timing.finish('ok', {
+      projects: projects.length,
+      workItems: workItems.length,
+      customers: customers.length,
+    });
     return { ok: true, data: list };
   } catch {
+    timing.finish('error');
     return { ok: false, status: 500, message: '项目列表加载失败，请稍后重试。' };
   }
 }
 
 
 export async function readCustomerList(): Promise<ServerReadResult<CustomerListItem[]>> {
+  const timing = createCpcReadTiming('customers');
+  const authStartedAt = Date.now();
   const supabase = await createClient();
-  if (!supabase) return { ok: false, status: 500, message: '数据库不可用' };
+  if (!supabase) {
+    timing.mark('auth', authStartedAt);
+    timing.finish('db_unavailable');
+    return { ok: false, status: 500, message: '数据库不可用' };
+  }
 
   const profileResult = await resolveCpcProfile(supabase);
+  timing.mark('auth', authStartedAt);
   if (!profileResult.ok) {
+    timing.finish(profileResult.status === 401 ? 'unauthorized' : 'forbidden');
     return { ok: false, status: profileResult.status, message: profileResult.message };
   }
   const profile = profileResult.profile;
 
   try {
+    const primaryStartedAt = Date.now();
     const customersResult = await supabase
       .from('cpc_customer_references')
       .select('id,reference_kind,display_name_snapshot,status,external_source,external_customer_id,external_owner_reference,provisional_source_reference,updated_at')
@@ -212,19 +258,25 @@ export async function readCustomerList(): Promise<ServerReadResult<CustomerListI
       .order('updated_at', { ascending: false })
       .range(0, MAX_CUSTOMERS - 1);
 
+    timing.mark('primary', primaryStartedAt);
     if (customersResult.error) throw new Error('customer read failed');
 
     const customers = (customersResult.data ?? []) as CustomerReferenceRow[];
     if (customers.length >= MAX_CUSTOMERS) {
+      timing.finish('limit', { customers: customers.length });
       return {
         ok: false,
         status: 409,
         message: '客户数量超出当前安全上限，请使用后续筛选能力。',
       };
     }
-    if (customers.length === 0) return { ok: true, data: [] };
+    if (customers.length === 0) {
+      timing.finish('ok', { customers: 0 });
+      return { ok: true, data: [] };
+    }
 
     const customerIds = customers.map(customer => customer.id);
+    const relationsStartedAt = Date.now();
     const [
       projectsResult,
       followUpsResult,
@@ -281,6 +333,7 @@ export async function readCustomerList(): Promise<ServerReadResult<CustomerListI
     const followUps = (followUpsResult.data ?? []) as CustomerFollowUpRow[];
     const relationshipEvents = (relationshipEventsResult.data ?? []) as CustomerEventRow[];
     const transactionEvents = (transactionEventsResult.data ?? []) as CustomerEventRow[];
+    timing.mark('relations', relationsStartedAt);
 
     if (
       projects.length >= MAX_RELATION_ROWS
@@ -288,6 +341,13 @@ export async function readCustomerList(): Promise<ServerReadResult<CustomerListI
       || relationshipEvents.length >= MAX_RELATION_ROWS
       || transactionEvents.length >= MAX_RELATION_ROWS
     ) {
+      timing.finish('limit', {
+        customers: customers.length,
+        projects: projects.length,
+        followUps: followUps.length,
+        relationshipEvents: relationshipEvents.length,
+        transactionEvents: transactionEvents.length,
+      });
       return {
         ok: false,
         status: 409,
@@ -295,33 +355,48 @@ export async function readCustomerList(): Promise<ServerReadResult<CustomerListI
       };
     }
 
-    return {
-      ok: true,
-      data: buildCustomerList({
+    const data = buildCustomerList({
         now: new Date(),
         actorProfileId: profile.id,
         customers,
         projects,
         followUps,
         events: [...relationshipEvents, ...transactionEvents],
-      }),
-    };
+      });
+    timing.finish('ok', {
+      customers: customers.length,
+      projects: projects.length,
+      followUps: followUps.length,
+      relationshipEvents: relationshipEvents.length,
+      transactionEvents: transactionEvents.length,
+    });
+    return { ok: true, data };
   } catch {
+    timing.finish('error');
     return { ok: false, status: 500, message: '客户列表加载失败，请稍后重试。' };
   }
 }
 
 export async function readTaskList(): Promise<ServerReadResult<TaskListItem[]>> {
+  const timing = createCpcReadTiming('tasks');
+  const authStartedAt = Date.now();
   const supabase = await createClient();
-  if (!supabase) return { ok: false, status: 500, message: '数据库不可用' };
+  if (!supabase) {
+    timing.mark('auth', authStartedAt);
+    timing.finish('db_unavailable');
+    return { ok: false, status: 500, message: '数据库不可用' };
+  }
 
   const profileResult = await resolveCpcProfile(supabase);
+  timing.mark('auth', authStartedAt);
   if (!profileResult.ok) {
+    timing.finish(profileResult.status === 401 ? 'unauthorized' : 'forbidden');
     return { ok: false, status: profileResult.status, message: profileResult.message };
   }
   const profile = profileResult.profile;
 
   try {
+    const primaryStartedAt = Date.now();
     const workItemsResult = await supabase
       .from('cpc_work_items')
       .select('id,customer_reference_id,project_id,work_item_type,title,due_at,status,priority,blocked_reason,version,updated_at')
@@ -330,10 +405,12 @@ export async function readTaskList(): Promise<ServerReadResult<TaskListItem[]>> 
       .order('updated_at', { ascending: false })
       .range(0, MAX_TASK_ROWS - 1);
 
+    timing.mark('primary', primaryStartedAt);
     if (workItemsResult.error) throw new Error('task read failed');
 
     const workItems = (workItemsResult.data ?? []) as ListWorkItemRow[];
     if (workItems.length >= MAX_TASK_ROWS) {
+      timing.finish('limit', { workItems: workItems.length });
       return {
         ok: false,
         status: 409,
@@ -347,6 +424,7 @@ export async function readTaskList(): Promise<ServerReadResult<TaskListItem[]>> 
         .filter((value): value is string => typeof value === 'string'),
     ));
 
+    const relationsStartedAt = Date.now();
     let projects: ListProjectRow[] = [];
     if (projectIds.length > 0) {
       const projectsResult = await supabase
@@ -378,11 +456,16 @@ export async function readTaskList(): Promise<ServerReadResult<TaskListItem[]>> 
       customers = (customersResult.data ?? []) as ListCustomerRow[];
     }
 
-    return {
-      ok: true,
-      data: buildTaskList({ workItems, projects, customers }),
-    };
+    timing.mark('relations', relationsStartedAt);
+    const data = buildTaskList({ workItems, projects, customers });
+    timing.finish('ok', {
+      workItems: workItems.length,
+      projects: projects.length,
+      customers: customers.length,
+    });
+    return { ok: true, data };
   } catch {
+    timing.finish('error');
     return { ok: false, status: 500, message: '我的任务加载失败，请稍后重试。' };
   }
 }
