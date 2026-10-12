@@ -42,6 +42,10 @@ const tasksPage = fs.readFileSync(
   'src/app/customer-projects/tasks/page.tsx',
   'utf8',
 );
+const tasksClient = fs.readFileSync(
+  'src/app/customer-projects/tasks/TasksClient.tsx',
+  'utf8',
+);
 const projectDetail = fs.readFileSync(
   'src/app/customer-projects/projects/[id]/page.tsx',
   'utf8',
@@ -138,18 +142,19 @@ assert(
 );
 
 assert(
-  tasksPage.includes("fetch('/api/customer-projects/tasks'")
-    && tasksPage.includes("'/transition'"),
-  'My Tasks reads task API and writes only through transition API',
+  tasksPage.includes('readTaskList')
+    && tasksClient.includes("fetch('/api/customer-projects/tasks'")
+    && tasksClient.includes("'/transition'"),
+  'My Tasks reads initial data server-first and writes only through transition API',
 );
 assert(
-  tasksPage.includes('activeNextActionNeedsProjectFlow')
-    && tasksPage.includes('完成或取消必须同时确定新的下一步/等待状态'),
+  tasksClient.includes('activeNextActionNeedsProjectFlow')
+    && tasksClient.includes('完成或取消必须同时确定新的下一步/等待状态'),
   'active Project NEXT_ACTION cannot be directly closed from My Tasks',
 );
 assert(
-  tasksPage.includes('标记受阻')
-    && tasksPage.includes('受阻/取消必须填写原因'),
+  tasksClient.includes('标记受阻')
+    && tasksClient.includes('受阻/取消必须填写原因'),
   'blocked/cancelled task transitions require explicit reason in UI',
 );
 
@@ -185,7 +190,7 @@ assert(
 for (const source of [
   projectsPage,
   newProjectPage,
-  tasksPage,
+  tasksClient,
   lifecycleSection,
 ]) {
   for (const forbidden of ['localStorage', 'site_data', '/api/data', '.from(', '.rpc(']) {
