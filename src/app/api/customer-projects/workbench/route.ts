@@ -27,26 +27,26 @@ export async function GET(_req: NextRequest) {
   const profile = profileResult.profile;
 
   try {
-    const projectsResult = await supabase
-      .from('cpc_projects')
-      .select('id,customer_reference_id,title,project_type,status,stage,waiting_on,next_check_at,risk_level,priority,owner_profile_id,version,updated_at')
-      .eq('org_id', profile.orgId)
-      .eq('owner_profile_id', profile.id)
-      .order('updated_at', { ascending: false })
-      .range(0, MAX_PERSONAL_ROWS - 1);
+    const [projectsResult, workItemsResult] = await Promise.all([
+      supabase
+        .from('cpc_projects')
+        .select('id,customer_reference_id,title,project_type,status,stage,waiting_on,next_check_at,risk_level,priority,owner_profile_id,version,updated_at')
+        .eq('org_id', profile.orgId)
+        .eq('owner_profile_id', profile.id)
+        .order('updated_at', { ascending: false })
+        .range(0, MAX_PERSONAL_ROWS - 1),
+      supabase
+        .from('cpc_work_items')
+        .select('id,customer_reference_id,project_id,work_item_type,title,assignee_profile_id,due_at,status,priority,blocked_reason,version,updated_at')
+        .eq('org_id', profile.orgId)
+        .eq('assignee_profile_id', profile.id)
+        .in('status', ['pending', 'in_progress', 'blocked'])
+        .order('due_at', { ascending: true, nullsFirst: false })
+        .order('id', { ascending: true })
+        .range(0, MAX_PERSONAL_ROWS - 1),
+    ]);
 
     if (projectsResult.error) throw new Error('project read failed');
-
-    const workItemsResult = await supabase
-      .from('cpc_work_items')
-      .select('id,customer_reference_id,project_id,work_item_type,title,assignee_profile_id,due_at,status,priority,blocked_reason,version,updated_at')
-      .eq('org_id', profile.orgId)
-      .eq('assignee_profile_id', profile.id)
-      .in('status', ['pending', 'in_progress', 'blocked'])
-      .order('due_at', { ascending: true, nullsFirst: false })
-      .order('id', { ascending: true })
-      .range(0, MAX_PERSONAL_ROWS - 1);
-
     if (workItemsResult.error) throw new Error('work item read failed');
 
     const projects = (projectsResult.data ?? []) as WorkbenchProjectRow[];

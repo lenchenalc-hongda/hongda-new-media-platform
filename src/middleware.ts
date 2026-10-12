@@ -19,6 +19,13 @@ const PUBLIC_ROUTES = [
   '/api/ai',
 ];
 
+// These API routes enforce trusted Supabase identity and CPC authorization
+// inside every route handler. Skipping the page middleware here avoids doing
+// the same remote auth/profile lookup twice for a single CPC data request.
+const SELF_AUTHENTICATED_API_PREFIXES = [
+  '/api/customer-projects',
+];
+
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
@@ -41,8 +48,12 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(featureOffUrl);
   }
 
-  // Skip static assets and API routes that don't need auth
-  if (pathname.startsWith('/_next') || pathname === '/favicon.ico') {
+  // Skip static assets and APIs that enforce their own trusted authorization.
+  if (
+    pathname.startsWith('/_next')
+    || pathname === '/favicon.ico'
+    || SELF_AUTHENTICATED_API_PREFIXES.some(prefix => pathname.startsWith(prefix))
+  ) {
     return NextResponse.next();
   }
 

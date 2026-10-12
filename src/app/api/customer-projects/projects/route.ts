@@ -44,32 +44,35 @@ export async function GET(_req: NextRequest) {
     const projectIds = projects.map(project => project.id);
     const customerIds = Array.from(new Set(projects.map(project => project.customer_reference_id)));
 
-    let workItems: ListWorkItemRow[] = [];
-    if (projectIds.length > 0) {
-      const workItemsResult = await supabase
-        .from('cpc_work_items')
-        .select('id,customer_reference_id,project_id,work_item_type,title,due_at,status,priority,blocked_reason,version,updated_at')
-        .eq('org_id', profile.orgId)
-        .in('project_id', projectIds)
-        .in('status', ['pending', 'in_progress', 'blocked'])
-        .order('updated_at', { ascending: false })
-        .limit(1000);
+    const [workItems, customers] = await Promise.all([
+      (async (): Promise<ListWorkItemRow[]> => {
+        if (projectIds.length === 0) return [];
 
-      if (workItemsResult.error) throw new Error('work item read failed');
-      workItems = (workItemsResult.data ?? []) as ListWorkItemRow[];
-    }
+        const workItemsResult = await supabase
+          .from('cpc_work_items')
+          .select('id,customer_reference_id,project_id,work_item_type,title,due_at,status,priority,blocked_reason,version,updated_at')
+          .eq('org_id', profile.orgId)
+          .in('project_id', projectIds)
+          .in('status', ['pending', 'in_progress', 'blocked'])
+          .order('updated_at', { ascending: false })
+          .limit(1000);
 
-    let customers: ListCustomerRow[] = [];
-    if (customerIds.length > 0) {
-      const customersResult = await supabase
-        .from('cpc_customer_references')
-        .select('id,display_name_snapshot')
-        .eq('org_id', profile.orgId)
-        .in('id', customerIds);
+        if (workItemsResult.error) throw new Error('work item read failed');
+        return (workItemsResult.data ?? []) as ListWorkItemRow[];
+      })(),
+      (async (): Promise<ListCustomerRow[]> => {
+        if (customerIds.length === 0) return [];
 
-      if (customersResult.error) throw new Error('customer read failed');
-      customers = (customersResult.data ?? []) as ListCustomerRow[];
-    }
+        const customersResult = await supabase
+          .from('cpc_customer_references')
+          .select('id,display_name_snapshot')
+          .eq('org_id', profile.orgId)
+          .in('id', customerIds);
+
+        if (customersResult.error) throw new Error('customer read failed');
+        return (customersResult.data ?? []) as ListCustomerRow[];
+      })(),
+    ]);
 
     return NextResponse.json({
       ok: true,
