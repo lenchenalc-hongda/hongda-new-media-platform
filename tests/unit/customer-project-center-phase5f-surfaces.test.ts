@@ -30,6 +30,10 @@ const customersPage = fs.readFileSync(
   'src/app/customer-projects/customers/page.tsx',
   'utf8',
 );
+const customersClient = fs.readFileSync(
+  'src/app/customer-projects/customers/CustomersClient.tsx',
+  'utf8',
+);
 const customerDetailPage = fs.readFileSync(
   'src/app/customer-projects/customers/[id]/page.tsx',
   'utf8',
@@ -48,6 +52,10 @@ const workbenchClient = fs.readFileSync(
 );
 const tasksPage = fs.readFileSync(
   'src/app/customer-projects/tasks/page.tsx',
+  'utf8',
+);
+const tasksClient = fs.readFileSync(
+  'src/app/customer-projects/tasks/TasksClient.tsx',
   'utf8',
 );
 const navigation = fs.readFileSync(
@@ -101,19 +109,19 @@ assert(
 );
 
 assert(
-  customersPage.includes('待我回访')
-    && customersPage.includes('已安排给我')
-    && customersPage.includes('有活跃项目'),
+  customersClient.includes('待我回访')
+    && customersClient.includes('已安排给我')
+    && customersClient.includes('有活跃项目'),
   'Customer list supports approved relationship-work filters',
 );
 assert(
-  !customersPage.includes("key: 'mine'")
-    && customersPage.includes('这里没有“我的客户”筛选'),
+  !customersClient.includes("key: 'mine'")
+    && customersClient.includes('这里没有“我的客户”筛选'),
   'Customer list does not invent CPC customer ownership',
 );
 assert(
-  customersPage.includes('外部归属引用')
-    && customersPage.includes('CPC 只显示已验证引用'),
+  customersClient.includes('外部归属引用')
+    && customersClient.includes('CPC 只显示已验证引用'),
   'Customer list treats external owner as a reference, not local truth',
 );
 
@@ -168,14 +176,14 @@ assert(
   'Workbench P3 customer-level work drills into Customer Detail',
 );
 assert(
-  tasksPage.includes('customerFollowUpNeedsCustomerFlow')
-    && tasksPage.includes('任务页不会静默完成回访')
-    && tasksPage.includes('href={"/customer-projects/customers/" + task.customerReferenceId}'),
+  tasksClient.includes('customerFollowUpNeedsCustomerFlow')
+    && tasksClient.includes('任务页不会静默完成回访')
+    && tasksClient.includes('href={"/customer-projects/customers/" + task.customerReferenceId}'),
   'My Tasks routes FOLLOW_UP completion through Customer Detail result capture',
 );
 
 for (const source of [
-  customersPage,
+  customersClient,
   customerDetailPage,
   newProjectPage,
 ]) {

@@ -30,6 +30,10 @@ const customersPage = fs.readFileSync(
   'src/app/customer-projects/customers/page.tsx',
   'utf8',
 );
+const customersClient = fs.readFileSync(
+  'src/app/customer-projects/customers/CustomersClient.tsx',
+  'utf8',
+);
 const detailPage = fs.readFileSync(
   'src/app/customer-projects/customers/[id]/page.tsx',
   'utf8',
@@ -133,9 +137,9 @@ assert(
 );
 
 assert(
-  customersPage.includes('recommendationStateLabel')
-    && customersPage.includes('安排回访 →')
-    && customersPage.includes("customer.recommendation.state === 'due'"),
+  customersClient.includes('recommendationStateLabel')
+    && customersClient.includes('安排回访 →')
+    && customersClient.includes("customer.recommendation.state === 'due'"),
   'Customer list exposes recommendation state and a drill-in acceptance affordance',
 );
 assert(
@@ -183,7 +187,7 @@ assert(
   'unaccepted recommendations do not enter the Workbench/Today queue',
 );
 
-for (const source of [customersPage, detailPage, newProjectPage, teamBoardPage]) {
+for (const source of [customersClient, detailPage, newProjectPage, teamBoardPage]) {
   for (const forbidden of ['localStorage', 'site_data', '/api/data', 'createAdminSupabaseClient']) {
     assert(!source.includes(forbidden), 'Phase 10 client surface avoids legacy data path: ' + forbidden);
   }
