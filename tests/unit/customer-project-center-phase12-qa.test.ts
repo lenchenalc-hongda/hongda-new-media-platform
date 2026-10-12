@@ -697,7 +697,7 @@ assert(
 );
 
 const mobileCriticalFiles = [
-  'src/app/customer-projects/page.tsx',
+  'src/app/customer-projects/WorkbenchClient.tsx',
   'src/app/customer-projects/customers/[id]/page.tsx',
   'src/app/customer-projects/projects/[id]/page.tsx',
   'src/app/customer-projects/tasks/page.tsx',
