@@ -125,8 +125,14 @@ function makeClient(options: {
 
 console.log('\n=== Customer Project Center Phase 5C API Contract ===');
 
-const anonymous = await resolveCpcProfile(makeClient({ authUserId: null }).client);
+const anonymousHolder = makeClient({ authUserId: null });
+const anonymous = await resolveCpcProfile(anonymousHolder.client);
 assert(!anonymous.ok && anonymous.status === 401, 'missing auth user rejected');
+assert(
+  anonymousHolder.authCalls.getClaims === 1
+    && anonymousHolder.authCalls.getUser === 0,
+  'invalid/missing claims fail closed without a second remote auth request',
+);
 
 const viewer = await resolveCpcProfile(makeClient({
   profile: {
