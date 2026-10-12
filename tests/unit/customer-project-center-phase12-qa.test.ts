@@ -629,8 +629,6 @@ assert(
 );
 
 const loadingStateFiles = [
-  'src/app/customer-projects/customers/page.tsx',
-  'src/app/customer-projects/tasks/page.tsx',
   'src/app/customer-projects/reports/page.tsx',
   'src/app/customer-projects/team/page.tsx',
   'src/app/customer-projects/customers/[id]/page.tsx',
@@ -696,11 +694,33 @@ assert(
   'partial and UNKNOWN data states remain visibly unknown',
 );
 
+const customersServerPage = read('src/app/customer-projects/customers/page.tsx');
+const tasksServerPage = read('src/app/customer-projects/tasks/page.tsx');
+const customersClient = read('src/app/customer-projects/customers/CustomersClient.tsx');
+const tasksClient = read('src/app/customer-projects/tasks/TasksClient.tsx');
+assert(
+  !customersServerPage.includes("'use client'")
+    && customersServerPage.includes('readCustomerList')
+    && customersServerPage.includes('initialCustomers')
+    && customersClient.includes('initialCustomers')
+    && !customersClient.includes("fetch('/api/customer-projects/customers'"),
+  'Customer list renders confirmed initial data on the server before hydration',
+);
+assert(
+  !tasksServerPage.includes("'use client'")
+    && tasksServerPage.includes('readTaskList')
+    && tasksServerPage.includes('initialTasks')
+    && tasksClient.includes('initialTasks')
+    && tasksClient.includes("fetch('/api/customer-projects/tasks'")
+    && !tasksClient.includes('void loadTasks(true);'),
+  'Task list renders initial data server-first and keeps refresh API only for mutations',
+);
+
 const mobileCriticalFiles = [
   'src/app/customer-projects/WorkbenchClient.tsx',
   'src/app/customer-projects/customers/[id]/page.tsx',
   'src/app/customer-projects/projects/[id]/page.tsx',
-  'src/app/customer-projects/tasks/page.tsx',
+  'src/app/customer-projects/tasks/TasksClient.tsx',
   'src/app/customer-projects/projects/new/page.tsx',
 ];
 for (const pagePath of mobileCriticalFiles) {
