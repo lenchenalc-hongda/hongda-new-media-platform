@@ -1,0 +1,18 @@
+export const GLH_PHASE8_NON_PRODUCTION_PILOT_SCOPE = Object.freeze({
+  phase: 'Phase 8 — Non-Production Pilot',
+  environment: 'NON_PRODUCTION',
+  data: 'SYNTHETIC_OR_EXPLICITLY_APPROVED_TEST_CONTACTS',
+  productionAccess: false,
+  realProviderCutover: false,
+  requiredEvidence: [
+    'RLS_SALES_ISOLATION',
+    'MANAGER_ADMIN_ORGANIZATION_SCOPE',
+    'WEBHOOK_REPLAY_IDEMPOTENCY',
+    'HUMAN_TAKEOVER_STOPS_AUTOSEND',
+    'AI_PROVIDER_OUTAGE_FALLBACK',
+    'DESKTOP_1366X768_USABILITY',
+    'ACCEPTANCE_CASES_A_TO_G',
+    'NO_BROWSER_OR_LOG_SECRET_EXPOSURE',
+    'HUMAN_WORK_REMAINS_AVAILABLE_WITHOUT_AI',
+  ],
+} as const);
