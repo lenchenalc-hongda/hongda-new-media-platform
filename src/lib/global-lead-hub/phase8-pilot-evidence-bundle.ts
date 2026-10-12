@@ -178,6 +178,7 @@ interface ParseContext {
   checks: Map<GlhPhase8PilotEvidenceCheckId, ParsedCheck>;
   generatedAt: number | null;
   expiresAt: number | null;
+  evidenceNotBefore: number | null;
 }
 
 interface CheckResult {
@@ -1508,16 +1509,18 @@ function parseSources(
       ));
     } else if (
       context.generatedAt !== null
-      && context.expiresAt !== null
       && (
-        Date.parse(capturedAt) < context.generatedAt
-        || Date.parse(capturedAt) > context.expiresAt
+        Date.parse(capturedAt) > context.generatedAt
+        || (
+          context.evidenceNotBefore !== null
+          && Date.parse(capturedAt) < context.evidenceNotBefore
+        )
       )
     ) {
       context.issues.push(issue(
         'INVALID_TIME_RANGE',
         `${path}/capturedAt`,
-        'Source timestamp must fall within the bundle validity window.',
+        'Source timestamp must not follow bundle generation or exceed the evidence freshness window.',
       ));
     }
     if (typeof digest !== 'string' || !/^[a-f0-9]{64}$/.test(digest)) {
@@ -1772,16 +1775,18 @@ function parseChecks(
       ));
     } else if (
       context.generatedAt !== null
-      && context.expiresAt !== null
       && (
-        Date.parse(observedAt) < context.generatedAt
-        || Date.parse(observedAt) > context.expiresAt
+        Date.parse(observedAt) > context.generatedAt
+        || (
+          context.evidenceNotBefore !== null
+          && Date.parse(observedAt) < context.evidenceNotBefore
+        )
       )
     ) {
       context.issues.push(issue(
         'INVALID_TIME_RANGE',
         `${path}/observedAt`,
-        'Check timestamp must fall within the bundle validity window.',
+        'Check timestamp must not follow bundle generation or exceed the evidence freshness window.',
         checkId,
       ));
     }
@@ -1880,8 +1885,9 @@ function emptyReport(
   generatedAt: string | null,
   expiresAt: string | null,
 ): GlhPhase8PilotEvidenceReport {
+  const globalErrors = sortIssues(issues.filter(entry => entry.checkId === undefined));
   const checkReports = GLH_PHASE8_PILOT_EVIDENCE_CHECK_IDS.map((id): GlhPhase8PilotEvidenceCheckReport => {
-    const errors = checkIssuesFor(id, issues);
+    const errors = sortIssues([...globalErrors, ...checkIssuesFor(id, issues)]);
     return {
       id,
       status: errors.length === 0 ? 'PASS' : 'FAIL',
@@ -2012,6 +2018,19 @@ export function validateGlhPhase8PilotEvidenceBundle(
     : isIsoTimestamp(options.evaluatedAt)
       ? Date.parse(options.evaluatedAt)
       : Number.NaN;
+  const configuredMaxAgeMs =
+    options.maxAgeMs ?? GLH_PHASE8_PILOT_EVIDENCE_MAX_AGE_MS;
+  const maxAgeMs =
+    Number.isFinite(configuredMaxAgeMs) && configuredMaxAgeMs >= 0
+      ? configuredMaxAgeMs
+      : GLH_PHASE8_PILOT_EVIDENCE_MAX_AGE_MS;
+  if (maxAgeMs !== configuredMaxAgeMs) {
+    issues.push(issue(
+      'INVALID_TIME_RANGE',
+      'maxAgeMs',
+      'maxAgeMs must be a finite non-negative number.',
+    ));
+  }
   if (!Number.isFinite(evaluatedAt)) {
     issues.push(issue(
       'INVALID_TIMESTAMP',
@@ -2026,7 +2045,6 @@ export function validateGlhPhase8PilotEvidenceBundle(
         'Evidence was generated in the future.',
       ));
     }
-    const maxAgeMs = options.maxAgeMs ?? GLH_PHASE8_PILOT_EVIDENCE_MAX_AGE_MS;
     if (evaluatedAt - generatedAt > maxAgeMs) {
       issues.push(issue(
         'EVIDENCE_STALE',
@@ -2051,6 +2069,9 @@ export function validateGlhPhase8PilotEvidenceBundle(
     checks: new Map(),
     generatedAt,
     expiresAt,
+    evidenceNotBefore: Number.isFinite(evaluatedAt)
+      ? evaluatedAt - maxAgeMs
+      : null,
   };
   parseSources(bundle.sources, context);
   parseIdentities(bundle.identities, context);
@@ -2095,8 +2116,9 @@ export function validateGlhPhase8PilotEvidenceBundle(
     issues.push(...validateCheckFacts(check, context).issues);
   }
 
+  const globalErrors = sortIssues(issues.filter(entry => entry.checkId === undefined));
   const checkReports = GLH_PHASE8_PILOT_EVIDENCE_CHECK_IDS.map((id): GlhPhase8PilotEvidenceCheckReport => {
-    const errors = checkIssuesFor(id, issues);
+    const errors = sortIssues([...globalErrors, ...checkIssuesFor(id, issues)]);
     const parsedCheck = context.checks.get(id);
     return {
       id,
