@@ -3,14 +3,23 @@
 > TASK_ID = GLH-P9-PRODUCTION-READINESS-001
 > MISSING_EVIDENCE = UNKNOWN
 > UNKNOWN_OR_FAIL = NOT_READY
+> PRODUCTION_CHANGED = NO
 > PRODUCTION_EXECUTION_AUTHORIZED = NO
 > OWNER_APPROVAL_REQUIRED = YES
+> EVALUATION_TIMESTAMP_REQUIRED = YES
+> MAX_EVIDENCE_AGE_DAYS = 7
+> CANDIDATE_RELEASE_SHA_MUST_MATCH_EXPECTED_RELEASE_SHA = YES
 > AUTO_PRODUCTION = false
 > AUTO_MERGE = false
 
 This checklist is repository evidence, not Production authorization. Do not
 enter secret values, access tokens, app secrets, verify tokens, service-role
 values, cookies, or real customer data.
+
+Every evidence item must record its exact required owner role and an
+`observedAt` timestamp no more than seven days before the report's explicit
+`evaluatedAt` UTC timestamp and never later than `evaluatedAt`. Missing,
+malformed, future-dated, stale, or owner-mismatched evidence is `UNKNOWN`.
 
 ## Gate A - Pilot Baseline
 
@@ -59,6 +68,9 @@ Evidence owner: release owner, database owner, and incident commander.
 
 ## Gate D - Owner Approval
 
+- [ ] `expectedReleaseSha` is a separately frozen 40-character SHA and
+  `candidateReleaseSha` exactly matches it; neither Agent Control bootstrap
+  nor task head is used as the release candidate.
 - [ ] Exact phrase recorded:
   `APPROVE GLH PHASE 9 PRODUCTION ACTIVATION FOR <40_CHAR_RELEASE_SHA> AFTER ALL READINESS EVIDENCE AND ROLLBACK DRILL`
 - [ ] Approver identity and ISO-8601 approval timestamp are recorded.

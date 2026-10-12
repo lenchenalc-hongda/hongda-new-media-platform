@@ -3,10 +3,15 @@
 > TASK_ID = GLH-P9-PRODUCTION-READINESS-001
 > SPEC_LOCK_VERSION = GLH-SPEC-V1.0
 > BASE_MASTER_SHA = 2ce22b565a5926b048205b87ac1ddca34fe0d43b
-> EXPECTED_HEAD = 3eeeda7c0ca4f97fead645a5ed7063fbca6bcb18
+> AGENT_CONTROL_BOOTSTRAP_HEAD = 3eeeda7c0ca4f97fead645a5ed7063fbca6bcb18
+> EXPECTED_HEAD = 464357ad33e4b863d22f0e44f0307bf76ee9094b
 > TRACK = REPOSITORY_ONLY
+> PRODUCTION_CHANGED = NO
 > PRODUCTION_EXECUTION_AUTHORIZED = NO
 > OWNER_APPROVAL_REQUIRED = YES
+> EVALUATION_TIMESTAMP_REQUIRED = YES
+> MAX_EVIDENCE_AGE_DAYS = 7
+> CANDIDATE_RELEASE_SHA_MUST_MATCH_EXPECTED_RELEASE_SHA = YES
 > AUTO_PRODUCTION = false
 > AUTO_MERGE = false
 
@@ -38,9 +43,12 @@ The readiness helper is the source of truth for the repository gate.
 
 | Input state | Readiness result |
 | --- | --- |
-| Missing, malformed, stale, or unverifiable evidence | `UNKNOWN`; overall `NOT_READY` |
+| Missing or malformed evaluation timestamp | overall `NOT_READY` |
+| Missing, malformed, future-dated, stale, or unverifiable evidence | `UNKNOWN`; overall `NOT_READY` |
+| Missing or mismatched evidence owner role | `UNKNOWN`; overall `NOT_READY` |
 | Evidence reports `FAIL` | `FAIL`; overall `NOT_READY` |
 | Revision values do not match the recorded task values | `MISMATCH`; overall `NOT_READY` |
+| Candidate release SHA does not match supplied expected release SHA | `MISMATCH`; overall `NOT_READY` |
 | All required evidence passes, owner approval absent | `OWNER_APPROVAL_REQUIRED` |
 | All required evidence passes, owner approval malformed | `NOT_READY` |
 | All required evidence passes, exact owner approval recorded | `READY_FOR_SEPARATE_PRODUCTION_EXECUTION` |
@@ -51,17 +59,21 @@ evidence must never be converted to `PASS`, zero, false, or an inferred fact.
 
 ## 3. Required evidence records
 
-Every evidence item must contain:
+The readiness evaluation input must contain an explicit `evaluatedAt`
+ISO-8601 UTC timestamp. Every evidence item must contain:
 
 - `status`: `PASS`, `FAIL`, or `UNKNOWN`;
+- `owner`: the accountable owner role, exactly matching the requirement owner;
 - `evidenceRef`: a non-secret repository, PR, or sanitized artifact reference;
-- `observedAt`: an ISO-8601 timestamp;
-- `owner`: the accountable human or team role.
+- `observedAt`: an ISO-8601 UTC timestamp no more than seven days before
+  `evaluatedAt` and never later than `evaluatedAt`.
 
 Evidence references must identify artifacts, not embed secret values or real
-customer data. A `PASS` claim without a valid reference and timestamp is
-`UNKNOWN`. An explicit `FAIL` remains a failure. No evidence item may be
-inferred from another item.
+customer data. A `PASS` claim without a valid reference, required owner, and
+fresh timestamp is `UNKNOWN`. Missing, malformed, future-dated, or stale
+evidence is `UNKNOWN`. An explicit `FAIL` remains a failure only when the
+evidence record is otherwise valid. No evidence item may be inferred from
+another item.
 
 The required evidence IDs are:
 
@@ -87,18 +99,25 @@ The required evidence IDs are:
 
 1. Resolve `GLH-P9-PRODUCTION-READINESS-001` from Agent Control issue 72 and
    verify project, branch, base, head, and allowed paths.
-2. Confirm `BASE_MASTER_SHA` and `EXPECTED_HEAD` exactly match the task record.
-3. Confirm the release candidate is a full 40-character Git SHA.
-4. Confirm the Phase 8 evidence bundle is present, within its validity window,
-   accepted, and has no failed checks.
-5. Confirm Acceptance Cases A-G passed in the non-Production pilot.
-6. Confirm `GLH_PROVIDER_CALLS_ENABLED` is still false and no real provider
+2. Confirm `BASE_MASTER_SHA`, `AGENT_CONTROL_BOOTSTRAP_HEAD`, and
+   `EXPECTED_HEAD` exactly match the task record. The bootstrap head and Agent
+   Control task head are not release candidates.
+3. Freeze and supply the later `expectedReleaseSha`; confirm both it and
+   `candidateReleaseSha` are full 40-character Git SHAs and exactly match.
+4. Supply the explicit `evaluatedAt` ISO-8601 UTC timestamp used for the
+   deterministic freshness decision.
+5. Confirm every evidence item has its required owner and an `observedAt` no
+   more than seven days before `evaluatedAt` and not later than `evaluatedAt`.
+6. Confirm the Phase 8 evidence bundle is present, accepted, and has no failed
+   checks.
+7. Confirm Acceptance Cases A-G passed in the non-Production pilot.
+8. Confirm `GLH_PROVIDER_CALLS_ENABLED` is still false and no real provider
    cutover has been performed.
-7. Confirm no Production SQL, RLS, environment, secret, data, ownership,
+9. Confirm no Production SQL, RLS, environment, secret, data, ownership,
    finance, or publishing change occurred in this task.
-8. Confirm a previous deployment/channel state is available as the rollback
+10. Confirm a previous deployment/channel state is available as the rollback
    target and a human rollback owner is named.
-9. Run:
+11. Run:
 
 ```sh
 pnpm exec tsx tests/unit/global-lead-hub-phase9-production-readiness.test.ts
@@ -189,27 +208,29 @@ Containment order:
 
 ## 9. Owner approval
 
-The exact phrase template is:
+The separately frozen release candidate must be supplied as
+`expectedReleaseSha`. The `candidateReleaseSha` must exactly match it before
+readiness can advance. Neither the Agent Control bootstrap head nor the Agent
+Control task head is the release candidate.
+
+After all other gates pass, the exact phrase template is:
 
 ```text
 APPROVE GLH PHASE 9 PRODUCTION ACTIVATION FOR <40_CHAR_RELEASE_SHA> AFTER ALL READINESS EVIDENCE AND ROLLBACK DRILL
 ```
 
-Example for the task head:
-
-```text
-APPROVE GLH PHASE 9 PRODUCTION ACTIVATION FOR 3eeeda7c0ca4f97fead645a5ed7063fbca6bcb18 AFTER ALL READINESS EVIDENCE AND ROLLBACK DRILL
-```
-
 The approval record must include the exact phrase, approver identity, and an
-ISO-8601 approval timestamp. A checked checklist, passing test, or helper
-result is not owner approval.
+ISO-8601 UTC approval timestamp. The phrase must use the bound candidate SHA,
+not an example or an Agent Control commit. A checked checklist, passing test,
+or helper result is not owner approval.
 
 ## 10. Completion contract
 
 A later human execution task must record:
 
 - `TASK_ID` and release candidate SHA;
+- `AGENT_CONTROL_BOOTSTRAP_HEAD`, `EXPECTED_HEAD`, `expectedReleaseSha`,
+  `candidateReleaseSha`, and `evaluatedAt`;
 - readiness result and all gate states;
 - every evidence ID with `PASS`, `FAIL`, or `UNKNOWN`;
 - exact owner approval phrase and approver;

@@ -10,8 +10,11 @@ export const GLH_PHASE9_PRODUCTION_READINESS_TASK = Object.freeze({
   project: 'global-lead-hub',
   phase: 'Phase 9 - Production Readiness Gate',
   baseMasterSha: '2ce22b565a5926b048205b87ac1ddca34fe0d43b',
-  expectedHeadSha: '3eeeda7c0ca4f97fead645a5ed7063fbca6bcb18',
+  agentControlBootstrapHeadSha:
+    '3eeeda7c0ca4f97fead645a5ed7063fbca6bcb18',
+  expectedHeadSha: '464357ad33e4b863d22f0e44f0307bf76ee9094b',
   mode: 'REPOSITORY_ONLY',
+  productionChanged: false,
   productionExecutionAuthorized: false,
   ownerApprovalRequired: true,
   autoProduction: false,
@@ -20,6 +23,9 @@ export const GLH_PHASE9_PRODUCTION_READINESS_TASK = Object.freeze({
 
 export const GLH_PHASE9_READINESS_REPORT_VERSION =
   'glh-phase9-production-readiness-report/v1' as const;
+export const GLH_PHASE9_EVIDENCE_MAX_AGE_DAYS = 7;
+export const GLH_PHASE9_EVIDENCE_MAX_AGE_MS =
+  GLH_PHASE9_EVIDENCE_MAX_AGE_DAYS * 24 * 60 * 60 * 1000;
 
 export const GLH_PHASE9_GATE_IDS = [
   'PILOT_BASELINE',
@@ -144,10 +150,17 @@ export type GlhPhase9IssueCode =
   | 'MISSING_REVISION'
   | 'INVALID_REVISION'
   | 'REVISION_MISMATCH'
+  | 'RELEASE_SHA_MISMATCH'
+  | 'MISSING_EVALUATION_TIMESTAMP'
+  | 'INVALID_EVALUATION_TIMESTAMP'
   | 'MISSING_EVIDENCE'
   | 'INVALID_EVIDENCE_STATUS'
+  | 'MISSING_EVIDENCE_OWNER'
+  | 'EVIDENCE_OWNER_MISMATCH'
   | 'MISSING_EVIDENCE_REFERENCE'
   | 'INVALID_EVIDENCE_TIMESTAMP'
+  | 'EVIDENCE_FROM_FUTURE'
+  | 'EVIDENCE_STALE'
   | 'SECRET_LIKE_EVIDENCE_REFERENCE'
   | 'EVIDENCE_REPORTED_FAILURE'
   | 'OWNER_APPROVAL_REQUIRED'
@@ -163,6 +176,7 @@ export interface GlhPhase9Issue {
 
 export interface GlhPhase9EvidenceItem {
   status?: unknown;
+  owner?: unknown;
   evidenceRef?: string | null;
   observedAt?: string | null;
 }
@@ -176,7 +190,9 @@ export interface GlhPhase9OwnerApprovalRecord {
 export interface GlhPhase9ReadinessInput {
   baseMasterSha?: unknown;
   expectedHeadSha?: unknown;
+  expectedReleaseSha?: unknown;
   candidateReleaseSha?: unknown;
+  evaluatedAt?: unknown;
   evidence?: Partial<
     Record<GlhPhase9EvidenceId, GlhPhase9EvidenceItem | null | undefined>
   > | null;
@@ -189,6 +205,8 @@ export interface GlhPhase9EvidenceReport {
   label: string;
   owner: string;
   status: GlhPhase9EvidenceStatus;
+  ownerRecorded: boolean;
+  ownerMatchesRequirement: boolean;
   evidenceRefRecorded: boolean;
   observedAtRecorded: boolean;
   issues: readonly GlhPhase9Issue[];
@@ -203,7 +221,15 @@ export interface GlhPhase9RevisionReport {
   status: GlhPhase9RevisionStatus;
   baseMasterShaRecorded: boolean;
   expectedHeadShaRecorded: boolean;
+  expectedReleaseShaRecorded: boolean;
   candidateReleaseShaRecorded: boolean;
+  candidateMatchesExpectedRelease: boolean;
+  issues: readonly GlhPhase9Issue[];
+}
+
+export interface GlhPhase9EvaluationReport {
+  evaluatedAtRecorded: boolean;
+  maximumEvidenceAgeMs: typeof GLH_PHASE9_EVIDENCE_MAX_AGE_MS;
   issues: readonly GlhPhase9Issue[];
 }
 
@@ -220,6 +246,7 @@ export interface GlhPhase9ProductionReadinessReport {
   reportVersion: typeof GLH_PHASE9_READINESS_REPORT_VERSION;
   taskId: typeof GLH_PHASE9_PRODUCTION_READINESS_TASK.taskId;
   mode: 'REPOSITORY_ONLY';
+  productionChanged: false;
   overallStatus: GlhPhase9ReadinessResult;
   accepted: boolean;
   productionExecutionAuthorized: false;
@@ -227,6 +254,7 @@ export interface GlhPhase9ProductionReadinessReport {
   ownerApprovalRequired: true;
   autoProduction: false;
   nextAction: GlhPhase9NextAction;
+  evaluation: GlhPhase9EvaluationReport;
   revision: GlhPhase9RevisionReport;
   evidence: readonly GlhPhase9EvidenceReport[];
   gates: readonly GlhPhase9GateReport[];
@@ -249,12 +277,39 @@ function isFullSha(value: unknown): value is string {
   return typeof value === 'string' && /^[0-9a-f]{40}$/i.test(value.trim());
 }
 
-function isIsoTimestamp(value: unknown): value is string {
-  if (!isNonEmptyString(value)) return false;
+function parseIsoTimestamp(value: unknown): number | null {
+  if (!isNonEmptyString(value)) return null;
   const normalized = value.trim();
-  return /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/.test(
-    normalized,
-  ) && Number.isFinite(Date.parse(normalized));
+  const match =
+    /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,3}))?Z$/.exec(
+      normalized,
+    );
+  if (!match) return null;
+
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const hour = Number(match[4]);
+  const minute = Number(match[5]);
+  const second = Number(match[6]);
+  const millisecond = Number((match[7] ?? '').padEnd(3, '0') || '0');
+  const parsed = new Date(0);
+  parsed.setUTCFullYear(year, month - 1, day);
+  parsed.setUTCHours(hour, minute, second, millisecond);
+
+  return parsed.getUTCFullYear() === year
+    && parsed.getUTCMonth() === month - 1
+    && parsed.getUTCDate() === day
+    && parsed.getUTCHours() === hour
+    && parsed.getUTCMinutes() === minute
+    && parsed.getUTCSeconds() === second
+    && parsed.getUTCMilliseconds() === millisecond
+    ? parsed.getTime()
+    : null;
+}
+
+function isIsoTimestamp(value: unknown): value is string {
+  return parseIsoTimestamp(value) !== null;
 }
 
 function containsSecretLikeReference(value: string): boolean {
@@ -284,10 +339,12 @@ function evaluateRevision(
   const issues: GlhPhase9Issue[] = [];
   const baseMasterSha = normalizeString(input.baseMasterSha);
   const expectedHeadSha = normalizeString(input.expectedHeadSha);
+  const expectedReleaseSha = normalizeString(input.expectedReleaseSha);
   const candidateReleaseSha = normalizeString(input.candidateReleaseSha);
   const fields = [
     ['baseMasterSha', baseMasterSha],
     ['expectedHeadSha', expectedHeadSha],
+    ['expectedReleaseSha', expectedReleaseSha],
     ['candidateReleaseSha', candidateReleaseSha],
   ] as const;
 
@@ -331,8 +388,26 @@ function evaluateRevision(
       'expectedHeadSha does not match the recorded task head.',
     ));
   }
+  const candidateMatchesExpectedRelease =
+    isFullSha(expectedReleaseSha)
+    && isFullSha(candidateReleaseSha)
+    && expectedReleaseSha.toLowerCase() === candidateReleaseSha.toLowerCase();
+  if (
+    isFullSha(expectedReleaseSha)
+    && isFullSha(candidateReleaseSha)
+    && !candidateMatchesExpectedRelease
+  ) {
+    issues.push(makeIssue(
+      'RELEASE_SHA_MISMATCH',
+      'candidateReleaseSha',
+      'candidateReleaseSha must match the supplied expectedReleaseSha.',
+    ));
+  }
 
-  const hasMismatch = issues.some(issue => issue.code === 'REVISION_MISMATCH');
+  const hasMismatch = issues.some(issue =>
+    issue.code === 'REVISION_MISMATCH'
+    || issue.code === 'RELEASE_SHA_MISMATCH'
+  );
   const hasIncomplete = issues.some(issue =>
     issue.code === 'MISSING_REVISION' || issue.code === 'INVALID_REVISION'
   );
@@ -341,7 +416,36 @@ function evaluateRevision(
     status: hasMismatch ? 'MISMATCH' : hasIncomplete ? 'UNKNOWN' : 'MATCH',
     baseMasterShaRecorded: isFullSha(baseMasterSha),
     expectedHeadShaRecorded: isFullSha(expectedHeadSha),
+    expectedReleaseShaRecorded: isFullSha(expectedReleaseSha),
     candidateReleaseShaRecorded: isFullSha(candidateReleaseSha),
+    candidateMatchesExpectedRelease,
+    issues,
+  };
+}
+
+function evaluateEvaluationTimestamp(
+  input: GlhPhase9ReadinessInput,
+): GlhPhase9EvaluationReport {
+  const evaluatedAt = normalizeString(input.evaluatedAt);
+  const issues: GlhPhase9Issue[] = [];
+
+  if (!evaluatedAt) {
+    issues.push(makeIssue(
+      'MISSING_EVALUATION_TIMESTAMP',
+      'evaluatedAt',
+      'An explicit ISO-8601 UTC evaluation timestamp is required.',
+    ));
+  } else if (!isIsoTimestamp(evaluatedAt)) {
+    issues.push(makeIssue(
+      'INVALID_EVALUATION_TIMESTAMP',
+      'evaluatedAt',
+      'evaluatedAt must be a valid ISO-8601 UTC timestamp.',
+    ));
+  }
+
+  return {
+    evaluatedAtRecorded: isIsoTimestamp(evaluatedAt),
+    maximumEvidenceAgeMs: GLH_PHASE9_EVIDENCE_MAX_AGE_MS,
     issues,
   };
 }
@@ -349,6 +453,7 @@ function evaluateRevision(
 function evaluateEvidenceItem(
   requirement: (typeof GLH_PHASE9_EVIDENCE_REQUIREMENTS)[number],
   item: GlhPhase9EvidenceItem | null | undefined,
+  evaluatedAtMs: number | null,
 ): GlhPhase9EvidenceReport {
   if (!item) {
     return {
@@ -357,6 +462,8 @@ function evaluateEvidenceItem(
       label: requirement.label,
       owner: requirement.owner,
       status: 'UNKNOWN',
+      ownerRecorded: false,
+      ownerMatchesRequirement: false,
       evidenceRefRecorded: false,
       observedAtRecorded: false,
       issues: [makeIssue(
@@ -369,8 +476,11 @@ function evaluateEvidenceItem(
   }
 
   const issues: GlhPhase9Issue[] = [];
+  const evidenceOwner = normalizeString(item.owner);
+  const ownerMatchesRequirement = evidenceOwner === requirement.owner;
   const evidenceRef = normalizeString(item.evidenceRef);
   const observedAt = normalizeString(item.observedAt);
+  const observedAtMs = parseIsoTimestamp(observedAt);
   const status = item.status;
 
   if (status !== 'PASS' && status !== 'FAIL') {
@@ -378,6 +488,21 @@ function evaluateEvidenceItem(
       'INVALID_EVIDENCE_STATUS',
       `evidence.${requirement.id}.status`,
       'Evidence status must be explicitly PASS or FAIL; missing or malformed status is UNKNOWN.',
+      requirement.id,
+    ));
+  }
+  if (!evidenceOwner) {
+    issues.push(makeIssue(
+      'MISSING_EVIDENCE_OWNER',
+      `evidence.${requirement.id}.owner`,
+      `The evidence owner must be ${requirement.owner}.`,
+      requirement.id,
+    ));
+  } else if (!ownerMatchesRequirement) {
+    issues.push(makeIssue(
+      'EVIDENCE_OWNER_MISMATCH',
+      `evidence.${requirement.id}.owner`,
+      `The evidence owner must match ${requirement.owner}.`,
       requirement.id,
     ));
   }
@@ -396,11 +521,32 @@ function evaluateEvidenceItem(
       requirement.id,
     ));
   }
-  if (!isIsoTimestamp(observedAt)) {
+  if (observedAtMs === null) {
     issues.push(makeIssue(
       'INVALID_EVIDENCE_TIMESTAMP',
       `evidence.${requirement.id}.observedAt`,
       'A valid ISO-8601 UTC observation timestamp is required.',
+      requirement.id,
+    ));
+  } else if (evaluatedAtMs === null) {
+    issues.push(makeIssue(
+      'INVALID_EVALUATION_TIMESTAMP',
+      `evidence.${requirement.id}.observedAt`,
+      'Evidence freshness cannot be verified without a valid evaluatedAt.',
+      requirement.id,
+    ));
+  } else if (observedAtMs > evaluatedAtMs) {
+    issues.push(makeIssue(
+      'EVIDENCE_FROM_FUTURE',
+      `evidence.${requirement.id}.observedAt`,
+      'Evidence observation time is later than the evaluation timestamp.',
+      requirement.id,
+    ));
+  } else if (evaluatedAtMs - observedAtMs > GLH_PHASE9_EVIDENCE_MAX_AGE_MS) {
+    issues.push(makeIssue(
+      'EVIDENCE_STALE',
+      `evidence.${requirement.id}.observedAt`,
+      'Evidence is older than the seven-day freshness window.',
       requirement.id,
     ));
   }
@@ -427,6 +573,8 @@ function evaluateEvidenceItem(
     label: requirement.label,
     owner: requirement.owner,
     status: resolvedStatus,
+    ownerRecorded: evidenceOwner.length > 0,
+    ownerMatchesRequirement,
     evidenceRefRecorded: evidenceRef.length > 0,
     observedAtRecorded: isIsoTimestamp(observedAt),
     issues,
@@ -436,12 +584,14 @@ function evaluateEvidenceItem(
 function evaluateOwnerApproval(
   input: GlhPhase9ReadinessInput,
   candidateReleaseSha: string,
+  candidateMatchesExpectedRelease: boolean,
 ): GlhPhase9OwnerApprovalReport {
   const approval = input.ownerApproval;
   const phrase = normalizeString(approval?.phrase);
   const approvedBy = normalizeString(approval?.approvedBy);
   const approvedAt = normalizeString(approval?.approvedAt);
-  const expectedPhrase = isFullSha(candidateReleaseSha)
+  const expectedPhrase =
+    isFullSha(candidateReleaseSha) && candidateMatchesExpectedRelease
     ? buildGlhPhase9OwnerApprovalPhrase(candidateReleaseSha)
     : '';
   const exactPhraseRecorded = Boolean(expectedPhrase) && phrase === expectedPhrase;
@@ -497,15 +647,24 @@ export function evaluateGlhPhase9ProductionReadiness(
   input: GlhPhase9ReadinessInput | null | undefined,
 ): GlhPhase9ProductionReadinessReport {
   const safeInput = input ?? {};
+  const evaluation = evaluateEvaluationTimestamp(safeInput);
+  const evaluatedAtMs = evaluation.evaluatedAtRecorded
+    ? parseIsoTimestamp(safeInput.evaluatedAt)
+    : null;
   const revision = evaluateRevision(safeInput);
   const evidence = GLH_PHASE9_EVIDENCE_REQUIREMENTS.map(requirement =>
     evaluateEvidenceItem(
       requirement,
       safeInput.evidence?.[requirement.id],
+      evaluatedAtMs,
     )
   );
   const candidateReleaseSha = normalizeString(safeInput.candidateReleaseSha);
-  const ownerApproval = evaluateOwnerApproval(safeInput, candidateReleaseSha);
+  const ownerApproval = evaluateOwnerApproval(
+    safeInput,
+    candidateReleaseSha,
+    revision.candidateMatchesExpectedRelease,
+  );
   const missingEvidence = evidence
     .filter(item => item.issues.some(issue => issue.code === 'MISSING_EVIDENCE'))
     .map(item => item.id);
@@ -518,16 +677,18 @@ export function evaluateGlhPhase9ProductionReadiness(
   const evidenceIssues = evidence.flatMap(item => item.issues);
   const issues = [
     ...revision.issues,
+    ...evaluation.issues,
     ...evidenceIssues,
     ...ownerApproval.issues,
   ];
   const allEvidencePass = evidence.every(item => item.status === 'PASS');
   const revisionMatches = revision.status === 'MATCH';
+  const evaluationValid = evaluation.evaluatedAtRecorded;
 
   let overallStatus: GlhPhase9ReadinessResult;
   let nextAction: GlhPhase9NextAction;
 
-  if (!revisionMatches) {
+  if (!revisionMatches || !evaluationValid) {
     overallStatus = 'NOT_READY';
     nextAction = 'RESOLVE_REVISION_AND_EVIDENCE';
   } else if (failedEvidence.length > 0) {
@@ -580,6 +741,7 @@ export function evaluateGlhPhase9ProductionReadiness(
     reportVersion: GLH_PHASE9_READINESS_REPORT_VERSION,
     taskId: GLH_PHASE9_PRODUCTION_READINESS_TASK.taskId,
     mode: 'REPOSITORY_ONLY',
+    productionChanged: false,
     overallStatus,
     accepted: overallStatus === 'READY_FOR_SEPARATE_PRODUCTION_EXECUTION',
     productionExecutionAuthorized: false,
@@ -587,6 +749,7 @@ export function evaluateGlhPhase9ProductionReadiness(
     ownerApprovalRequired: true,
     autoProduction: false,
     nextAction,
+    evaluation,
     revision,
     evidence,
     gates,
