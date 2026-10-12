@@ -27,8 +27,12 @@ const rejectRoute = fs.readFileSync(
   'src/app/api/customer-projects/ai-drafts/[id]/reject/route.ts',
   'utf8',
 );
-const workbench = fs.readFileSync(
+const workbenchPage = fs.readFileSync(
   'src/app/customer-projects/page.tsx',
+  'utf8',
+);
+const workbench = fs.readFileSync(
+  'src/app/customer-projects/WorkbenchClient.tsx',
   'utf8',
 );
 const domain = fs.readFileSync(
