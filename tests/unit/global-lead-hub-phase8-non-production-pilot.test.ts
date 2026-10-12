@@ -37,6 +37,12 @@ const whatsappInbound = readFileSync(
   'utf8',
 );
 
+function occursBefore(source: string, earlier: string, later: string): boolean {
+  const earlierIndex = source.indexOf(earlier);
+  const laterIndex = source.indexOf(later);
+  return earlierIndex >= 0 && laterIndex >= 0 && earlierIndex < laterIndex;
+}
+
 const webhookPayload = {
   object: 'whatsapp_business_account',
   entry: [{
@@ -139,8 +145,11 @@ const fixture: GlhPhase8PilotFixture = {
       externalEventUnique:
         phase1Migration.includes('CREATE UNIQUE INDEX uq_glh_webhook_provider_event'),
       duplicateReturnsBeforeLogicalWrites:
-        phase3Migration.indexOf('IF v_event_id IS NULL THEN')
-          < phase3Migration.indexOf('INSERT INTO public.glh_contacts'),
+        occursBefore(
+          phase3Migration,
+          'IF v_event_id IS NULL THEN',
+          'INSERT INTO public.glh_contacts',
+        ),
       messageProviderEventUnique:
         phase1Migration.includes('CONSTRAINT uq_glh_messages_provider_external')
         && phase3Migration.includes(
@@ -173,8 +182,11 @@ const fixture: GlhPhase8PilotFixture = {
     originalMessageCountBefore: 2,
     originalMessageCountAfter: 2,
     pendingAiBlockedBeforeAudit:
-      phase5Migration.indexOf('UPDATE public.glh_ai_actions')
-        < phase5Migration.indexOf('INSERT INTO public.glh_audit_events'),
+      occursBefore(
+        phase5Migration,
+        'UPDATE public.glh_ai_actions',
+        'INSERT INTO public.glh_audit_events',
+      ),
     humanMessage: {
       conversationId: 'phase8-conversation',
       leadId: 'phase8-lead',
