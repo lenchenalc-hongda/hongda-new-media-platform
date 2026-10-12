@@ -165,6 +165,8 @@ export type GlhPhase9IssueCode =
   | 'EVIDENCE_REPORTED_FAILURE'
   | 'OWNER_APPROVAL_REQUIRED'
   | 'INVALID_OWNER_APPROVAL'
+  | 'OWNER_APPROVAL_FROM_FUTURE'
+  | 'OWNER_APPROVAL_PRECEDES_EVIDENCE'
   | 'OWNER_APPROVAL_PHRASE_MISMATCH';
 
 export interface GlhPhase9Issue {
@@ -585,18 +587,21 @@ function evaluateOwnerApproval(
   input: GlhPhase9ReadinessInput,
   candidateReleaseSha: string,
   candidateMatchesExpectedRelease: boolean,
+  evaluatedAtMs: number | null,
+  latestEvidenceAtMs: number | null,
 ): GlhPhase9OwnerApprovalReport {
   const approval = input.ownerApproval;
   const phrase = normalizeString(approval?.phrase);
   const approvedBy = normalizeString(approval?.approvedBy);
   const approvedAt = normalizeString(approval?.approvedAt);
+  const approvedAtMs = parseIsoTimestamp(approvedAt);
   const expectedPhrase =
     isFullSha(candidateReleaseSha) && candidateMatchesExpectedRelease
     ? buildGlhPhase9OwnerApprovalPhrase(candidateReleaseSha)
     : '';
   const exactPhraseRecorded = Boolean(expectedPhrase) && phrase === expectedPhrase;
   const approverRecorded = approvedBy.length > 0;
-  const approvedAtRecorded = isIsoTimestamp(approvedAt);
+  const approvedAtRecorded = approvedAtMs !== null;
   const anyApprovalField = Boolean(phrase || approvedBy || approvedAt);
   const issues: GlhPhase9Issue[] = [];
 
@@ -630,9 +635,34 @@ function evaluateOwnerApproval(
       'Approver identity and ISO-8601 approval timestamp are required.',
     ));
   }
+  if (
+    approvedAtMs !== null
+    && evaluatedAtMs !== null
+    && approvedAtMs > evaluatedAtMs
+  ) {
+    issues.push(makeIssue(
+      'OWNER_APPROVAL_FROM_FUTURE',
+      'ownerApproval.approvedAt',
+      'Owner approval cannot be later than the evaluation timestamp.',
+    ));
+  }
+  if (
+    approvedAtMs !== null
+    && latestEvidenceAtMs !== null
+    && approvedAtMs < latestEvidenceAtMs
+  ) {
+    issues.push(makeIssue(
+      'OWNER_APPROVAL_PRECEDES_EVIDENCE',
+      'ownerApproval.approvedAt',
+      'Owner approval must be recorded after all readiness evidence observations.',
+    ));
+  }
 
   return {
-    status: exactPhraseRecorded && approverRecorded && approvedAtRecorded
+    status: exactPhraseRecorded
+      && approverRecorded
+      && approvedAtRecorded
+      && issues.length === 0
       ? 'RECORDED'
       : 'INVALID',
     required: true,
@@ -660,10 +690,22 @@ export function evaluateGlhPhase9ProductionReadiness(
     )
   );
   const candidateReleaseSha = normalizeString(safeInput.candidateReleaseSha);
+  const latestEvidenceAtMs = GLH_PHASE9_EVIDENCE_REQUIREMENTS.reduce<number | null>(
+    (latest, requirement) => {
+      const observedAtMs = parseIsoTimestamp(
+        safeInput.evidence?.[requirement.id]?.observedAt,
+      );
+      if (observedAtMs === null) return latest;
+      return latest === null || observedAtMs > latest ? observedAtMs : latest;
+    },
+    null,
+  );
   const ownerApproval = evaluateOwnerApproval(
     safeInput,
     candidateReleaseSha,
     revision.candidateMatchesExpectedRelease,
+    evaluatedAtMs,
+    latestEvidenceAtMs,
   );
   const missingEvidence = evidence
     .filter(item => item.issues.some(issue => issue.code === 'MISSING_EVIDENCE'))

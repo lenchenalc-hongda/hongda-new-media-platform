@@ -458,6 +458,46 @@ assert(
   'wrong owner approval phrase is NOT_READY',
 );
 
+const futureApproval = evaluateGlhPhase9ProductionReadiness({
+  ...makeReadyInput(),
+  ownerApproval: {
+    phrase: buildGlhPhase9OwnerApprovalPhrase(candidateReleaseSha),
+    approvedBy: 'human-owner',
+    approvedAt: '2026-10-12T12:00:00.001Z',
+  },
+});
+assert(
+  futureApproval.overallStatus === 'NOT_READY'
+    && futureApproval.ownerApproval.status === 'INVALID',
+  'future-dated owner approval is NOT_READY',
+);
+assert(
+  futureApproval.issues.some(
+    issue => issue.code === 'OWNER_APPROVAL_FROM_FUTURE',
+  ),
+  'future-dated owner approval is explicit',
+);
+
+const prematureApproval = evaluateGlhPhase9ProductionReadiness({
+  ...makeReadyInput(),
+  ownerApproval: {
+    phrase: buildGlhPhase9OwnerApprovalPhrase(candidateReleaseSha),
+    approvedBy: 'human-owner',
+    approvedAt: '2026-10-12T11:44:59Z',
+  },
+});
+assert(
+  prematureApproval.overallStatus === 'NOT_READY'
+    && prematureApproval.ownerApproval.status === 'INVALID',
+  'owner approval recorded before readiness evidence is NOT_READY',
+);
+assert(
+  prematureApproval.issues.some(
+    issue => issue.code === 'OWNER_APPROVAL_PRECEDES_EVIDENCE',
+  ),
+  'premature owner approval is explicit',
+);
+
 const wrongTaskHead = evaluateGlhPhase9ProductionReadiness({
   ...makeReadyInput(),
   expectedHeadSha: 'b'.repeat(40),

@@ -73,7 +73,9 @@ Evidence owner: release owner, database owner, and incident commander.
   nor task head is used as the release candidate.
 - [ ] Exact phrase recorded:
   `APPROVE GLH PHASE 9 PRODUCTION ACTIVATION FOR <40_CHAR_RELEASE_SHA> AFTER ALL READINESS EVIDENCE AND ROLLBACK DRILL`
-- [ ] Approver identity and ISO-8601 approval timestamp are recorded.
+- [ ] Approver identity and ISO-8601 UTC approval timestamp are recorded; the
+  timestamp is no earlier than the latest evidence observation and no later
+  than `evaluatedAt`.
 - [ ] Gate A, Gate B, and Gate C are all `PASS`; any `FAIL` or `UNKNOWN` blocks
   this gate.
 - [ ] A separate owner decision is recorded before a real outbound

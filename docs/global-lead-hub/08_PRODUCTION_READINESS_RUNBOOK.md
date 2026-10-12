@@ -220,9 +220,11 @@ APPROVE GLH PHASE 9 PRODUCTION ACTIVATION FOR <40_CHAR_RELEASE_SHA> AFTER ALL RE
 ```
 
 The approval record must include the exact phrase, approver identity, and an
-ISO-8601 UTC approval timestamp. The phrase must use the bound candidate SHA,
-not an example or an Agent Control commit. A checked checklist, passing test,
-or helper result is not owner approval.
+ISO-8601 UTC approval timestamp. That timestamp must be no earlier than the
+latest readiness evidence observation and no later than `evaluatedAt`; a
+premature or future-dated approval is invalid. The phrase must use the bound
+candidate SHA, not an example or an Agent Control commit. A checked checklist,
+passing test, or helper result is not owner approval.
 
 ## 10. Completion contract
 
