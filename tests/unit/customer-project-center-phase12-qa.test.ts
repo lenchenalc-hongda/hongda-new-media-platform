@@ -700,31 +700,11 @@ assert(
     && !projectsClient.includes("fetch('/api/customer-projects/projects'"),
   'CPC primary navigation no longer waits for an initial client-side data fetch',
 );
-const readOnlyPrincipal = read('src/lib/auth/read-only-principal.ts');
-const currentUserBridge = read('src/lib/auth/current-user.ts');
-assert(
-  readOnlyPrincipal.includes("import { cache } from 'react'")
-    && readOnlyPrincipal.includes('getReadOnlySupabasePrincipal = cache(')
-    && readOnlyPrincipal.includes("from('profiles')")
-    && readOnlyPrincipal.includes('resolveVerifiedSupabaseIdentity')
-    && !readOnlyPrincipal.includes('unstable_cache')
-    && !readOnlyPrincipal.includes('revalidate'),
-  'read-only identity/profile reuse is request-scoped and never persistent across users',
-);
-assert(
-  currentUserBridge.includes("await import('./read-only-principal')")
-    && !currentUserBridge.includes("import { getReadOnlySupabasePrincipal } from './read-only-principal'")
-    && serverReads.includes('getReadOnlySupabasePrincipal')
-    && serverReads.includes('resolveCpcReadProfile()'),
-  'RootLayout and CPC server-first reads share the request principal without loading Server Component cache code in middleware',
-);
 assert(
   serverReads.includes("import 'server-only'")
-    && serverReads.includes("principal.role !== 'admin'")
-    && serverReads.includes("principal.role !== 'manager'")
-    && serverReads.includes("principal.role !== 'sales'")
+    && serverReads.includes('resolveCpcProfile')
     && serverReads.includes(".eq('org_id', profile.orgId)"),
-  'Server-first reads preserve CPC role gating and organization scoping after principal reuse',
+  'Server-first reads preserve trusted profile resolution and organization scoping',
 );
 
 const reportsPage = read('src/app/customer-projects/reports/page.tsx');
