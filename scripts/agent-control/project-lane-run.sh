@@ -104,7 +104,7 @@ env -i \
   TMPDIR="$RUNNER_TEMP" \
   "$codex_binary" exec \
   -m "$model_name" \
-  -c "model_reasoning_effort=\\"$reasoning_effort\\"" \
+  -c "model_reasoning_effort=\"$reasoning_effort\"" \
   -C "$GITHUB_WORKSPACE" \
   -s workspace-write \
   -c 'approval_policy="never"' \
