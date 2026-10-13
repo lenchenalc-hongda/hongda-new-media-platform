@@ -12,9 +12,8 @@ import {
   getSupabaseUserFromRequest,
   getSupabaseUserAndResponseFromRequest,
   getSupabaseUserFromServer,
-  resolveSupabaseCurrentUser,
 } from './supabase-user';
-import { createReadOnlySupabaseClient } from '@/lib/supabase/readonly';
+import { getReadOnlySupabasePrincipal } from './read-only-principal';
 
 export type { CurrentUser, Role, Action };
 
@@ -76,9 +75,19 @@ export async function requireUser(): Promise<CurrentUser> {
 export async function getCurrentUserReadOnly(): Promise<CurrentUser | null> {
   if (getAuthMode() === 'supabase') {
     if (!isSupabaseConfigured()) return null;
-    const client = await createReadOnlySupabaseClient();
-    if (!client) return null;
-    return resolveSupabaseCurrentUser(client as any);
+    const result = await getReadOnlySupabasePrincipal();
+    if (!result.ok || result.principal.isActive === false) return null;
+
+    const principal = result.principal;
+    return {
+      id: principal.authUserId,
+      name: principal.fullName || principal.identityEmail || '用户',
+      role: principal.role,
+      department: principal.department,
+      email: principal.identityEmail ?? principal.profileEmail,
+      active: true,
+      authSource: 'supabase',
+    };
   }
   const cookieStore = await cookies();
   return getMockUserFromCookie(cookieStore.get('nmc_user')?.value);
