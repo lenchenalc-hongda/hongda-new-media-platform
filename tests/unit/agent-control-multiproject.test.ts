@@ -82,4 +82,30 @@ assert(!publisher.includes('merge_pull_request'));
 assert(!publisher.includes('push origin master'));
 assert(!publisher.includes('push origin main'));
 
+
+const cpcWorkflow = read('.github/workflows/customer-project-center-agent-control.yml');
+assert(cpcWorkflow.includes('github.event.issue.number == 10'));
+assert(cpcWorkflow.includes('agent-control-${{ github.repository }}-customer-project-center'));
+assert(cpcWorkflow.includes("AGENT_CONTROL_PROJECT: customer-project-center"));
+assert(cpcWorkflow.includes("AGENT_CONTROL_ISSUE: '10'"));
+assert(cpcWorkflow.includes('FIX_ROUND: ${{ needs.validate.outputs.fix_round }}'));
+assert(cpcWorkflow.includes('MAX_FIX_ROUNDS: ${{ needs.validate.outputs.max_fix_rounds }}'));
+
+const modelPolicy = read('docs/agent-control/MODEL_POLICY_V1.md');
+assert(modelPolicy.includes('L1 — default execution'));
+assert(modelPolicy.includes('L2 — first repair'));
+assert(modelPolicy.includes('L3 — second repair / strong-model escalation'));
+assert(modelPolicy.includes('PM diagnosis required'));
+assert(modelPolicy.includes('AUTO_PRODUCTION=false'));
+
+assert(workflow.includes('FIX_ROUND: ${{ needs.validate.outputs.fix_round }}'));
+assert(workflow.includes('MAX_FIX_ROUNDS: ${{ needs.validate.outputs.max_fix_rounds }}'));
+assert(runner.includes('MODEL_POLICY_V1_TIER'));
+assert(runner.includes('AGENT_CONTROL_DEFAULT_MODEL:-deepseek-v4-flash'));
+assert(runner.includes('AGENT_CONTROL_STRONG_MODEL:-deepseek-v4-pro'));
+assert(runner.includes('reasoning_effort="high"'));
+assert(runner.includes('reasoning_effort="xhigh"'));
+assert(runner.includes('PM_DIAGNOSIS_REQUIRED=YES'));
+assert(validator.includes('MODEL_POLICY_V1 max fix rounds reached; PM diagnosis required'));
+
 console.log('agent-control-multiproject.test.ts: PASS');

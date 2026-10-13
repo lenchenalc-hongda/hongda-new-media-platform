@@ -115,6 +115,10 @@ jobs:
           OBJECTIVE_B64: ${{ needs.validate.outputs.objective_b64 }}
           ALLOWED_PATHS_B64: ${{ needs.validate.outputs.allowed_paths_b64 }}
           CHECKS: ${{ needs.validate.outputs.checks }}
+          FIX_ROUND: ${{ needs.validate.outputs.fix_round }}
+          MAX_FIX_ROUNDS: ${{ needs.validate.outputs.max_fix_rounds }}
+          AGENT_CONTROL_DEFAULT_MODEL: ${{ vars.AGENT_CONTROL_DEFAULT_MODEL }}
+          AGENT_CONTROL_STRONG_MODEL: ${{ vars.AGENT_CONTROL_STRONG_MODEL }}
         run: bash scripts/agent-control/project-lane-run.sh
 
       - name: Mint scoped GitHub App token
