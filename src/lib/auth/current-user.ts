@@ -13,7 +13,6 @@ import {
   getSupabaseUserAndResponseFromRequest,
   getSupabaseUserFromServer,
 } from './supabase-user';
-import { getReadOnlySupabasePrincipal } from './read-only-principal';
 
 export type { CurrentUser, Role, Action };
 
@@ -75,6 +74,7 @@ export async function requireUser(): Promise<CurrentUser> {
 export async function getCurrentUserReadOnly(): Promise<CurrentUser | null> {
   if (getAuthMode() === 'supabase') {
     if (!isSupabaseConfigured()) return null;
+    const { getReadOnlySupabasePrincipal } = await import('./read-only-principal');
     const result = await getReadOnlySupabasePrincipal();
     if (!result.ok || result.principal.isActive === false) return null;
 
