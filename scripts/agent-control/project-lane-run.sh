@@ -10,12 +10,40 @@ set -euo pipefail
 : "${OBJECTIVE_B64:?}"
 : "${ALLOWED_PATHS_B64:?}"
 : "${CHECKS:?}"
+: "${FIX_ROUND:=0}"
+: "${MAX_FIX_ROUNDS:=3}"
 
 codex_binary="/Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex"
 if [ ! -x "$codex_binary" ]; then
   codex_binary="/Applications/ChatGPT.app/Contents/Resources/codex"
 fi
 [ -x "$codex_binary" ] || { printf 'CODEX_BINARY=ABSENT\n'; exit 1; }
+
+default_model="${AGENT_CONTROL_DEFAULT_MODEL:-deepseek-v4-flash}"
+strong_model="${AGENT_CONTROL_STRONG_MODEL:-deepseek-v4-pro}"
+model_tier="L1"
+model_name="$default_model"
+reasoning_effort="high"
+
+if [ "$STATUS" = "FIX_REQUIRED" ]; then
+  if [ "$FIX_ROUND" -ge "$MAX_FIX_ROUNDS" ]; then
+    printf 'MODEL_POLICY_V1=STOP_MAX_FIX_ROUNDS\n'
+    printf 'PM_DIAGNOSIS_REQUIRED=YES\n'
+    exit 2
+  elif [ "$FIX_ROUND" -ge 2 ]; then
+    model_tier="L3"
+    model_name="$strong_model"
+    reasoning_effort="xhigh"
+  else
+    model_tier="L2"
+    model_name="$default_model"
+    reasoning_effort="xhigh"
+  fi
+fi
+
+printf 'MODEL_POLICY_V1_TIER=%s\n' "$model_tier"
+printf 'MODEL_POLICY_V1_MODEL=%s\n' "$model_name"
+printf 'MODEL_POLICY_V1_REASONING=%s\n' "$reasoning_effort"
 
 deepseek_api_key="$(/bin/launchctl getenv DEEPSEEK_API_KEY 2>/dev/null || true)"
 [ -n "$deepseek_api_key" ] || { printf 'DEEPSEEK_API_KEY_STATUS=MISSING\n'; exit 1; }
@@ -50,6 +78,9 @@ TASK_ID = $TASK_ID
 BASE_MASTER_SHA = $BASE_MASTER_SHA
 EXPECTED_HEAD = $EXPECTED_HEAD
 STATUS = $STATUS
+MODEL_POLICY_V1_TIER = $model_tier
+MODEL = $model_name
+REASONING_EFFORT = $reasoning_effort
 
 Read the complete objective from: $objective_file
 You may modify only the exact newline-separated repository paths in: $paths_file
@@ -57,6 +88,10 @@ Do not modify any other path.
 Do not stage, commit, push, create/switch branches, edit git metadata, call GitHub write APIs,
 read unrelated user credentials/tokens/cookies, print secrets, execute Production SQL/RLS/env changes,
 or perform external publishing.
+MODEL_POLICY_V1 is enforced by the wrapper: new tasks use L1, first fix uses L2, second fix uses L3,
+and max-fix exhaustion stops for PM diagnosis. Do not attempt to override the selected model/tier.
+Human Gate remains mandatory for Production SQL/RLS/env/secrets, destructive Production data actions,
+auth/security boundary weakening, finance/customer-ownership source-of-truth changes, or real external cutover.
 Keep all edits unstaged. Run no network-write operation.
 When finished, return a short plain-text completion summary. The wrapper, not you, validates paths/tests and publishes Git state.
 EOF2
@@ -68,6 +103,8 @@ env -i \
   DEEPSEEK_API_KEY="$deepseek_api_key" \
   TMPDIR="$RUNNER_TEMP" \
   "$codex_binary" exec \
+  -m "$model_name" \
+  -c "model_reasoning_effort=\\"$reasoning_effort\\"" \
   -C "$GITHUB_WORKSPACE" \
   -s workspace-write \
   -c 'approval_policy="never"' \
