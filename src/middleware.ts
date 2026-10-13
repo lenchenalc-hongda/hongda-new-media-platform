@@ -9,6 +9,7 @@ import { getCurrentUserAndResponseFromRequest } from '@/lib/auth/current-user';
 import { AuthError } from '@/lib/auth/types';
 import { isFeatureEnabled, FEATURES } from '@/lib/features';
 import { copyResponseCookies } from '@/lib/supabase/middleware';
+import { logAuthPerformance } from '@/lib/auth/performance';
 
 const PUBLIC_ROUTES = [
   '/login',
@@ -60,11 +61,29 @@ export async function middleware(request: NextRequest) {
   // Resolve trusted user through unified bridge (mock or supabase)
   let user = null;
   let authResponse = NextResponse.next({ request });
+  const isCpcPageRequest = pathname.startsWith('/customer-projects');
+  const authStartedAt = Date.now();
   try {
     const resolved = await getCurrentUserAndResponseFromRequest(request);
     user = resolved.user;
     authResponse = resolved.response;
+    if (isCpcPageRequest) {
+      logAuthPerformance({
+        scope: 'middleware-cpc',
+        startedAt: authStartedAt,
+        outcome: user ? 'ok' : 'anonymous',
+      });
+    }
   } catch (err) {
+    if (isCpcPageRequest) {
+      logAuthPerformance({
+        scope: 'middleware-cpc',
+        startedAt: authStartedAt,
+        outcome: err instanceof AuthError && err.code === 'AUTH_CONFIG_MISSING'
+          ? 'config_error'
+          : 'error',
+      });
+    }
     if (err instanceof AuthError && err.code === 'AUTH_CONFIG_MISSING') {
       const cfgUrl = new URL('/login', request.url);
       cfgUrl.searchParams.set('error', 'auth_config_missing');
