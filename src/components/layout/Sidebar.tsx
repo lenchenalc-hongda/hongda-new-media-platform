@@ -114,6 +114,9 @@ export default function Sidebar() {
                     }
                     return (
                       <Link key={item.path} href={item.path}
+                        // CPC preloads each authorized route through costly middleware auth.
+                        // Keep click navigation/authorization unchanged while preventing eager fetches.
+                        prefetch={portal.id === 'sales' ? false : undefined}
                         className={cn(
                           'flex items-center gap-2 px-4 py-1.5 text-xs transition-colors no-underline border-l-2 ml-4',
                           isActive
