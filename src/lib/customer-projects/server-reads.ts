@@ -1,7 +1,7 @@
 import 'server-only';
 
 import { createClient } from '@/lib/supabase/server';
-import { getReadOnlySupabasePrincipal } from '@/lib/auth/read-only-principal';
+import { resolveCpcProfile } from '@/lib/customer-projects/api';
 import { createCpcReadTiming } from '@/lib/customer-projects/performance';
 import {
   buildWorkbenchSnapshot,
@@ -38,55 +38,6 @@ type ServerReadResult<T> =
   | { ok: true; data: T }
   | { ok: false; status: number; message: string };
 
-type CpcReadProfile = {
-  id: string;
-  orgId: string;
-  role: 'admin' | 'manager' | 'sales';
-};
-
-type CpcReadProfileResult =
-  | { ok: true; profile: CpcReadProfile }
-  | { ok: false; status: number; message: string };
-
-async function resolveCpcReadProfile(): Promise<CpcReadProfileResult> {
-  const result = await getReadOnlySupabasePrincipal();
-  if (!result.ok) {
-    if (result.reason === 'unavailable') {
-      return { ok: false, status: 500, message: '数据库不可用' };
-    }
-    if (result.reason === 'unauthenticated') {
-      return { ok: false, status: 401, message: '未登录或无权限' };
-    }
-    return { ok: false, status: 403, message: '无有效档案' };
-  }
-
-  const principal = result.principal;
-  if (
-    principal.isActive !== true
-    || !principal.profileId
-    || !principal.orgId
-  ) {
-    return { ok: false, status: 403, message: '无有效档案' };
-  }
-
-  if (
-    principal.role !== 'admin'
-    && principal.role !== 'manager'
-    && principal.role !== 'sales'
-  ) {
-    return { ok: false, status: 403, message: '无权使用客户项目中心' };
-  }
-
-  return {
-    ok: true,
-    profile: {
-      id: principal.profileId,
-      orgId: principal.orgId,
-      role: principal.role,
-    },
-  };
-}
-
 export type ProjectListPageItem = ProjectListItem & {
   isOwnedByMe: boolean;
 };
@@ -101,7 +52,7 @@ export async function readWorkbenchSnapshot(): Promise<ServerReadResult<Workbenc
     return { ok: false, status: 500, message: '数据库不可用' };
   }
 
-  const profileResult = await resolveCpcReadProfile();
+  const profileResult = await resolveCpcProfile(supabase);
   timing.mark('auth', authStartedAt);
   if (!profileResult.ok) {
     timing.finish(profileResult.status === 401 ? 'unauthorized' : 'forbidden');
@@ -196,7 +147,7 @@ export async function readProjectList(): Promise<ServerReadResult<ProjectListPag
     return { ok: false, status: 500, message: '数据库不可用' };
   }
 
-  const profileResult = await resolveCpcReadProfile();
+  const profileResult = await resolveCpcProfile(supabase);
   timing.mark('auth', authStartedAt);
   if (!profileResult.ok) {
     timing.finish(profileResult.status === 401 ? 'unauthorized' : 'forbidden');
@@ -289,7 +240,7 @@ export async function readCustomerList(): Promise<ServerReadResult<CustomerListI
     return { ok: false, status: 500, message: '数据库不可用' };
   }
 
-  const profileResult = await resolveCpcReadProfile();
+  const profileResult = await resolveCpcProfile(supabase);
   timing.mark('auth', authStartedAt);
   if (!profileResult.ok) {
     timing.finish(profileResult.status === 401 ? 'unauthorized' : 'forbidden');
@@ -436,7 +387,7 @@ export async function readTaskList(): Promise<ServerReadResult<TaskListItem[]>> 
     return { ok: false, status: 500, message: '数据库不可用' };
   }
 
-  const profileResult = await resolveCpcReadProfile();
+  const profileResult = await resolveCpcProfile(supabase);
   timing.mark('auth', authStartedAt);
   if (!profileResult.ok) {
     timing.finish(profileResult.status === 401 ? 'unauthorized' : 'forbidden');
