@@ -650,6 +650,26 @@ for (const pagePath of loadingStateFiles) {
   );
 }
 
+const authPerfTiming = read('src/lib/auth/performance.ts');
+const currentUserAuth = read('src/lib/auth/current-user.ts');
+assert(
+  authPerfTiming.includes("console.info('[auth-perf]'")
+    && authPerfTiming.includes('totalMs')
+    && authPerfTiming.includes("'middleware-cpc' | 'server-readonly'")
+    && !authPerfTiming.includes('email')
+    && !authPerfTiming.includes('userId')
+    && !authPerfTiming.includes('profileId')
+    && !authPerfTiming.includes('orgId'),
+  'auth performance logs contain timing/outcome only and no identity fields',
+);
+assert(
+  middleware.includes("scope: 'middleware-cpc'")
+    && middleware.includes("pathname.startsWith('/customer-projects')")
+    && currentUserAuth.includes("scope: 'server-readonly'")
+    && currentUserAuth.includes('logAuthPerformance'),
+  'CPC middleware and server read-only authentication are independently timed',
+);
+
 const perfTiming = read('src/lib/customer-projects/performance.ts');
 const serverReadsWithTiming = read('src/lib/customer-projects/server-reads.ts');
 assert(
