@@ -712,10 +712,11 @@ assert(
   'read-only identity/profile reuse is request-scoped and never persistent across users',
 );
 assert(
-  currentUserBridge.includes('getReadOnlySupabasePrincipal')
+  currentUserBridge.includes("await import('./read-only-principal')")
+    && !currentUserBridge.includes("import { getReadOnlySupabasePrincipal } from './read-only-principal'")
     && serverReads.includes('getReadOnlySupabasePrincipal')
     && serverReads.includes('resolveCpcReadProfile()'),
-  'RootLayout and CPC server-first reads share the same request-scoped trusted principal',
+  'RootLayout and CPC server-first reads share the request principal without loading Server Component cache code in middleware',
 );
 assert(
   serverReads.includes("import 'server-only'")
