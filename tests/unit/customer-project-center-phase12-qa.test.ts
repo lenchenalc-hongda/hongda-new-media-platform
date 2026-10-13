@@ -650,6 +650,32 @@ for (const pagePath of loadingStateFiles) {
   );
 }
 
+const perfTiming = read('src/lib/customer-projects/performance.ts');
+const serverReadsWithTiming = read('src/lib/customer-projects/server-reads.ts');
+assert(
+  perfTiming.includes("console.info('[cpc-perf]'")
+    && perfTiming.includes('totalMs')
+    && perfTiming.includes('stages')
+    && perfTiming.includes('counts')
+    && !perfTiming.includes('customerName')
+    && !perfTiming.includes('customerId')
+    && !perfTiming.includes('projectId'),
+  'CPC server timing logs are structured and do not include business identifiers',
+);
+for (const view of ['workbench', 'projects', 'customers', 'tasks']) {
+  assert(
+    serverReadsWithTiming.includes("createCpcReadTiming('" + view + "')"),
+    'CPC server-first read is instrumented: ' + view,
+  );
+}
+assert(
+  serverReadsWithTiming.includes("timing.mark('auth'")
+    && serverReadsWithTiming.includes("timing.mark('primary'")
+    && serverReadsWithTiming.includes("timing.mark('relations'")
+    && serverReadsWithTiming.includes("timing.finish('ok'"),
+  'CPC timing separates auth, primary, relation and total read cost',
+);
+
 const workbenchServerPage = read('src/app/customer-projects/page.tsx');
 const projectsServerPage = read('src/app/customer-projects/projects/page.tsx');
 const workbenchClient = read('src/app/customer-projects/WorkbenchClient.tsx');
