@@ -162,6 +162,19 @@ async function main() {
 
   if (state.status === 'READY_FOR_CODEX' && (state.master_sha !== masterSha || state.verified_head !== masterSha)) fail('READY control state is stale against master');
 
+  if (state.status === 'FIX_REQUIRED' && state.fix_round >= state.max_fix_rounds) {
+    emit({
+      result: 'NOT_EXECUTABLE',
+      reason: 'MODEL_POLICY_V1 max fix rounds reached; PM diagnosis required',
+      project: PROJECT,
+      control_issue: CONTROL_ISSUE,
+      task_id: state.current_task_id,
+      fix_round: state.fix_round,
+      max_fix_rounds: state.max_fix_rounds,
+    });
+    return;
+  }
+
   if (state.status === 'FIX_REQUIRED') {
     const pr = await api(`/repos/${REPOSITORY}/pulls/${state.active_pr}`);
     if (pr.state !== 'open' || pr.base?.ref !== 'master' || pr.head?.ref !== state.active_branch || pr.head?.sha !== state.verified_head) fail('active PR does not match FIX state');
