@@ -15,6 +15,7 @@ import {
   resolveSupabaseCurrentUser,
 } from './supabase-user';
 import { createReadOnlySupabaseClient } from '@/lib/supabase/readonly';
+import { logAuthPerformance, type AuthPerfOutcome } from './performance';
 
 export type { CurrentUser, Role, Action };
 
@@ -74,14 +75,38 @@ export async function requireUser(): Promise<CurrentUser> {
 }
 
 export async function getCurrentUserReadOnly(): Promise<CurrentUser | null> {
-  if (getAuthMode() === 'supabase') {
-    if (!isSupabaseConfigured()) return null;
-    const client = await createReadOnlySupabaseClient();
-    if (!client) return null;
-    return resolveSupabaseCurrentUser(client as any);
+  const startedAt = Date.now();
+  let outcome: AuthPerfOutcome = 'anonymous';
+
+  try {
+    if (getAuthMode() === 'supabase') {
+      if (!isSupabaseConfigured()) {
+        outcome = 'unavailable';
+        return null;
+      }
+      const client = await createReadOnlySupabaseClient();
+      if (!client) {
+        outcome = 'unavailable';
+        return null;
+      }
+      const user = await resolveSupabaseCurrentUser(client as any);
+      outcome = user ? 'ok' : 'anonymous';
+      return user;
+    }
+    const cookieStore = await cookies();
+    const user = getMockUserFromCookie(cookieStore.get('nmc_user')?.value);
+    outcome = user ? 'ok' : 'anonymous';
+    return user;
+  } catch (error) {
+    outcome = 'error';
+    throw error;
+  } finally {
+    logAuthPerformance({
+      scope: 'server-readonly',
+      startedAt,
+      outcome,
+    });
   }
-  const cookieStore = await cookies();
-  return getMockUserFromCookie(cookieStore.get('nmc_user')?.value);
 }
 
 export async function requireRole(roles: Role[]): Promise<CurrentUser> {
