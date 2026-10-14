@@ -54,8 +54,8 @@ export default function LoginForm({ mode }: { mode: AuthMode }) {
     <div className="min-h-screen flex items-center justify-center bg-gray-100">
       <div className="bg-white rounded-lg shadow-md p-8 w-full max-w-md">
         <div className="text-center mb-6">
-          <h1 className="text-2xl font-bold text-gray-800">宏达新媒体作战中台</h1>
-          <p className="text-sm text-gray-500 mt-1">广东宏达印业内部管理系统</p>
+          <h1 className="text-2xl font-bold text-gray-800">Hongda OS</h1>
+          <p className="text-sm text-gray-500 mt-1">宏达印业数字化业务操作系统</p>
           <p className="text-[10px] text-gray-400 mt-2">
             {mode === 'supabase' ? '🔐 正式认证模式（Supabase Auth）' : '🧪 开发兼容模式（Mock，非审计身份）'}
           </p>
