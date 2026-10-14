@@ -34,6 +34,7 @@ const roleProvider = fs.readFileSync(
 );
 const sidebar = fs.readFileSync('src/components/layout/Sidebar.tsx', 'utf8');
 const workspaceHome = fs.readFileSync('src/app/workspace-home/page.tsx', 'utf8');
+assert(sidebar.includes("prefetch={item.path.startsWith('/customer-projects') ? false : undefined}"), 'CPC side navigation disables speculative prefetch while keeping links');
 
 assert(
   roles.includes("'customer_project_center_team'")
