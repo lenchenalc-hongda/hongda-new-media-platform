@@ -113,6 +113,102 @@ function ChevronDownIcon() {
   );
 }
 
+type HomeIconName =
+  | 'review'
+  | 'publish'
+  | 'progress'
+  | 'health'
+  | 'script'
+  | 'article'
+  | 'knowledge'
+  | 'topic'
+  | 'import';
+
+function HomeLineIcon({
+  name,
+  className = 'h-4 w-4',
+}: {
+  name: HomeIconName;
+  className?: string;
+}) {
+  const common = {
+    fill: 'none',
+    stroke: 'currentColor',
+    strokeWidth: 1.7,
+    strokeLinecap: 'round' as const,
+    strokeLinejoin: 'round' as const,
+  };
+
+  if (name === 'review') {
+    return (
+      <svg viewBox="0 0 24 24" className={className} aria-hidden="true">
+        <path d="M3.5 12s3.2-5 8.5-5 8.5 5 8.5 5-3.2 5-8.5 5-8.5-5-8.5-5Z" {...common} />
+        <circle cx="12" cy="12" r="2.4" {...common} />
+      </svg>
+    );
+  }
+
+  if (name === 'publish') {
+    return (
+      <svg viewBox="0 0 24 24" className={className} aria-hidden="true">
+        <path d="m5 13 4 4L19 7" {...common} />
+        <path d="M12 3v4M12 17v4M3 12h4M17 12h4" {...common} />
+      </svg>
+    );
+  }
+
+  if (name === 'progress') {
+    return (
+      <svg viewBox="0 0 24 24" className={className} aria-hidden="true">
+        <path d="M4 19V9M10 19V5M16 19v-7M22 19V3" {...common} />
+      </svg>
+    );
+  }
+
+  if (name === 'health') {
+    return (
+      <svg viewBox="0 0 24 24" className={className} aria-hidden="true">
+        <path d="M3 12h4l2-4 3.5 8 2.5-5h6" {...common} />
+        <circle cx="12" cy="12" r="9" {...common} />
+      </svg>
+    );
+  }
+
+  if (name === 'script' || name === 'article') {
+    return (
+      <svg viewBox="0 0 24 24" className={className} aria-hidden="true">
+        <path d="M6 3h8l4 4v14H6V3Z" {...common} />
+        <path d="M14 3v5h5M9 12h6M9 16h6" {...common} />
+      </svg>
+    );
+  }
+
+  if (name === 'knowledge') {
+    return (
+      <svg viewBox="0 0 24 24" className={className} aria-hidden="true">
+        <path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H11v16H6.5A2.5 2.5 0 0 0 4 21.5v-16Z" {...common} />
+        <path d="M20 5.5A2.5 2.5 0 0 0 17.5 3H13v16h4.5a2.5 2.5 0 0 1 2.5 2.5v-16Z" {...common} />
+      </svg>
+    );
+  }
+
+  if (name === 'topic') {
+    return (
+      <svg viewBox="0 0 24 24" className={className} aria-hidden="true">
+        <path d="M5 5h14v14H5V5Z" {...common} />
+        <path d="M8 9h8M8 13h8M8 17h5" {...common} />
+      </svg>
+    );
+  }
+
+  return (
+    <svg viewBox="0 0 24 24" className={className} aria-hidden="true">
+      <path d="M12 3v12M7.5 10.5 12 15l4.5-4.5" {...common} />
+      <path d="M5 18.5h14" {...common} />
+    </svg>
+  );
+}
+
 export default function WorkspaceHome() {
   const canCreateReview = useCanCreateReview();
   const canAccessCustomerProjectCenter = useCanAccessCustomerProjectCenter();
@@ -152,8 +248,8 @@ export default function WorkspaceHome() {
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white font-bold text-sm">宏</div>
             <div>
-              <h1 className="text-base font-bold text-gray-800">宏达新媒体作战中台</h1>
-              <p className="text-[10px] text-gray-400">广东宏达印业</p>
+              <h1 className="text-base font-bold text-gray-800">Hongda OS</h1>
+              <p className="text-[10px] text-gray-400">宏达印业数字化业务操作系统</p>
             </div>
           </div>
 
@@ -296,46 +392,66 @@ export default function WorkspaceHome() {
         <section>
           <h2 className="text-lg font-bold text-gray-800 mb-4">今日概览</h2>
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
-              <div className="flex items-center gap-2 mb-2">
-                <span className="text-lg">👀</span>
-                <span className="text-sm font-medium text-gray-700">今日待审核</span>
+            {[
+              {
+                label: '今日待审核',
+                value: MOCK_METRICS.pendingReview,
+                detail: '脚本和选题审核',
+                icon: 'review' as HomeIconName,
+                valueClass: 'text-amber-600',
+                iconClass: 'text-amber-600 bg-amber-50 border-amber-100',
+              },
+              {
+                label: '今日待发布',
+                value: MOCK_METRICS.pendingPublish,
+                detail: '排好未发布',
+                icon: 'publish' as HomeIconName,
+                valueClass: 'text-blue-600',
+                iconClass: 'text-blue-600 bg-blue-50 border-blue-100',
+              },
+              {
+                label: '本周内容进度',
+                value: `${MOCK_METRICS.weeklyProgress}%`,
+                detail: '计划 12 / 已发布 8',
+                icon: 'progress' as HomeIconName,
+                valueClass: 'text-emerald-600',
+                iconClass: 'text-emerald-600 bg-emerald-50 border-emerald-100',
+              },
+              {
+                label: '系统健康',
+                value: '正常',
+                detail: 'AI 服务与核心接口在线',
+                icon: 'health' as HomeIconName,
+                valueClass: 'text-emerald-600',
+                iconClass: 'text-emerald-600 bg-emerald-50 border-emerald-100',
+              },
+            ].map(metric => (
+              <div
+                key={metric.label}
+                className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-medium text-gray-700">{metric.label}</p>
+                    <p className={`mt-2 text-2xl font-bold ${metric.valueClass}`}>{metric.value}</p>
+                  </div>
+                  <span className={`flex h-9 w-9 items-center justify-center rounded-lg border ${metric.iconClass}`}>
+                    <HomeLineIcon name={metric.icon} />
+                  </span>
+                </div>
+
+                {metric.label === '本周内容进度' && (
+                  <div className="w-full bg-gray-100 rounded-full h-1.5 mt-3">
+                    <div
+                      className="bg-emerald-500 h-1.5 rounded-full"
+                      style={{ width: MOCK_METRICS.weeklyProgress + '%' }}
+                    />
+                  </div>
+                )}
+
+                <p className="text-xs text-gray-400 mt-2">{metric.detail}</p>
               </div>
-              <p className="text-2xl font-bold text-yellow-600">{MOCK_METRICS.pendingReview}</p>
-              <p className="text-xs text-gray-400 mt-1">脚本和选题审核</p>
-            </div>
-            <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
-              <div className="flex items-center gap-2 mb-2">
-                <span className="text-lg">🚀</span>
-                <span className="text-sm font-medium text-gray-700">今日待发布</span>
-              </div>
-              <p className="text-2xl font-bold text-blue-600">{MOCK_METRICS.pendingPublish}</p>
-              <p className="text-xs text-gray-400 mt-1">排好未发布</p>
-            </div>
-            <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
-              <div className="flex items-center gap-2 mb-2">
-                <span className="text-lg">📈</span>
-                <span className="text-sm font-medium text-gray-700">本周内容进度</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <p className="text-2xl font-bold text-green-600">{MOCK_METRICS.weeklyProgress}%</p>
-              </div>
-              <div className="w-full bg-gray-100 rounded-full h-1.5 mt-1">
-                <div className="bg-green-500 h-1.5 rounded-full" style={{ width: MOCK_METRICS.weeklyProgress + '%' }} />
-              </div>
-              <p className="text-xs text-gray-400 mt-1">计划 12/已发布 8</p>
-            </div>
-            <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
-              <div className="flex items-center gap-2 mb-2">
-                <span className="text-lg">💊</span>
-                <span className="text-sm font-medium text-gray-700">系统健康</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="w-2.5 h-2.5 rounded-full bg-green-500" />
-                <p className="text-2xl font-bold text-green-600">正常</p>
-              </div>
-              <p className="text-xs text-gray-400 mt-1">AI Mock模式 · 7个接口在线</p>
-            </div>
+            ))}
           </div>
         </section>
 
@@ -384,18 +500,18 @@ export default function WorkspaceHome() {
           <h2 className="text-lg font-bold text-gray-800 mb-4">快速新建</h2>
           <div className="flex flex-wrap gap-3">
             {[
-              { label: '新建脚本', icon: '✍️', path: '/scripts', color: 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100' },
-              { label: '新建文章', icon: '✏️', path: '/official/article-factory', color: 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100' },
-              { label: '新建知识卡', icon: '📇', path: '/knowledge', color: 'bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100' },
-              { label: '新建选题', icon: '📋', path: '/topics', color: 'bg-yellow-50 text-yellow-700 border-yellow-200 hover:bg-yellow-100' },
-              { label: '导入CSV', icon: '📥', path: '/settings', color: 'bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100' },
+              { label: '新建脚本', icon: 'script' as HomeIconName, path: '/scripts', color: 'text-blue-700 hover:border-blue-200 hover:bg-blue-50' },
+              { label: '新建文章', icon: 'article' as HomeIconName, path: '/official/article-factory', color: 'text-emerald-700 hover:border-emerald-200 hover:bg-emerald-50' },
+              { label: '新建知识卡', icon: 'knowledge' as HomeIconName, path: '/knowledge', color: 'text-purple-700 hover:border-purple-200 hover:bg-purple-50' },
+              { label: '新建选题', icon: 'topic' as HomeIconName, path: '/topics', color: 'text-amber-700 hover:border-amber-200 hover:bg-amber-50' },
+              { label: '导入CSV', icon: 'import' as HomeIconName, path: '/settings', color: 'text-gray-700 hover:border-gray-300 hover:bg-gray-50' },
             ].map(btn => (
               <Link
                 key={btn.label}
                 href={btn.path}
-                className={`flex items-center gap-2 px-4 py-2.5 rounded-lg border text-sm font-medium transition-colors no-underline ${btn.color}`}
+                className={`inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3.5 py-2 text-sm font-medium shadow-sm transition-colors no-underline ${btn.color}`}
               >
-                <span>{btn.icon}</span>
+                <HomeLineIcon name={btn.icon} className="h-4 w-4" />
                 {btn.label}
               </Link>
             ))}
