@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import './workshop-order-suite.test';
 import {
   WORKSHOP_CONTROL_ISSUE,
   WORKSHOP_PROJECT_SLUG,
