@@ -34,6 +34,12 @@ const roleProvider = fs.readFileSync(
 );
 const sidebar = fs.readFileSync('src/components/layout/Sidebar.tsx', 'utf8');
 const workspaceHome = fs.readFileSync('src/app/workspace-home/page.tsx', 'utf8');
+assert(
+  sidebar.includes("prefetch={portal.id === 'sales' ? false : undefined}")
+    && sidebar.includes('<Link key={item.path} href={item.path}'),
+  'CPC sidebar disables speculative prefetch without changing navigation destinations or other portal defaults',
+);
+
 
 assert(
   roles.includes("'customer_project_center_team'")
