@@ -10,6 +10,7 @@ path, but the global safety gates below still apply.
 - Each project has exactly one control issue and one machine-readable control state.
 - Customer Project Center uses Issue #10.
 - Global Lead Hub uses Issue #72.
+- Workshop Order System uses Issue #104.
 - The machine-readable control block in the matching control issue controls automation.
 - Explanatory prose does not override machine state.
 - The active PM task defines the exact work scope for that project.
@@ -34,6 +35,7 @@ path, but the global safety gates below still apply.
 
 - `ONE_ACTIVE_TASK_PER_PROJECT = true`.
 - `MAX_PARALLEL_PROJECTS = 2` until the owner explicitly raises the limit.
+- More than two projects may be registered, but only two heavy execution jobs may run concurrently; the rest wait in queue.
 - Different projects may execute concurrently only when their allowed paths do not overlap.
 - `SHARED_PATH_LOCK = true`.
 - Shared repository paths must never be edited concurrently by two projects.
@@ -45,6 +47,7 @@ Typical project-owned roots:
 
 - Customer Project Center: `src/app/customer-projects/`, `src/lib/customer-projects/`, `docs/customer-project-center/`, CPC-specific tests and migrations.
 - Global Lead Hub: `src/app/global-lead-hub/`, `src/app/api/global-lead-hub/`, `src/lib/global-lead-hub/`, `src/components/global-lead-hub/`, `docs/global-lead-hub/`, GLH-specific tests and migrations.
+- Workshop Order System: `src/app/workshop-orders/`, `src/app/api/workshop-orders/`, `src/lib/workshop-orders/`, `src/components/workshop-orders/`, `docs/workshop-order-system/`, WOS-specific tests and migrations.
 
 Typical shared paths include root application/layout/configuration, shared navigation/components,
 `package.json`, lockfiles, root middleware, root auth, common Supabase helpers, `.github/`,
@@ -80,10 +83,11 @@ Additional hard stops:
 
 ## Project data rules
 
-- Formal Customer Project Center or Global Lead Hub data must not use `localStorage`, `site_data`, or generic `/api/data` as source of truth.
+- Formal Customer Project Center, Global Lead Hub, or Workshop Order System data must not use `localStorage`, `site_data`, or generic `/api/data` as source of truth.
 - Business profile FKs use `profiles.id`.
 - AI proposals are drafts; AI proposal != business fact.
 - External canonical customer ownership and payment sources remain authoritative unless an explicit integration decision changes that contract.
+- Workshop production/sampling records must preserve version, confirmation, reference-image, readiness and audit history; released production baselines must never be silently overwritten.
 - Do not repair legacy `leads`, `site_data`, or `ai_jobs` security debt inside unrelated tasks.
 
 ## Agent Control protocol
