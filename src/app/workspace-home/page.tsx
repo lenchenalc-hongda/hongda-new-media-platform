@@ -248,8 +248,8 @@ export default function WorkspaceHome() {
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white font-bold text-sm">宏</div>
             <div>
-              <h1 className="text-base font-bold text-gray-800">宏达新媒体作战中台</h1>
-              <p className="text-[10px] text-gray-400">广东宏达印业</p>
+              <h1 className="text-base font-bold text-gray-800">Hongda OS</h1>
+              <p className="text-[10px] text-gray-400">宏达印业数字化业务操作系统</p>
             </div>
           </div>
 
