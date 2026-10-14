@@ -357,6 +357,7 @@ export default function WorkspaceHome() {
                           <Link
                             key={item.path}
                             href={item.path}
+                             prefetch={portal.id === 'sales' ? false : undefined}
                             className="flex items-center gap-1.5 text-xs text-gray-600 hover:text-blue-700 px-2 py-1.5 rounded-lg bg-white/55 hover:bg-white transition-colors no-underline"
                           >
                             <ItemLineIcon />
@@ -375,6 +376,7 @@ export default function WorkspaceHome() {
                     <div className="pt-2.5">
                       <Link
                         href={portal.items[0]?.path || '#'}
+                        prefetch={portal.id === 'sales' ? false : undefined}
                         className={`inline-flex items-center gap-1 text-xs font-medium px-3 py-1.5 rounded-lg transition-colors no-underline ${styles.button}`}
                       >
                         进入{portal.label}
