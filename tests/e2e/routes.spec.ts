@@ -28,7 +28,7 @@ async function main() {
 
   // ============ Public Pages ============
   console.log('\n=== Public Pages ===');
-  await testPageRender('/login', '宏达新媒体作战中台');
+  await testPageRender('/login', 'Hongda OS');
 
   // ============ API Health ============
   console.log('\n=== API Health ===');
