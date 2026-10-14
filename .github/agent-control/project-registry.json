@@ -34,6 +34,23 @@
       "owned_regexes": [
         "^supabase/migrations/[0-9]+_global_lead_hub_[A-Za-z0-9_]+\\.sql$"
       ]
+    },
+    "workshop-order-system": {
+      "control_issue": 104,
+      "task_prefix": "WOS-",
+      "branch_prefix": "codex/wos-",
+      "owned_prefixes": [
+        "docs/workshop-order-system/",
+        "src/app/workshop-orders/",
+        "src/app/api/workshop-orders/",
+        "src/lib/workshop-orders/",
+        "src/components/workshop-orders/",
+        "tests/unit/workshop-order-",
+        "tests/e2e/workshop-order-"
+      ],
+      "owned_regexes": [
+        "^supabase/migrations/[0-9]+_workshop_order_system_[A-Za-z0-9_]+\\.sql$"
+      ]
     }
   },
   "shared_prefixes": [
