@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import './workshop-order-spec.test';
 
 const read = (path: string) => fs.readFileSync(path, 'utf8');
 
