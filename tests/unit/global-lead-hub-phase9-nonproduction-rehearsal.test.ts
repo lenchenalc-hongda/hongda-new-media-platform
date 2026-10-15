@@ -1,12 +1,23 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
+  GLH_PHASE8_PILOT_EVIDENCE_CHECK_IDS,
+  GLH_PHASE8_PILOT_EVIDENCE_REPORT_VERSION,
+  GLH_PHASE8_PILOT_EVIDENCE_TASK,
+  type GlhPhase8PilotEvidenceReport,
+} from '../../src/lib/global-lead-hub/phase8-pilot-evidence-bundle';
+import {
+  GLH_PHASE9_EVIDENCE_PREP_TASK,
+  evaluateGlhPhase9EvidencePrep,
+} from '../../src/lib/global-lead-hub/phase9-evidence-prep';
+import {
+  GLH_PHASE9_DIRECT_REHEARSAL_IDS,
   GLH_PHASE9_NONPRODUCTION_REHEARSAL_TASK,
   GLH_PHASE9_REHEARSAL_REQUIREMENTS,
   evaluateGlhPhase9NonproductionRehearsal,
   type GlhPhase9NonproductionRehearsalInput,
   type GlhPhase9RepositoryObservation,
-  type GlhPhase9RepositoryRehearsalId,
+  type GlhPhase9DirectRehearsalId,
 } from '../../src/lib/global-lead-hub/phase9-nonproduction-rehearsal';
 
 const candidateSha = GLH_PHASE9_NONPRODUCTION_REHEARSAL_TASK.baseMasterSha;
@@ -21,23 +32,68 @@ const humanGateRequirements = GLH_PHASE9_REHEARSAL_REQUIREMENTS.filter(
   requirement => requirement[2] === 'HUMAN_GATE',
 );
 
+function acceptedPhase8Report(): GlhPhase8PilotEvidenceReport {
+  return {
+    reportVersion: GLH_PHASE8_PILOT_EVIDENCE_REPORT_VERSION,
+    taskId: GLH_PHASE8_PILOT_EVIDENCE_TASK.taskId,
+    environment: 'NON_PRODUCTION',
+    overallStatus: 'PASS',
+    accepted: true,
+    passed: GLH_PHASE8_PILOT_EVIDENCE_CHECK_IDS.length,
+    failed: 0,
+    evidenceGeneratedAt: '2026-10-15T10:40:00Z',
+    evidenceExpiresAt: '2026-10-18T10:40:00Z',
+    checks: GLH_PHASE8_PILOT_EVIDENCE_CHECK_IDS.map(id => ({
+      id,
+      status: 'PASS',
+      sourceRefs: [`phase8-${id}`],
+      errors: [],
+    })),
+    errors: [],
+  };
+}
+
+function phase9Preparation() {
+  return evaluateGlhPhase9EvidencePrep({
+    taskId: GLH_PHASE9_EVIDENCE_PREP_TASK.taskId,
+    baseMasterSha: GLH_PHASE9_EVIDENCE_PREP_TASK.baseMasterSha,
+    candidateSha,
+    evaluatedAt,
+    evidence: {},
+    productionSqlExecuted: false,
+    productionRlsOrGrantsChanged: false,
+    productionEnvOrSecretsChanged: false,
+    productionDataChanged: false,
+    realProviderCutoverExecuted: false,
+    realCustomerMessageSent: false,
+    externalPublishingExecuted: false,
+    authenticationWeakened: false,
+  });
+}
+
 function passingObservations(): Record<
-  GlhPhase9RepositoryRehearsalId,
+  GlhPhase9DirectRehearsalId,
   GlhPhase9RepositoryObservation
 > {
   return Object.fromEntries(
-    repositoryRequirements.map(([id, ownerRole]) => [
-      id,
-      {
-        passed: true,
-        ownerRole,
-        evidenceRef: `repository://glh/nonproduction-rehearsal#${id}`,
-        observedAt,
-        candidateSha,
-        targetAlias,
-      },
-    ]),
-  ) as Record<GlhPhase9RepositoryRehearsalId, GlhPhase9RepositoryObservation>;
+    GLH_PHASE9_DIRECT_REHEARSAL_IDS.map(id => {
+      const requirement = GLH_PHASE9_REHEARSAL_REQUIREMENTS.find(
+        item => item[0] === id,
+      );
+      assert(requirement);
+      return [
+        id,
+        {
+          passed: true,
+          ownerRole: requirement[1],
+          evidenceRef: `repository://glh/nonproduction-rehearsal#${id}`,
+          observedAt,
+          candidateSha,
+          targetAlias,
+        },
+      ];
+    }),
+  ) as Record<GlhPhase9DirectRehearsalId, GlhPhase9RepositoryObservation>;
 }
 
 function passingInput(): GlhPhase9NonproductionRehearsalInput {
@@ -47,6 +103,8 @@ function passingInput(): GlhPhase9NonproductionRehearsalInput {
     candidateSha,
     evaluatedAt,
     targetAlias,
+    phase8EvidenceReport: acceptedPhase8Report(),
+    phase9EvidencePreparation: phase9Preparation(),
     observations: passingObservations(),
     productionSqlExecuted: false,
     productionRlsOrGrantsChanged: false,
@@ -78,19 +136,19 @@ assert(
 );
 
 const failed = passingInput();
-failed.observations!.AI_FORBIDDEN_CLAIMS = {
-  ...failed.observations!.AI_FORBIDDEN_CLAIMS!,
+failed.observations!.ROLLOUT_DRY_RUN = {
+  ...failed.observations!.ROLLOUT_DRY_RUN!,
   passed: false,
 };
 const failedReport = evaluateGlhPhase9NonproductionRehearsal(failed);
 assert.equal(failedReport.rehearsalStatus, 'FAIL');
-assert(failedReport.fail.includes('AI_FORBIDDEN_CLAIMS'));
+assert(failedReport.fail.includes('ROLLOUT_DRY_RUN'));
 
 const missing = passingInput();
-delete missing.observations!.HUMAN_HANDOFF;
+delete missing.observations!.META_WEBHOOK_VERIFICATION;
 const missingReport = evaluateGlhPhase9NonproductionRehearsal(missing);
 assert.equal(missingReport.rehearsalStatus, 'FAIL');
-assert(missingReport.unknown.includes('HUMAN_HANDOFF'));
+assert(missingReport.unknown.includes('META_WEBHOOK_VERIFICATION'));
 
 const future = passingInput();
 future.observations!.META_WEBHOOK_SIGNATURE = {
@@ -106,13 +164,35 @@ assert(
 );
 
 const secretLike = passingInput();
-secretLike.observations!.SECRET_REDACTION = {
-  ...secretLike.observations!.SECRET_REDACTION!,
+secretLike.observations!.META_WEBHOOK_VERIFICATION = {
+  ...secretLike.observations!.META_WEBHOOK_VERIFICATION!,
   evidenceRef: 'artifact://token=synthetic-but-forbidden-123456789',
 };
 const secretLikeReport = evaluateGlhPhase9NonproductionRehearsal(secretLike);
 assert.equal(secretLikeReport.rehearsalStatus, 'FAIL');
 assert(!JSON.stringify(secretLikeReport).includes('synthetic-but-forbidden'));
+
+const rejectedPhase8 = passingInput();
+rejectedPhase8.phase8EvidenceReport = {
+  ...acceptedPhase8Report(),
+  accepted: false,
+  overallStatus: 'FAIL',
+};
+const rejectedPhase8Report = evaluateGlhPhase9NonproductionRehearsal(rejectedPhase8);
+assert.equal(rejectedPhase8Report.rehearsalStatus, 'FAIL');
+assert(rejectedPhase8Report.fail.includes('WEBHOOK_IDEMPOTENCY'));
+
+const missingPreparation = passingInput();
+missingPreparation.phase9EvidencePreparation = null;
+const missingPreparationReport = evaluateGlhPhase9NonproductionRehearsal(
+  missingPreparation,
+);
+assert.equal(missingPreparationReport.rehearsalStatus, 'FAIL');
+assert(
+  missingPreparationReport.issues.includes(
+    'MISSING_PHASE9_EVIDENCE_PREPARATION',
+  ),
+);
 
 const productionBoundaryViolation = evaluateGlhPhase9NonproductionRehearsal({
   ...passingInput(),
