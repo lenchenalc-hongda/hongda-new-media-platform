@@ -108,12 +108,12 @@ const futureReport = evaluateGlhPhase9EvidencePrep(future);
 assert(futureReport.unknown.includes('META_WEBHOOK_SIGNATURE'));
 
 const secretLike = readyInput();
-secretLike.evidence.SECRET_REDaction = {
-  ...secretLike.evidence.SECRET_REDaction!,
+secretLike.evidence.SECRET_REDACTION = {
+  ...secretLike.evidence.SECRET_REDACTION!,
   evidenceRef: 'token=should-never-appear-123456789',
 };
 const secretLikeReport = evaluateGlhPhase9EvidencePrep(secretLike);
-assert(secretLikeReport.unknown.includes('SECRET_REDaction'));
+assert(secretLikeReport.unknown.includes('SECRET_REDACTION'));
 assert(!JSON.stringify(secretLikeReport).includes('should-never-appear'));
 
 const productionMutation = evaluateGlhPhase9EvidencePrep({

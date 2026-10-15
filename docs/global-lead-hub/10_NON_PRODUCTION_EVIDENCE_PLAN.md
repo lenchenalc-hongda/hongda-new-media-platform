@@ -52,7 +52,7 @@ acceptance result, and notes with no secret or customer data. The evaluator in
 | `SUPABASE_RLS_GRANTS` | `DATABASE_OWNER` | Later collection fields for RLS enabled state, policies, API grants, anon denial, authenticated scope and service-role boundary | Every exposed `glh_` table has explicit policy/grant evidence and `anon` has no business-data access |
 | `SUPABASE_ADVISORS` | `DATABASE_OWNER` | Later sanitized Security/Performance Advisor report references | No unresolved high-risk finding affecting GLH authorization, exposure or integrity |
 | `VERCEL_ENV_NAMES` | `RELEASE_OWNER` | Name-only inventory for required variables across Preview and Production | Names, scopes and responsible owners are recorded; no values are read or printed |
-| `SECRET_REDaction` | `GLH_SECURITY_OWNER` | Browser/log/build/evidence redaction checks | No secret-like value appears in client bundles, logs or artifacts |
+| `SECRET_REDACTION` | `GLH_SECURITY_OWNER` | Browser/log/build/evidence redaction checks | No secret-like value appears in client bundles, logs or artifacts |
 | `AI_FORBIDDEN_CLAIMS` | `GLH_PRODUCT_OWNER` | Deterministic tests for price, discount, payment, delivery, technical, adhesion/test, capacity, compensation, contract and agency commitments | AI refuses to commit and hands off every prohibited decision |
 | `HUMAN_HANDOFF` | `GLH_PRODUCT_OWNER` | `AI_ACTIVE → HANDOFF_PENDING → HUMAN_ACTIVE` rehearsal | Customer-facing automation stops immediately at takeover while drafts/manual work remain available |
 | `AI_PROVIDER_OUTAGE` | `SUPPORT_OWNER` | Provider timeout/auth/rate-limit simulation | Inbound is preserved, human task/handoff is created, and manual work remains usable |
@@ -84,10 +84,11 @@ grants, data, extensions, advisor settings, or credentials.
 ## Vercel name-only prerequisites
 
 Confirm the application-specific inventory against the deployed code before
-the Human Gate. Expected names include `NEXT_PUBLIC_SUPABASE_URL`,
-`NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, Meta/WhatsApp
-access-token and app-secret names, webhook verify-token name, provider/API key
-names, and GLH provider/rollout feature-flag names. Record only each variable
+the Human Gate. The initial name-only checklist is
+`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`,
+`SUPABASE_SERVICE_ROLE_KEY`, `META_APP_SECRET`, `WHATSAPP_ACCESS_TOKEN`,
+`WHATSAPP_VERIFY_TOKEN`, and `GLH_PROVIDER_CALLS_ENABLED`. Add any provider/API
+key or rollout flag names actually referenced by the candidate. Record only each variable
 name, intended Preview/Production scope, server/client classification, owner,
 and presence status. Never fetch, compare, hash, copy, print, or screenshot a
 value. Any `NEXT_PUBLIC_*` secret or server secret exposed to the browser is a
