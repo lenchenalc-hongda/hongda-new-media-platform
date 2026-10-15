@@ -99,6 +99,11 @@ assert(runner.includes('PROJECT_LANE_PATH_OUT_OF_SCOPE'));
 assert(runner.includes('execute Production SQL/RLS/env changes'));
 assert(runner.includes('git -c core.quotepath=false diff --name-only --no-renames'));
 assert(runner.includes('git -c core.quotepath=false ls-files --others --exclude-standard'));
+assert(runner.includes('$HOME/.codex/plugins/.plugin-appserver/codex-cli/bin/codex'));
+assert(runner.includes('"$codex_binary" --no-daemon exec'));
+assert(runner.includes('CODEX_HOME="$HOME/.codex"'));
+assert(runner.includes('CODEX_STDERR_BEGIN'));
+assert(runner.includes('[REDACTED_API_KEY]'));
 
 const publisher = read('scripts/agent-control/project-lane-publish.sh');
 assert(publisher.includes('AUTO_PRODUCTION = false'));
