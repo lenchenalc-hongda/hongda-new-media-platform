@@ -36,6 +36,18 @@ const sidebar = fs.readFileSync('src/components/layout/Sidebar.tsx', 'utf8');
 const workspaceHome = fs.readFileSync('src/app/workspace-home/page.tsx', 'utf8');
 
 assert(
+  sidebar.includes("prefetch={portal.id === 'sales' ? false : undefined}")
+    && sidebar.includes('<Link key={item.path} href={item.path}'),
+  'CPC sidebar links avoid speculative prefetch while preserving normal navigation',
+);
+assert(
+  (workspaceHome.match(/prefetch=\{portal\.id === 'sales' \? false : undefined\}/g)?.length ?? 0) === 2
+    && workspaceHome.includes('href={item.path}')
+    && workspaceHome.includes("href={portal.items[0]?.path || '#'}"),
+  'CPC workspace links and portal entry avoid speculative prefetch without affecting other portals',
+);
+
+assert(
   roles.includes("'customer_project_center_team'")
     && roles.includes("customer_project_center_team: { roles: ['admin', 'manager']")
     && roles.includes("customer_project_center_team: '/customer-projects/team'"),
