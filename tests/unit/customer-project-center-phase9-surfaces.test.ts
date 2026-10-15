@@ -34,6 +34,19 @@ const roleProvider = fs.readFileSync(
 );
 const sidebar = fs.readFileSync('src/components/layout/Sidebar.tsx', 'utf8');
 const workspaceHome = fs.readFileSync('src/app/workspace-home/page.tsx', 'utf8');
+// CPC link prefetch regression: keep href and auth boundaries unchanged while avoiding speculative auth fetches.
+assert(
+  sidebar.includes("prefetch={portal.id === 'sales' ? false : undefined}")
+    && sidebar.includes('<Link key={item.path} href={item.path}'),
+  'CPC sidebar links disable speculative prefetch while retaining destinations',
+);
+assert(
+  (workspaceHome.match(/prefetch=\{portal\.id === 'sales' \? false : undefined\}/g)?.length ?? 0) === 2
+    && workspaceHome.includes('href={item.path}')
+    && workspaceHome.includes("href={portal.items[0]?.path || '#'}"),
+  'both homepage CPC entry types disable speculative prefetch, retain href, other modules unchanged',
+);
+
 
 assert(
   roles.includes("'customer_project_center_team'")
