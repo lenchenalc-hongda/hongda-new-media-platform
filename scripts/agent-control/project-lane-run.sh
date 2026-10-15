@@ -13,11 +13,16 @@ set -euo pipefail
 : "${FIX_ROUND:=0}"
 : "${MAX_FIX_ROUNDS:=3}"
 
-codex_binary="/Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex"
+codex_binary="$HOME/.codex/plugins/.plugin-appserver/codex-cli/bin/codex"
+if [ ! -x "$codex_binary" ]; then
+  codex_binary="/Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex"
+fi
 if [ ! -x "$codex_binary" ]; then
   codex_binary="/Applications/ChatGPT.app/Contents/Resources/codex"
 fi
 [ -x "$codex_binary" ] || { printf 'CODEX_BINARY=ABSENT\n'; exit 1; }
+printf 'CODEX_BINARY=%s\n' "$codex_binary"
+"$codex_binary" --version 2>/dev/null || true
 
 default_model="${AGENT_CONTROL_DEFAULT_MODEL:-deepseek-v4-flash}"
 strong_model="${AGENT_CONTROL_STRONG_MODEL:-deepseek-v4-pro}"
@@ -99,10 +104,11 @@ EOF2
 set +e
 env -i \
   HOME="$HOME" \
-  PATH="/usr/bin:/bin:/usr/sbin:/sbin" \
+  CODEX_HOME="$HOME/.codex" \
+  PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin" \
   DEEPSEEK_API_KEY="$deepseek_api_key" \
   TMPDIR="$RUNNER_TEMP" \
-  "$codex_binary" exec \
+  "$codex_binary" --no-daemon exec \
   -m "$model_name" \
   -c "model_reasoning_effort=\"$reasoning_effort\"" \
   -C "$GITHUB_WORKSPACE" \
@@ -115,7 +121,16 @@ env -i \
 codex_status=$?
 set -e
 printf 'CODEX_EXIT_STATUS=%s\n' "$codex_status"
-[ "$codex_status" -eq 0 ] || { printf 'PROJECT_LANE_CODEX=FAIL\n'; exit 1; }
+if [ "$codex_status" -ne 0 ]; then
+  printf 'CODEX_STDERR_BEGIN\n'
+  /usr/bin/sed -E \
+    -e 's/sk-[A-Za-z0-9_-]{12,}/[REDACTED_API_KEY]/g' \
+    -e 's/(DEEPSEEK_API_KEY=)[^[:space:]]+/\1[REDACTED]/g' \
+    "$error_log" | /usr/bin/tail -n 80
+  printf 'CODEX_STDERR_END\n'
+  printf 'PROJECT_LANE_CODEX=FAIL\n'
+  exit 1
+fi
 
 [ "$(git rev-parse HEAD)" = "$EXPECTED_HEAD" ] || { printf 'PROJECT_LANE_GIT_HEAD=CHANGED\n'; exit 1; }
 git diff --cached --exit-code > /dev/null || { printf 'PROJECT_LANE_INDEX=DIRTY\n'; exit 1; }
