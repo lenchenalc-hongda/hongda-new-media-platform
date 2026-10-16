@@ -308,7 +308,8 @@ for (const routePath of cpcApiRoutes) {
   assert(
     source.includes('resolveCpcProfile')
       || source.includes('runCpcMutation')
-      || source.includes('resolveReportNarrativeSession'),
+      || source.includes('resolveReportNarrativeSession')
+      || source.includes('readTeamBoardSnapshot'),
     routePath + ' self-authenticates before CPC data access',
   );
 }
