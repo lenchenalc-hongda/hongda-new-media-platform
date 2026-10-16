@@ -105,7 +105,8 @@ async function reconcileMergedPr(project, issue, state) {
   state.status = 'MERGED';
   state.runtime_status = 'COMPLETE';
   state.verified_head = pr.merge_commit_sha || state.verified_head;
-  state.master_sha = pr.merge_commit_sha || state.master_sha;
+  const master = await api(`/repos/${REPOSITORY}/branches/master`);
+  state.master_sha = master?.commit?.sha || pr.merge_commit_sha || state.master_sha;
   state.active_pr = null;
   state.active_branch = null;
   state.infra_retry_count = 0;
@@ -175,7 +176,7 @@ async function inspectProject(project, config) {
     return;
   }
 
-  const latest = runs[0] || null;
+  const latest = runs.find(run => run.conclusion !== 'skipped') || null;
   const terminalAge = latest ? ageMinutes(latest.updated_at || latest.created_at) : Number.POSITIVE_INFINITY;
   const redispatch = shouldRedispatch({
     stateStatus: state.status,
