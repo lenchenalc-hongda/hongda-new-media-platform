@@ -167,7 +167,7 @@ assert(recovery.includes('MAX_INFRA_RETRIES'));
 
 const watchdog = read('scripts/agent-control/reliability-watchdog.mjs');
 assert(watchdog.includes('LOST_TRIGGER'));
-assert(watchdog.includes('WAITING_OWNER'));
+assert(reliabilityCore.includes('WAITING_OWNER'));
 assert(watchdog.includes('RECONCILED_MERGED_PR'));
 
 const watchdogWorkflow = read('.github/workflows/agent-control-reliability-watchdog-v2.yml');
