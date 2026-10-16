@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import {trustedGeneratedTask} from './owner-decision-core.mjs';
 
 const REPOSITORY = 'lenchenalc-hongda/hongda-new-media-platform';
 const TRUSTED_ACTOR = 'lenchenalc-hongda';
@@ -197,7 +198,7 @@ async function main() {
   const sourceIssue = state.status === 'FIX_REQUIRED' ? state.active_pr : CONTROL_ISSUE;
   const allComments = await comments(sourceIssue);
   const candidates = allComments
-    .filter(comment => comment.user?.login === TRUSTED_ACTOR && String(comment.body || '').replaceAll('\r\n', '\n').split('\n')[0] === TASK_SENTINEL)
+    .filter(comment => (comment.user?.login === TRUSTED_ACTOR || trustedGeneratedTask(comment,state,allComments)) && String(comment.body || '').replaceAll('\r\n', '\n').split('\n')[0] === TASK_SENTINEL)
     .sort((a, b) => b.id - a.id)
     .map(comment => ({ comment, task: parseTask(comment.body) }))
     .filter(({ task }) => task
@@ -246,3 +247,4 @@ async function main() {
 }
 
 main().catch(error => fail(error instanceof Error ? error.message : 'unknown validator error'));
+
