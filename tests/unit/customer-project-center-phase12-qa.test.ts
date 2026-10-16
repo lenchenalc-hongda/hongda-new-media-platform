@@ -308,7 +308,8 @@ for (const routePath of cpcApiRoutes) {
   assert(
     source.includes('resolveCpcProfile')
       || source.includes('runCpcMutation')
-      || source.includes('resolveReportNarrativeSession'),
+      || source.includes('resolveReportNarrativeSession')
+      || source.includes('readTeamBoardSnapshot'),
     routePath + ' self-authenticates before CPC data access',
   );
 }
@@ -630,7 +631,6 @@ assert(
 
 const loadingStateFiles = [
   'src/app/customer-projects/reports/page.tsx',
-  'src/app/customer-projects/team/page.tsx',
   'src/app/customer-projects/customers/[id]/page.tsx',
   'src/app/customer-projects/projects/[id]/page.tsx',
   'src/components/customer-projects/IntegrationStatusPanel.tsx',
@@ -728,7 +728,9 @@ assert(
 );
 
 const reportsPage = read('src/app/customer-projects/reports/page.tsx');
-const teamPage = read('src/app/customer-projects/team/page.tsx');
+const teamPage = read('src/app/customer-projects/team/TeamClient.tsx');
+const teamServerPage = read('src/app/customer-projects/team/page.tsx');
+const teamServerRead = read('src/lib/customer-projects/team-board-server.ts');
 const integrationPanel = read(
   'src/components/customer-projects/IntegrationStatusPanel.tsx',
 );
@@ -738,6 +740,17 @@ assert(
     && teamPage.includes("return { value: '未知'")
     && integrationPanel.includes("unknown: '未知'"),
   'partial and UNKNOWN data states remain visibly unknown',
+);
+
+assert(
+  !teamServerPage.includes("'use client'")
+    && teamServerPage.includes('readTeamBoardSnapshot')
+    && teamServerPage.includes('snapshot={result.ok ? result.data : null}')
+    && teamServerRead.includes("createCpcReadTiming('team')")
+    && teamServerRead.includes('resolveCpcProfile')
+    && teamServerRead.includes('canAccessTeamBoard')
+    && !teamPage.includes("fetch('/api/customer-projects/team'"),
+  'Team Board renders server-first while preserving trusted authorization and timing',
 );
 
 const customersServerPage = read('src/app/customer-projects/customers/page.tsx');
