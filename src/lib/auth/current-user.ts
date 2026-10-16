@@ -5,6 +5,7 @@
 
 import { NextResponse, type NextRequest } from 'next/server';
 import { cookies } from 'next/headers';
+import { cache } from 'react';
 import { canPerformAction } from './roles';
 import { CurrentUser, AuthError, getAuthMode, isSupabaseConfigured, type Role, type Action } from './types';
 import { getMockUserFromCookie } from './mock-user';
@@ -108,6 +109,10 @@ export async function getCurrentUserReadOnly(): Promise<CurrentUser | null> {
     });
   }
 }
+
+// React request cache deduplicates RootLayout + page Server Component reads
+// within the same RSC render. It does not replace authorization in API routes.
+export const getCurrentUserReadOnlyCached = cache(getCurrentUserReadOnly);
 
 export async function requireRole(roles: Role[]): Promise<CurrentUser> {
   const user = await requireUser();
