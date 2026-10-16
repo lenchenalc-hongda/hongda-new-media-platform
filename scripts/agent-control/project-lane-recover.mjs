@@ -1,5 +1,4 @@
-import fs from 'node:fs';
-
+import { INFRA_FAILURES, classifyFailureText, recoveryDecision } from './reliability-core.mjs';
 const REPOSITORY = process.env.GITHUB_REPOSITORY || 'lenchenalc-hongda/hongda-new-media-platform';
 const PROJECT = process.env.PROJECT_SLUG || '';
 const CONTROL_ISSUE = Number(process.env.CONTROL_ISSUE || '0');
@@ -8,18 +7,6 @@ const CURRENT_RUN_ID = Number(process.env.CURRENT_RUN_ID || '0');
 const TOKEN = process.env.GITHUB_TOKEN || '';
 const PROVIDED_FAILURE_CLASS = process.env.FAILURE_CLASS || '';
 const MAX_INFRA_RETRIES = Number(process.env.MAX_INFRA_RETRIES || '3');
-
-const INFRA_FAILURES = new Set([
-  'AUTH_FAILURE',
-  'PROVIDER_401',
-  'KEYCHAIN_FAILURE',
-  'NETWORK_FAILURE',
-  'CHECKOUT_FAILURE',
-  'RUNNER_OFFLINE',
-  'DEPENDENCY_FAILURE',
-  'CODEX_CRASH',
-  'UNKNOWN_INFRA_FAILURE',
-]);
 
 function fail(message) {
   console.error(`RELIABILITY_RECOVERY_ERROR=${message}`);
@@ -77,16 +64,6 @@ async function jobLog(jobId) {
   return response.text();
 }
 
-function classifyText(text) {
-  const value = String(text || '');
-  if (/\/usr\/bin\/security|Failed to resolve external auth|keychain/i.test(value)) return 'KEYCHAIN_FAILURE';
-  if (/\b401\b|unauthori[sz]ed|invalid (api )?key|authentication failed/i.test(value)) return 'PROVIDER_401';
-  if (/429|Too Many Requests|Could not resolve host|connection reset|network is unreachable|timed? out|TLS|SSL/i.test(value)) return 'NETWORK_FAILURE';
-  if (/checkout|git fetch|ls-remote/i.test(value) && /fail|error|fatal/i.test(value)) return 'CHECKOUT_FAILURE';
-  if (/pnpm install|npm install|dependency/i.test(value) && /fail|error/i.test(value)) return 'DEPENDENCY_FAILURE';
-  return '';
-}
-
 async function inferFailureClass() {
   if (PROVIDED_FAILURE_CLASS && PROVIDED_FAILURE_CLASS !== 'NONE') return PROVIDED_FAILURE_CLASS;
   if (!CURRENT_RUN_ID) return 'UNKNOWN_INFRA_FAILURE';
@@ -96,7 +73,7 @@ async function inferFailureClass() {
   const failed = jobs.filter(job => ['failure', 'timed_out', 'cancelled'].includes(job.conclusion));
   for (const job of failed) {
     const log = await jobLog(job.id);
-    const fromLog = classifyText(log);
+    const fromLog = classifyFailureText(log);
     if (fromLog) return fromLog;
 
     const failedSteps = (job.steps || []).filter(step => step.conclusion === 'failure').map(step => step.name || '');
@@ -164,7 +141,12 @@ async function main() {
   }
 
   const currentRetries = Number.isInteger(state.infra_retry_count) ? state.infra_retry_count : 0;
-  if (currentRetries >= MAX_INFRA_RETRIES) {
+  const decision = recoveryDecision({
+    failureClass,
+    retryCount: currentRetries,
+    maxRetries: MAX_INFRA_RETRIES,
+  });
+  if (decision.action === 'BLOCK') {
     state.status = 'BLOCKED';
     state.runtime_status = 'BLOCKED';
     state.last_failure_class = failureClass;
@@ -194,7 +176,7 @@ async function main() {
     return;
   }
 
-  const nextRetry = currentRetries + 1;
+  const nextRetry = decision.nextRetryCount;
   state.runtime_status = 'INFRA_RETRY';
   state.infra_retry_count = nextRetry;
   state.last_failure_class = failureClass;
