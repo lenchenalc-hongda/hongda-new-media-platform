@@ -12,6 +12,11 @@ set -euo pipefail
 : "${CONTROL_ISSUE:?}"
 : "${TASK_COMMENT_ID:?}"
 : "${REPOSITORY:?}"
+: "${RUN_RESULT:=PASS}"
+: "${FAILURE_CLASS:=NONE}"
+: "${CHECKS_PASSED:=true}"
+: "${FAILED_CHECK:=NONE}"
+: "${INFRA_LOCAL_ATTEMPTS:=1}"
 
 askpass_file="$(mktemp "$RUNNER_TEMP/project-lane-askpass.XXXXXX")"
 curl_config="$(mktemp "$RUNNER_TEMP/project-lane-curl.XXXXXX")"
@@ -109,7 +114,12 @@ BRANCH = $BRANCH_NAME
 HEAD_SHA = $commit_sha
 AUTO_MERGE = false
 AUTO_PRODUCTION = false
-READY_FOR_PM_REVIEW = YES"
+RUN_RESULT = $RUN_RESULT
+FAILURE_CLASS = $FAILURE_CLASS
+CHECKS_PASSED = $CHECKS_PASSED
+FAILED_CHECK = $FAILED_CHECK
+INFRA_LOCAL_ATTEMPTS = $INFRA_LOCAL_ATTEMPTS
+READY_FOR_PM_REVIEW = $ready_for_pm_review"
   body_json="$(printf '%s' "$pr_body" | json_string)"
   payload="{\"title\":\"$PROJECT_SLUG: $TASK_ID\",\"head\":\"$BRANCH_NAME\",\"base\":\"master\",\"body\":$body_json,\"draft\":true}"
   http_code="$(curl --silent --show-error --http1.1 --config "$curl_config" --output "$response_file" --write-out '%{http_code}' --request POST "https://api.github.com/repos/$REPOSITORY/pulls" --data "$payload")"
@@ -119,9 +129,15 @@ else
   pr_number="${ACTIVE_PR:?}"
 fi
 
+task_status="PASS"
+ready_for_pm_review="YES"
+if [ "$RUN_RESULT" = "CODE_FAILURE" ]; then
+  task_status="FIX_REQUIRED"
+fi
+
 completion="PROJECT = $PROJECT_SLUG
 TASK_ID = $TASK_ID
-TASK_STATUS = PASS
+TASK_STATUS = $task_status
 BASE_MASTER_SHA = $BASE_MASTER_SHA
 BASE_HEAD_SHA = $EXPECTED_HEAD
 HEAD_SHA = $commit_sha

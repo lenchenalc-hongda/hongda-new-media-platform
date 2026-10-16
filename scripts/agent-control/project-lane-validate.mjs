@@ -147,9 +147,12 @@ async function main() {
   if (!projectConfig || projectConfig.control_issue !== CONTROL_ISSUE) fail('project registry mismatch');
 
   const event = JSON.parse(fs.readFileSync(eventPath, 'utf8'));
-  if (eventName !== 'issue_comment') fail('project lane only accepts issue_comment trigger');
-  if (event.repository?.full_name !== REPOSITORY || event.issue?.number !== CONTROL_ISSUE || event.issue?.pull_request) fail('untrusted repository/control issue');
-  if (event.sender?.login !== TRUSTED_ACTOR || event.comment?.user?.login !== TRUSTED_ACTOR || String(event.comment?.body || '').trim() !== TRIGGER) fail('untrusted trigger');
+  if (!['issue_comment', 'workflow_dispatch'].includes(eventName)) fail('project lane only accepts issue_comment or workflow_dispatch trigger');
+  if (event.repository?.full_name !== REPOSITORY) fail('untrusted repository');
+  if (eventName === 'issue_comment') {
+    if (event.issue?.number !== CONTROL_ISSUE || event.issue?.pull_request) fail('untrusted repository/control issue');
+    if (event.sender?.login !== TRUSTED_ACTOR || event.comment?.user?.login !== TRUSTED_ACTOR || String(event.comment?.body || '').trim() !== TRIGGER) fail('untrusted trigger');
+  }
 
   const issue = await api(`/repos/${REPOSITORY}/issues/${CONTROL_ISSUE}`);
   const state = parseState(issue.body);
@@ -161,6 +164,17 @@ async function main() {
   if (!/^[0-9a-f]{40}$/.test(masterSha || '')) fail('live master SHA unavailable');
 
   if (state.status === 'READY_FOR_CODEX' && (state.master_sha !== masterSha || state.verified_head !== masterSha)) fail('READY control state is stale against master');
+
+  if (eventName === 'workflow_dispatch') {
+    const sender = event.sender?.login || '';
+    if (![TRUSTED_ACTOR, 'github-actions[bot]'].includes(sender)) fail('untrusted workflow_dispatch sender');
+    const expectedHead = state.status === 'FIX_REQUIRED' ? state.verified_head : state.master_sha;
+    const inputs = event.inputs || {};
+    if (inputs.recovery_task_id !== state.current_task_id) fail('workflow_dispatch task id mismatch');
+    if (inputs.recovery_expected_head !== expectedHead) fail('workflow_dispatch expected head mismatch');
+    const attempt = Number(inputs.recovery_attempt || '0');
+    if (!Number.isInteger(attempt) || attempt < 0 || attempt > 3) fail('workflow_dispatch retry attempt invalid');
+  }
 
   if (state.status === 'FIX_REQUIRED' && state.fix_round >= state.max_fix_rounds) {
     emit({
@@ -184,11 +198,15 @@ async function main() {
   const allComments = await comments(sourceIssue);
   const candidates = allComments
     .filter(comment => comment.user?.login === TRUSTED_ACTOR && String(comment.body || '').replaceAll('\r\n', '\n').split('\n')[0] === TASK_SENTINEL)
-    .sort((a, b) => b.id - a.id);
-  const comment = candidates[0];
-  if (!comment) fail('trusted project task comment not found');
-  const task = parseTask(comment.body);
-  if (!task) fail('project task comment invalid');
+    .sort((a, b) => b.id - a.id)
+    .map(comment => ({ comment, task: parseTask(comment.body) }))
+    .filter(({ task }) => task
+      && task.taskId === state.current_task_id
+      && task.status === state.status
+      && task.baseMasterSha === state.master_sha);
+  const selected = candidates[0];
+  if (!selected) fail('trusted valid project task comment not found');
+  const { comment, task } = selected;
   const checks = validateTaskAgainstState(task, state, masterSha, projectConfig, registry);
 
   const branchSuffix = task.taskId.slice(projectConfig.task_prefix.length).toLowerCase().replace(/[^a-z0-9._-]+/g, '-');

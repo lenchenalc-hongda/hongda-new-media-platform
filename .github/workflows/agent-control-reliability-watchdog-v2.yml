@@ -1,0 +1,29 @@
+name: Agent Control Reliability Watchdog V2
+
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+
+permissions:
+  actions: write
+  contents: read
+  issues: write
+  pull-requests: read
+
+concurrency:
+  group: agent-control-reliability-watchdog-v2
+  cancel-in-progress: false
+
+jobs:
+  reconcile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Reconcile project lanes
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          LOST_TRIGGER_MINUTES: '10'
+          RUNNER_STALL_MINUTES: '30'
+        run: node scripts/agent-control/reliability-watchdog.mjs

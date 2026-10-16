@@ -142,8 +142,20 @@ jobs:
       - name: Agent Control READY general runner tests
         run: pnpm exec tsx tests/unit/agent-control-ready-general-runner.test.ts
 
+      - name: Agent Control Reliability V2 syntax checks
+        run: |
+          bash -n scripts/agent-control/project-lane-run.sh
+          bash -n scripts/agent-control/project-lane-publish.sh
+          node --check scripts/agent-control/project-lane-validate.mjs
+          node --check scripts/agent-control/project-lane-recover.mjs
+          node --check scripts/agent-control/reliability-core.mjs
+          node --check scripts/agent-control/reliability-watchdog.mjs
+
       - name: Agent Control multi-project lane tests
         run: pnpm exec tsx tests/unit/agent-control-multiproject.test.ts
+
+      - name: Agent Control Reliability V2 failure-injection tests
+        run: pnpm exec tsx tests/unit/agent-control-reliability-v2.test.ts
 
       - name: Check server-only imports
         run: bash scripts/check-server-imports.sh

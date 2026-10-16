@@ -22,6 +22,7 @@ The concurrency unit is **project**, not repository and not individual file edit
 | --- | ---: | --- | --- |
 | Customer Project Center | #10 | `CPC-` | `codex/cpc-` |
 | Global Lead Hub | #72 | `GLH-` | `codex/glh-` |
+| Workshop Order System | #104 | `WOS-` | `codex/wos-` |
 
 The machine-readable registry is `.github/agent-control/project-registry.json`.
 
@@ -29,7 +30,7 @@ The machine-readable registry is `.github/agent-control/project-registry.json`.
 
 Each control issue uses the existing `AGENT_CONTROL_STATE_START/END` JSON block. `project` must match the registry slug.
 
-A project may have one of the existing workflow states:
+A project may have one of the workflow states below. Reliability V2 also writes `runtime_status` and `infra_retry_count` without consuming business `fix_round`:
 
 - `READY_FOR_CODEX`
 - `CODEX_WORKING`
@@ -39,6 +40,9 @@ A project may have one of the existing workflow states:
 - `APPROVED_FOR_MERGE`
 - `MERGED`
 - `BLOCKED`
+- `HUMAN_GATE`
+
+Runtime presentation is normalized to `RUNNING`, `QUEUED`, `WAITING_OWNER`, `BLOCKED`, or `COMPLETE`.
 
 `active_pr`, `active_branch`, `verified_head`, `master_sha`, `fix_round`, `max_fix_rounds`, `auto_merge` and `auto_production` remain project-local.
 
@@ -121,4 +125,4 @@ Across projects:
 3. Bring a second runner instance online.
 4. Convert Issue #72 into the GLH control issue with its own machine state.
 5. Start GLH through the dedicated project-lane workflow.
-6. Run CPC and GLHÛÛ˜İ\œ™[K‚Ëˆ™]\™H™\ÜÚ]ÜK]ÚYHÙ\šX[^˜][ÛˆÛ›HY\ˆ›İ[[™H›ÛÙˆ\ÜÙ\Ë‚‚ˆÈÈ[X[ˆØ]\È[˜Ú[™ÙB‚“™]™\ˆ\˜[[^™H]Ø^H\›İ˜[™\]Z\™[Y[È›Ü‚‚‹H›ÙXİ[ÛˆÔSÔ“ËÙ[‹ÜÙXÜ™]ÎÂ‹H\İXİ]™H›ÙXİ[Ûˆ]HXİ[ÛœÎÂ‹H\İXİ]™HZYÜ˜][ÛœÎÂ‹H™X[Y]KÕÚ]Ğ\›ÙXİ[Ûˆİ]İ™\Â‹Hİ\İÛY\ˆİÛ™\œÚ\]Â‹Hš[˜[˜ÚX[Ûİ\˜ÙK[Ù‹]]Â‹H^\›˜[X›\Ú[™ÎÂ‹HX]\šX[\Ú[™\ÜË\ÛXŞHXÚ\Ú[ÛœË‚
+6. Run CPC and GLHÃ›Ã›ËœÃ\Å“â„¢[ÂKâ€šÂÃ‹Ë†â„¢]\â„¢Hâ„¢\ÃœÃš]ÃœÅ¾K]ÃšYHÃ™\Å¡X[^Ëœ][Ã›Ë†Ã›â€ºHYÂ\Ë†â€ºÃ[[â„¢Hâ€ºÃ›Ã™Ë†\ÃœÃ™\Ã‹â€šâ€šË†ÃˆÃˆ[X[Ë†Ã˜]\Ãˆ[ËœÃš[â„¢Ã™Bâ€šâ€œâ„¢]â„¢\Ë†\Ëœ[[^â„¢H]Ã˜^H\â€ºÃËœ[â„¢\]Z\â„¢[Y[ÂÃˆâ€ºÃœÅ½â€šâ€šâ€¹Hâ€ºÃ™XÃ[Ã›Ë†Ã”SÃ”â€œÃ‹Ã™[Ââ€¹ÃœÃ™XÃœâ„¢]ÃÃ‚â€¹H\ÃÂXÃ]â„¢Hâ€ºÃ™XÃ[Ã›Ë†]HXÃ[Ã›Å“ÃÃ‚â€¹H\ÃÂXÃ]â„¢HZYÃœËœ][Ã›Å“ÃÃ‚â€¹Hâ„¢X[Y]KÃ•Ãš]Ã\â€ºÃ™XÃ[Ã›Ë†Ã]Ãâ„¢\Å½Ã‚â€¹HÃ\ÃÃ›Y\Ë†ÃÃ›â„¢\Å“Ãš\Â]Ã‚â€¹HÅ¡[Ëœ[ËœÃšX[Ã›Ã\ËœÃ™K[Ã™â€¹]Â]Ã‚â€¹H^\â€ºËœ[Xâ€º\Ãš[â„¢ÃÃ‚â€¹HX]\Å¡X[Â\Ãš[â„¢\ÃœÃ‹\Ã›XÃHXÃš\Ãš[Ã›Å“Ã‹â€š
