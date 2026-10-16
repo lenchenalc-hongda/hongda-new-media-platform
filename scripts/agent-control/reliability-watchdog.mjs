@@ -170,7 +170,15 @@ async function inspectProject(project, config) {
   const runs = await workflowRuns(config.workflow_file);
   const active = runs.find(run => ['queued', 'in_progress', 'waiting', 'pending'].includes(run.status));
   if (active) {
-    state.runtime_status = ageMinutes(active.created_at) > RUNNER_STALL_MINUTES ? 'RUNNER_STALLED' : 'RUNNING';
+    const queued = ['queued', 'waiting', 'pending'].includes(active.status);
+    state.runtime_status = ageMinutes(active.created_at) > RUNNER_STALL_MINUTES
+      ? 'RUNNER_STALLED'
+      : displayStatus({
+        stateStatus: state.status,
+        ownerActionRequired: false,
+        hasActiveRun: !queued,
+        queued,
+      });
     await updateState(issue, state);
     console.log(`WATCHDOG_PROJECT=${project} RESULT=${state.runtime_status} RUN_ID=${active.id}`);
     return;
