@@ -21,6 +21,14 @@ const page = fs.readFileSync(
   'src/app/customer-projects/team/page.tsx',
   'utf8',
 );
+const client = fs.readFileSync(
+  'src/app/customer-projects/team/TeamClient.tsx',
+  'utf8',
+);
+const serverRead = fs.readFileSync(
+  'src/lib/customer-projects/team-board-server.ts',
+  'utf8',
+);
 const model = fs.readFileSync(
   'src/lib/customer-projects/team-board.ts',
   'utf8',
@@ -60,29 +68,30 @@ assert(
 );
 
 assert(
-  api.includes('resolveCpcProfile')
-    && api.includes('canAccessTeamBoard(profile.role)')
-    && api.includes("jsonError('无权访问团队看板', 403)"),
-  'Team Board API enforces manager/admin authorization server-side',
+  api.includes('readTeamBoardSnapshot')
+    && serverRead.includes('resolveCpcProfile')
+    && serverRead.includes('canAccessTeamBoard(profile.role)')
+    && serverRead.includes("message: '无权访问团队看板'"),
+  'Team Board API and server page share one manager/admin-authorized read path',
 );
 assert(
-  (api.match(/\.eq\('org_id', profile\.orgId\)/g)?.length ?? 0) >= 6,
+  (serverRead.match(/\.eq\('org_id', profile\.orgId\)/g)?.length ?? 0) >= 6,
   'every Team Board CPC/profile read is same-org scoped',
 );
 assert(
-  api.includes('.range(0, MAX_PROJECT_ROWS - 1)')
-    && api.includes('.range(0, MAX_WORK_ITEM_ROWS - 1)')
-    && api.includes('.range(0, MAX_CUSTOMER_ROWS - 1)')
-    && api.includes('.range(0, MAX_PROFILE_ROWS - 1)')
-    && api.includes('.range(0, MAX_REPORT_ROWS - 1)')
-    && api.includes('.range(0, MAX_EVENT_ROWS - 1)'),
+  serverRead.includes('.range(0, MAX_PROJECT_ROWS - 1)')
+    && serverRead.includes('.range(0, MAX_WORK_ITEM_ROWS - 1)')
+    && serverRead.includes('.range(0, MAX_CUSTOMER_ROWS - 1)')
+    && serverRead.includes('.range(0, MAX_PROFILE_ROWS - 1)')
+    && serverRead.includes('.range(0, MAX_REPORT_ROWS - 1)')
+    && serverRead.includes('.range(0, MAX_EVENT_ROWS - 1)'),
   'Team Board reads are bounded to explicit row limits',
 );
 assert(
-  !api.includes('createAdminSupabaseClient')
-    && !api.includes('SUPABASE_SERVICE_ROLE')
-    && !api.includes('service_role'),
-  'Team Board API does not bypass RLS with a privileged browser/server read',
+  !serverRead.includes('createAdminSupabaseClient')
+    && !serverRead.includes('SUPABASE_SERVICE_ROLE')
+    && !serverRead.includes('service_role'),
+  'Team Board server read does not bypass RLS with a privileged client',
 );
 for (const mutation of [
   'export async function POST',
@@ -99,26 +108,29 @@ for (const mutation of [
 }
 
 assert(
-  page.includes("fetch('/api/customer-projects/team'")
-    && page.includes('id="management-decisions"')
-    && page.includes('id="commitment-exceptions"')
-    && page.includes('id="project-exceptions"')
-    && page.includes('id="team-support"')
-    && page.includes('id="old-customer-coverage"')
-    && page.includes('id="business-progress"'),
-  'Team Board page exposes all six required sections',
+  !page.includes("'use client'")
+    && page.includes('readTeamBoardSnapshot')
+    && page.includes('snapshot={result.ok ? result.data : null}')
+    && client.includes('id="management-decisions"')
+    && client.includes('id="commitment-exceptions"')
+    && client.includes('id="project-exceptions"')
+    && client.includes('id="team-support"')
+    && client.includes('id="old-customer-coverage"')
+    && client.includes('id="business-progress"')
+    && !client.includes("fetch('/api/customer-projects/team'"),
+  'Team Board renders all six sections from server-provided initial data without an initial client fetch',
 );
 assert(
-  page.indexOf('id="management-decisions"')
-    < page.indexOf('id="commitment-exceptions"')
-    && page.indexOf('id="commitment-exceptions"')
-    < page.indexOf('id="project-exceptions"')
-    && page.indexOf('id="project-exceptions"')
-    < page.indexOf('id="team-support"')
-    && page.indexOf('id="team-support"')
-    < page.indexOf('id="old-customer-coverage"')
-    && page.indexOf('id="old-customer-coverage"')
-    < page.indexOf('id="business-progress"'),
+  client.indexOf('id="management-decisions"')
+    < client.indexOf('id="commitment-exceptions"')
+    && client.indexOf('id="commitment-exceptions"')
+    < client.indexOf('id="project-exceptions"')
+    && client.indexOf('id="project-exceptions"')
+    < client.indexOf('id="team-support"')
+    && client.indexOf('id="team-support"')
+    < client.indexOf('id="old-customer-coverage"')
+    && client.indexOf('id="old-customer-coverage"')
+    < client.indexOf('id="business-progress"'),
   'Team Board page keeps the frozen first-screen section order',
 );
 for (const forbidden of [
@@ -129,10 +141,10 @@ for (const forbidden of [
   '.rpc(',
   'createAdminSupabaseClient',
 ]) {
-  assert(!page.includes(forbidden), 'Team Board client avoids direct/legacy data path: ' + forbidden);
+  assert(!client.includes(forbidden), 'Team Board client avoids direct/legacy data path: ' + forbidden);
 }
 for (const prohibited of ['排名', '评分', '绩效', '态度', 'message_count', 'click_count']) {
-  assert(!page.includes(prohibited), 'Team Board page has no prohibited inference UI: ' + prohibited);
+  assert(!client.includes(prohibited), 'Team Board page has no prohibited inference UI: ' + prohibited);
 }
 
 assert(
