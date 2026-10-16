@@ -202,19 +202,22 @@ if ! printf '%s\n' "$provider_block" | /usr/bin/grep -Eq '^requires_openai_auth[
   exit 1
 fi
 
+model_catalog_line=""
+if [ -f "$HOME/.codex/models.json" ]; then
+  cp "$HOME/.codex/models.json" "$agent_codex_home/models.json"
+  chmod 600 "$agent_codex_home/models.json"
+  model_catalog_line="model_catalog_json = \"$agent_codex_home/models.json\""
+fi
+
 {
   printf 'model = "%s"\n' "$model_name"
   printf 'model_provider = "deepseek"\n'
   printf 'model_reasoning_effort = "%s"\n' "$reasoning_effort"
+  if [ -n "$model_catalog_line" ]; then printf '%s\n' "$model_catalog_line"; fi
   /usr/bin/grep -E '^(preferred_auth_method|forced_login_method)[[:space:]]*=' "$source_config" || true
   printf '\n%s\n' "$provider_block"
 } > "$agent_codex_home/config.toml"
 chmod 600 "$agent_codex_home/config.toml"
-
-if [ -f "$HOME/.codex/models.json" ]; then
-  cp "$HOME/.codex/models.json" "$agent_codex_home/models.json"
-  chmod 600 "$agent_codex_home/models.json"
-fi
 
 # Discover the actual installed CLI surface before executing; fail closed if required flags are absent.
 env -i HOME="$agent_user_home" CODEX_HOME="$agent_codex_home" PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin" TMPDIR="$RUNNER_TEMP" \
@@ -228,7 +231,7 @@ done
 for required in '--output-last-message' '--ephemeral' '--ignore-rules'; do
   /usr/bin/grep -q -- "$required" "$exec_help_file" || { emit_output failure_class AUTH_FAILURE; emit_output run_result INFRA_FAILURE; printf 'CODEX_EXEC_REQUIRED_FLAG_MISSING=%s\n' "$required"; exit 1; }
 done
-if ! "$codex_binary" --help 2>&1 | /usr/bin/grep -q -- '--no-daemon'; then
+if ! /usr/bin/grep -q -- '--no-daemon' "$help_file"; then
   emit_output failure_class AUTH_FAILURE
   emit_output run_result INFRA_FAILURE
   printf 'CODEX_REQUIRED_FLAG_MISSING=--no-daemon\n'
