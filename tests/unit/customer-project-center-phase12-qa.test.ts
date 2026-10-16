@@ -652,6 +652,9 @@ for (const pagePath of loadingStateFiles) {
 
 const authPerfTiming = read('src/lib/auth/performance.ts');
 const currentUserAuth = read('src/lib/auth/current-user.ts');
+const rootLayoutAuth = read('src/app/layout.tsx');
+const supabaseUserAuth = read('src/lib/auth/supabase-user.ts');
+const authTypes = read('src/lib/auth/types.ts');
 assert(
   authPerfTiming.includes("console.info('[auth-perf]'")
     && authPerfTiming.includes('totalMs')
@@ -668,6 +671,16 @@ assert(
     && currentUserAuth.includes("scope: 'server-readonly'")
     && currentUserAuth.includes('logAuthPerformance'),
   'CPC middleware and server read-only authentication are independently timed',
+);
+assert(
+  currentUserAuth.includes('getCurrentUserReadOnlyCached = cache(getCurrentUserReadOnly)')
+    && rootLayoutAuth.includes('getCurrentUserReadOnlyCached')
+    && authTypes.includes('profileId?: string | null')
+    && authTypes.includes('orgId?: string | null')
+    && supabaseUserAuth.includes(".select('id,user_id,org_id,full_name,email,role,department,is_active')")
+    && supabaseUserAuth.includes('profileId: profile.id')
+    && supabaseUserAuth.includes('orgId: profile.org_id ?? null'),
+  'RootLayout and CPC server reads can reuse one verified profile result per RSC render',
 );
 
 const perfTiming = read('src/lib/customer-projects/performance.ts');
@@ -722,9 +735,14 @@ assert(
 );
 assert(
   serverReads.includes("import 'server-only'")
-    && serverReads.includes('resolveCpcProfile')
+    && serverReads.includes('getCurrentUserReadOnlyCached')
+    && serverReads.includes('resolveServerReadContext')
+    && serverReads.includes("user.authSource === 'supabase'")
+    && serverReads.includes('user.profileId')
+    && serverReads.includes('user.orgId')
+    && serverReads.includes('resolveCpcProfile(supabase)')
     && serverReads.includes(".eq('org_id', profile.orgId)"),
-  'Server-first reads preserve trusted profile resolution and organization scoping',
+  'Server-first reads reuse trusted same-request auth while preserving fallback verification and organization scoping',
 );
 
 const reportsPage = read('src/app/customer-projects/reports/page.tsx');
