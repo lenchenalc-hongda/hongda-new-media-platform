@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import { displayStatus, shouldRedispatch } from './reliability-core.mjs';
 const REPOSITORY = process.env.GITHUB_REPOSITORY || 'lenchenalc-hongda/hongda-new-media-platform';
 const TOKEN = process.env.GITHUB_TOKEN || '';
