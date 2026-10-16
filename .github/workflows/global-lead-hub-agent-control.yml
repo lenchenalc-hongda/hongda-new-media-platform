@@ -1,4 +1,5 @@
 name: Global Lead Hub Agent Control
+run-name: ${{ inputs.recovery_task_id || github.workflow }}
 
 on:
   issue_comment:
@@ -217,3 +218,4 @@ jobs:
           FAILURE_CLASS: ${{ needs.execute.outputs.failure_class }}
           MAX_INFRA_RETRIES: '3'
         run: node scripts/agent-control/project-lane-recover.mjs
+

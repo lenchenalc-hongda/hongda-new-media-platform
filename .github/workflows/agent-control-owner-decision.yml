@@ -1,0 +1,30 @@
+name: Agent Control Owner Decision
+on:
+  issue_comment:
+    types: [created]
+permissions:
+  contents: read
+jobs:
+  consume:
+    if: >-
+      github.repository == 'lenchenalc-hongda/hongda-new-media-platform' &&
+      github.event.issue.number == 72 &&
+      github.event.issue.pull_request == null &&
+      github.event.sender.login == 'lenchenalc-hongda' &&
+      github.event.comment.user.login == 'lenchenalc-hongda' &&
+      startsWith(github.event.comment.body, 'OWNER_DECISION_V1')
+    concurrency:
+      group: owner-decision-global-lead-hub
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+      actions: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Validate and consume exact owner decision
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/agent-control/owner-decision-handler.mjs
