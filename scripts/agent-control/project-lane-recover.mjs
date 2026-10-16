@@ -74,7 +74,7 @@ async function inferFailureClass() {
   for (const job of failed) {
     const log = await jobLog(job.id);
     const fromLog = classifyFailureText(log);
-    if (fromLog) return fromLog;
+    if (fromLog && fromLog !== 'UNKNOWN_INFRA_FAILURE') return fromLog;
 
     const failedSteps = (job.steps || []).filter(step => step.conclusion === 'failure').map(step => step.name || '');
     const names = failedSteps.join(' | ');
