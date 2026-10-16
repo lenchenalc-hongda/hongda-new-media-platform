@@ -190,9 +190,13 @@ fi
 printf 'AGENT_CODEX_SOURCE_PROVIDER_ID=%s\n' "$source_provider_id"
 
 provider_block="$(/usr/bin/awk -v provider="$source_provider_id" '
-  $0 == "[model_providers." provider "]" {capture=1; print; next}
-  /^\[/ && capture {exit}
-  capture && /^(name|base_url|env_key|wire_api|requires_openai_auth|request_max_retries|stream_max_retries|stream_idle_timeout_ms)[[:space:]]*=/ {print}
+  {
+    normalized=$0
+    sub(/^[[:space:]]+/, "", normalized)
+  }
+  normalized == "[model_providers." provider "]" {capture=1; print normalized; next}
+  normalized ~ /^\[/ && capture {exit}
+  capture && normalized ~ /^(name|base_url|env_key|wire_api|requires_openai_auth|request_max_retries|stream_max_retries|stream_idle_timeout_ms)[[:space:]]*=/ {print normalized}
 ' "$source_config")"
 
 if [ -z "$provider_block" ]; then

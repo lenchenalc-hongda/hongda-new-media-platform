@@ -111,6 +111,8 @@ assert(runner.includes('CODEX_HOME="$agent_codex_home"'));
 assert(!runner.includes('CODEX_HOME="$HOME/.codex"'));
 assert(runner.includes('AGENT_CODEX_RUNTIME=ISOLATED'));
 assert(runner.includes('source_provider_id'));
+assert(runner.includes('normalized=$0'));
+assert(runner.includes('print normalized'));
 assert(runner.includes('model_provider = "%s"'));
 assert(!runner.includes('model_provider = "deepseek"'));
 assert(runner.includes('KEYCHAIN_FAILURE'));
