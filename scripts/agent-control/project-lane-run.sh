@@ -171,8 +171,26 @@ if [ ! -f "$source_config" ]; then
   exit 1
 fi
 
-provider_block="$(/usr/bin/awk '
-  /^\[model_providers\.deepseek\][[:space:]]*$/ {capture=1; print; next}
+source_provider_id="$(/usr/bin/awk -F= '
+  /^[[:space:]]*model_provider[[:space:]]*=/ {
+    value=$2
+    gsub(/^[[:space:]]*"/, "", value)
+    gsub(/"[[:space:]]*$/, "", value)
+    gsub(/[[:space:]]/, "", value)
+    print value
+    exit
+  }
+' "$source_config")"
+if [ -z "$source_provider_id" ]; then
+  emit_output failure_class AUTH_FAILURE
+  emit_output run_result INFRA_FAILURE
+  printf 'AGENT_CODEX_PROVIDER_ID=MISSING\n'
+  exit 1
+fi
+printf 'AGENT_CODEX_SOURCE_PROVIDER_ID=%s\n' "$source_provider_id"
+
+provider_block="$(/usr/bin/awk -v provider="$source_provider_id" '
+  $0 == "[model_providers." provider "]" {capture=1; print; next}
   /^\[/ && capture {exit}
   capture && /^(name|base_url|env_key|wire_api|requires_openai_auth|request_max_retries|stream_max_retries|stream_idle_timeout_ms)[[:space:]]*=/ {print}
 ' "$source_config")"
@@ -180,7 +198,7 @@ provider_block="$(/usr/bin/awk '
 if [ -z "$provider_block" ]; then
   emit_output failure_class AUTH_FAILURE
   emit_output run_result INFRA_FAILURE
-  printf 'AGENT_CODEX_PROVIDER_CONFIG=MISSING\n'
+  printf 'AGENT_CODEX_PROVIDER_CONFIG=MISSING_FOR_%s\n' "$source_provider_id"
   exit 1
 fi
 if printf '%s\n' "$provider_block" | /usr/bin/grep -Eqi '/usr/bin/security|external_auth|auth_command|experimental_bearer_token'; then
@@ -211,7 +229,7 @@ fi
 
 {
   printf 'model = "%s"\n' "$model_name"
-  printf 'model_provider = "deepseek"\n'
+  printf 'model_provider = "%s"\n' "$source_provider_id"
   printf 'model_reasoning_effort = "%s"\n' "$reasoning_effort"
   if [ -n "$model_catalog_line" ]; then printf '%s\n' "$model_catalog_line"; fi
   /usr/bin/grep -E '^(preferred_auth_method|forced_login_method)[[:space:]]*=' "$source_config" || true

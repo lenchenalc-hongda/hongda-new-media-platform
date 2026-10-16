@@ -29,9 +29,6 @@ permissions:
   issues: read
   pull-requests: read
 
-concurrency:
-  group: agent-control-${{ github.repository }}-customer-project-center
-  cancel-in-progress: false
 
 jobs:
   gate:
@@ -95,6 +92,9 @@ jobs:
   execute:
     needs: validate
     if: needs.validate.outputs.result == 'READY'
+    concurrency:
+      group: agent-control-${{ github.repository }}-customer-project-center
+      cancel-in-progress: false
     runs-on: [self-hosted, macOS, X64, hongda-agent-control]
     timeout-minutes: 90
     permissions:
