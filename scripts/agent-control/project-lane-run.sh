@@ -189,20 +189,80 @@ if [ -z "$source_provider_id" ]; then
 fi
 printf 'AGENT_CODEX_SOURCE_PROVIDER_ID=%s\n' "$source_provider_id"
 
-provider_block="$(/usr/bin/awk -v provider="$source_provider_id" '
-  {
-    normalized=$0
-    sub(/^[[:space:]]+/, "", normalized)
-  }
-  normalized == "[model_providers." provider "]" {capture=1; print normalized; next}
-  normalized ~ /^\[/ && capture {exit}
-  capture && normalized ~ /^(name|base_url|env_key|wire_api|requires_openai_auth|request_max_retries|stream_max_retries|stream_idle_timeout_ms)[[:space:]]*=/ {print normalized}
-' "$source_config")"
+provider_block_for() {
+  local provider="$1"
+  /usr/bin/awk -v provider="$provider" '
+    {
+      normalized=$0
+      sub(/^[[:space:]]+/, "", normalized)
+    }
+    normalized == "[model_providers." provider "]" {capture=1; print normalized; next}
+    normalized ~ /^\[/ && capture {exit}
+    capture && normalized ~ /^(name|base_url|env_key|wire_api|requires_openai_auth|request_max_retries|stream_max_retries|stream_idle_timeout_ms)[[:space:]]*=/ {print normalized}
+  ' "$source_config"
+}
+
+provider_is_safe_deepseek() {
+  local block="$1"
+  [ -n "$block" ] || return 1
+  printf '%s\n' "$block" | /usr/bin/grep -Eqi '/usr/bin/security|external_auth|auth_command|experimental_bearer_token' && return 1
+  printf '%s\n' "$block" | /usr/bin/grep -Eq '^env_key[[:space:]]*=[[:space:]]*"DEEPSEEK_API_KEY"' || return 1
+  printf '%s\n' "$block" | /usr/bin/grep -Eq '^requires_openai_auth[[:space:]]*=[[:space:]]*false' || return 1
+  return 0
+}
+
+provider_block="$(provider_block_for "$source_provider_id")"
+selected_provider_id="$source_provider_id"
+
+# cc-switch and older Desktop configs can leave root model_provider pointing at an
+# alias while the actual DeepSeek env-key provider is stored under a different
+# [model_providers.*] section. Discover that section from the live config rather
+# than guessing a provider id or copying any credential value.
+if ! provider_is_safe_deepseek "$provider_block"; then
+  safe_provider_id="$(/usr/bin/awk '
+    function finish() {
+      if (found == "" && provider != "" && has_env && auth_false && !unsafe) {
+        found=provider
+      }
+    }
+    {
+      normalized=$0
+      sub(/^[[:space:]]+/, "", normalized)
+    }
+    normalized ~ /^\[model_providers\.[^]]+\]$/ {
+      finish()
+      provider=normalized
+      sub(/^\[model_providers\./, "", provider)
+      sub(/\]$/, "", provider)
+      has_env=0
+      auth_false=0
+      unsafe=0
+      next
+    }
+    normalized ~ /^\[/ {
+      finish()
+      provider=""
+      next
+    }
+    provider != "" && normalized ~ /^env_key[[:space:]]*=[[:space:]]*"DEEPSEEK_API_KEY"[[:space:]]*$/ {has_env=1}
+    provider != "" && normalized ~ /^requires_openai_auth[[:space:]]*=[[:space:]]*false[[:space:]]*$/ {auth_false=1}
+    provider != "" && normalized ~ /(\/usr\/bin\/security|external_auth|auth_command|experimental_bearer_token)/ {unsafe=1}
+    END {
+      finish()
+      if (found != "") print found
+    }
+  ' "$source_config")"
+  if [ -n "$safe_provider_id" ]; then
+    selected_provider_id="$safe_provider_id"
+    provider_block="$(provider_block_for "$selected_provider_id")"
+    printf 'AGENT_CODEX_PROVIDER_SELECTION=DISCOVERED_SAFE_ENV_PROVIDER\n'
+  fi
+fi
 
 if [ -z "$provider_block" ]; then
   emit_output failure_class AUTH_FAILURE
   emit_output run_result INFRA_FAILURE
-  printf 'AGENT_CODEX_PROVIDER_CONFIG=MISSING_FOR_%s\n' "$source_provider_id"
+  printf 'AGENT_CODEX_PROVIDER_CONFIG=MISSING_FOR_%s\n' "$selected_provider_id"
   exit 1
 fi
 if printf '%s\n' "$provider_block" | /usr/bin/grep -Eqi '/usr/bin/security|external_auth|auth_command|experimental_bearer_token'; then
@@ -223,6 +283,7 @@ if ! printf '%s\n' "$provider_block" | /usr/bin/grep -Eq '^requires_openai_auth[
   printf 'AGENT_CODEX_PROVIDER_CONFIG=REQUIRES_EXTERNAL_AUTH\n'
   exit 1
 fi
+printf 'AGENT_CODEX_SELECTED_PROVIDER_ID=%s\n' "$selected_provider_id"
 
 model_catalog_line=""
 if [ -f "$HOME/.codex/models.json" ] && /usr/bin/grep -Eq '^model_catalog_json[[:space:]]*=' "$source_config"; then
@@ -233,7 +294,7 @@ fi
 
 {
   printf 'model = "%s"\n' "$model_name"
-  printf 'model_provider = "%s"\n' "$source_provider_id"
+  printf 'model_provider = "%s"\n' "$selected_provider_id"
   printf 'model_reasoning_effort = "%s"\n' "$reasoning_effort"
   if [ -n "$model_catalog_line" ]; then printf '%s\n' "$model_catalog_line"; fi
   /usr/bin/grep -E '^(preferred_auth_method|forced_login_method)[[:space:]]*=' "$source_config" || true
