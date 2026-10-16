@@ -1,7 +1,8 @@
 import 'server-only';
 
 import { createClient } from '@/lib/supabase/server';
-import { resolveCpcProfile } from '@/lib/customer-projects/api';
+import { getCurrentUserReadOnlyCached } from '@/lib/auth/current-user';
+import { resolveCpcProfile, type CpcProfile } from '@/lib/customer-projects/api';
 import { createCpcReadTiming } from '@/lib/customer-projects/performance';
 import {
   buildWorkbenchSnapshot,
@@ -42,23 +43,72 @@ export type ProjectListPageItem = ProjectListItem & {
   isOwnedByMe: boolean;
 };
 
-export async function readWorkbenchSnapshot(): Promise<ServerReadResult<WorkbenchSnapshot>> {
-  const timing = createCpcReadTiming('workbench');
-  const authStartedAt = Date.now();
-  const supabase = await createClient();
+async function resolveServerReadContext(): Promise<
+  | { ok: true; supabase: NonNullable<Awaited<ReturnType<typeof createClient>>>; profile: CpcProfile }
+  | { ok: false; status: number; message: string }
+> {
+  const [supabase, user] = await Promise.all([
+    createClient(),
+    getCurrentUserReadOnlyCached(),
+  ]);
+
   if (!supabase) {
-    timing.mark('auth', authStartedAt);
-    timing.finish('db_unavailable');
     return { ok: false, status: 500, message: '数据库不可用' };
   }
 
-  const profileResult = await resolveCpcProfile(supabase);
-  timing.mark('auth', authStartedAt);
-  if (!profileResult.ok) {
-    timing.finish(profileResult.status === 401 ? 'unauthorized' : 'forbidden');
-    return { ok: false, status: profileResult.status, message: profileResult.message };
+  if (!user) {
+    return { ok: false, status: 401, message: '未登录或无权限' };
   }
-  const profile = profileResult.profile;
+
+  if (!['admin', 'manager', 'sales'].includes(user.role)) {
+    return { ok: false, status: 403, message: '无权使用客户项目中心' };
+  }
+
+  if (
+    user.authSource === 'supabase'
+    && typeof user.profileId === 'string'
+    && user.profileId.length > 0
+    && typeof user.orgId === 'string'
+    && user.orgId.length > 0
+  ) {
+    return {
+      ok: true,
+      supabase,
+      profile: {
+        id: user.profileId,
+        orgId: user.orgId,
+        role: user.role as CpcProfile['role'],
+      },
+    };
+  }
+
+  // Preserve development/test compatibility for non-Supabase identity sources.
+  const fallback = await resolveCpcProfile(supabase);
+  if (!fallback.ok) return fallback;
+
+  return {
+    ok: true,
+    supabase,
+    profile: fallback.profile,
+  };
+}
+
+export async function readWorkbenchSnapshot(): Promise<ServerReadResult<WorkbenchSnapshot>> {
+  const timing = createCpcReadTiming('workbench');
+  const authStartedAt = Date.now();
+  const context = await resolveServerReadContext();
+  timing.mark('auth', authStartedAt);
+  if (!context.ok) {
+    timing.finish(
+      context.status === 401
+        ? 'unauthorized'
+        : context.status === 403
+          ? 'forbidden'
+          : 'db_unavailable',
+    );
+    return context;
+  }
+  const { supabase, profile } = context;
 
   try {
     const primaryStartedAt = Date.now();
@@ -140,20 +190,19 @@ export async function readWorkbenchSnapshot(): Promise<ServerReadResult<Workbenc
 export async function readProjectList(): Promise<ServerReadResult<ProjectListPageItem[]>> {
   const timing = createCpcReadTiming('projects');
   const authStartedAt = Date.now();
-  const supabase = await createClient();
-  if (!supabase) {
-    timing.mark('auth', authStartedAt);
-    timing.finish('db_unavailable');
-    return { ok: false, status: 500, message: '数据库不可用' };
-  }
-
-  const profileResult = await resolveCpcProfile(supabase);
+  const context = await resolveServerReadContext();
   timing.mark('auth', authStartedAt);
-  if (!profileResult.ok) {
-    timing.finish(profileResult.status === 401 ? 'unauthorized' : 'forbidden');
-    return { ok: false, status: profileResult.status, message: profileResult.message };
+  if (!context.ok) {
+    timing.finish(
+      context.status === 401
+        ? 'unauthorized'
+        : context.status === 403
+          ? 'forbidden'
+          : 'db_unavailable',
+    );
+    return context;
   }
-  const profile = profileResult.profile;
+  const { supabase, profile } = context;
 
   try {
     const primaryStartedAt = Date.now();
@@ -233,20 +282,19 @@ export async function readProjectList(): Promise<ServerReadResult<ProjectListPag
 export async function readCustomerList(): Promise<ServerReadResult<CustomerListItem[]>> {
   const timing = createCpcReadTiming('customers');
   const authStartedAt = Date.now();
-  const supabase = await createClient();
-  if (!supabase) {
-    timing.mark('auth', authStartedAt);
-    timing.finish('db_unavailable');
-    return { ok: false, status: 500, message: '数据库不可用' };
-  }
-
-  const profileResult = await resolveCpcProfile(supabase);
+  const context = await resolveServerReadContext();
   timing.mark('auth', authStartedAt);
-  if (!profileResult.ok) {
-    timing.finish(profileResult.status === 401 ? 'unauthorized' : 'forbidden');
-    return { ok: false, status: profileResult.status, message: profileResult.message };
+  if (!context.ok) {
+    timing.finish(
+      context.status === 401
+        ? 'unauthorized'
+        : context.status === 403
+          ? 'forbidden'
+          : 'db_unavailable',
+    );
+    return context;
   }
-  const profile = profileResult.profile;
+  const { supabase, profile } = context;
 
   try {
     const primaryStartedAt = Date.now();
@@ -380,20 +428,19 @@ export async function readCustomerList(): Promise<ServerReadResult<CustomerListI
 export async function readTaskList(): Promise<ServerReadResult<TaskListItem[]>> {
   const timing = createCpcReadTiming('tasks');
   const authStartedAt = Date.now();
-  const supabase = await createClient();
-  if (!supabase) {
-    timing.mark('auth', authStartedAt);
-    timing.finish('db_unavailable');
-    return { ok: false, status: 500, message: '数据库不可用' };
-  }
-
-  const profileResult = await resolveCpcProfile(supabase);
+  const context = await resolveServerReadContext();
   timing.mark('auth', authStartedAt);
-  if (!profileResult.ok) {
-    timing.finish(profileResult.status === 401 ? 'unauthorized' : 'forbidden');
-    return { ok: false, status: profileResult.status, message: profileResult.message };
+  if (!context.ok) {
+    timing.finish(
+      context.status === 401
+        ? 'unauthorized'
+        : context.status === 403
+          ? 'forbidden'
+          : 'db_unavailable',
+    );
+    return context;
   }
-  const profile = profileResult.profile;
+  const { supabase, profile } = context;
 
   try {
     const primaryStartedAt = Date.now();
