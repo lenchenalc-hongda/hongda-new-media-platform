@@ -1,5 +1,4 @@
-import fs from 'node:fs';
-
+import { displayStatus, shouldRedispatch } from './reliability-core.mjs';
 const REPOSITORY = process.env.GITHUB_REPOSITORY || 'lenchenalc-hongda/hongda-new-media-platform';
 const TOKEN = process.env.GITHUB_TOKEN || '';
 const REGISTRY_PATH = process.env.AGENT_CONTROL_REGISTRY || '.github/agent-control/project-registry.json';
@@ -137,11 +136,15 @@ async function inspectProject(project, config) {
   }
 
   if (['HUMAN_GATE', 'NEEDS_DECISION'].includes(state.status) || state.owner_action_required === true) {
-    if (state.runtime_status !== 'WAITING_OWNER') {
-      state.runtime_status = 'WAITING_OWNER';
+    const derived = displayStatus({
+      stateStatus: state.status,
+      ownerActionRequired: state.owner_action_required === true,
+    });
+    if (state.runtime_status !== derived) {
+      state.runtime_status = derived;
       await updateState(issue, state);
     }
-    console.log(`WATCHDOG_PROJECT=${project} RESULT=WAITING_OWNER`);
+    console.log(`WATCHDOG_PROJECT=${project} RESULT=${derived}`);
     return;
   }
 
@@ -172,8 +175,16 @@ async function inspectProject(project, config) {
   }
 
   const latest = runs[0] || null;
-  if (latest && ageMinutes(latest.updated_at || latest.created_at) < LOST_TRIGGER_MINUTES) {
-    console.log(`WATCHDOG_PROJECT=${project} RESULT=RECENT_TERMINAL_RUN RUN_ID=${latest.id}`);
+  const terminalAge = latest ? ageMinutes(latest.updated_at || latest.created_at) : Number.POSITIVE_INFINITY;
+  const redispatch = shouldRedispatch({
+    stateStatus: state.status,
+    ownerActionRequired: state.owner_action_required === true,
+    hasActiveRun: false,
+    latestTerminalAgeMinutes: terminalAge,
+    lostTriggerMinutes: LOST_TRIGGER_MINUTES,
+  });
+  if (!redispatch) {
+    console.log(`WATCHDOG_PROJECT=${project} RESULT=RECENT_TERMINAL_RUN RUN_ID=${latest?.id || 'none'}`);
     return;
   }
 
