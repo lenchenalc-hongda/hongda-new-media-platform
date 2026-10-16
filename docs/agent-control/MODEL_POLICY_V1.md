@@ -7,6 +7,7 @@ Hongda Agent Control uses a fail-closed model escalation policy for project-lane
 This policy applies to both:
 - Customer Project Center (CPC), control Issue #10.
 - Global Lead Hub (GLH), control Issue #72.
+- Workshop Order System (WOS), control Issue #104.
 
 ## Execution tiers
 
@@ -36,6 +37,8 @@ This policy applies to both:
 - A new task or explicit PM decision is required before further execution.
 
 Every new task resets to L1. Escalation is per task, not sticky across tasks.
+
+Infrastructure retries are intentionally separate from model repair escalation. Reliability V2 records `infra_retry_count` for runner/provider/network recovery; it must not increment `fix_round`.
 
 ## Human Gate
 
