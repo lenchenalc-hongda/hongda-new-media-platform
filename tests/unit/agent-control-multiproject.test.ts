@@ -85,6 +85,11 @@ assert(wosWorkflow.includes("AGENT_CONTROL_ISSUE: '104'"));
 assert(wosWorkflow.includes('FIX_ROUND: ${{ needs.validate.outputs.fix_round }}'));
 assert(wosWorkflow.includes('MAX_FIX_ROUNDS: ${{ needs.validate.outputs.max_fix_rounds }}'));
 assert(wosWorkflow.includes('runs-on: [self-hosted, macOS, X64, hongda-agent-control]'));
+assert(wosWorkflow.includes('workflow_dispatch:'));
+assert(wosWorkflow.includes('project-lane-recover.mjs'));
+assert(wosWorkflow.includes('needs.execute.result == \'failure\''));
+assert(glhWorkflow.includes('workflow_dispatch:'));
+assert(cpcWorkflow.includes('workflow_dispatch:'));
 
 const validator = read('scripts/agent-control/project-lane-validate.mjs');
 assert(validator.includes("const PROJECT = process.env.AGENT_CONTROL_PROJECT || 'global-lead-hub'"));
@@ -101,7 +106,12 @@ assert(runner.includes('git -c core.quotepath=false diff --name-only --no-rename
 assert(runner.includes('git -c core.quotepath=false ls-files --others --exclude-standard'));
 assert(runner.includes('$HOME/.codex/plugins/.plugin-appserver/codex-cli/bin/codex'));
 assert(runner.includes('"$codex_binary" --no-daemon exec'));
-assert(runner.includes('CODEX_HOME="$HOME/.codex"'));
+assert(runner.includes('agent_codex_home="$agent_user_home/.codex"'));
+assert(runner.includes('CODEX_HOME="$agent_codex_home"'));
+assert(!runner.includes('CODEX_HOME="$HOME/.codex"'));
+assert(runner.includes('AGENT_CODEX_RUNTIME=ISOLATED'));
+assert(runner.includes('KEYCHAIN_FAILURE'));
+assert(runner.includes('run_result CODE_FAILURE'));
 assert(runner.includes('CODEX_STDERR_BEGIN'));
 assert(runner.includes('[REDACTED_API_KEY]'));
 
@@ -142,3 +152,25 @@ assert(imageSpec.includes('不允许覆盖'));
 assert(imageSpec.includes('订单版本 V4'));
 
 console.log('agent-control-multiproject.test.ts: PASS');
+
+const reliabilityCore = read('scripts/agent-control/reliability-core.mjs');
+assert(reliabilityCore.includes('KEYCHAIN_FAILURE'));
+assert(reliabilityCore.includes('PROVIDER_401'));
+assert(reliabilityCore.includes('NETWORK_FAILURE'));
+assert(reliabilityCore.includes('recoveryDecision'));
+assert(reliabilityCore.includes('shouldRedispatch'));
+
+const recovery = read('scripts/agent-control/project-lane-recover.mjs');
+assert(recovery.includes('RECOVERY_DISPATCHED'));
+assert(recovery.includes('infra_retry_count'));
+assert(recovery.includes('MAX_INFRA_RETRIES'));
+
+const watchdog = read('scripts/agent-control/reliability-watchdog.mjs');
+assert(watchdog.includes('LOST_TRIGGER'));
+assert(watchdog.includes('WAITING_OWNER'));
+assert(watchdog.includes('RECONCILED_MERGED_PR'));
+
+const watchdogWorkflow = read('.github/workflows/agent-control-reliability-watchdog-v2.yml');
+assert(watchdogWorkflow.includes("cron: '*/15 * * * *'"));
+assert(watchdogWorkflow.includes('actions: write'));
+assert(watchdogWorkflow.includes('issues: write'));
