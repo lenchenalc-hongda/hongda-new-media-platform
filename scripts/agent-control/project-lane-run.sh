@@ -203,7 +203,7 @@ if ! printf '%s\n' "$provider_block" | /usr/bin/grep -Eq '^requires_openai_auth[
 fi
 
 model_catalog_line=""
-if [ -f "$HOME/.codex/models.json" ]; then
+if [ -f "$HOME/.codex/models.json" ] && /usr/bin/grep -Eq '^model_catalog_json[[:space:]]*=' "$source_config"; then
   cp "$HOME/.codex/models.json" "$agent_codex_home/models.json"
   chmod 600 "$agent_codex_home/models.json"
   model_catalog_line="model_catalog_json = \"$agent_codex_home/models.json\""
