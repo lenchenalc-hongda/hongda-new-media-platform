@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import { RoleProvider } from '@/components/layout/RoleProvider';
-import { getCurrentUserReadOnly } from '@/lib/auth/current-user';
+import { getCurrentUserReadOnlyCached } from '@/lib/auth/current-user';
 import { canRoleAccessPage } from '@/lib/auth/roles';
 import { canCreateReview } from '@/lib/review-center/permissions';
 import { canReviewSubmittedDailyReports } from '@/lib/customer-projects/report-review';
@@ -18,7 +18,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   let canAccessCustomerProjectSettings = false;
   let canReviewDailyReports = false;
   try {
-    const user = await getCurrentUserReadOnly();
+    const user = await getCurrentUserReadOnlyCached();
     if (user) {
       canCreate = canCreateReview(user.role);
       canAccessCustomerProjectCenter = canRoleAccessPage(
