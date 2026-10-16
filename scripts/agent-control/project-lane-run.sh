@@ -221,9 +221,8 @@ selected_provider_id="$source_provider_id"
 if ! provider_is_safe_deepseek "$provider_block"; then
   safe_provider_id="$(/usr/bin/awk '
     function finish() {
-      if (provider != "" && has_env && auth_false && !unsafe) {
-        print provider
-        exit
+      if (found == "" && provider != "" && has_env && auth_false && !unsafe) {
+        found=provider
       }
     }
     {
@@ -248,7 +247,10 @@ if ! provider_is_safe_deepseek "$provider_block"; then
     provider != "" && normalized ~ /^env_key[[:space:]]*=[[:space:]]*"DEEPSEEK_API_KEY"[[:space:]]*$/ {has_env=1}
     provider != "" && normalized ~ /^requires_openai_auth[[:space:]]*=[[:space:]]*false[[:space:]]*$/ {auth_false=1}
     provider != "" && normalized ~ /(\/usr\/bin\/security|external_auth|auth_command|experimental_bearer_token)/ {unsafe=1}
-    END {finish()}
+    END {
+      finish()
+      if (found != "") print found
+    }
   ' "$source_config")"
   if [ -n "$safe_provider_id" ]; then
     selected_provider_id="$safe_provider_id"
@@ -292,7 +294,7 @@ fi
 
 {
   printf 'model = "%s"\n' "$model_name"
-  printf 'model_provider = "%s"\n' "$source_provider_id"
+  printf 'model_provider = "%s"\n' "$selected_provider_id"
   printf 'model_reasoning_effort = "%s"\n' "$reasoning_effort"
   if [ -n "$model_catalog_line" ]; then printf '%s\n' "$model_catalog_line"; fi
   /usr/bin/grep -E '^(preferred_auth_method|forced_login_method)[[:space:]]*=' "$source_config" || true
