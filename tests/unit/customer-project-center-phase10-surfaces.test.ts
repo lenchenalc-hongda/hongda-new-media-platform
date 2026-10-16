@@ -47,7 +47,7 @@ const teamBoardModel = fs.readFileSync(
   'utf8',
 );
 const teamBoardPage = fs.readFileSync(
-  'src/app/customer-projects/team/page.tsx',
+  'src/app/customer-projects/team/TeamClient.tsx',
   'utf8',
 );
 const proactiveModel = fs.readFileSync(
