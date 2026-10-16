@@ -16,7 +16,8 @@
       ],
       "owned_regexes": [
         "^supabase/migrations/[0-9]+_customer_project_center_[A-Za-z0-9_]+\\.sql$"
-      ]
+      ],
+      "workflow_file": "customer-project-center-agent-control.yml"
     },
     "global-lead-hub": {
       "control_issue": 72,
@@ -33,7 +34,8 @@
       ],
       "owned_regexes": [
         "^supabase/migrations/[0-9]+_global_lead_hub_[A-Za-z0-9_]+\\.sql$"
-      ]
+      ],
+      "workflow_file": "global-lead-hub-agent-control.yml"
     },
     "workshop-order-system": {
       "control_issue": 104,
@@ -50,7 +52,8 @@
       ],
       "owned_regexes": [
         "^supabase/migrations/[0-9]+_workshop_order_system_[A-Za-z0-9_]+\\.sql$"
-      ]
+      ],
+      "workflow_file": "workshop-order-system-agent-control.yml"
     }
   },
   "shared_prefixes": [
