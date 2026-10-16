@@ -14,6 +14,7 @@ import { CurrentUser, normalizeRole } from './types';
 interface SupabaseUserRow {
   id: string;
   user_id: string;
+  org_id?: string | null;
   full_name?: string | null;
   email?: string | null;
   role?: string | null;
@@ -38,7 +39,7 @@ export async function resolveSupabaseCurrentUser(client: SupabaseLikeClient): Pr
 
   const { data: profile, error: profileError } = await client
     .from('profiles')
-    .select('id,user_id,full_name,email,role,department,is_active')
+    .select('id,user_id,org_id,full_name,email,role,department,is_active')
     .eq('user_id', authId)
     .maybeSingle();
 
@@ -54,6 +55,8 @@ export async function resolveSupabaseCurrentUser(client: SupabaseLikeClient): Pr
     role,
     department: profile.department ?? null,
     email: identity.email ?? profile.email ?? null,
+    profileId: profile.id,
+    orgId: profile.org_id ?? null,
     active: true,
     authSource: 'supabase',
   };
