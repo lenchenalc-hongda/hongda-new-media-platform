@@ -151,7 +151,6 @@ assert(imageSpec.includes('当前生产基准'));
 assert(imageSpec.includes('不允许覆盖'));
 assert(imageSpec.includes('订单版本 V4'));
 
-console.log('agent-control-multiproject.test.ts: PASS');
 
 const reliabilityCore = read('scripts/agent-control/reliability-core.mjs');
 assert(reliabilityCore.includes('KEYCHAIN_FAILURE'));
@@ -174,3 +173,5 @@ const watchdogWorkflow = read('.github/workflows/agent-control-reliability-watch
 assert(watchdogWorkflow.includes("cron: '*/15 * * * *'"));
 assert(watchdogWorkflow.includes('actions: write'));
 assert(watchdogWorkflow.includes('issues: write'));
+
+console.log('agent-control-multiproject.test.ts: PASS');
