@@ -12,6 +12,11 @@ export interface CurrentUser {
   role: Role;
   department: string | null;
   email?: string | null;
+  // Trusted profile coordinates are populated only after server-side profile
+  // resolution. They let same-request Server Components reuse the verified
+  // identity/profile result without another auth + profile round trip.
+  profileId?: string | null;
+  orgId?: string | null;
   active: boolean;
   authSource: AuthMode;
 }
