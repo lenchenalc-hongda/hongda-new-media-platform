@@ -145,6 +145,9 @@ jobs:
       - name: Agent Control multi-project lane tests
         run: pnpm exec tsx tests/unit/agent-control-multiproject.test.ts
 
+      - name: Agent Control Reliability V2 failure-injection tests
+        run: pnpm exec tsx tests/unit/agent-control-reliability-v2.test.ts
+
       - name: Check server-only imports
         run: bash scripts/check-server-imports.sh
 
