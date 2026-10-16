@@ -3,6 +3,27 @@ name: Global Lead Hub Agent Control
 on:
   issue_comment:
     types: [created]
+  workflow_dispatch:
+    inputs:
+      recovery_task_id:
+        description: Current Agent Control task id
+        required: true
+        type: string
+      recovery_expected_head:
+        description: Current exact task head
+        required: true
+        type: string
+      recovery_attempt:
+        description: Infrastructure retry attempt
+        required: false
+        default: '0'
+        type: string
+      recovery_reason:
+        description: Reliability V2 recovery reason
+        required: false
+        default: LOST_TRIGGER
+        type: string
+
 permissions:
   contents: read
   issues: read
@@ -16,12 +37,19 @@ jobs:
   gate:
     if: >-
       (
+        github.event_name == 'issue_comment' &&
         github.repository == 'lenchenalc-hongda/hongda-new-media-platform' &&
         github.event.issue.number == 72 &&
         github.event.issue.pull_request == null &&
         github.event.sender.login == 'lenchenalc-hongda' &&
         github.event.comment.user.login == 'lenchenalc-hongda' &&
         github.event.comment.body == 'AGENT_CONTROL_TRIGGER_V1'
+      ) ||
+      (
+        github.event_name == 'workflow_dispatch' &&
+        github.repository == 'lenchenalc-hongda/hongda-new-media-platform' &&
+        inputs.recovery_task_id != '' &&
+        inputs.recovery_expected_head != ''
       )
     runs-on: ubuntu-latest
     outputs:
@@ -72,6 +100,12 @@ jobs:
     permissions:
       contents: read
       actions: read
+    outputs:
+      run_result: ${{ steps.run.outputs.run_result }}
+      failure_class: ${{ steps.run.outputs.failure_class }}
+      checks_passed: ${{ steps.run.outputs.checks_passed }}
+      failed_check: ${{ steps.run.outputs.failed_check }}
+      infra_local_attempts: ${{ steps.run.outputs.infra_local_attempts }}
     steps:
       - name: Harden Git transport for unstable links
         shell: bash
@@ -104,6 +138,7 @@ jobs:
 
       - name: Run bounded project task
         id: run
+        continue-on-error: true
         shell: bash
         env:
           PROJECT_SLUG: ${{ needs.validate.outputs.project }}
@@ -122,6 +157,7 @@ jobs:
         run: bash scripts/agent-control/project-lane-run.sh
 
       - name: Mint scoped GitHub App token
+        if: steps.run.outcome == 'success' && (steps.run.outputs.run_result == 'PASS' || steps.run.outputs.run_result == 'CODE_FAILURE')
         id: app-token
         uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
         with:
@@ -131,6 +167,7 @@ jobs:
           permission-pull-requests: write
 
       - name: Publish project task
+        if: steps.run.outcome == 'success' && (steps.run.outputs.run_result == 'PASS' || steps.run.outputs.run_result == 'CODE_FAILURE')
         shell: bash
         env:
           GH_APP_TOKEN: ${{ steps.app-token.outputs.token }}
@@ -145,4 +182,38 @@ jobs:
           TASK_COMMENT_ID: ${{ needs.validate.outputs.task_comment_id }}
           ACTIVE_PR: ${{ needs.validate.outputs.active_pr }}
           REPOSITORY: ${{ github.repository }}
+          RUN_RESULT: ${{ steps.run.outputs.run_result }}
+          FAILURE_CLASS: ${{ steps.run.outputs.failure_class }}
+          CHECKS_PASSED: ${{ steps.run.outputs.checks_passed }}
+          FAILED_CHECK: ${{ steps.run.outputs.failed_check }}
+          INFRA_LOCAL_ATTEMPTS: ${{ steps.run.outputs.infra_local_attempts }}
         run: bash scripts/agent-control/project-lane-publish.sh
+
+      - name: Fail unresolved execution
+        if: steps.run.outcome == 'failure'
+        shell: bash
+        run: |
+          echo "PROJECT_LANE_FINAL=FAILED"
+          echo "FAILURE_CLASS=${{ steps.run.outputs.failure_class }}"
+          exit 1
+
+  recover:
+    needs: [validate, execute]
+    if: always() && needs.validate.result == 'success' && needs.execute.result == 'failure'
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Recover infrastructure failure
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          PROJECT_SLUG: global-lead-hub
+          CONTROL_ISSUE: '72'
+          WORKFLOW_FILE: global-lead-hub-agent-control.yml
+          CURRENT_RUN_ID: ${{ github.run_id }}
+          FAILURE_CLASS: ${{ needs.execute.outputs.failure_class }}
+          MAX_INFRA_RETRIES: '3'
+        run: node scripts/agent-control/project-lane-recover.mjs
