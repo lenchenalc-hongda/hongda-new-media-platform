@@ -58,6 +58,7 @@ export default function NewCustomerProjectPage() {
   const [selectedCustomerId, setSelectedCustomerId] = useState('');
   const [customerLoading, setCustomerLoading] = useState(false);
   const [customerError, setCustomerError] = useState('');
+  const [customerNotice, setCustomerNotice] = useState('');
 
   const [showProvisional, setShowProvisional] = useState(false);
   const [provisionalName, setProvisionalName] = useState('');
@@ -88,6 +89,7 @@ export default function NewCustomerProjectPage() {
   async function loadCustomers(query = '') {
     setCustomerLoading(true);
     setCustomerError('');
+    setCustomerNotice('');
     try {
       const response = await fetch(
         '/api/customer-projects/customer-references?q=' + encodeURIComponent(query.trim()),
@@ -180,12 +182,14 @@ export default function NewCustomerProjectPage() {
     const source = provisionalSource.trim();
 
     if (!name || !source) {
-      setCustomerError('临时客户必须填写客户名称和来源说明。');
+      setCustomerError('新增客户必须填写客户名称和来源说明。');
+      setCustomerNotice('');
       return;
     }
 
     setCreatingCustomer(true);
     setCustomerError('');
+    setCustomerNotice('');
 
     try {
       const response = await fetch('/api/customer-projects/customers/provisional', {
@@ -212,13 +216,14 @@ export default function NewCustomerProjectPage() {
         setProvisionalName('');
         setProvisionalSource('');
         setShowProvisional(false);
+        setCustomerNotice('已添加到客户池并自动选中，可继续填写项目。');
       } else {
         setCustomerError(typeof body?.message === 'string'
           ? body.message
-          : '临时客户创建失败，请检查后重试。');
+          : '新增客户失败，请检查后重试。');
       }
     } catch {
-      setCustomerError('临时客户创建失败，请稍后重试。');
+      setCustomerError('新增客户失败，请稍后重试。');
     } finally {
       setCreatingCustomer(false);
     }
@@ -321,7 +326,9 @@ export default function NewCustomerProjectPage() {
       <form onSubmit={submitProject} className="space-y-5">
         <section className="rounded-lg border border-gray-200 bg-white p-4 sm:p-6">
           <h2 className="text-base font-semibold text-gray-800">1. 客户</h2>
-          <p className="mt-1 text-sm text-gray-500">优先复用已有正式客户引用；找不到时才创建临时引用。</p>
+          <p className="mt-1 text-sm text-gray-500">
+            优先从客户池选择；首次合作的新客户可以直接新增到客户池，再继续创建项目。
+          </p>
 
           <div className="mt-4 flex flex-col gap-2 sm:flex-row">
             <input
@@ -340,16 +347,27 @@ export default function NewCustomerProjectPage() {
             </button>
             <button
               type="button"
-              onClick={() => setShowProvisional(value => !value)}
-              className="rounded-lg border border-cyan-200 bg-cyan-50 px-4 py-2 text-sm font-medium text-cyan-700"
+              onClick={() => {
+                setShowProvisional(value => !value);
+                setCustomerError('');
+                setCustomerNotice('');
+              }}
+              aria-expanded={showProvisional}
+              className="rounded-lg bg-cyan-600 px-4 py-2 text-sm font-medium text-white hover:bg-cyan-700"
             >
-              找不到客户
+              {showProvisional ? '收起新增客户' : '＋ 添加新客户到客户池'}
             </button>
           </div>
 
           {customerError && (
             <p className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
               {customerError}
+            </p>
+          )}
+
+          {customerNotice && (
+            <p className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
+              {customerNotice}
             </p>
           )}
 
@@ -376,7 +394,7 @@ export default function NewCustomerProjectPage() {
                   <div className="min-w-0">
                     <p className="truncate text-sm font-medium text-gray-800">{customer.displayName}</p>
                     <p className="mt-1 text-xs text-gray-500">
-                      {customer.referenceKind === 'canonical' ? '正式客户' : '临时客户'}
+                      {customer.referenceKind === 'canonical' ? '正式客户' : '待确认客户'}
                       {customer.sourceLabel ? ' · ' + customer.sourceLabel : ''}
                     </p>
                   </div>
@@ -391,9 +409,9 @@ export default function NewCustomerProjectPage() {
 
           {showProvisional && (
             <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-4">
-              <p className="text-sm font-medium text-amber-800">创建临时客户引用</p>
+              <p className="text-sm font-medium text-amber-800">添加新客户到客户池</p>
               <p className="mt-1 text-xs text-amber-700">
-                临时引用只用于先推进真实机会；项目成交前仍必须映射到正式客户。
+                新增后会以“待确认客户”进入客户池并自动选中；后续有正式客户编号时再完成映射。
               </p>
               <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
                 <div>
@@ -421,7 +439,7 @@ export default function NewCustomerProjectPage() {
                 className="mt-3 rounded-lg bg-amber-600 px-4 py-2 text-sm font-medium text-white"
                 disabled={creatingCustomer}
               >
-                {creatingCustomer ? '创建中...' : '创建并选中'}
+                {creatingCustomer ? '添加中...' : '添加到客户池并选中'}
               </button>
             </div>
           )}
