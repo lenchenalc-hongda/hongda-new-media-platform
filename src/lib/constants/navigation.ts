@@ -1,7 +1,6 @@
 // ===== Portal Navigation Structure =====
 
-import type { Role } from '@/lib/auth/roles';
-import { canRoleAccessPage, getPageSlugFromRoute } from '@/lib/auth/roles';
+import { canRoleAccessPage, getPageSlugFromRoute, type Role } from '@/lib/auth/roles';
 
 export interface PortalNavItem {
   label: string;
