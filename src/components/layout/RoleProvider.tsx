@@ -1,5 +1,6 @@
 'use client';
 import { createContext, useContext, type ReactNode } from 'react';
+import type { Role } from '@/lib/auth/types';
 
 interface RoleContextValue {
   canCreateReview: boolean;
@@ -7,6 +8,8 @@ interface RoleContextValue {
   canAccessCustomerProjectTeam: boolean;
   canAccessCustomerProjectSettings: boolean;
   canReviewDailyReports: boolean;
+  currentUserName: string | null;
+  currentUserRole: Role | null;
 }
 
 const RoleContext = createContext<RoleContextValue>({
@@ -15,6 +18,8 @@ const RoleContext = createContext<RoleContextValue>({
   canAccessCustomerProjectTeam: false,
   canAccessCustomerProjectSettings: false,
   canReviewDailyReports: false,
+  currentUserName: null,
+  currentUserRole: null,
 });
 
 export function RoleProvider({
@@ -23,6 +28,8 @@ export function RoleProvider({
   canAccessCustomerProjectTeam,
   canAccessCustomerProjectSettings,
   canReviewDailyReports,
+  currentUserName,
+  currentUserRole,
   children,
 }: RoleContextValue & { children: ReactNode }) {
   return (
@@ -33,6 +40,8 @@ export function RoleProvider({
         canAccessCustomerProjectTeam,
         canAccessCustomerProjectSettings,
         canReviewDailyReports,
+        currentUserName,
+        currentUserRole,
       }}
     >
       {children}
@@ -58,4 +67,13 @@ export function useCanAccessCustomerProjectSettings(): boolean {
 
 export function useCanReviewDailyReports(): boolean {
   return useContext(RoleContext).canReviewDailyReports;
+}
+
+
+export function useCurrentUserName(): string | null {
+  return useContext(RoleContext).currentUserName;
+}
+
+export function useCurrentUserRole(): Role | null {
+  return useContext(RoleContext).currentUserRole;
 }

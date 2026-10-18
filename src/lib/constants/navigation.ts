@@ -1,5 +1,7 @@
 // ===== Portal Navigation Structure =====
 
+import { canRoleAccessPage, getPageSlugFromRoute, type Role } from '@/lib/auth/roles';
+
 export interface PortalNavItem {
   label: string;
   path: string;
@@ -23,6 +25,7 @@ export interface PortalVisibilityOptions {
   canAccessCustomerProjectCenter: boolean;
   canAccessCustomerProjectTeam?: boolean;
   canAccessCustomerProjectSettings?: boolean;
+  currentRole?: Role | null;
 }
 
 export const WORKSPACE_PORTAL_STYLES: Record<
@@ -173,8 +176,9 @@ export function getVisiblePortalGroups({
   canAccessCustomerProjectCenter,
   canAccessCustomerProjectTeam = false,
   canAccessCustomerProjectSettings = false,
+  currentRole = null,
 }: PortalVisibilityOptions): PortalGroup[] {
-  return PORTAL_GROUPS.filter(group => {
+  const groups = PORTAL_GROUPS.filter(group => {
     if (group.id === 'review') return projectReviewCenterEnabled;
     if (group.id === 'sales') {
       return customerProjectCenterEnabled && canAccessCustomerProjectCenter;
@@ -199,6 +203,31 @@ export function getVisiblePortalGroups({
         )),
     };
   });
+
+  if (currentRole !== 'sales') return groups;
+
+  // Employee launch rule: a sales user should never see links that the
+  // server-side role matrix will reject. Keep the Customer Project portal
+  // first so the default workspace is immediately business-relevant.
+  const salesGroups = groups
+    .map(group => ({
+      ...group,
+      items: group.items.filter(item => {
+        const page = getPageSlugFromRoute(item.path);
+        return page !== null && canRoleAccessPage('sales', page);
+      }),
+    }))
+    .filter(group => group.items.length > 0);
+
+  const order: Record<string, number> = {
+    sales: 0,
+    review: 1,
+    media: 2,
+  };
+
+  return salesGroups.sort(
+    (a, b) => (order[a.id] ?? 99) - (order[b.id] ?? 99),
+  );
 }
 
 export function isPortalItemEnabled(item: PortalNavItem): boolean {

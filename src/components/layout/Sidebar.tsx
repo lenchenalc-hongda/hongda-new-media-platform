@@ -14,6 +14,7 @@ import {
   useCanAccessCustomerProjectSettings,
   useCanAccessCustomerProjectTeam,
   useCanCreateReview,
+  useCurrentUserRole,
 } from './RoleProvider';
 import { applyCreateVisibility } from '@/lib/review-center/navigation';
 
@@ -23,6 +24,7 @@ export default function Sidebar() {
   const canAccessCustomerProjectCenter = useCanAccessCustomerProjectCenter();
   const canAccessCustomerProjectTeam = useCanAccessCustomerProjectTeam();
   const canAccessCustomerProjectSettings = useCanAccessCustomerProjectSettings();
+  const currentUserRole = useCurrentUserRole();
 
   // Determine which portal is active based on current path
   const baseGroups = getVisiblePortalGroups({
@@ -31,6 +33,7 @@ export default function Sidebar() {
     canAccessCustomerProjectCenter,
     canAccessCustomerProjectTeam,
     canAccessCustomerProjectSettings,
+    currentRole: currentUserRole,
   });
   const enabledGroups = applyCreateVisibility(baseGroups, canCreateReview);
   const activePortal = getPortalForPath(pathname);
@@ -53,8 +56,8 @@ export default function Sidebar() {
         <Link href="/workspace-home" className="flex items-center gap-2 no-underline">
           <div className="w-7 h-7 bg-blue-600 rounded-lg flex items-center justify-center text-white font-bold text-xs">宏</div>
           <div>
-            <p className="text-sm font-bold text-gray-800 leading-tight">宏达新媒体</p>
-            <p className="text-[10px] text-gray-500">作战中台</p>
+            <p className="text-sm font-bold text-gray-800 leading-tight">Hongda OS</p>
+            <p className="text-[10px] text-gray-500">宏达印业数字化业务系统</p>
           </div>
         </Link>
       </div>

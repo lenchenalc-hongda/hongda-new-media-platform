@@ -13,15 +13,10 @@ import {
   useCanAccessCustomerProjectSettings,
   useCanAccessCustomerProjectTeam,
   useCanCreateReview,
+  useCurrentUserName,
+  useCurrentUserRole,
 } from '@/components/layout/RoleProvider';
 import { applyCreateVisibility } from '@/lib/review-center/navigation';
-
-const MOCK_METRICS = {
-  pendingReview: 5,
-  pendingPublish: 3,
-  weeklyProgress: 68,
-  systemHealth: 'healthy',
-};
 
 function PortalLineIcon({
   portalId,
@@ -214,14 +209,9 @@ export default function WorkspaceHome() {
   const canAccessCustomerProjectCenter = useCanAccessCustomerProjectCenter();
   const canAccessCustomerProjectTeam = useCanAccessCustomerProjectTeam();
   const canAccessCustomerProjectSettings = useCanAccessCustomerProjectSettings();
+  const currentUserName = useCurrentUserName();
+  const currentUserRole = useCurrentUserRole();
   const [userMenuOpen, setUserMenuOpen] = useState(false);
-  const [user] = useState(() => {
-    if (typeof window !== 'undefined') {
-      const u = localStorage.getItem('nmc_user');
-      return u ? JSON.parse(u) : null;
-    }
-    return null;
-  });
 
   const baseGroups = getVisiblePortalGroups({
     projectReviewCenterEnabled: isFeatureEnabled(FEATURES.PROJECT_REVIEW_CENTER),
@@ -229,6 +219,7 @@ export default function WorkspaceHome() {
     canAccessCustomerProjectCenter,
     canAccessCustomerProjectTeam,
     canAccessCustomerProjectSettings,
+    currentRole: currentUserRole,
   });
   const enabledGroups = applyCreateVisibility(baseGroups, canCreateReview);
   const totalTodos = enabledGroups.reduce((sum, g) => sum + g.items.length, 0);
@@ -264,9 +255,9 @@ export default function WorkspaceHome() {
                 aria-expanded={userMenuOpen}
               >
                 <span className="w-7 h-7 bg-blue-100 rounded-full flex items-center justify-center text-xs text-blue-700 font-semibold">
-                  {user?.full_name?.charAt(0) || 'U'}
+                  {currentUserName?.charAt(0) || 'U'}
                 </span>
-                <span className="hidden sm:inline">{user?.full_name || '用户'}</span>
+                <span className="hidden sm:inline">{currentUserName || '用户'}</span>
                 <ChevronDownIcon />
               </button>
 
@@ -276,7 +267,7 @@ export default function WorkspaceHome() {
                   className="absolute right-0 top-full mt-2 w-44 rounded-xl border border-gray-200 bg-white p-1.5 shadow-lg"
                 >
                   <div className="px-3 py-2 border-b border-gray-100">
-                    <p className="text-xs font-medium text-gray-700 truncate">{user?.full_name || '用户'}</p>
+                    <p className="text-xs font-medium text-gray-700 truncate">{currentUserName || '用户'}</p>
                     <p className="text-[11px] text-gray-400">当前登录账号</p>
                   </div>
                   <button
@@ -388,135 +379,33 @@ export default function WorkspaceHome() {
           </div>
         </section>
 
-        {/* === SECOND SCREEN: Status Dashboard === */}
-        <section>
-          <h2 className="text-lg font-bold text-gray-800 mb-4">今日概览</h2>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            {[
-              {
-                label: '今日待审核',
-                value: MOCK_METRICS.pendingReview,
-                detail: '脚本和选题审核',
-                icon: 'review' as HomeIconName,
-                valueClass: 'text-amber-600',
-                iconClass: 'text-amber-600 bg-amber-50 border-amber-100',
-              },
-              {
-                label: '今日待发布',
-                value: MOCK_METRICS.pendingPublish,
-                detail: '排好未发布',
-                icon: 'publish' as HomeIconName,
-                valueClass: 'text-blue-600',
-                iconClass: 'text-blue-600 bg-blue-50 border-blue-100',
-              },
-              {
-                label: '本周内容进度',
-                value: `${MOCK_METRICS.weeklyProgress}%`,
-                detail: '计划 12 / 已发布 8',
-                icon: 'progress' as HomeIconName,
-                valueClass: 'text-emerald-600',
-                iconClass: 'text-emerald-600 bg-emerald-50 border-emerald-100',
-              },
-              {
-                label: '系统健康',
-                value: '正常',
-                detail: 'AI 服务与核心接口在线',
-                icon: 'health' as HomeIconName,
-                valueClass: 'text-emerald-600',
-                iconClass: 'text-emerald-600 bg-emerald-50 border-emerald-100',
-              },
-            ].map(metric => (
-              <div
-                key={metric.label}
-                className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm"
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="text-sm font-medium text-gray-700">{metric.label}</p>
-                    <p className={`mt-2 text-2xl font-bold ${metric.valueClass}`}>{metric.value}</p>
-                  </div>
-                  <span className={`flex h-9 w-9 items-center justify-center rounded-lg border ${metric.iconClass}`}>
-                    <HomeLineIcon name={metric.icon} />
-                  </span>
-                </div>
-
-                {metric.label === '本周内容进度' && (
-                  <div className="w-full bg-gray-100 rounded-full h-1.5 mt-3">
-                    <div
-                      className="bg-emerald-500 h-1.5 rounded-full"
-                      style={{ width: MOCK_METRICS.weeklyProgress + '%' }}
-                    />
-                  </div>
-                )}
-
-                <p className="text-xs text-gray-400 mt-2">{metric.detail}</p>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        {/* === THIRD SCREEN: 最近待办 === */}
-        <section>
-          <h2 className="text-lg font-bold text-gray-800 mb-4">最近待办</h2>
-          <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="bg-gray-50 border-b border-gray-200">
-                  <th className="text-left px-4 py-2.5 text-xs font-medium text-gray-500">事项</th>
-                  <th className="text-left px-4 py-2.5 text-xs font-medium text-gray-500">所属模块</th>
-                  <th className="text-left px-4 py-2.5 text-xs font-medium text-gray-500">状态</th>
-                  <th className="text-right px-4 py-2.5 text-xs font-medium text-gray-500">操作</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {[
-                  { task: '待审核脚本', module: '新媒体', status: '待审核', color: 'text-yellow-600', path: '/scripts' },
-                  { task: '待审核选题', module: '新媒体', status: '待审核', color: 'text-yellow-600', path: '/topics' },
-                  { task: '待发布文章', module: '公众号', status: '草稿', color: 'text-blue-600', path: '/oa/articles' },
-                  { task: '待确认知识卡', module: '知识库', status: '待确认', color: 'text-purple-600', path: '/knowledge' },
-                  { task: '未分配线索', module: '新媒体', status: '待跟进', color: 'text-orange-600', path: '/leads' },
-                ].map((item, i) => (
-                  <tr key={i} className="hover:bg-gray-50 transition-colors">
-                    <td className="px-4 py-2.5 text-gray-700">{item.task}</td>
-                    <td className="px-4 py-2.5 text-xs text-gray-400">{item.module}</td>
-                    <td className={`px-4 py-2.5 text-xs font-medium ${item.color}`}>{item.status}</td>
-                    <td className="px-4 py-2.5 text-right">
-                      <a
-                        href={item.path}
-                        className="text-xs text-blue-600 hover:text-blue-800 no-underline"
-                      >
-                        去处理 →
-                      </a>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </section>
-
-        {/* === FOURTH SCREEN: Quick Actions === */}
-        <section>
-          <h2 className="text-lg font-bold text-gray-800 mb-4">快速新建</h2>
-          <div className="flex flex-wrap gap-3">
-            {[
-              { label: '新建脚本', icon: 'script' as HomeIconName, path: '/scripts', color: 'text-blue-700 hover:border-blue-200 hover:bg-blue-50' },
-              { label: '新建文章', icon: 'article' as HomeIconName, path: '/official/article-factory', color: 'text-emerald-700 hover:border-emerald-200 hover:bg-emerald-50' },
-              { label: '新建知识卡', icon: 'knowledge' as HomeIconName, path: '/knowledge', color: 'text-purple-700 hover:border-purple-200 hover:bg-purple-50' },
-              { label: '新建选题', icon: 'topic' as HomeIconName, path: '/topics', color: 'text-amber-700 hover:border-amber-200 hover:bg-amber-50' },
-              { label: '导入CSV', icon: 'import' as HomeIconName, path: '/settings', color: 'text-gray-700 hover:border-gray-300 hover:bg-gray-50' },
-            ].map(btn => (
-              <Link
-                key={btn.label}
-                href={btn.path}
-                className={`inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3.5 py-2 text-sm font-medium shadow-sm transition-colors no-underline ${btn.color}`}
-              >
-                <HomeLineIcon name={btn.icon} className="h-4 w-4" />
-                {btn.label}
-              </Link>
-            ))}
-          </div>
-        </section>
+        {currentUserRole !== 'sales' && (
+          <>
+          {/* === FOURTH SCREEN: Quick Actions === */}
+          <section>
+            <h2 className="text-lg font-bold text-gray-800 mb-4">快速新建</h2>
+            <div className="flex flex-wrap gap-3">
+              {[
+                { label: '新建脚本', icon: 'script' as HomeIconName, path: '/scripts', color: 'text-blue-700 hover:border-blue-200 hover:bg-blue-50' },
+                { label: '新建文章', icon: 'article' as HomeIconName, path: '/official/article-factory', color: 'text-emerald-700 hover:border-emerald-200 hover:bg-emerald-50' },
+                { label: '新建知识卡', icon: 'knowledge' as HomeIconName, path: '/knowledge', color: 'text-purple-700 hover:border-purple-200 hover:bg-purple-50' },
+                { label: '新建选题', icon: 'topic' as HomeIconName, path: '/topics', color: 'text-amber-700 hover:border-amber-200 hover:bg-amber-50' },
+                { label: '导入CSV', icon: 'import' as HomeIconName, path: '/settings', color: 'text-gray-700 hover:border-gray-300 hover:bg-gray-50' },
+              ].map(btn => (
+                <Link
+                  key={btn.label}
+                  href={btn.path}
+                  className={`inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3.5 py-2 text-sm font-medium shadow-sm transition-colors no-underline ${btn.color}`}
+                >
+                  <HomeLineIcon name={btn.icon} className="h-4 w-4" />
+                  {btn.label}
+                </Link>
+              ))}
+            </div>
+          </section>
+  
+          </>
+        )}
       </main>
     </div>
   );
