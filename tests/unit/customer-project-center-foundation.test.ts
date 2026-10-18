@@ -204,6 +204,19 @@ assert(
   'workbench uses generic EmptyState instead of Review Center UI',
 );
 
+const newProjectSource = fs.readFileSync(
+  'src/app/customer-projects/projects/new/page.tsx',
+  'utf8',
+);
+assert(
+  newProjectSource.includes('＋ 添加新客户到客户池')
+    && newProjectSource.includes('添加到客户池并选中')
+    && newProjectSource.includes("fetch('/api/customer-projects/customers/provisional'")
+    && newProjectSource.includes('已添加到客户池并自动选中，可继续填写项目。')
+    && newProjectSource.includes("'正式客户' : '待确认客户'"),
+  'new project page exposes an explicit add-customer-to-pool flow and immediately selects the created reference',
+);
+
 const workspaceHomeSource = fs.readFileSync('src/app/workspace-home/page.tsx', 'utf8');
 assert(
   workspaceHomeSource.includes('getVisiblePortalGroups({')
