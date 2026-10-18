@@ -82,7 +82,7 @@ export default function LoginForm({ mode }: { mode: AuthMode }) {
                 className="input-field"
                 value={email}
                 onChange={e => setEmail(e.target.value)}
-                placeholder="you@hongda.com"
+                placeholder="name@hongda.cn"
                 required
               />
             </div>
