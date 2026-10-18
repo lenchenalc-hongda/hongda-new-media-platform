@@ -206,9 +206,28 @@ provider_is_safe_deepseek() {
   local block="$1"
   [ -n "$block" ] || return 1
   printf '%s\n' "$block" | /usr/bin/grep -Eqi '/usr/bin/security|external_auth|auth_command|experimental_bearer_token' && return 1
-  printf '%s\n' "$block" | /usr/bin/grep -Eq '^env_key[[:space:]]*=[[:space:]]*"DEEPSEEK_API_KEY"' || return 1
-  printf '%s\n' "$block" | /usr/bin/grep -Eq '^requires_openai_auth[[:space:]]*=[[:space:]]*false' || return 1
+  printf '%s\n' "$block" | /usr/bin/grep -Eq '^env_key[[:space:]]*=.*DEEPSEEK_API_KEY' || return 1
+  printf '%s\n' "$block" | /usr/bin/grep -Eq '^requires_openai_auth[[:space:]]*=[[:space:]]*false([[:space:]]|$)' || return 1
   return 0
+}
+
+provider_targets_deepseek() {
+  local block="$1"
+  [ -n "$block" ] || return 1
+  printf '%s\n' "$block" | /usr/bin/grep -Eqi '^base_url[[:space:]]*=.*deepseek\.com'
+}
+
+normalize_deepseek_provider_block() {
+  local block="$1"
+  printf '%s\n' "$block" | /usr/bin/awk '
+    /^env_key[[:space:]]*=/ {next}
+    /^requires_openai_auth[[:space:]]*=/ {next}
+    {print}
+    END {
+      print "env_key = \"DEEPSEEK_API_KEY\""
+      print "requires_openai_auth = false"
+    }
+  '
 }
 
 provider_block="$(provider_block_for "$source_provider_id")"
@@ -221,7 +240,7 @@ selected_provider_id="$source_provider_id"
 if ! provider_is_safe_deepseek "$provider_block"; then
   safe_provider_id="$(/usr/bin/awk '
     function finish() {
-      if (found == "" && provider != "" && has_env && auth_false && !unsafe) {
+      if (found == "" && provider != "" && !unsafe && (has_env || deepseek_url)) {
         found=provider
       }
     }
@@ -236,6 +255,7 @@ if ! provider_is_safe_deepseek "$provider_block"; then
       sub(/\]$/, "", provider)
       has_env=0
       auth_false=0
+      deepseek_url=0
       unsafe=0
       next
     }
@@ -244,8 +264,9 @@ if ! provider_is_safe_deepseek "$provider_block"; then
       provider=""
       next
     }
-    provider != "" && normalized ~ /^env_key[[:space:]]*=[[:space:]]*"DEEPSEEK_API_KEY"[[:space:]]*$/ {has_env=1}
-    provider != "" && normalized ~ /^requires_openai_auth[[:space:]]*=[[:space:]]*false[[:space:]]*$/ {auth_false=1}
+    provider != "" && normalized ~ /^env_key[[:space:]]*=.*DEEPSEEK_API_KEY/ {has_env=1}
+    provider != "" && normalized ~ /^requires_openai_auth[[:space:]]*=[[:space:]]*false([[:space:]]|$)/ {auth_false=1}
+    provider != "" && normalized ~ /^base_url[[:space:]]*=.*deepseek\.com/ {deepseek_url=1}
     provider != "" && normalized ~ /(\/usr\/bin\/security|external_auth|auth_command|experimental_bearer_token)/ {unsafe=1}
     END {
       finish()
@@ -264,6 +285,16 @@ if [ -z "$provider_block" ]; then
   emit_output run_result INFRA_FAILURE
   printf 'AGENT_CODEX_PROVIDER_CONFIG=MISSING_FOR_%s\n' "$selected_provider_id"
   exit 1
+fi
+
+# Some Desktop/cc-switch configurations point model_provider at a generic alias
+# whose base_url is DeepSeek but whose env_key still names a legacy variable.
+# The isolated Agent runtime already injects DEEPSEEK_API_KEY explicitly, so
+# normalize only the allow-listed provider metadata for that DeepSeek endpoint.
+# No credential value is copied and Production configuration is not modified.
+if ! provider_is_safe_deepseek "$provider_block" && provider_targets_deepseek "$provider_block"; then
+  provider_block="$(normalize_deepseek_provider_block "$provider_block")"
+  printf 'AGENT_CODEX_PROVIDER_SELECTION=NORMALIZED_DEEPSEEK_ALIAS\n'
 fi
 if printf '%s\n' "$provider_block" | /usr/bin/grep -Eqi '/usr/bin/security|external_auth|auth_command|experimental_bearer_token'; then
   emit_output failure_class KEYCHAIN_FAILURE
