@@ -17,9 +17,13 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   let canAccessCustomerProjectTeam = false;
   let canAccessCustomerProjectSettings = false;
   let canReviewDailyReports = false;
+  let currentUserName: string | null = null;
+  let currentUserRole: import('@/lib/auth/types').Role | null = null;
   try {
     const user = await getCurrentUserReadOnly();
     if (user) {
+      currentUserName = user.name;
+      currentUserRole = user.role;
       canCreate = canCreateReview(user.role);
       canAccessCustomerProjectCenter = canRoleAccessPage(
         user.role,
@@ -46,6 +50,8 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           canAccessCustomerProjectTeam={canAccessCustomerProjectTeam}
           canAccessCustomerProjectSettings={canAccessCustomerProjectSettings}
           canReviewDailyReports={canReviewDailyReports}
+          currentUserName={currentUserName}
+          currentUserRole={currentUserRole}
         >
           {children}
         </RoleProvider>
