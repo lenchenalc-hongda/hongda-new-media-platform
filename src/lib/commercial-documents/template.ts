@@ -110,6 +110,7 @@ export function itemAmountMinor(item: DocumentItem): number | null {
   const minor = moneyToMinor(item.unitPrice);
   const milli = quantityToMilli(item.quantity);
   if (minor === null || milli === null) return null;
+  if (!Number.isSafeInteger(minor * milli)) return null;
   // Round each line to the currency's smallest minor unit.
   const total = Math.round((minor * milli) / 1000);
   return Number.isSafeInteger(total) ? total : null;
@@ -142,7 +143,11 @@ export function sectionAmount(section: DocumentSection): SectionAmount {
 export function documentAmount(draft: CommercialDocumentDraft): SectionAmount {
   return draft.sections.reduce<SectionAmount>((result, section) => {
     const subtotal = sectionAmount(section);
-    result.amountMinor += subtotal.amountMinor;
+    if (!Number.isSafeInteger(result.amountMinor + subtotal.amountMinor)) {
+      result.invalidLines++;
+    } else {
+      result.amountMinor += subtotal.amountMinor;
+    }
     result.amountLines += subtotal.amountLines;
     result.catalogLines += subtotal.catalogLines;
     result.invalidLines += subtotal.invalidLines;
