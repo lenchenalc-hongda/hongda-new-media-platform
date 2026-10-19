@@ -294,7 +294,9 @@ export default function DocumentWorkbench({ userName }: { userName: string }) {
 
       <div className="commercial-warning bg-amber-50 text-amber-900 border border-amber-200 rounded-lg p-3 text-xs leading-relaxed">
         <strong>模板试运行：</strong>本阶段仅支持页面编辑、PDF 打印和 JSON 草稿下载/导入，
-        <strong>尚未接入服务器保存、历史版本、客户库或经财务批准的收款账户库</strong>。
+        <strong>尚未接入服务器单据保存、历史版本及经财务批准的收款账户库</strong>。
+        可搜索现有客户项目库（受原权限规则限制）或手动输入新客户。
+        编号采用高随机度生成，但数据库唯一性登记尚未上线，手工修改编号暂不能跨员工防重。
         离开页面前请下载草稿；生成文件始终带“模板草稿”提示，正式合同请复核条款后签署。
       </div>
 
@@ -485,9 +487,36 @@ export default function DocumentWorkbench({ userName }: { userName: string }) {
                 </fieldset>
               : <p className="text-xs text-gray-600 bg-gray-50 p-2 rounded">外销税务及开票事宜由双方和财务确认，不自动采用国内13%专票条款。</p>}
             {draft.kind === 'quotation' && <Field label="报价有效期" value={draft.validity} onChange={value => patch('validity', value)} placeholder="如：自报价日起30天" />}
-            <Field required={draft.kind === 'machine_contract'} label="付款条件" multiline value={draft.paymentTerms} onChange={value => patch('paymentTerms', value)} placeholder="请填写双方已经确认的付款节点，不自动生成条款" />
+            <label className="block text-xs text-gray-600">
+              <span className="block mb-1 font-medium">付款条件 · 快速选择</span>
+              <select className="w-full" value={draft.paymentPreset}
+                onChange={event => choosePayment(event.target.value as PaymentPreset)}>
+                <option value="">请选择付款条件</option>
+                {PAYMENT_PRESETS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+              </select>
+            </label>
+            {draft.paymentPreset === 'credit_days' && (
+              <label className="block text-xs text-gray-600">
+                <span className="block mb-1 font-medium">账期（天）</span>
+                <input type="number" min="1" max="365" step="1" className="w-full" value={draft.paymentDays}
+                  onChange={event => setPaymentDays(event.target.value)} />
+              </label>
+            )}
+            <Field required={draft.kind === 'machine_contract'} label="付款条件 · 最终显示文字（可修改）"
+              multiline value={draft.paymentTerms} onChange={value => patch('paymentTerms', value)}
+              placeholder="选择上方预设，或自行填写双方确认的付款条件" />
             <Field required={draft.kind === 'machine_contract'} label="交付条件与期限" multiline value={draft.deliveryTerms} onChange={value => patch('deliveryTerms', value)} />
-            <Field label="运输方式 / 贸易术语" value={draft.shippingTerms} onChange={value => patch('shippingTerms', value)} placeholder="如 EXW / FOB / 物流送货，按实际约定" />
+            <label className="block text-xs text-gray-600">
+              <span className="block mb-1 font-medium">运输方式 / 贸易术语 · 快速选择</span>
+              <select className="w-full" value={draft.shippingPreset}
+                onChange={event => chooseShipping(event.target.value as ShippingPreset)}>
+                <option value="">请选择运输方式 / 贸易术语</option>
+                {SHIPPING_PRESETS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+              </select>
+            </label>
+            <Field label="运输方式 / 贸易术语 · 最终显示文字（可修改）"
+              multiline value={draft.shippingTerms} onChange={value => patch('shippingTerms', value)}
+              placeholder="选择上方预设，或自行填写交货地点与运输安排" />
             {draft.kind === 'machine_contract' && (
               <>
                 <Field required label="设备验收标准" multiline value={draft.acceptanceTerms} onChange={value => patch('acceptanceTerms', value)} placeholder="产品范围、产能、验收条件须双方明确" />
