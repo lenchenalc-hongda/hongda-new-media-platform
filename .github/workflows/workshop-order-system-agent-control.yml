@@ -185,11 +185,9 @@ jobs:
             git -c core.quotepath=false ls-files --others --exclude-standard
           } | sed '/^$/d' | LC_ALL=C sort -u > "$RUNNER_TEMP/project-lane-changed.txt"
           while IFS= read -r path; do
-            if ! git ls-files --error-unmatch "$path" >/dev/null 2>&1; then
-              git add -N -- "$path"
-            fi
+            git add -A -- "$path"
           done < "$RUNNER_TEMP/project-lane-changed.txt"
-          git diff --binary --full-index --no-ext-diff --ita-visible-in-index > "$RUNNER_TEMP/project-lane-result.patch"
+          git diff --cached --binary --full-index --no-ext-diff HEAD > "$RUNNER_TEMP/project-lane-result.patch"
           git reset -- .
           test -s "$RUNNER_TEMP/project-lane-result.patch"
 
