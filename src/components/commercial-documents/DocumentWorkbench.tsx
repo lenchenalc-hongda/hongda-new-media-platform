@@ -320,14 +320,7 @@ export default function DocumentWorkbench({ userName }: { userName: string }) {
             <div className="grid grid-cols-2 gap-3">
               <label className="text-xs text-gray-600">
                 <span className="block mb-1 font-medium">单据类型</span>
-                <select className="w-full" value={draft.kind} onChange={e => {
-                  const kind = e.target.value as CommercialDocumentDraft['kind'];
-                  setDraft(previous => ({ ...previous, kind, sections: previous.sections.map(group => ({
-                    ...group, items: group.items.map(item => kind === 'machine_contract' && item.mode === 'catalog'
-                      ? { ...item, mode: 'amount', quantity: item.quantity || '1' } : item),
-                  })) }));
-                  setErrors([]);
-                }}>
+                <select className="w-full" value={draft.kind} onChange={e => changeDocumentKind(e.target.value as CommercialDocumentDraft['kind'])}>
                   <option value="quotation">产品报价单</option>
                   <option value="machine_contract">机器销售合同</option>
                 </select>
@@ -352,19 +345,56 @@ export default function DocumentWorkbench({ userName }: { userName: string }) {
                   {CURRENCIES.map(currency => <option key={currency} value={currency}>{currency}</option>)}
                 </select>
               </label>
-              <Field required label="单据编号" value={draft.documentNo} onChange={value => patch('documentNo', value)} placeholder="如 HD-Q-2026-001（人工编号）" />
-              <Field required label="日期" type="date" value={draft.date} onChange={value => patch('date', value)} />
+              <div>
+                <Field required label="单据编号（默认随机生成，可修改）" value={draft.documentNo}
+                  onChange={value => patch('documentNo', value)} placeholder="正在自动生成编号…" />
+                <button type="button" className="text-xs text-blue-700 hover:underline mt-1"
+                  onClick={() => patch('documentNo', createDocumentNo(draft.kind, draft.date))}>
+                  重新生成编号
+                </button>
+              </div>
+              <Field required label="日期" type="date" value={draft.date} onChange={changeDate} />
             </div>
           </Panel>
 
-          <Panel title="02 · 买卖双方 / 客户信息">
+          <Panel title="02 · 客户与业务员信息">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <Field required label="卖方 / 报价主体（正式公司全称）" value={draft.sellerName} onChange={value => patch('sellerName', value)} />
-              <Field required label="客户 / 买方全称" value={draft.buyerName} onChange={value => patch('buyerName', value)} />
-              <Field label="卖方地址" value={draft.sellerAddress} onChange={value => patch('sellerAddress', value)} />
-              <Field label="客户地址" value={draft.buyerAddress} onChange={value => patch('buyerAddress', value)} />
-              <Field label="卖方联系方式" value={draft.sellerContact} onChange={value => patch('sellerContact', value)} />
-              <Field label="客户联系人" value={draft.buyerContact} onChange={value => patch('buyerContact', value)} />
+              <div className="sm:col-span-2 rounded-lg bg-gray-50 border border-gray-200 p-3">
+                <p className="text-xs text-gray-500 mb-1">卖方正式主体（固定，不可更改）</p>
+                <p className="text-sm font-bold text-gray-800">{FIXED_SELLER_NAME}</p>
+              </div>
+              <div className="rounded-lg bg-gray-50 border border-gray-200 p-3">
+                <p className="text-xs text-gray-500 mb-1">业务员（当前登录账号）</p>
+                <p className="text-sm font-semibold text-gray-800">{draft.salespersonName}</p>
+              </div>
+              <Field label="客户联系人" value={draft.buyerContact} onChange={value => patch('buyerContact', value)} placeholder="如：王经理" />
+              <div className="sm:col-span-2 relative">
+                <label htmlFor="commercial-buyer" className="block text-xs font-medium text-gray-600 mb-1">客户 / 买方全称 <span className="text-red-600">*</span></label>
+                <input id="commercial-buyer" type="text" autoComplete="off" className="w-full"
+                  value={draft.buyerName} placeholder="搜索已有客户，或直接输入新客户名称"
+                  maxLength={300}
+                  onChange={event => changeBuyerName(event.target.value)}
+                  onFocus={() => { if (!draft.buyerCustomerReferenceId) setCustomerSearchOpen(true); }}
+                  onBlur={() => setCustomerSearchOpen(false)} />
+                {draft.buyerCustomerReferenceId && <p className="mt-1 text-xs text-green-700">已选择客户库中的现有客户；仍可编辑本单显示名称</p>}
+                {customerSearchOpen && draft.buyerName.trim() && !draft.buyerCustomerReferenceId && (
+                  <div role="listbox" aria-label="已有客户搜索结果"
+                    className="absolute left-0 right-0 top-full z-20 bg-white border border-gray-200 rounded-lg shadow-md mt-1 max-h-60 overflow-y-auto">
+                    {customerLoading && <p className="text-xs text-gray-500 p-3">正在查询客户池…</p>}
+                    {!customerLoading && customerError && <p className="text-xs text-amber-700 p-3">{customerError}</p>}
+                    {!customerLoading && !customerError && customerOptions.length === 0 && <p className="text-xs text-gray-500 p-3">暂无匹配客户，可直接填写新客户名称</p>}
+                    {!customerLoading && customerOptions.map(option => (
+                      <button key={option.id} type="button" role="option" aria-selected={false}
+                        onMouseDown={event => event.preventDefault()}
+                        onClick={() => selectCustomer(option)}
+                        className="w-full text-left px-3 py-2 hover:bg-blue-50 text-sm text-gray-800 border-b border-gray-100 last:border-0">
+                        {option.name}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                <p className="text-xs text-gray-500 mt-1">手动输入新客户不会自动改动或新增客户池记录。</p>
+              </div>
             </div>
             <Field label="项目 / 产品用途" value={draft.projectName} onChange={value => patch('projectName', value)} />
           </Panel>
