@@ -28,16 +28,37 @@ export const SHIPPING_PRESETS = [
 ] as const;
 export type ShippingPreset = '' | (typeof SHIPPING_PRESETS)[number]['value'];
 
-export function paymentPresetText(preset: PaymentPreset, days: string): string {
+const PAYMENT_TEXT_EN: Partial<Record<PaymentPreset, string>> = {
+  film_monthly: 'Plate-making fees payable in advance; transfer film payments settled monthly.',
+  film_before_shipping: 'Plate-making fees payable in advance; transfer film payments due before shipment.',
+  monthly: 'Monthly settlement.',
+  machine_deposit: '50% deposit for the machine; remaining 50% balance payable before shipment.',
+};
+
+const SHIPPING_TEXT_EN: Partial<Record<ShippingPreset, string>> = {
+  exw: 'EXW (Ex Works), named place to be agreed.',
+  ddp: 'DDP (Delivered Duty Paid), named destination to be agreed.',
+  included: 'Freight included.',
+  excluded: 'Freight excluded.',
+  pickup: 'Buyer pickup.',
+};
+
+export function paymentPresetText(preset: PaymentPreset, days: string, language: DocumentLanguage = 'zh'): string {
   if (preset === 'credit_days') {
-    return /^\d{1,3}$/.test(days) && Number(days) >= 1 && Number(days) <= 365
-      ? '账期' + Number(days) + '天，具体起算时间以双方约定为准。' : '';
+    if (!/^\d{1,3}$/.test(days) || Number(days) < 1 || Number(days) > 365) return '';
+    return language === 'en'
+      ? 'Payment term: ' + Number(days) + ' days; start date subject to mutual agreement.'
+      : '账期' + Number(days) + '天，具体起算时间以双方约定为准。';
   }
-  return PAYMENT_PRESETS.find(option => option.value === preset)?.text ?? '';
+  return language === 'en'
+    ? PAYMENT_TEXT_EN[preset] ?? ''
+    : PAYMENT_PRESETS.find(option => option.value === preset)?.text ?? '';
 }
 
-export function shippingPresetText(preset: ShippingPreset): string {
-  return SHIPPING_PRESETS.find(option => option.value === preset)?.text ?? '';
+export function shippingPresetText(preset: ShippingPreset, language: DocumentLanguage = 'zh'): string {
+  return language === 'en'
+    ? SHIPPING_TEXT_EN[preset] ?? ''
+    : SHIPPING_PRESETS.find(option => option.value === preset)?.text ?? '';
 }
 
 /** Randomized, non-sequential document numbers. Central uniqueness requires a durable registry. */
