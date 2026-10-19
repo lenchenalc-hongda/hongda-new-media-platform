@@ -20,7 +20,7 @@ const printStyles = [
   '   max-height: none !important; overflow: visible !important; margin: 0 !important;',
   '   padding: 0 !important; border: 0 !important; box-shadow: none !important; }',
   ' #commercial-print, #commercial-print * { visibility: visible !important; }',
-  ' #commercial-print { position: static; display: block !important;'
+  ' #commercial-print { position: static; display: block !important;',
   '  width: 100% !important; max-width: none !important; padding: 0 !important;',
   '  margin: 0 !important; border: 0 !important; box-shadow: none !important; overflow: visible !important; }',
   ' #commercial-print .document-section-title, #commercial-print .document-total {',
