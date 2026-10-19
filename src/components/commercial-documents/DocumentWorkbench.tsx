@@ -143,8 +143,8 @@ export default function DocumentWorkbench({ userName }: { userName: string }) {
   const total = documentAmount(draft);
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-start justify-between gap-3">
+    <div className="commercial-root space-y-4">
+      <div className="commercial-top-bar flex flex-wrap items-start justify-between gap-3">
         <div>
           <p className="text-xs text-gray-500 mb-1">HongdaOS / 商务单据中心</p>
           <h1 className="text-xl font-bold text-gray-900">报价单与机器合同模板</h1>
@@ -158,14 +158,14 @@ export default function DocumentWorkbench({ userName }: { userName: string }) {
         </div>
       </div>
 
-      <div className="bg-amber-50 text-amber-900 border border-amber-200 rounded-lg p-3 text-xs leading-relaxed">
+      <div className="commercial-warning bg-amber-50 text-amber-900 border border-amber-200 rounded-lg p-3 text-xs leading-relaxed">
         <strong>模板试运行：</strong>本阶段仅支持页面编辑、PDF 打印和 JSON 草稿下载/导入，
         <strong>尚未接入服务器保存、历史版本、客户库或经财务批准的收款账户库</strong>。
         离开页面前请下载草稿；生成文件始终带“模板草稿”提示，正式合同请复核条款后签署。
       </div>
 
       {errors.length > 0 && (
-        <div role="alert" className="bg-red-50 border border-red-200 rounded-lg p-3">
+        <div role="alert" className="commercial-errors bg-red-50 border border-red-200 rounded-lg p-3">
           <p className="font-semibold text-red-800 text-sm">请先补全以下信息，再生成 PDF：</p>
           <ul className="list-disc list-inside text-xs text-red-700 mt-2 space-y-1">
             {errors.slice(0, 20).map((error, index) => <li key={index}>{error}</li>)}
@@ -174,12 +174,12 @@ export default function DocumentWorkbench({ userName }: { userName: string }) {
         </div>
       )}
 
-      <div className="flex gap-2 border-b border-gray-200 lg:hidden pb-2">
+      <div className="commercial-tabs flex gap-2 border-b border-gray-200 lg:hidden pb-2">
         <button type="button" onClick={() => setActiveTab('edit')} className={activeTab === 'edit' ? 'btn-primary btn-sm' : 'btn-secondary btn-sm'}>填写内容</button>
         <button type="button" onClick={() => setActiveTab('preview')} className={activeTab === 'preview' ? 'btn-primary btn-sm' : 'btn-secondary btn-sm'}>预览版式</button>
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)] gap-4 items-start">
+      <div className="commercial-workspace grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)] gap-4 items-start">
         <div className={(activeTab === 'preview' ? 'hidden lg:block' : '') + ' commercial-editor space-y-4'}>
 
           <Panel title="01 · 单据基础信息">
@@ -351,15 +351,15 @@ export default function DocumentWorkbench({ userName }: { userName: string }) {
           </div>
         </div>
         <div className={(activeTab === 'edit' ? 'hidden lg:block' : '') + ' commercial-preview-shell'}>
-          <div className="lg:sticky lg:top-4 space-y-2">
-            <div className="flex justify-between items-center">
+          <div className="commercial-preview-inner lg:sticky lg:top-4 space-y-2">
+            <div className="commercial-preview-controls flex justify-between items-center">
               <h2 className="text-sm font-semibold text-gray-700">A4 PDF 排版预览</h2>
               <button type="button" className="btn-secondary btn-sm" onClick={printPdf}>保存为 PDF</button>
             </div>
             <div className="commercial-preview-scroll max-h-[78vh] overflow-auto border border-gray-200 rounded-lg bg-gray-100 p-2">
               <DocumentPreview draft={draft} />
             </div>
-            <p className="text-xs text-gray-500">点击“保存为 PDF”会打开浏览器打印窗口，选择“另存为 PDF”。</p>
+            <p className="commercial-preview-help text-xs text-gray-500">点击“保存为 PDF”会打开浏览器打印窗口，选择“另存为 PDF”。</p>
           </div>
         </div>
       </div>
