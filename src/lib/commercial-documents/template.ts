@@ -223,6 +223,9 @@ export function validateForPrint(draft: CommercialDocumentDraft): string[] {
   if (!draft.buyerName.trim()) errors.push('请填写客户名称');
   if (!draft.documentNo.trim() || draft.documentNo.length > 80) errors.push('请填写有效的单据编号');
   if (!/^\d{4}-\d{2}-\d{2}$/.test(draft.date)) errors.push('请填写正确的单据日期');
+  if (draft.paymentPreset === 'credit_days' && !paymentPresetText('credit_days', draft.paymentDays)) {
+    errors.push('账期天数必须是1到365之间的整数');
+  }
   if (draft.sections.length === 0) errors.push('请至少添加一个报价大项');
   for (const [groupIndex, section] of draft.sections.entries()) {
     const prefix = '大项 ' + (groupIndex + 1);
