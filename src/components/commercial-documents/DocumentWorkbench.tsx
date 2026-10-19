@@ -180,7 +180,7 @@ export default function DocumentWorkbench({ userName }: { userName: string }) {
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)] gap-4 items-start">
-        <div className={(activeTab === 'preview' ? 'hidden lg:block' : '') + ' space-y-4'}>
+        <div className={(activeTab === 'preview' ? 'hidden lg:block' : '') + ' commercial-editor space-y-4'}>
 
           <Panel title="01 · 单据基础信息">
             <div className="grid grid-cols-2 gap-3">
@@ -343,13 +343,13 @@ export default function DocumentWorkbench({ userName }: { userName: string }) {
             <button type="button" className="btn-primary" onClick={printPdf}>核对并生成 PDF</button>
           </div>
         </div>
-        <div className={activeTab === 'edit' ? 'hidden lg:block' : ''}>
+        <div className={(activeTab === 'edit' ? 'hidden lg:block' : '') + ' commercial-preview-shell'}>
           <div className="lg:sticky lg:top-4 space-y-2">
             <div className="flex justify-between items-center">
               <h2 className="text-sm font-semibold text-gray-700">A4 PDF 排版预览</h2>
               <button type="button" className="btn-secondary btn-sm" onClick={printPdf}>保存为 PDF</button>
             </div>
-            <div className="max-h-[78vh] overflow-auto border border-gray-200 rounded-lg bg-gray-100 p-2">
+            <div className="commercial-preview-scroll max-h-[78vh] overflow-auto border border-gray-200 rounded-lg bg-gray-100 p-2">
               <DocumentPreview draft={draft} />
             </div>
             <p className="text-xs text-gray-500">点击“保存为 PDF”会打开浏览器打印窗口，选择“另存为 PDF”。</p>
