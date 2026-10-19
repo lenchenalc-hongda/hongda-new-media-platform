@@ -68,6 +68,12 @@ assert(glhWorkflow.includes('runs-on: [self-hosted, macOS, X64, hongda-agent-con
 assert(glhWorkflow.includes('project-lane-validate.mjs'));
 assert(glhWorkflow.includes('project-lane-run.sh'));
 assert(glhWorkflow.includes('project-lane-publish.sh'));
+assert(glhWorkflow.includes('actions/upload-artifact@v4'));
+assert(glhWorkflow.includes('project-lane-source-${{ github.run_id }}'));
+assert(glhWorkflow.includes('actions/download-artifact@v4'));
+assert(glhWorkflow.includes('project-lane-result-${{ github.run_id }}'));
+assert(glhWorkflow.includes('git apply --check'));
+assert(!glhWorkflow.includes('Harden Git transport for unstable links'));
 
 const cpcWorkflow = read('.github/workflows/customer-project-center-agent-control.yml');
 assert(cpcWorkflow.includes('github.event.issue.number == 10'));
@@ -88,6 +94,12 @@ assert(wosWorkflow.includes('runs-on: [self-hosted, macOS, X64, hongda-agent-con
 assert(wosWorkflow.includes('workflow_dispatch:'));
 assert(wosWorkflow.includes('project-lane-recover.mjs'));
 assert(wosWorkflow.includes('needs.execute.result == \'failure\''));
+assert(wosWorkflow.includes('actions/upload-artifact@v4'));
+assert(wosWorkflow.includes('project-lane-source-${{ github.run_id }}'));
+assert(wosWorkflow.includes('actions/download-artifact@v4'));
+assert(wosWorkflow.includes('project-lane-result-${{ github.run_id }}'));
+assert(wosWorkflow.includes('git apply --check'));
+assert(!wosWorkflow.includes('Harden Git transport for unstable links'));
 assert(glhWorkflow.includes('workflow_dispatch:'));
 assert(cpcWorkflow.includes('workflow_dispatch:'));
 
@@ -133,6 +145,10 @@ assert(publisher.includes('git -c core.quotepath=false ls-files --others --exclu
 assert(!publisher.includes('merge_pull_request'));
 assert(!publisher.includes('push origin master'));
 assert(!publisher.includes('push origin main'));
+assert(
+  publisher.indexOf('ready_for_pm_review="YES"') < publisher.indexOf('pr_body='),
+  'publisher initializes review status before PR body expansion under set -u',
+);
 
 const modelPolicy = read('docs/agent-control/MODEL_POLICY_V1.md');
 assert(modelPolicy.includes('L1 — default execution'));

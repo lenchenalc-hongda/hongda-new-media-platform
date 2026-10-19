@@ -105,6 +105,12 @@ json_string() {
 
 files_changed="$(paste -sd, "$changed_file")"
 
+task_status="PASS"
+ready_for_pm_review="YES"
+if [ "$RUN_RESULT" = "CODE_FAILURE" ]; then
+  task_status="FIX_REQUIRED"
+fi
+
 if [ "$STATUS" = "READY_FOR_CODEX" ]; then
   pr_body="PROJECT = $PROJECT_SLUG
 TASK_ID = $TASK_ID
@@ -127,12 +133,6 @@ READY_FOR_PM_REVIEW = $ready_for_pm_review"
   pr_number="$(/usr/bin/ruby -rjson -e 'print JSON.parse(File.read(ARGV[0]))["number"]' "$response_file")"
 else
   pr_number="${ACTIVE_PR:?}"
-fi
-
-task_status="PASS"
-ready_for_pm_review="YES"
-if [ "$RUN_RESULT" = "CODE_FAILURE" ]; then
-  task_status="FIX_REQUIRED"
 fi
 
 completion="PROJECT = $PROJECT_SLUG
