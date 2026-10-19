@@ -100,6 +100,12 @@ assert(wosWorkflow.includes('actions/download-artifact@v4'));
 assert(wosWorkflow.includes('project-lane-result-${{ github.run_id }}'));
 assert(wosWorkflow.includes('git apply --check'));
 assert(!wosWorkflow.includes('Harden Git transport for unstable links'));
+assert(wosWorkflow.includes('git add -A -- "$path"'));
+assert(wosWorkflow.includes('git diff --cached --binary --full-index --no-ext-diff HEAD'));
+assert(!wosWorkflow.includes('git add -N -- "$path"'));
+assert(glhWorkflow.includes('git add -A -- "$path"'));
+assert(glhWorkflow.includes('git diff --cached --binary --full-index --no-ext-diff HEAD'));
+assert(!glhWorkflow.includes('git add -N -- "$path"'));
 assert(glhWorkflow.includes('workflow_dispatch:'));
 assert(cpcWorkflow.includes('workflow_dispatch:'));
 
