@@ -63,7 +63,7 @@ export function initialDraft(): CommercialDocumentDraft {
     language: 'zh',
     currency: 'CNY',
     documentNo: '',
-    date: new Date().toLocaleDateString('en-CA'),
+    date: new Date().toISOString().slice(0, 10),
     sellerName: '',
     sellerAddress: '',
     sellerContact: '',
