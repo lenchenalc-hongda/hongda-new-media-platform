@@ -122,7 +122,7 @@ export default function DocumentWorkbench({ userName }: { userName: string }) {
       const parsed: unknown = JSON.parse(await file.text());
       if (!isDraftShape(parsed)) throw new Error('bad draft shape');
       if (!window.confirm('导入将替换当前页面尚未下载的内容，确认继续？')) return;
-      setDraft(parsed);
+      setDraft({ ...parsed, accountLabel: '', accountDetails: '' });
       setErrors([]);
       setActiveTab('edit');
     } catch {
@@ -186,7 +186,14 @@ export default function DocumentWorkbench({ userName }: { userName: string }) {
             <div className="grid grid-cols-2 gap-3">
               <label className="text-xs text-gray-600">
                 <span className="block mb-1 font-medium">单据类型</span>
-                <select className="w-full" value={draft.kind} onChange={e => patch('kind', e.target.value as CommercialDocumentDraft['kind'])}>
+                <select className="w-full" value={draft.kind} onChange={e => {
+                  const kind = e.target.value as CommercialDocumentDraft['kind'];
+                  setDraft(previous => ({ ...previous, kind, sections: previous.sections.map(group => ({
+                    ...group, items: group.items.map(item => kind === 'machine_contract' && item.mode === 'catalog'
+                      ? { ...item, mode: 'amount', quantity: item.quantity || '1' } : item),
+                  })) }));
+                  setErrors([]);
+                }}>
                   <option value="quotation">产品报价单</option>
                   <option value="machine_contract">机器销售合同</option>
                 </select>
@@ -264,9 +271,9 @@ export default function DocumentWorkbench({ userName }: { userName: string }) {
                           </select>
                         </label>
                         <div className="grid grid-cols-3 gap-2">
-                          <Field label="数量" value={item.mode === 'catalog' ? '' : item.quantity}
-                            onChange={value => updateItem(section.id, item.id, { quantity: value })}
-                            placeholder={item.mode === 'catalog' ? '不适用' : '1'} />
+                          {item.mode === 'catalog'
+                            ? <div><span className="block text-xs text-gray-600 mb-1">数量</span><div className="text-xs text-gray-500 bg-gray-100 rounded-lg p-2">目录不适用</div></div>
+                            : <Field label="数量" value={item.quantity} onChange={value => updateItem(section.id, item.id, { quantity: value })} placeholder="1" />}
                           <Field label="单位" value={item.unit} onChange={value => updateItem(section.id, item.id, { unit: value })} placeholder="支/㎡/台" />
                           <Field required label="单价" value={item.unitPrice}
                             onChange={value => updateItem(section.id, item.id, { unitPrice: value })} placeholder="0.00" />
