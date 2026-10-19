@@ -89,6 +89,22 @@ jobs:
           AGENT_CONTROL_PROJECT: global-lead-hub
           AGENT_CONTROL_ISSUE: '72'
         run: node scripts/agent-control/project-lane-validate.mjs
+      - name: Package validated source snapshot
+        if: steps.validate.outputs.result == 'READY'
+        shell: bash
+        run: |
+          set -euo pipefail
+          tar -czf "$RUNNER_TEMP/project-lane-source.tgz" .
+
+      - name: Upload validated source snapshot
+        if: steps.validate.outputs.result == 'READY'
+        uses: actions/upload-artifact@v4
+        with:
+          name: project-lane-source-${{ github.run_id }}
+          path: ${{ runner.temp }}/project-lane-source.tgz
+          if-no-files-found: error
+          retention-days: 1
+
 
   execute:
     needs: validate
@@ -108,23 +124,25 @@ jobs:
       failed_check: ${{ steps.run.outputs.failed_check }}
       infra_local_attempts: ${{ steps.run.outputs.infra_local_attempts }}
     steps:
-      - name: Harden Git transport for unstable links
+      - name: Download validated source snapshot
+        uses: actions/download-artifact@v4
+        with:
+          name: project-lane-source-${{ github.run_id }}
+          path: ${{ runner.temp }}/project-lane-source
+
+      - name: Restore validated source snapshot
         shell: bash
+        env:
+          EXPECTED_HEAD: ${{ needs.validate.outputs.expected_head }}
         run: |
           set -euo pipefail
-          echo 'GIT_CONFIG_COUNT=3' >> "$GITHUB_ENV"
-          echo 'GIT_CONFIG_KEY_0=http.version' >> "$GITHUB_ENV"
-          echo 'GIT_CONFIG_VALUE_0=HTTP/1.1' >> "$GITHUB_ENV"
-          echo 'GIT_CONFIG_KEY_1=http.lowSpeedLimit' >> "$GITHUB_ENV"
-          echo 'GIT_CONFIG_VALUE_1=1' >> "$GITHUB_ENV"
-          echo 'GIT_CONFIG_KEY_2=http.lowSpeedTime' >> "$GITHUB_ENV"
-          echo 'GIT_CONFIG_VALUE_2=900' >> "$GITHUB_ENV"
-
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with:
-          ref: ${{ needs.validate.outputs.expected_head }}
-          fetch-depth: 1
-          persist-credentials: false
+          find "$GITHUB_WORKSPACE" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
+          tar -xzf "$RUNNER_TEMP/project-lane-source/project-lane-source.tgz" -C "$GITHUB_WORKSPACE"
+          cd "$GITHUB_WORKSPACE"
+          test "$(git rev-parse HEAD)" = "$EXPECTED_HEAD"
+          git reset --hard "$EXPECTED_HEAD"
+          git clean -ffdx
+          test -z "$(git status --porcelain)"
 
       - uses: actions/setup-node@v4
         with:
@@ -157,8 +175,73 @@ jobs:
           AGENT_CONTROL_STRONG_MODEL: ${{ vars.AGENT_CONTROL_STRONG_MODEL }}
         run: bash scripts/agent-control/project-lane-run.sh
 
-      - name: Mint scoped GitHub App token
+      - name: Package bounded result patch
         if: steps.run.outcome == 'success' && (steps.run.outputs.run_result == 'PASS' || steps.run.outputs.run_result == 'CODE_FAILURE')
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$GITHUB_WORKSPACE"
+          {
+            git -c core.quotepath=false diff --name-only --no-renames
+            git -c core.quotepath=false ls-files --others --exclude-standard
+          } | sed '/^$/d' | LC_ALL=C sort -u > "$RUNNER_TEMP/project-lane-changed.txt"
+          while IFS= read -r path; do
+            if ! git ls-files --error-unmatch "$path" >/dev/null 2>&1; then
+              git add -N -- "$path"
+            fi
+          done < "$RUNNER_TEMP/project-lane-changed.txt"
+          git diff --binary --full-index --no-ext-diff --ita-visible-in-index > "$RUNNER_TEMP/project-lane-result.patch"
+          git reset -- .
+          test -s "$RUNNER_TEMP/project-lane-result.patch"
+
+      - name: Upload bounded result patch
+        if: steps.run.outcome == 'success' && (steps.run.outputs.run_result == 'PASS' || steps.run.outputs.run_result == 'CODE_FAILURE')
+        uses: actions/upload-artifact@v4
+        with:
+          name: project-lane-result-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/project-lane-result.patch
+            ${{ runner.temp }}/project-lane-changed.txt
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Fail unresolved execution
+        if: steps.run.outcome == 'failure'
+        shell: bash
+        run: |
+          echo "PROJECT_LANE_FINAL=FAILED"
+          echo "FAILURE_CLASS=${{ steps.run.outputs.failure_class }}"
+          exit 1
+
+  publish:
+    needs: [validate, execute]
+    if: needs.validate.result == 'success' && needs.execute.result == 'success' && (needs.execute.outputs.run_result == 'PASS' || needs.execute.outputs.run_result == 'CODE_FAILURE')
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ needs.validate.outputs.expected_head }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Download bounded result patch
+        uses: actions/download-artifact@v4
+        with:
+          name: project-lane-result-${{ github.run_id }}
+          path: ${{ runner.temp }}/project-lane-result
+
+      - name: Apply bounded result patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git apply --check "$RUNNER_TEMP/project-lane-result/project-lane-result.patch"
+          git apply "$RUNNER_TEMP/project-lane-result/project-lane-result.patch"
+          test -n "$(git status --porcelain)"
+
+      - name: Mint scoped GitHub App token
         id: app-token
         uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
         with:
@@ -168,7 +251,6 @@ jobs:
           permission-pull-requests: write
 
       - name: Publish project task
-        if: steps.run.outcome == 'success' && (steps.run.outputs.run_result == 'PASS' || steps.run.outputs.run_result == 'CODE_FAILURE')
         shell: bash
         env:
           GH_APP_TOKEN: ${{ steps.app-token.outputs.token }}
@@ -183,20 +265,12 @@ jobs:
           TASK_COMMENT_ID: ${{ needs.validate.outputs.task_comment_id }}
           ACTIVE_PR: ${{ needs.validate.outputs.active_pr }}
           REPOSITORY: ${{ github.repository }}
-          RUN_RESULT: ${{ steps.run.outputs.run_result }}
-          FAILURE_CLASS: ${{ steps.run.outputs.failure_class }}
-          CHECKS_PASSED: ${{ steps.run.outputs.checks_passed }}
-          FAILED_CHECK: ${{ steps.run.outputs.failed_check }}
-          INFRA_LOCAL_ATTEMPTS: ${{ steps.run.outputs.infra_local_attempts }}
+          RUN_RESULT: ${{ needs.execute.outputs.run_result }}
+          FAILURE_CLASS: ${{ needs.execute.outputs.failure_class }}
+          CHECKS_PASSED: ${{ needs.execute.outputs.checks_passed }}
+          FAILED_CHECK: ${{ needs.execute.outputs.failed_check }}
+          INFRA_LOCAL_ATTEMPTS: ${{ needs.execute.outputs.infra_local_attempts }}
         run: bash scripts/agent-control/project-lane-publish.sh
-
-      - name: Fail unresolved execution
-        if: steps.run.outcome == 'failure'
-        shell: bash
-        run: |
-          echo "PROJECT_LANE_FINAL=FAILED"
-          echo "FAILURE_CLASS=${{ steps.run.outputs.failure_class }}"
-          exit 1
 
   recover:
     needs: [validate, execute]
