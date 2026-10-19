@@ -30,7 +30,7 @@ export type ShippingPreset = '' | (typeof SHIPPING_PRESETS)[number]['value'];
 
 export function paymentPresetText(preset: PaymentPreset, days: string): string {
   if (preset === 'credit_days') {
-    return /^\\d{1,3}$/.test(days) && Number(days) >= 1 && Number(days) <= 365
+    return /^\d{1,3}$/.test(days) && Number(days) >= 1 && Number(days) <= 365
       ? '账期' + Number(days) + '天，具体起算时间以双方约定为准。' : '';
   }
   return PAYMENT_PRESETS.find(option => option.value === preset)?.text ?? '';
@@ -42,11 +42,11 @@ export function shippingPresetText(preset: ShippingPreset): string {
 
 /** Randomized, non-sequential document numbers. Central uniqueness requires a durable registry. */
 export function formatDocumentNumber(kind: DocumentKind, date: string, randomCode: string): string {
-  const yearMonth = /^\\d{4}-\\d{2}/.test(date) ? date.slice(2, 4) + date.slice(5, 7) : '0000';
+  const yearMonth = /^\d{4}-\d{2}/.test(date) ? date.slice(2, 4) + date.slice(5, 7) : '0000';
   return 'HD-' + (kind === 'quotation' ? 'Q' : 'C') + '-' + yearMonth + '-' + randomCode;
 }
 export function isGeneratedDocumentNumber(value: string): boolean {
-  return /^HD-[QC]-\\d{4}-[A-HJ-NP-Z2-9]{12}$/.test(value);
+  return /^HD-[QC]-\d{4}-[A-HJ-NP-Z2-9]{12}$/.test(value);
 }
 
 
