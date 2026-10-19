@@ -54,7 +54,7 @@ export default function Sidebar() {
       {/* Brand */}
       <div className="px-4 py-3 border-b border-gray-200">
         <Link href="/workspace-home" className="flex items-center gap-2 no-underline">
-          <div className="w-7 h-7 bg-blue-600 rounded-lg flex items-center justify-center text-white font-bold text-xs">宏</div>
+          <img src="/hongda-os-original-emblem.png" alt="宏达印业 Logo" className="w-7 h-7 object-contain shrink-0" width={28} height={28} />
           <div>
             <p className="text-sm font-bold text-gray-800 leading-tight">Hongda OS</p>
             <p className="text-[10px] text-gray-500">宏达印业数字化业务系统</p>
