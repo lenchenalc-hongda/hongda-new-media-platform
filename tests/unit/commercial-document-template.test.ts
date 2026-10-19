@@ -24,7 +24,7 @@ assert.equal(draft.salespersonName, '测试业务员');
 assert.equal(draft.sellerAddress, '');
 assert.equal(draft.sellerContact, '');
 draft.documentNo = 'HD-TEST-001';
-draft.sellerName = '经确认的报价主体';
+draft.sellerName = FIXED_SELLER_NAME;
 draft.buyerName = '测试客户';
 draft.sections = [
   {
