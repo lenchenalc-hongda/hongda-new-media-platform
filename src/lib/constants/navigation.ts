@@ -57,6 +57,11 @@ export const WORKSPACE_PORTAL_STYLES: Record<
     background: 'bg-orange-50 border-orange-200',
     button: 'text-orange-700 bg-orange-100 hover:bg-orange-200',
   },
+  red: {
+    gradient: 'from-red-600 to-red-700',
+    background: 'bg-red-50 border-red-200',
+    button: 'text-red-700 bg-red-100 hover:bg-red-200',
+  },
   cyan: {
     gradient: 'from-cyan-500 to-cyan-600',
     background: 'bg-cyan-50 border-cyan-200',
@@ -151,6 +156,16 @@ export const PORTAL_GROUPS: PortalGroup[] = [
     ],
   },
   {
+    id: 'commercial',
+    label: '商务单据',
+    description: '报价单与机器合同模板',
+    icon: '📑',
+    color: 'red',
+    items: [
+      { label: '报价 / 合同模板', path: '/commercial-documents', icon: '📄' },
+    ],
+  },
+  {
     id: 'admin',
     label: '管理',
     description: '系统配置与用户管理',
@@ -221,8 +236,9 @@ export function getVisiblePortalGroups({
 
   const order: Record<string, number> = {
     sales: 0,
-    review: 1,
-    media: 2,
+    commercial: 1,
+    review: 2,
+    media: 3,
   };
 
   return salesGroups.sort(
@@ -253,6 +269,7 @@ export function getPortalForPath(path: string): string {
       path.startsWith('/posts') || path.startsWith('/leads') || path.startsWith('/reports')) return 'media';
   if (path.startsWith('/oa')) return 'official';
   if (path.startsWith('/knowledge')) return 'knowledge';
+  if (path.startsWith('/commercial-documents')) return 'commercial';
   if (path.startsWith('/customer-projects')) return 'sales';
   if (path.startsWith('/settings')) return 'admin';
   if (path.startsWith('/review-center')) return 'review';
