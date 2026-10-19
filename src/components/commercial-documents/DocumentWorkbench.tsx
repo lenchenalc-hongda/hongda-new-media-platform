@@ -111,6 +111,78 @@ export default function DocumentWorkbench({ userName }: { userName: string }) {
     setDraft(previous => ({ ...previous, [key]: value }));
     setErrors([]);
   };
+  const changeDocumentKind = (kind: CommercialDocumentDraft['kind']) => {
+    const nextNumber = createDocumentNo(kind, draft.date);
+    setDraft(previous => ({
+      ...previous,
+      kind,
+      documentNo: !previous.documentNo || isGeneratedDocumentNumber(previous.documentNo)
+        ? nextNumber : previous.documentNo,
+      sections: previous.sections.map(section => ({
+        ...section,
+        items: section.items.map(item => kind === 'machine_contract' && item.mode === 'catalog'
+          ? { ...item, mode: 'amount', quantity: item.quantity || '1' } : item),
+      })),
+    }));
+    setErrors([]);
+  };
+
+  const changeDate = (date: string) => {
+    const number = createDocumentNo(draft.kind, date);
+    setDraft(previous => ({
+      ...previous,
+      date,
+      documentNo: isGeneratedDocumentNumber(previous.documentNo)
+        && previous.date.slice(0, 7) !== date.slice(0, 7) ? number : previous.documentNo,
+    }));
+    setErrors([]);
+  };
+
+  const changeBuyerName = (buyerName: string) => {
+    setDraft(previous => ({ ...previous, buyerName, buyerCustomerReferenceId: '' }));
+    setCustomerSearchOpen(true);
+    setErrors([]);
+  };
+
+  const selectCustomer = (customer: CustomerOption) => {
+    setDraft(previous => ({
+      ...previous,
+      buyerName: customer.name,
+      buyerCustomerReferenceId: customer.id,
+    }));
+    setCustomerSearchOpen(false);
+    setCustomerOptions([]);
+    setCustomerError('');
+  };
+
+  const choosePayment = (preset: PaymentPreset) => {
+    setDraft(previous => ({
+      ...previous,
+      paymentPreset: preset,
+      paymentTerms: preset === 'other' ? '' : paymentPresetText(preset, previous.paymentDays),
+    }));
+    setErrors([]);
+  };
+
+  const setPaymentDays = (days: string) => {
+    setDraft(previous => ({
+      ...previous,
+      paymentDays: days,
+      paymentTerms: previous.paymentPreset === 'credit_days'
+        ? paymentPresetText('credit_days', days) : previous.paymentTerms,
+    }));
+    setErrors([]);
+  };
+
+  const chooseShipping = (preset: ShippingPreset) => {
+    setDraft(previous => ({
+      ...previous,
+      shippingPreset: preset,
+      shippingTerms: preset === 'other' ? '' : shippingPresetText(preset),
+    }));
+    setErrors([]);
+  };
+
   const updateSection = (sectionId: string, update: (section: DocumentSection) => DocumentSection) => {
     setDraft(previous => ({
       ...previous, sections: previous.sections.map(section => section.id === sectionId ? update(section) : section),
@@ -183,7 +255,8 @@ export default function DocumentWorkbench({ userName }: { userName: string }) {
       const parsed: unknown = JSON.parse(await file.text());
       if (!isDraftShape(parsed)) throw new Error('bad draft shape');
       if (!window.confirm('导入将替换当前页面尚未下载的内容，确认继续？')) return;
-      setDraft({ ...parsed, accountLabel: '', accountDetails: '' });
+      setDraft(normalizeImportedDraft(parsed, userName));
+      setCustomerSearchOpen(false);
       setErrors([]);
       setActiveTab('edit');
     } catch {
@@ -405,7 +478,9 @@ export default function DocumentWorkbench({ userName }: { userName: string }) {
           <div className="flex justify-between gap-3 pb-8">
             <button type="button" className="btn-secondary" onClick={() => {
               if (window.confirm('清空当前内容并新建草稿？请先下载草稿文件。')) {
-                setDraft(initialDraft()); setErrors([]);
+                const replacement = initialDraft(userName);
+                replacement.documentNo = createDocumentNo(replacement.kind, replacement.date);
+                setDraft(replacement); setCustomerSearchOpen(false); setErrors([]);
               }
             }}>重置模板</button>
             <button type="button" className="btn-primary" onClick={printPdf}>核对并生成 PDF</button>
