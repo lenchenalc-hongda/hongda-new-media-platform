@@ -27,6 +27,12 @@ function createDocumentNo(kind: CommercialDocumentDraft['kind'], date: string): 
 }
 
 interface CustomerOption { id: string; name: string; }
+function localDateToday(): string {
+  const date = new Date();
+  return [String(date.getFullYear()).padStart(4, '0'),
+    String(date.getMonth() + 1).padStart(2, '0'),
+    String(date.getDate()).padStart(2, '0')].join('-');
+}
 
 function Field({
   label, value, onChange, placeholder, multiline = false, required = false, type = 'text',
@@ -67,8 +73,9 @@ export default function DocumentWorkbench({ userName }: { userName: string }) {
 
   // Generate after hydration to avoid server/client random-ID mismatches.
   useEffect(() => {
-    const nextNumber = createDocumentNo('quotation', new Date().toISOString().slice(0, 10));
-    setDraft(previous => previous.documentNo ? previous : { ...previous, documentNo: nextNumber });
+    const date = localDateToday();
+    const nextNumber = createDocumentNo('quotation', date);
+    setDraft(previous => previous.documentNo ? previous : { ...previous, date, documentNo: nextNumber });
   }, []);
 
   // Existing CPC references only. All customer read permissions remain enforced by Supabase RLS.
@@ -538,6 +545,7 @@ export default function DocumentWorkbench({ userName }: { userName: string }) {
             <button type="button" className="btn-secondary" onClick={() => {
               if (window.confirm('清空当前内容并新建草稿？请先下载草稿文件。')) {
                 const replacement = initialDraft(userName);
+                replacement.date = localDateToday();
                 replacement.documentNo = createDocumentNo(replacement.kind, replacement.date);
                 setDraft(replacement); setCustomerSearchOpen(false); setErrors([]);
               }
