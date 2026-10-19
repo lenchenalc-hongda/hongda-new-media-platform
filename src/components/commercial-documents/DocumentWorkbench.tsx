@@ -1,17 +1,32 @@
 'use client';
 
-import { useRef, useState, type ChangeEvent, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ChangeEvent, type ReactNode } from 'react';
 import DocumentPreview from './DocumentPreview';
 import {
   blankItem, documentAmount, formatMoney, initialDraft, isDraftShape,
-  itemAmountMinor, sectionAmount, validateForPrint,
+  itemAmountMinor, sectionAmount, validateForPrint, formatDocumentNumber,
+  isGeneratedDocumentNumber, FIXED_SELLER_NAME, PAYMENT_PRESETS,
+  SHIPPING_PRESETS, paymentPresetText, shippingPresetText, normalizeImportedDraft,
   type CommercialDocumentDraft, type DocumentItem, type DocumentSection,
+  type PaymentPreset, type ShippingPreset,
 } from '@/lib/commercial-documents/template';
 
 const SECTION_PRESETS = ['版费', '热转印花膜', '数码花膜', '机器设备', '夹具与配件', '加工费用', '其他费用'];
 const CURRENCIES = ['CNY', 'USD', 'EUR'] as const;
 let sequence = 1;
 function id(prefix: string) { return prefix + '-' + Date.now() + '-' + sequence++; }
+
+// 12 cryptographically random characters in a human-readable, non-sequential ID.
+// This does not replace database-side unique constraints for saved documents.
+function createDocumentNo(kind: CommercialDocumentDraft['kind'], date: string): string {
+  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // 32 characters.
+  const bytes = new Uint8Array(12);
+  window.crypto.getRandomValues(bytes);
+  const code = Array.from(bytes, byte => alphabet[byte & 31]).join('');
+  return formatDocumentNumber(kind, date, code);
+}
+
+interface CustomerOption { id: string; name: string; }
 
 function Field({
   label, value, onChange, placeholder, multiline = false, required = false, type = 'text',
@@ -41,10 +56,56 @@ function Panel({ title, children }: { title: string; children: ReactNode }) {
 }
 
 export default function DocumentWorkbench({ userName }: { userName: string }) {
-  const [draft, setDraft] = useState<CommercialDocumentDraft>(initialDraft);
+  const [draft, setDraft] = useState<CommercialDocumentDraft>(() => initialDraft(userName));
   const [errors, setErrors] = useState<string[]>([]);
   const [activeTab, setActiveTab] = useState<'edit' | 'preview'>('edit');
+  const [customerSearchOpen, setCustomerSearchOpen] = useState(false);
+  const [customerOptions, setCustomerOptions] = useState<CustomerOption[]>([]);
+  const [customerError, setCustomerError] = useState('');
+  const [customerLoading, setCustomerLoading] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  // Generate after hydration to avoid server/client random-ID mismatches.
+  useEffect(() => {
+    const nextNumber = createDocumentNo('quotation', new Date().toISOString().slice(0, 10));
+    setDraft(previous => previous.documentNo ? previous : { ...previous, documentNo: nextNumber });
+  }, []);
+
+  // Existing CPC references only. All customer read permissions remain enforced by Supabase RLS.
+  useEffect(() => {
+    const query = draft.buyerName.trim();
+    if (!customerSearchOpen || !query || draft.buyerCustomerReferenceId) {
+      setCustomerOptions([]);
+      setCustomerLoading(false);
+      return;
+    }
+    const controller = new AbortController();
+    const timer = window.setTimeout(async () => {
+      setCustomerLoading(true);
+      setCustomerError('');
+      try {
+        const response = await fetch(
+          '/api/commercial-documents/customer-options?q=' + encodeURIComponent(query),
+          { cache: 'no-store', signal: controller.signal },
+        );
+        const json: { ok?: boolean; message?: string; customers?: CustomerOption[] } = await response.json();
+        if (!response.ok || !json.ok) {
+          setCustomerOptions([]);
+          setCustomerError(json.message || '客户池暂不可用，可直接输入名称');
+        } else {
+          setCustomerOptions(Array.isArray(json.customers) ? json.customers : []);
+        }
+      } catch {
+        if (!controller.signal.aborted) {
+          setCustomerOptions([]);
+          setCustomerError('无法读取客户池，可直接输入名称');
+        }
+      } finally {
+        if (!controller.signal.aborted) setCustomerLoading(false);
+      }
+    }, 250);
+    return () => { window.clearTimeout(timer); controller.abort(); };
+  }, [customerSearchOpen, draft.buyerName, draft.buyerCustomerReferenceId]);
 
   const patch = <K extends keyof CommercialDocumentDraft>(key: K, value: CommercialDocumentDraft[K]) => {
     setDraft(previous => ({ ...previous, [key]: value }));
