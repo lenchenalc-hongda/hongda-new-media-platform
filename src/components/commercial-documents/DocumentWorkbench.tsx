@@ -1,17 +1,38 @@
 'use client';
 
-import { useRef, useState, type ChangeEvent, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ChangeEvent, type ReactNode } from 'react';
 import DocumentPreview from './DocumentPreview';
 import {
   blankItem, documentAmount, formatMoney, initialDraft, isDraftShape,
-  itemAmountMinor, sectionAmount, validateForPrint,
+  itemAmountMinor, sectionAmount, validateForPrint, formatDocumentNumber,
+  isGeneratedDocumentNumber, FIXED_SELLER_NAME, PAYMENT_PRESETS,
+  SHIPPING_PRESETS, paymentPresetText, shippingPresetText, normalizeImportedDraft,
   type CommercialDocumentDraft, type DocumentItem, type DocumentSection,
+  type PaymentPreset, type ShippingPreset,
 } from '@/lib/commercial-documents/template';
 
 const SECTION_PRESETS = ['版费', '热转印花膜', '数码花膜', '机器设备', '夹具与配件', '加工费用', '其他费用'];
 const CURRENCIES = ['CNY', 'USD', 'EUR'] as const;
 let sequence = 1;
 function id(prefix: string) { return prefix + '-' + Date.now() + '-' + sequence++; }
+
+// 12 cryptographically random characters in a human-readable, non-sequential ID.
+// This does not replace database-side unique constraints for saved documents.
+function createDocumentNo(kind: CommercialDocumentDraft['kind'], date: string): string {
+  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // 32 characters.
+  const bytes = new Uint8Array(12);
+  window.crypto.getRandomValues(bytes);
+  const code = Array.from(bytes, byte => alphabet[byte & 31]).join('');
+  return formatDocumentNumber(kind, date, code);
+}
+
+interface CustomerOption { id: string; name: string; }
+function localDateToday(): string {
+  const date = new Date();
+  return [String(date.getFullYear()).padStart(4, '0'),
+    String(date.getMonth() + 1).padStart(2, '0'),
+    String(date.getDate()).padStart(2, '0')].join('-');
+}
 
 function Field({
   label, value, onChange, placeholder, multiline = false, required = false, type = 'text',
@@ -41,15 +62,150 @@ function Panel({ title, children }: { title: string; children: ReactNode }) {
 }
 
 export default function DocumentWorkbench({ userName }: { userName: string }) {
-  const [draft, setDraft] = useState<CommercialDocumentDraft>(initialDraft);
+  const [draft, setDraft] = useState<CommercialDocumentDraft>(() => initialDraft(userName));
   const [errors, setErrors] = useState<string[]>([]);
   const [activeTab, setActiveTab] = useState<'edit' | 'preview'>('edit');
+  const [customerSearchOpen, setCustomerSearchOpen] = useState(false);
+  const [customerOptions, setCustomerOptions] = useState<CustomerOption[]>([]);
+  const [customerError, setCustomerError] = useState('');
+  const [customerLoading, setCustomerLoading] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  // Generate after hydration to avoid server/client random-ID mismatches.
+  useEffect(() => {
+    const date = localDateToday();
+    const nextNumber = createDocumentNo('quotation', date);
+    setDraft(previous => previous.documentNo ? previous : { ...previous, date, documentNo: nextNumber });
+  }, []);
+
+  // Existing CPC references only. All customer read permissions remain enforced by Supabase RLS.
+  useEffect(() => {
+    const query = draft.buyerName.trim();
+    if (!customerSearchOpen || !query || draft.buyerCustomerReferenceId) {
+      setCustomerOptions([]);
+      setCustomerLoading(false);
+      return;
+    }
+    const controller = new AbortController();
+    const timer = window.setTimeout(async () => {
+      setCustomerLoading(true);
+      setCustomerError('');
+      try {
+        const response = await fetch(
+          '/api/commercial-documents/customer-options?q=' + encodeURIComponent(query),
+          { cache: 'no-store', signal: controller.signal },
+        );
+        const json: { ok?: boolean; message?: string; customers?: CustomerOption[] } = await response.json();
+        if (!response.ok || !json.ok) {
+          setCustomerOptions([]);
+          setCustomerError(json.message || '客户池暂不可用，可直接输入名称');
+        } else {
+          setCustomerOptions(Array.isArray(json.customers) ? json.customers : []);
+        }
+      } catch {
+        if (!controller.signal.aborted) {
+          setCustomerOptions([]);
+          setCustomerError('无法读取客户池，可直接输入名称');
+        }
+      } finally {
+        if (!controller.signal.aborted) setCustomerLoading(false);
+      }
+    }, 250);
+    return () => { window.clearTimeout(timer); controller.abort(); };
+  }, [customerSearchOpen, draft.buyerName, draft.buyerCustomerReferenceId]);
 
   const patch = <K extends keyof CommercialDocumentDraft>(key: K, value: CommercialDocumentDraft[K]) => {
     setDraft(previous => ({ ...previous, [key]: value }));
     setErrors([]);
   };
+  const changeDocumentKind = (kind: CommercialDocumentDraft['kind']) => {
+    const nextNumber = createDocumentNo(kind, draft.date);
+    setDraft(previous => ({
+      ...previous,
+      kind,
+      documentNo: !previous.documentNo || isGeneratedDocumentNumber(previous.documentNo)
+        ? nextNumber : previous.documentNo,
+      sections: previous.sections.map(section => ({
+        ...section,
+        items: section.items.map(item => kind === 'machine_contract' && item.mode === 'catalog'
+          ? { ...item, mode: 'amount', quantity: item.quantity || '1' } : item),
+      })),
+    }));
+    setErrors([]);
+  };
+
+  const changeDate = (date: string) => {
+    const number = createDocumentNo(draft.kind, date);
+    setDraft(previous => ({
+      ...previous,
+      date,
+      documentNo: isGeneratedDocumentNumber(previous.documentNo)
+        && previous.date.slice(0, 7) !== date.slice(0, 7) ? number : previous.documentNo,
+    }));
+    setErrors([]);
+  };
+
+  const changeBuyerName = (buyerName: string) => {
+    setDraft(previous => ({ ...previous, buyerName, buyerCustomerReferenceId: '' }));
+    setCustomerSearchOpen(true);
+    setErrors([]);
+  };
+
+  const selectCustomer = (customer: CustomerOption) => {
+    setDraft(previous => ({
+      ...previous,
+      buyerName: customer.name,
+      buyerCustomerReferenceId: customer.id,
+    }));
+    setCustomerSearchOpen(false);
+    setCustomerOptions([]);
+    setCustomerError('');
+  };
+
+  const changeLanguage = (language: CommercialDocumentDraft['language']) => {
+    setDraft(previous => {
+      const previousPaymentPreset = paymentPresetText(previous.paymentPreset, previous.paymentDays, previous.language);
+      const previousShippingPreset = shippingPresetText(previous.shippingPreset, previous.language);
+      return {
+        ...previous,
+        language,
+        paymentTerms: previousPaymentPreset && previous.paymentTerms === previousPaymentPreset
+          ? paymentPresetText(previous.paymentPreset, previous.paymentDays, language) : previous.paymentTerms,
+        shippingTerms: previousShippingPreset && previous.shippingTerms === previousShippingPreset
+          ? shippingPresetText(previous.shippingPreset, language) : previous.shippingTerms,
+      };
+    });
+    setErrors([]);
+  };
+
+  const choosePayment = (preset: PaymentPreset) => {
+    setDraft(previous => ({
+      ...previous,
+      paymentPreset: preset,
+      paymentTerms: preset === 'other' ? '' : paymentPresetText(preset, previous.paymentDays, previous.language),
+    }));
+    setErrors([]);
+  };
+
+  const setPaymentDays = (days: string) => {
+    setDraft(previous => ({
+      ...previous,
+      paymentDays: days,
+      paymentTerms: previous.paymentPreset === 'credit_days'
+        ? paymentPresetText('credit_days', days, previous.language) : previous.paymentTerms,
+    }));
+    setErrors([]);
+  };
+
+  const chooseShipping = (preset: ShippingPreset) => {
+    setDraft(previous => ({
+      ...previous,
+      shippingPreset: preset,
+      shippingTerms: preset === 'other' ? '' : shippingPresetText(preset, previous.language),
+    }));
+    setErrors([]);
+  };
+
   const updateSection = (sectionId: string, update: (section: DocumentSection) => DocumentSection) => {
     setDraft(previous => ({
       ...previous, sections: previous.sections.map(section => section.id === sectionId ? update(section) : section),
@@ -122,7 +278,8 @@ export default function DocumentWorkbench({ userName }: { userName: string }) {
       const parsed: unknown = JSON.parse(await file.text());
       if (!isDraftShape(parsed)) throw new Error('bad draft shape');
       if (!window.confirm('导入将替换当前页面尚未下载的内容，确认继续？')) return;
-      setDraft({ ...parsed, accountLabel: '', accountDetails: '' });
+      setDraft(normalizeImportedDraft(parsed, userName));
+      setCustomerSearchOpen(false);
       setErrors([]);
       setActiveTab('edit');
     } catch {
@@ -160,7 +317,9 @@ export default function DocumentWorkbench({ userName }: { userName: string }) {
 
       <div className="commercial-warning bg-amber-50 text-amber-900 border border-amber-200 rounded-lg p-3 text-xs leading-relaxed">
         <strong>模板试运行：</strong>本阶段仅支持页面编辑、PDF 打印和 JSON 草稿下载/导入，
-        <strong>尚未接入服务器保存、历史版本、客户库或经财务批准的收款账户库</strong>。
+        <strong>尚未接入服务器单据保存、历史版本及经财务批准的收款账户库</strong>。
+        可搜索现有客户项目库（受原权限规则限制）或手动输入新客户。
+        编号采用高随机度生成，但数据库唯一性登记尚未上线，手工修改编号暂不能跨员工防重。
         离开页面前请下载草稿；生成文件始终带“模板草稿”提示，正式合同请复核条款后签署。
       </div>
 
@@ -186,14 +345,7 @@ export default function DocumentWorkbench({ userName }: { userName: string }) {
             <div className="grid grid-cols-2 gap-3">
               <label className="text-xs text-gray-600">
                 <span className="block mb-1 font-medium">单据类型</span>
-                <select className="w-full" value={draft.kind} onChange={e => {
-                  const kind = e.target.value as CommercialDocumentDraft['kind'];
-                  setDraft(previous => ({ ...previous, kind, sections: previous.sections.map(group => ({
-                    ...group, items: group.items.map(item => kind === 'machine_contract' && item.mode === 'catalog'
-                      ? { ...item, mode: 'amount', quantity: item.quantity || '1' } : item),
-                  })) }));
-                  setErrors([]);
-                }}>
+                <select className="w-full" value={draft.kind} onChange={e => changeDocumentKind(e.target.value as CommercialDocumentDraft['kind'])}>
                   <option value="quotation">产品报价单</option>
                   <option value="machine_contract">机器销售合同</option>
                 </select>
@@ -207,7 +359,7 @@ export default function DocumentWorkbench({ userName }: { userName: string }) {
               </label>
               <label className="text-xs text-gray-600">
                 <span className="block mb-1 font-medium">PDF 语言</span>
-                <select className="w-full" value={draft.language} onChange={e => patch('language', e.target.value as CommercialDocumentDraft['language'])}>
+                <select className="w-full" value={draft.language} onChange={e => changeLanguage(e.target.value as CommercialDocumentDraft['language'])}>
                   <option value="zh">中文</option>
                   <option value="en">English</option>
                 </select>
@@ -218,19 +370,56 @@ export default function DocumentWorkbench({ userName }: { userName: string }) {
                   {CURRENCIES.map(currency => <option key={currency} value={currency}>{currency}</option>)}
                 </select>
               </label>
-              <Field required label="单据编号" value={draft.documentNo} onChange={value => patch('documentNo', value)} placeholder="如 HD-Q-2026-001（人工编号）" />
-              <Field required label="日期" type="date" value={draft.date} onChange={value => patch('date', value)} />
+              <div>
+                <Field required label="单据编号（默认随机生成，可修改）" value={draft.documentNo}
+                  onChange={value => patch('documentNo', value)} placeholder="正在自动生成编号…" />
+                <button type="button" className="text-xs text-blue-700 hover:underline mt-1"
+                  onClick={() => patch('documentNo', createDocumentNo(draft.kind, draft.date))}>
+                  重新生成编号
+                </button>
+              </div>
+              <Field required label="日期" type="date" value={draft.date} onChange={changeDate} />
             </div>
           </Panel>
 
-          <Panel title="02 · 买卖双方 / 客户信息">
+          <Panel title="02 · 客户与业务员信息">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <Field required label="卖方 / 报价主体（正式公司全称）" value={draft.sellerName} onChange={value => patch('sellerName', value)} />
-              <Field required label="客户 / 买方全称" value={draft.buyerName} onChange={value => patch('buyerName', value)} />
-              <Field label="卖方地址" value={draft.sellerAddress} onChange={value => patch('sellerAddress', value)} />
-              <Field label="客户地址" value={draft.buyerAddress} onChange={value => patch('buyerAddress', value)} />
-              <Field label="卖方联系方式" value={draft.sellerContact} onChange={value => patch('sellerContact', value)} />
-              <Field label="客户联系人" value={draft.buyerContact} onChange={value => patch('buyerContact', value)} />
+              <div className="sm:col-span-2 rounded-lg bg-gray-50 border border-gray-200 p-3">
+                <p className="text-xs text-gray-500 mb-1">卖方正式主体（固定，不可更改）</p>
+                <p className="text-sm font-bold text-gray-800">{FIXED_SELLER_NAME}</p>
+              </div>
+              <div className="rounded-lg bg-gray-50 border border-gray-200 p-3">
+                <p className="text-xs text-gray-500 mb-1">业务员（当前登录账号）</p>
+                <p className="text-sm font-semibold text-gray-800">{draft.salespersonName}</p>
+              </div>
+              <Field label="客户联系人" value={draft.buyerContact} onChange={value => patch('buyerContact', value)} placeholder="如：王经理" />
+              <div className="sm:col-span-2 relative">
+                <label htmlFor="commercial-buyer" className="block text-xs font-medium text-gray-600 mb-1">客户 / 买方全称 <span className="text-red-600">*</span></label>
+                <input id="commercial-buyer" type="text" autoComplete="off" className="w-full"
+                  value={draft.buyerName} placeholder="搜索已有客户，或直接输入新客户名称"
+                  maxLength={300}
+                  onChange={event => changeBuyerName(event.target.value)}
+                  onFocus={() => { if (!draft.buyerCustomerReferenceId) setCustomerSearchOpen(true); }}
+                  onBlur={() => setCustomerSearchOpen(false)} />
+                {draft.buyerCustomerReferenceId && <p className="mt-1 text-xs text-green-700">已选择客户库中的现有客户；仍可编辑本单显示名称</p>}
+                {customerSearchOpen && draft.buyerName.trim() && !draft.buyerCustomerReferenceId && (
+                  <div role="listbox" aria-label="已有客户搜索结果"
+                    className="absolute left-0 right-0 top-full z-20 bg-white border border-gray-200 rounded-lg shadow-md mt-1 max-h-60 overflow-y-auto">
+                    {customerLoading && <p className="text-xs text-gray-500 p-3">正在查询客户池…</p>}
+                    {!customerLoading && customerError && <p className="text-xs text-amber-700 p-3">{customerError}</p>}
+                    {!customerLoading && !customerError && customerOptions.length === 0 && <p className="text-xs text-gray-500 p-3">暂无匹配客户，可直接填写新客户名称</p>}
+                    {!customerLoading && customerOptions.map(option => (
+                      <button key={option.id} type="button" role="option" aria-selected={false}
+                        onMouseDown={event => event.preventDefault()}
+                        onClick={() => selectCustomer(option)}
+                        className="w-full text-left px-3 py-2 hover:bg-blue-50 text-sm text-gray-800 border-b border-gray-100 last:border-0">
+                        {option.name}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                <p className="text-xs text-gray-500 mt-1">手动输入新客户不会自动改动或新增客户池记录。</p>
+              </div>
             </div>
             <Field label="项目 / 产品用途" value={draft.projectName} onChange={value => patch('projectName', value)} />
           </Panel>
@@ -321,9 +510,36 @@ export default function DocumentWorkbench({ userName }: { userName: string }) {
                 </fieldset>
               : <p className="text-xs text-gray-600 bg-gray-50 p-2 rounded">外销税务及开票事宜由双方和财务确认，不自动采用国内13%专票条款。</p>}
             {draft.kind === 'quotation' && <Field label="报价有效期" value={draft.validity} onChange={value => patch('validity', value)} placeholder="如：自报价日起30天" />}
-            <Field required={draft.kind === 'machine_contract'} label="付款条件" multiline value={draft.paymentTerms} onChange={value => patch('paymentTerms', value)} placeholder="请填写双方已经确认的付款节点，不自动生成条款" />
+            <label className="block text-xs text-gray-600">
+              <span className="block mb-1 font-medium">付款条件 · 快速选择</span>
+              <select className="w-full" value={draft.paymentPreset}
+                onChange={event => choosePayment(event.target.value as PaymentPreset)}>
+                <option value="">请选择付款条件</option>
+                {PAYMENT_PRESETS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+              </select>
+            </label>
+            {draft.paymentPreset === 'credit_days' && (
+              <label className="block text-xs text-gray-600">
+                <span className="block mb-1 font-medium">账期（天）</span>
+                <input type="number" min="1" max="365" step="1" className="w-full" value={draft.paymentDays}
+                  onChange={event => setPaymentDays(event.target.value)} />
+              </label>
+            )}
+            <Field required={draft.kind === 'machine_contract'} label="付款条件 · 最终显示文字（可修改）"
+              multiline value={draft.paymentTerms} onChange={value => patch('paymentTerms', value)}
+              placeholder="选择上方预设，或自行填写双方确认的付款条件" />
             <Field required={draft.kind === 'machine_contract'} label="交付条件与期限" multiline value={draft.deliveryTerms} onChange={value => patch('deliveryTerms', value)} />
-            <Field label="运输方式 / 贸易术语" value={draft.shippingTerms} onChange={value => patch('shippingTerms', value)} placeholder="如 EXW / FOB / 物流送货，按实际约定" />
+            <label className="block text-xs text-gray-600">
+              <span className="block mb-1 font-medium">运输方式 / 贸易术语 · 快速选择</span>
+              <select className="w-full" value={draft.shippingPreset}
+                onChange={event => chooseShipping(event.target.value as ShippingPreset)}>
+                <option value="">请选择运输方式 / 贸易术语</option>
+                {SHIPPING_PRESETS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+              </select>
+            </label>
+            <Field label="运输方式 / 贸易术语 · 最终显示文字（可修改）"
+              multiline value={draft.shippingTerms} onChange={value => patch('shippingTerms', value)}
+              placeholder="选择上方预设，或自行填写交货地点与运输安排" />
             {draft.kind === 'machine_contract' && (
               <>
                 <Field required label="设备验收标准" multiline value={draft.acceptanceTerms} onChange={value => patch('acceptanceTerms', value)} placeholder="产品范围、产能、验收条件须双方明确" />
@@ -344,7 +560,10 @@ export default function DocumentWorkbench({ userName }: { userName: string }) {
           <div className="flex justify-between gap-3 pb-8">
             <button type="button" className="btn-secondary" onClick={() => {
               if (window.confirm('清空当前内容并新建草稿？请先下载草稿文件。')) {
-                setDraft(initialDraft()); setErrors([]);
+                const replacement = initialDraft(userName);
+                replacement.date = localDateToday();
+                replacement.documentNo = createDocumentNo(replacement.kind, replacement.date);
+                setDraft(replacement); setCustomerSearchOpen(false); setErrors([]);
               }
             }}>重置模板</button>
             <button type="button" className="btn-primary" onClick={printPdf}>核对并生成 PDF</button>

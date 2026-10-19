@@ -1,5 +1,5 @@
 import type { CommercialDocumentDraft } from '@/lib/commercial-documents/template';
-import { documentAmount, formatMoney, itemAmountMinor, sectionAmount } from '@/lib/commercial-documents/template';
+import { documentAmount, formatMoney, itemAmountMinor, sectionAmount, FIXED_SELLER_NAME } from '@/lib/commercial-documents/template';
 
 function safeDisplay(value: string, fallback = '—'): string {
   return value.trim() || fallback;
@@ -54,14 +54,10 @@ export default function DocumentPreview({ draft }: { draft: CommercialDocumentDr
             <div>
               <p className="font-extrabold text-xl tracking-wide text-gray-900">宏达印业</p>
               <p className="text-[11px] tracking-[0.16em] font-semibold text-gray-600">HONGDA PRINTING</p>
-              <p className="text-xs text-gray-600 mt-1">{safeDisplay(draft.sellerName, label('（待填写正式公司主体）', '(Legal entity to be completed)'))}</p>
+              <p className="text-xs text-gray-600 mt-1">{FIXED_SELLER_NAME}</p>
             </div>
           </div>
-          <div className="text-right text-[11px] text-gray-600">
-            {draft.sellerAddress && <p className="whitespace-pre-wrap">{draft.sellerAddress}</p>}
-            {draft.sellerContact && <p className="whitespace-pre-wrap">{draft.sellerContact}</p>}
-          </div>
-        </div>
+         </div>
         <div className="h-1 bg-red-700" />
         <div className="py-4 text-center">
           <h1 className="font-bold text-xl text-gray-900">
@@ -73,10 +69,10 @@ export default function DocumentPreview({ draft }: { draft: CommercialDocumentDr
       <section className="grid grid-cols-2 gap-x-6 gap-y-2 text-xs pb-4 border-b border-gray-200">
         <p><strong>{label('编号', 'No.')}：</strong>{safeDisplay(draft.documentNo)}</p>
         <p><strong>{label('日期', 'Date')}：</strong>{safeDisplay(draft.date)}</p>
-        <p><strong>{label('卖方 / 报价方', 'Seller')}：</strong>{safeDisplay(draft.sellerName)}</p>
+        <p><strong>{label('卖方 / 报价方', 'Seller')}：</strong>{FIXED_SELLER_NAME}</p>
         <p><strong>{label('客户 / 买方', 'Buyer')}：</strong>{safeDisplay(draft.buyerName)}</p>
-        {draft.buyerAddress && <p className="col-span-2"><strong>{label('客户地址', 'Buyer address')}：</strong>{draft.buyerAddress}</p>}
-        {draft.buyerContact && <p><strong>{label('联系人', 'Contact')}：</strong>{draft.buyerContact}</p>}
+        <p><strong>{label('业务员', 'Sales representative')}：</strong>{safeDisplay(draft.salespersonName)}</p>
+        {draft.buyerContact && <p><strong>{label('客户联系人', 'Buyer contact')}：</strong>{draft.buyerContact}</p>}
         {draft.projectName && <p><strong>{label('项目', 'Project')}：</strong>{draft.projectName}</p>}
         <p><strong>{label('币种', 'Currency')}：</strong>{draft.currency}</p>
         <p><strong>{label('销售区域', 'Market')}：</strong>{draft.market === 'domestic' ? label('内销', 'Domestic') : label('外销', 'Export')}</p>
