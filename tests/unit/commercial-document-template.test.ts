@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import {
   initialDraft, blankItem, moneyToMinor, quantityToMilli, itemAmountMinor,
   sectionAmount, documentAmount, validateForPrint, isDraftShape,
+  FIXED_SELLER_NAME, PAYMENT_PRESETS, SHIPPING_PRESETS, paymentPresetText, shippingPresetText,
+  formatDocumentNumber, isGeneratedDocumentNumber, normalizeImportedDraft,
 } from '../../src/lib/commercial-documents/template';
 import { canRoleAccessPage, getPageSlugFromRoute } from '../../src/lib/auth/roles';
 import { getPortalForPath, getVisiblePortalGroups } from '../../src/lib/constants/navigation';
@@ -16,7 +18,11 @@ assert.equal(quantityToMilli('1.25'), 1250);
 assert.equal(quantityToMilli('0'), null);
 assert.equal(quantityToMilli('1.2345'), null);
 
-const draft = initialDraft();
+const draft = initialDraft('测试业务员');
+assert.equal(draft.sellerName, FIXED_SELLER_NAME);
+assert.equal(draft.salespersonName, '测试业务员');
+assert.equal(draft.sellerAddress, '');
+assert.equal(draft.sellerContact, '');
 draft.documentNo = 'HD-TEST-001';
 draft.sellerName = '经确认的报价主体';
 draft.buyerName = '测试客户';
@@ -60,6 +66,69 @@ draft.warrantyTerms = '经确认的保修条件';
 assert.deepEqual(validateForPrint(draft), []);
 
 assert(isDraftShape(draft));
+
+assert.equal(PAYMENT_PRESETS.length, 6);
+assert.equal(SHIPPING_PRESETS.length, 6);
+assert.equal(paymentPresetText('film_monthly', ''), '版费先付，花膜月结。');
+assert.equal(paymentPresetText('film_before_shipping', ''), '版费先付，花膜发货前付款。');
+assert.equal(paymentPresetText('monthly', ''), '月结。');
+assert.equal(paymentPresetText('machine_deposit', ''), '机器定金50%，发货前付清剩余50%尾款。');
+assert.equal(paymentPresetText('credit_days', '30'), '账期30天，具体起算时间以双方约定为准。');
+for (const wrongDays of ['', '0', '366', '1.5', '-5', 'x']) {
+  assert.equal(paymentPresetText('credit_days', wrongDays), '', 'invalid credit period: ' + wrongDays);
+}
+assert.equal(shippingPresetText('exw'), 'EXW（工厂交货），具体交货地点以双方约定为准。');
+assert.equal(shippingPresetText('ddp'), 'DDP（完税后交货），具体目的地以双方约定为准。');
+assert.equal(shippingPresetText('included'), '含运费。');
+assert.equal(shippingPresetText('excluded'), '不含运费。');
+
+const opaque = formatDocumentNumber('quotation', '2026-10-19', 'K7M4X8R2P5LF');
+const machineOpaque = formatDocumentNumber('machine_contract', '2026-10-19', 'K7M4X8R2P5LF');
+assert.equal(opaque, 'HD-Q-2610-K7M4X8R2P5LF');
+assert.equal(machineOpaque, 'HD-C-2610-K7M4X8R2P5LF');
+assert(isGeneratedDocumentNumber(opaque));
+assert(isGeneratedDocumentNumber(machineOpaque));
+assert(!isGeneratedDocumentNumber('HD-Q-00001'));
+assert(!isGeneratedDocumentNumber('CUSTOM-2026-01'));
+
+const unsafeImported = {
+  ...draft,
+  sellerName: '被错误填写的公司名称',
+  sellerAddress: '不应显示的卖方地址',
+  sellerContact: '不应显示的电话',
+  buyerAddress: '不应显示的客户地址',
+  salespersonName: '其他员工',
+  accountLabel: '未经确认的账户',
+  accountDetails: '123456789',
+  buyerCustomerReferenceId: 'unsafe-reference',
+  paymentPreset: 'credit_days' as const,
+  paymentDays: '30',
+};
+const cleaned = normalizeImportedDraft(unsafeImported, '当前登录业务员');
+assert.equal(cleaned.sellerName, FIXED_SELLER_NAME);
+assert.equal(cleaned.salespersonName, '当前登录业务员');
+assert.equal(cleaned.sellerAddress, '');
+assert.equal(cleaned.sellerContact, '');
+assert.equal(cleaned.buyerAddress, '');
+assert.equal(cleaned.accountDetails, '');
+assert.equal(cleaned.buyerCustomerReferenceId, '');
+assert.equal(cleaned.documentNo, draft.documentNo);
+assert.equal(cleaned.paymentPreset, 'credit_days');
+assert.deepEqual(validateForPrint(cleaned), []);
+cleaned.paymentDays = '400';
+assert(validateForPrint(cleaned).some(x => x.includes('账期天数')));
+
+const oldDraft = { ...draft } as Record<string, unknown>;
+delete oldDraft.salespersonName;
+delete oldDraft.buyerCustomerReferenceId;
+delete oldDraft.paymentPreset;
+delete oldDraft.paymentDays;
+delete oldDraft.shippingPreset;
+assert(isDraftShape(oldDraft), 'legacy JSON drafts should remain importable');
+const restored = normalizeImportedDraft(oldDraft as unknown as typeof draft, '当前账号');
+assert.equal(restored.salespersonName, '当前账号');
+assert.equal(restored.paymentPreset, 'other');
+assert.equal(restored.shippingPreset, draft.shippingTerms ? 'other' : '');
 assert(!isDraftShape({ ...draft, sections: [{ id: 'x', title: 'x', items: [null] }] }));
 assert.equal(getPortalForPath('/commercial-documents'), 'commercial');
 assert.equal(getPageSlugFromRoute('/commercial-documents'), 'commercial_documents');
