@@ -81,6 +81,11 @@ assert.equal(shippingPresetText('exw'), 'EXW（工厂交货），具体交货地
 assert.equal(shippingPresetText('ddp'), 'DDP（完税后交货），具体目的地以双方约定为准。');
 assert.equal(shippingPresetText('included'), '含运费。');
 assert.equal(shippingPresetText('excluded'), '不含运费。');
+assert.equal(paymentPresetText('monthly', '', 'en'), 'Monthly settlement.');
+assert.equal(paymentPresetText('credit_days', '30', 'en'), 'Payment term: 30 days; start date subject to mutual agreement.');
+assert.equal(paymentPresetText('machine_deposit', '', 'en'), '50% deposit for the machine; remaining 50% balance payable before shipment.');
+assert.equal(shippingPresetText('exw', 'en'), 'EXW (Ex Works), named place to be agreed.');
+assert.equal(shippingPresetText('included', 'en'), 'Freight included.');
 
 const opaque = formatDocumentNumber('quotation', '2026-10-19', 'K7M4X8R2P5LF');
 const machineOpaque = formatDocumentNumber('machine_contract', '2026-10-19', 'K7M4X8R2P5LF');
