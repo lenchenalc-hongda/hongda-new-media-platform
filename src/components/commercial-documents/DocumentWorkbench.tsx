@@ -162,11 +162,27 @@ export default function DocumentWorkbench({ userName }: { userName: string }) {
     setCustomerError('');
   };
 
+  const changeLanguage = (language: CommercialDocumentDraft['language']) => {
+    setDraft(previous => {
+      const previousPaymentPreset = paymentPresetText(previous.paymentPreset, previous.paymentDays, previous.language);
+      const previousShippingPreset = shippingPresetText(previous.shippingPreset, previous.language);
+      return {
+        ...previous,
+        language,
+        paymentTerms: previousPaymentPreset && previous.paymentTerms === previousPaymentPreset
+          ? paymentPresetText(previous.paymentPreset, previous.paymentDays, language) : previous.paymentTerms,
+        shippingTerms: previousShippingPreset && previous.shippingTerms === previousShippingPreset
+          ? shippingPresetText(previous.shippingPreset, language) : previous.shippingTerms,
+      };
+    });
+    setErrors([]);
+  };
+
   const choosePayment = (preset: PaymentPreset) => {
     setDraft(previous => ({
       ...previous,
       paymentPreset: preset,
-      paymentTerms: preset === 'other' ? '' : paymentPresetText(preset, previous.paymentDays),
+      paymentTerms: preset === 'other' ? '' : paymentPresetText(preset, previous.paymentDays, previous.language),
     }));
     setErrors([]);
   };
@@ -176,7 +192,7 @@ export default function DocumentWorkbench({ userName }: { userName: string }) {
       ...previous,
       paymentDays: days,
       paymentTerms: previous.paymentPreset === 'credit_days'
-        ? paymentPresetText('credit_days', days) : previous.paymentTerms,
+        ? paymentPresetText('credit_days', days, previous.language) : previous.paymentTerms,
     }));
     setErrors([]);
   };
@@ -185,7 +201,7 @@ export default function DocumentWorkbench({ userName }: { userName: string }) {
     setDraft(previous => ({
       ...previous,
       shippingPreset: preset,
-      shippingTerms: preset === 'other' ? '' : shippingPresetText(preset),
+      shippingTerms: preset === 'other' ? '' : shippingPresetText(preset, previous.language),
     }));
     setErrors([]);
   };
@@ -343,7 +359,7 @@ export default function DocumentWorkbench({ userName }: { userName: string }) {
               </label>
               <label className="text-xs text-gray-600">
                 <span className="block mb-1 font-medium">PDF 语言</span>
-                <select className="w-full" value={draft.language} onChange={e => patch('language', e.target.value as CommercialDocumentDraft['language'])}>
+                <select className="w-full" value={draft.language} onChange={e => changeLanguage(e.target.value as CommercialDocumentDraft['language'])}>
                   <option value="zh">中文</option>
                   <option value="en">English</option>
                 </select>
