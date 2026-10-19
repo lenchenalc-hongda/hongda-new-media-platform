@@ -6,6 +6,50 @@ export type DocumentLanguage = 'zh' | 'en';
 export type TaxStatement = 'exclusive' | 'vat13';
 export type ItemMode = 'amount' | 'catalog';
 
+export const FIXED_SELLER_NAME = '广东宏达印业股份有限公司';
+
+export const PAYMENT_PRESETS = [
+  { value: 'film_monthly', label: '版费先付，花膜月结', text: '版费先付，花膜月结。' },
+  { value: 'film_before_shipping', label: '版费先付，花膜发货前付款', text: '版费先付，花膜发货前付款。' },
+  { value: 'monthly', label: '月结', text: '月结。' },
+  { value: 'credit_days', label: '账期多少天', text: '' },
+  { value: 'machine_deposit', label: '机器：定金50%，发货前付清尾款', text: '机器定金50%，发货前付清剩余50%尾款。' },
+  { value: 'other', label: '其他（自行填写）', text: '' },
+] as const;
+export type PaymentPreset = '' | (typeof PAYMENT_PRESETS)[number]['value'];
+
+export const SHIPPING_PRESETS = [
+  { value: 'exw', label: 'EXW', text: 'EXW（工厂交货），具体交货地点以双方约定为准。' },
+  { value: 'ddp', label: 'DDP', text: 'DDP（完税后交货），具体目的地以双方约定为准。' },
+  { value: 'included', label: '含运费', text: '含运费。' },
+  { value: 'excluded', label: '不含运费', text: '不含运费。' },
+  { value: 'pickup', label: '客户自提', text: '客户自提。' },
+  { value: 'other', label: '其他（自行填写）', text: '' },
+] as const;
+export type ShippingPreset = '' | (typeof SHIPPING_PRESETS)[number]['value'];
+
+export function paymentPresetText(preset: PaymentPreset, days: string): string {
+  if (preset === 'credit_days') {
+    return /^\\d{1,3}$/.test(days) && Number(days) >= 1 && Number(days) <= 365
+      ? '账期' + Number(days) + '天，具体起算时间以双方约定为准。' : '';
+  }
+  return PAYMENT_PRESETS.find(option => option.value === preset)?.text ?? '';
+}
+
+export function shippingPresetText(preset: ShippingPreset): string {
+  return SHIPPING_PRESETS.find(option => option.value === preset)?.text ?? '';
+}
+
+/** Randomized, non-sequential document numbers. Central uniqueness requires a durable registry. */
+export function formatDocumentNumber(kind: DocumentKind, date: string, randomCode: string): string {
+  const yearMonth = /^\\d{4}-\\d{2}/.test(date) ? date.slice(2, 4) + date.slice(5, 7) : '0000';
+  return 'HD-' + (kind === 'quotation' ? 'Q' : 'C') + '-' + yearMonth + '-' + randomCode;
+}
+export function isGeneratedDocumentNumber(value: string): boolean {
+  return /^HD-[QC]-\\d{4}-[A-HJ-NP-Z2-9]{12}$/.test(value);
+}
+
+
 export interface DocumentItem {
   id: string;
   name: string;
@@ -31,17 +75,23 @@ export interface CommercialDocumentDraft {
   documentNo: string;
   date: string;
   sellerName: string;
+  // Retained only for backward-compatible JSON imports; never printed or editable.
   sellerAddress: string;
   sellerContact: string;
   buyerName: string;
   buyerAddress: string;
   buyerContact: string;
+  salespersonName: string;
+  buyerCustomerReferenceId: string;
   projectName: string;
   taxStatement: TaxStatement;
   validity: string;
   deliveryTerms: string;
   paymentTerms: string;
+  paymentPreset: PaymentPreset;
+  paymentDays: string;
   shippingTerms: string;
+  shippingPreset: ShippingPreset;
   warrantyTerms: string;
   acceptanceTerms: string;
   additionalTerms: string;
@@ -56,7 +106,7 @@ export function blankItem(id: string): DocumentItem {
     mode: 'amount', note: '' };
 }
 
-export function initialDraft(): CommercialDocumentDraft {
+export function initialDraft(salespersonName = ''): CommercialDocumentDraft {
   return {
     kind: 'quotation',
     market: 'domestic',
@@ -64,18 +114,23 @@ export function initialDraft(): CommercialDocumentDraft {
     currency: 'CNY',
     documentNo: '',
     date: new Date().toISOString().slice(0, 10),
-    sellerName: '',
+    sellerName: FIXED_SELLER_NAME,
     sellerAddress: '',
     sellerContact: '',
     buyerName: '',
     buyerAddress: '',
     buyerContact: '',
+    salespersonName,
+    buyerCustomerReferenceId: '',
     projectName: '',
     taxStatement: 'exclusive',
     validity: '',
     deliveryTerms: '',
     paymentTerms: '',
+    paymentPreset: '',
+    paymentDays: '30',
     shippingTerms: '',
+    shippingPreset: '',
     warrantyTerms: '',
     acceptanceTerms: '',
     additionalTerms: '',
@@ -163,9 +218,10 @@ export function formatMoney(amountMinor: number, currency: string): string {
 
 export function validateForPrint(draft: CommercialDocumentDraft): string[] {
   const errors: string[] = [];
-  if (!draft.sellerName.trim()) errors.push('请填写正式卖方/报价主体名称');
+  if (draft.sellerName !== FIXED_SELLER_NAME) errors.push('卖方公司名称必须使用固定的宏达正式主体');
+  if (!draft.salespersonName.trim()) errors.push('缺少当前登录的业务员姓名');
   if (!draft.buyerName.trim()) errors.push('请填写客户名称');
-  if (!draft.documentNo.trim()) errors.push('请填写单据编号');
+  if (!draft.documentNo.trim() || draft.documentNo.length > 80) errors.push('请填写有效的单据编号');
   if (!/^\d{4}-\d{2}-\d{2}$/.test(draft.date)) errors.push('请填写正确的单据日期');
   if (draft.sections.length === 0) errors.push('请至少添加一个报价大项');
   for (const [groupIndex, section] of draft.sections.entries()) {
@@ -209,6 +265,11 @@ export function isDraftShape(value: unknown): value is CommercialDocumentDraft {
       'deliveryTerms', 'paymentTerms', 'shippingTerms', 'warrantyTerms',
       'acceptanceTerms', 'additionalTerms', 'accountLabel', 'accountDetails']
       .every(k => typeof (draft as Record<string, unknown>)[k] === 'string')
+    && (draft.salespersonName === undefined || typeof draft.salespersonName === 'string')
+    && (draft.buyerCustomerReferenceId === undefined || typeof draft.buyerCustomerReferenceId === 'string')
+    && (draft.paymentDays === undefined || typeof draft.paymentDays === 'string')
+    && (draft.paymentPreset === undefined || draft.paymentPreset === '' || PAYMENT_PRESETS.some(option => option.value === draft.paymentPreset))
+    && (draft.shippingPreset === undefined || draft.shippingPreset === '' || SHIPPING_PRESETS.some(option => option.value === draft.shippingPreset))
     && Array.isArray(draft.sections) && draft.sections.length <= 50
     && draft.sections.every(g => typeof g?.id === 'string'
       && typeof g?.title === 'string' && Array.isArray(g?.items) && g.items.length <= 200
@@ -217,4 +278,24 @@ export function isDraftShape(value: unknown): value is CommercialDocumentDraft {
         && ['name', 'specification', 'quantity', 'unit', 'unitPrice', 'note']
           .every(k => typeof (i as unknown as Record<string, unknown>)[k] === 'string')))
   );
+}
+
+/** Restore older JSON drafts safely; hidden seller, address and payment data are not trusted. */
+export function normalizeImportedDraft(draft: CommercialDocumentDraft, salespersonName: string): CommercialDocumentDraft {
+  return {
+    ...draft,
+    sellerName: FIXED_SELLER_NAME,
+    sellerAddress: '',
+    sellerContact: '',
+    buyerAddress: '',
+    salespersonName,
+    buyerCustomerReferenceId: '',
+    paymentPreset: PAYMENT_PRESETS.some(option => option.value === draft.paymentPreset)
+      ? draft.paymentPreset : draft.paymentTerms ? 'other' : '',
+    paymentDays: typeof draft.paymentDays === 'string' ? draft.paymentDays : '30',
+    shippingPreset: SHIPPING_PRESETS.some(option => option.value === draft.shippingPreset)
+      ? draft.shippingPreset : draft.shippingTerms ? 'other' : '',
+    accountLabel: '',
+    accountDetails: '',
+  };
 }
