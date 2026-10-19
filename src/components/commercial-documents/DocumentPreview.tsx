@@ -150,8 +150,6 @@ export default function DocumentPreview({ draft }: { draft: CommercialDocumentDr
           {contract && draft.acceptanceTerms && <p className="whitespace-pre-wrap"><strong>{label('验收条件', 'Acceptance terms')}：</strong>{draft.acceptanceTerms}</p>}
           {contract && draft.warrantyTerms && <p className="whitespace-pre-wrap"><strong>{label('售后与保修', 'Warranty / After-sales')}：</strong>{draft.warrantyTerms}</p>}
           {draft.additionalTerms && <p className="whitespace-pre-wrap"><strong>{label('其他约定', 'Additional terms')}：</strong>{draft.additionalTerms}</p>}
-          {draft.accountLabel && draft.accountDetails &&
-            <p className="whitespace-pre-wrap"><strong>{label('经财务确认的收款账户', 'Verified payment account')}：</strong>{draft.accountLabel}{'\n'}{draft.accountDetails}</p>}
         </section>
       </main>
       {contract && (
