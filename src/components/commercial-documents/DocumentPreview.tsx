@@ -9,7 +9,6 @@ const printStyles = [
   '@page { size: A4; margin: 13mm 12mm; }',
   '.commercial-print { font-family: Arial, "Microsoft YaHei", "PingFang SC", sans-serif; }',
   '.commercial-print thead { display: table-header-group; }',
-  '.commercial-print[data-quotation-image-header="zh"] .document-section-title { break-after: avoid; page-break-after: avoid; }',
   '.commercial-print tr { break-inside: avoid; page-break-inside: avoid; }',
   '.commercial-print .no-split { break-inside: avoid; page-break-inside: avoid; }',
   '@media print {',
@@ -49,7 +48,7 @@ export default function DocumentPreview({ draft }: { draft: CommercialDocumentDr
       : label('报价未含税，发票及税务安排另行确认。', 'Tax not included; invoice and tax arrangements to be confirmed separately.');
 
   return (
-    <article id="commercial-print" data-quotation-image-header={imageHeader ? 'zh' : undefined} className="commercial-print bg-white text-gray-900 w-full max-w-[810px] mx-auto border border-gray-200 shadow-sm p-7 sm:p-10">
+    <article id="commercial-print" className="commercial-print bg-white text-gray-900 w-full max-w-[810px] mx-auto border border-gray-200 shadow-sm p-7 sm:p-10">
       <style>{printStyles}</style>
       <header className="no-split">
         {imageHeader ? (
@@ -99,11 +98,14 @@ export default function DocumentPreview({ draft }: { draft: CommercialDocumentDr
           const subtotal = sectionAmount(section);
           return (
             <section key={section.id}>
-              <div className="document-section-title bg-gray-700 text-white text-xs font-bold py-2 px-3">
+              {!imageHeader && <div className="document-section-title bg-gray-700 text-white text-xs font-bold py-2 px-3">
                 {index + 1}. {safeDisplay(section.title, label('未命名大项', 'Untitled section'))}
-              </div>
+              </div>}
               <table className="w-full table-fixed text-xs border-collapse">
                 <thead className="bg-gray-100 text-gray-700">
+                  {imageHeader && <tr><th colSpan={5} className="document-section-title bg-gray-700 text-white text-xs font-bold py-2 px-3 text-left">
+                    {index + 1}. {safeDisplay(section.title, label('未命名大项', 'Untitled section'))}
+                  </th></tr>}
                   <tr>
                     <th className="w-[6%] p-2 text-left">{label('序', '#')}</th>
                     <th className="w-[36%] p-2 text-left">{label('名称 / 规格', 'Item / Specification')}</th>
