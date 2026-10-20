@@ -27,11 +27,39 @@ CREATE TABLE public.commercial_quotation_archives (
   archived_at timestamptz NOT NULL DEFAULT now(),
   CONSTRAINT uq_commercial_quotation_org_id_id UNIQUE (id,org_id),
   CONSTRAINT uq_commercial_quotation_version UNIQUE (org_id,document_no,version),
-  CONSTRAINT fk_commercial_quotation_owner_org FOREIGN KEY (owner_profile_id,org_id)
-    REFERENCES public.profiles(id,org_id),
+  -- profiles has a single-column UUID PK; it does not have UNIQUE(id,org_id).
+  -- Preserve same-organization ownership via the new table's trigger below.
+  CONSTRAINT fk_commercial_quotation_owner FOREIGN KEY (owner_profile_id)
+    REFERENCES public.profiles(id),
   CONSTRAINT fk_commercial_quotation_source_org FOREIGN KEY (source_archive_id,org_id)
     REFERENCES public.commercial_quotation_archives(id,org_id)
 );
+
+-- Server writes must never be able to bind a quote to a profile in another org.
+-- This trigger touches only the NEW archive table; do not alter public.profiles.
+CREATE OR REPLACE FUNCTION public.check_commercial_quotation_owner_org()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = public, pg_temp
+AS $archive$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM public.profiles p
+    WHERE p.id = NEW.owner_profile_id
+      AND p.org_id = NEW.org_id
+      AND p.is_active = true
+  ) THEN
+    RAISE EXCEPTION 'quote owner must be an active profile within the same organization'
+      USING ERRCODE = '23503';
+  END IF;
+  RETURN NEW;
+END;
+$archive$;
+
+CREATE TRIGGER commercial_quotation_owner_org_guard
+  BEFORE INSERT OR UPDATE OF owner_profile_id, org_id
+  ON public.commercial_quotation_archives
+  FOR EACH ROW EXECUTE FUNCTION public.check_commercial_quotation_owner_org();
 
 CREATE INDEX idx_commercial_quote_org_date
  ON public.commercial_quotation_archives (org_id,archived_at DESC);
