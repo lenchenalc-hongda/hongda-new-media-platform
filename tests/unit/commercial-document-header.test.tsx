@@ -27,6 +27,17 @@ for (const kind of ['quotation', 'machine_contract'] as const) {
       assert.equal(html.includes(headerPath), imageHeader && language === 'zh');
       assert.equal(html.includes('/document-headers/hongda-quotation-header-en.jpg'), false);
       assert.equal(html.includes('/hongda-os-original-emblem.png'), !imageHeader);
+      // Compact styling is applied only to the Chinese quotation; machine contracts and English quotes
+      // retain the exact previous density and header structure.
+      assert.equal(html.includes('class="commercial-print compact-quotation bg-white'), imageHeader);
+      // Keep the original PNG width/height; never stretch or crop brand artwork.
+      if (imageHeader) {
+        assert(html.includes('width="2047" height="515"'), 'Original artwork dimensions must be retained');
+        assert(html.includes('width:100%;height:auto'), 'Artwork must retain aspect ratio');
+        assert(html.includes('table .document-section-title { padding: 5px 9px; line-height: 16px; }'));
+        assert(html.includes('> main > * + * { margin-top: 8px; }'));
+        assert(html.includes('.document-total { padding: 8px 12px; gap: 12px; }'));
+      }
       assert.equal(html.includes(language === 'zh' ? '卖方 / 报价方' : 'Seller'), !imageHeader);
       for (const text of ['业务员测试', '客户测试', '联系人测试', '项目测试', formatMoney(documentAmount(draft).amountMinor, draft.currency)]) {
         assert(html.includes(text), `Missing ${text}`);
