@@ -1,5 +1,6 @@
 import type { CommercialDocumentDraft } from '@/lib/commercial-documents/template';
 import { documentAmount, formatMoney, itemAmountMinor, sectionAmount, FIXED_SELLER_NAME } from '@/lib/commercial-documents/template';
+import { documentProductNotices } from '@/lib/commercial-documents/product-notices';
 
 function safeDisplay(value: string, fallback = '—'): string {
   return value.trim() || fallback;
@@ -34,6 +35,10 @@ const printStyles = [
   '.commercial-print.compact-quotation .document-total-label { font-size: 12px; white-space: nowrap; }',
   '.commercial-print.compact-quotation .document-terms p { margin-top: 4px; }',
   '.commercial-print.compact-quotation .document-terms h2 { padding-bottom: 4px; }',
+  // Plain, compact product notices; each paragraph stays together across A4 page breaks.
+  '.commercial-print .document-product-notices { margin-top: 9px !important; font-size: 11px; line-height: 1.5; }',
+  '.commercial-print .document-product-notices h2 { padding-bottom: 4px; margin-bottom: 4px; break-after: avoid-page; page-break-after: avoid; }',
+  '.commercial-print .document-product-note { margin-top: 4px; break-inside: avoid; page-break-inside: avoid; }',
   '@media print {',
   ' html, body { background: #fff !important; }',
   ' body * { visibility: hidden !important; }',
@@ -62,6 +67,7 @@ export default function DocumentPreview({ draft }: { draft: CommercialDocumentDr
     ? { src: '/document-headers/hongda-quotation-header-zh.png', width: 2047, height: 515, alt: '宏达印业中文报价抬头（公司名称及联系方式）' }
     : null;
   const total = documentAmount(draft);
+  const productNotices = documentProductNotices(draft);
   const label = (zh: string, english: string) => en ? english : zh;
   const amountText = (n: number) => formatMoney(n, draft.currency);
   const taxText = draft.market === 'export'
@@ -196,6 +202,18 @@ export default function DocumentPreview({ draft }: { draft: CommercialDocumentDr
           {contract && draft.warrantyTerms && <p className="whitespace-pre-wrap"><strong>{label('售后与保修', 'Warranty / After-sales')}：</strong>{draft.warrantyTerms}</p>}
           {draft.additionalTerms && <p className="whitespace-pre-wrap"><strong>{label('其他约定', 'Additional terms')}：</strong>{draft.additionalTerms}</p>}
         </section>
+        {productNotices.length > 0 && (
+          <section className="document-product-notices">
+            <h2 className="font-bold text-gray-800 border-b border-gray-300">
+              {label('产品及工艺说明', 'PRODUCT / PROCESS NOTES')}
+            </h2>
+            {productNotices.map(note => (
+              <p key={note.type} className="document-product-note text-gray-800">
+                <strong>{note.title}：</strong><span className="whitespace-pre-wrap">{note.text}</span>
+              </p>
+            ))}
+          </section>
+        )}
       </main>
       {contract && (
         <footer className="no-split mt-10 grid grid-cols-2 gap-10 text-xs">
