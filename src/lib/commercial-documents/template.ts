@@ -5,7 +5,7 @@ export type DocumentMarket = 'domestic' | 'export';
 export type DocumentLanguage = 'zh' | 'en';
 export type TaxStatement = 'exclusive' | 'vat13';
 export type ItemMode = 'amount' | 'catalog';
-import { activeNoticeTypes, NOTICE_TYPES } from './product-notices';
+import { NOTICE_TYPES } from './product-notices';
 import type { NoticeOverrides, NoticeSelection } from './product-notices';
 
 export const FIXED_SELLER_NAME = '广东宏达印业股份有限公司';
@@ -283,13 +283,6 @@ export function validateForPrint(draft: CommercialDocumentDraft): string[] {
     if (!draft.deliveryTerms.trim()) errors.push('机器合同必须填写经确认的交付条款');
     if (!draft.acceptanceTerms.trim()) errors.push('机器合同必须填写经确认的验收条款');
     if (!draft.warrantyTerms.trim()) errors.push('机器合同必须填写经确认的售后/保修条款');
-  }
-  if (activeNoticeTypes(draft.sections).includes('machine')) {
-    if (!draft.machineVoltage?.trim()) errors.push('机器大项需要确认设备电压');
-    if (!draft.machineFrequency?.trim()) errors.push('机器大项需要确认设备频率');
-    if (draft.kind === 'quotation' && !draft.machineWarrantyPeriod?.trim()) {
-      errors.push('机器报价需要填写非人为因素零部件的具体保修期（例如1年或18个月）');
-    }
   }
   if (documentAmount(draft).invalidLines > 0) errors.push('存在无法计算的报价明细');
   return errors;
