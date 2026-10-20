@@ -235,15 +235,15 @@ const expectedApprovedZh = {
   digital_film: [
     '数码热转印花膜依据客户最终确认的电子图稿及工艺要求生产。由于显示设备、印刷工艺及承印材料不同，实际印刷效果可能与屏幕显示存在一定差异；特殊色彩要求应通过实物打样确认。',
     '产品附着力及耐磨、耐水、耐高温等特殊性能须根据实际材质及使用条件另行验证。未经双方确认的特殊性能，不视为默认产品验收要求。',
-  ].join('\\n\\n'),
+  ].join('\n\n'),
   machine: [
     '设备电压、频率、气源及技术配置以双方最终确认的设备规格为准。设备生产能力应依据约定产品、花膜、夹具及测试条件进行验收。',
     '设备在正常使用及维护条件下，因制造质量产生的零部件故障，按双方约定的保修期限和范围提供售后服务。易损件、安装培训及其他服务事项以合同约定为准。',
-  ].join('\\n\\n'),
+  ].join('\n\n'),
   processing: [
     '客户提供的产品应符合双方确认的材质、尺寸及表面质量要求。我司在入库后进行约定的印前抽检；发现来料脏污、损伤或其他异常时，双方协商退回、清洁或另行处理。',
     '常规加工建议额外预留订单数量3%的产品作为试产及工艺损耗备品，具体损耗责任按实际原因及双方约定处理。高难度或特殊工艺产品的备品比例应在生产前另行确认。',
-  ].join('\\n\\n'),
+  ].join('\n\n'),
 };
 assert.deepEqual(APPROVED_ZH_NOTICES, expectedApprovedZh, 'Approved Chinese text must stay verbatim');
 for (const type of Object.keys(expectedApprovedZh) as Array<keyof typeof expectedApprovedZh>) {
