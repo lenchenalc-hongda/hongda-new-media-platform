@@ -39,7 +39,10 @@ for (const kind of ['quotation', 'machine_contract'] as const) {
         assert(html.includes('.document-section + .document-section { margin-top: 8px; }'), 'Group spacing must use SSR-safe selectors');
         assert(!html.includes('.compact-quotation &gt;'), 'HTML-escaped CSS combinators must never break print styles');
         assert(html.includes('document-total-amount'), 'Subtotal and total must retain clear text hierarchy');
-        assert(html.includes('.document-total { padding: 8px 12px; gap: 12px; }'));
+        assert(html.includes('display: flex !important; flex-direction: row !important; justify-content: space-between !important;'), 'PDF total must use flex even under print resets');
+        assert(html.includes('margin-left: auto; text-align: right;'), 'Total amount must align to the right edge');
+        assert(html.includes('white-space: nowrap;'), 'Total amount must never wrap');
+        assert(html.includes('padding: 8px 12px; gap: 12px;'), 'Keep the approved compact red total band');
         assert(html.includes('tbody tr:last-child { break-after: avoid-page; page-break-after: avoid; }'), 'Last item should stay with group subtotal');
       }
       assert.equal(html.includes(language === 'zh' ? '卖方 / 报价方' : 'Seller'), !imageHeader);
@@ -47,6 +50,8 @@ for (const kind of ['quotation', 'machine_contract'] as const) {
         assert(html.includes(text), `Missing ${text}`);
       }
       for (const section of draft.sections) for (const item of section.items) assert(html.includes(item.name));
+      assert.equal(html.includes('模板草稿') || html.includes('DRAFT TEMPLATE'), kind === 'machine_contract',
+        'Quotation PDFs should not show the draft disclaimer, while unfinished machine contract templates retain it');
       assert.equal(html.includes('Signature / Seal'), kind === 'machine_contract' && language === 'en');
     }
   }
