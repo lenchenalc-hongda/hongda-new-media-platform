@@ -151,4 +151,72 @@ for (const role of ['admin', 'manager', 'operator', 'sales', 'viewer'] as const)
   assert(visible.some(group => group.id === 'commercial' && group.items.some(item => item.path === '/commercial-documents')),
     role + ' must see commercial documents nav');
 }
+
+const notices = initialDraft('业务员');
+notices.documentNo = 'HD-Q-TEST-NOTES';
+notices.buyerName = '客户';
+notices.sections = [
+  { id: 'machine', title: '机器设备', items: [{ ...blankItem('m1'), name: '热转印机', unitPrice: '50000' }] },
+];
+assert.deepEqual(activeNoticeTypes(notices.sections), ['machine']);
+assert.deepEqual(documentProductNotices(notices).map(n => n.type), ['machine']);
+assert(documentProductNotices(notices)[0].text.includes('220V／60Hz'));
+assert(validateForPrint(notices).some(e => e.includes('保修期')), 'Machine quote needs actual warranty term');
+notices.machineWarrantyPeriod = '18个月';
+assert(documentProductNotices(notices)[0].text.includes('18个月'));
+assert.deepEqual(validateForPrint(notices), []);
+notices.sections.push(
+  { id: 'plate', title: '开版费', items: [{ ...blankItem('p1'), name: '铜版', unitPrice: '500' }] },
+  { id: 'film', title: '凹版热转印花膜', items: [{ ...blankItem('g1'), name: 'PP花膜', unitPrice: '5' }] },
+  { id: 'plate2', title: '制版费', items: [{ ...blankItem('p2'), name: '第二个铜版', unitPrice: '500' }] },
+);
+assert.deepEqual(activeNoticeTypes(notices.sections), ['machine', 'plate', 'gravure_film']);
+assert.equal(documentProductNotices(notices).length, 3, 'Repeated sections get one clause per type');
+assert(documentProductNotices(notices).find(n => n.type === 'plate')?.text.includes('18个月'));
+assert(documentProductNotices(notices).find(n => n.type === 'gravure_film')?.text.includes('±0.3mm'));
+notices.sections.shift();
+assert.deepEqual(activeNoticeTypes(notices.sections), ['plate', 'gravure_film'], 'Remove machine group removes its notice');
+notices.sections.push(
+  { id: 'digital', title: '数码热转印花膜', items: [{ ...blankItem('d1'), name: '数码膜', unitPrice: '10' }] },
+  { id: 'process', title: '加工费用', items: [{ ...blankItem('w1'), name: '转印加工', unitPrice: '2' }] },
+  { id: 'other', title: '运费', items: [{ ...blankItem('o1'), name: '运输费', unitPrice: '100' }] },
+);
+assert.deepEqual(activeNoticeTypes(notices.sections), ['plate', 'gravure_film', 'digital_film', 'processing']);
+assert.equal(inferNoticeType('数码花膜'), 'digital_film');
+assert.equal(inferNoticeType('凹版花膜'), 'gravure_film');
+assert.equal(inferNoticeType('热转印花膜'), 'gravure_film');
+assert.equal(inferNoticeType('UV打印'), null);
+assert.equal(inferNoticeType('机器'), 'machine');
+assert.equal(inferNoticeType('加工'), 'processing');
+const other = notices.sections.find(s => s.id === 'other')!;
+assert.equal(sectionNoticeType(other), null);
+other.noticeType = 'machine';
+assert.equal(sectionNoticeType(other), 'machine');
+other.noticeType = 'none';
+assert.equal(sectionNoticeType(other), null);
+notices.noticeOverrides = { plate: { zh: '定制铜版说明' } };
+assert.equal(documentProductNotices(notices).find(n => n.type === 'plate')?.text, '定制铜版说明');
+assert.equal(documentProductNotices(notices).find(n => n.type === 'plate')?.isCustomized, true);
+notices.language = 'en';
+assert(documentProductNotices(notices).find(n => n.type === 'plate')?.text.includes('18-month'));
+assert(documentProductNotices(notices).find(n => n.type === 'processing')?.text.includes('3%'));
+notices.language = 'zh';
+notices.sections.find(s => s.id === 'process')!.items = [blankItem('empty')];
+assert(!activeNoticeTypes(notices.sections).includes('processing'), 'Empty sections do not trigger clauses');
+assert(isDraftShape(notices));
+const restored = normalizeImportedDraft(notices, '当前登录业务员');
+assert.equal(restored.noticeOverrides?.plate?.zh, '定制铜版说明');
+assert.equal(restored.machineWarrantyPeriod, '18个月');
+const older = { ...notices };
+delete older.noticeOverrides;
+delete older.machineVoltage;
+delete older.machineFrequency;
+delete older.machineWarrantyPeriod;
+for (const group of older.sections) delete group.noticeType;
+assert(isDraftShape(older), 'Legacy draft without notice fields must remain valid');
+const oldRestored = normalizeImportedDraft(older, '当前账号');
+assert.equal(oldRestored.machineVoltage, '220V');
+assert.equal(oldRestored.machineFrequency, '60Hz');
+assert.deepEqual(oldRestored.noticeOverrides, {});
+
 console.log('commercial-document-template.test.ts: PASS');
