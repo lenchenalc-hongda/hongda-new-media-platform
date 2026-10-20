@@ -29,7 +29,7 @@ const printStyles = [
   '.commercial-print.compact-quotation table tfoot { break-inside: avoid; page-break-inside: avoid; }',
   // The general print reset makes direct main children display:block!important;
   // restore flex explicitly so the total label stays left and its amount right in the PDF.
-  '.commercial-print.compact-quotation .document-total { display: flex !important; flex-direction: row !important; justify-content: space-between !important; align-items: center !important; width: 100%; padding: 8px 12px; gap: 12px; }',
+  '.commercial-print.compact-quotation .document-total { display: flex !important; flex-direction: row !important; justify-content: space-between !important; align-items: center !important; width: 100%; padding: 8px 12px !important; gap: 12px; }',
   '.commercial-print.compact-quotation .document-total-amount { font-size: 16px; line-height: 22px; margin-left: auto; text-align: right; flex: 0 0 auto; white-space: nowrap; }',
   '.commercial-print.compact-quotation .document-total-label { font-size: 12px; white-space: nowrap; }',
   '.commercial-print.compact-quotation .document-terms p { margin-top: 4px; }',
