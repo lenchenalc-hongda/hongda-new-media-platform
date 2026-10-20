@@ -35,10 +35,8 @@ const printStyles = [
 export default function DocumentPreview({ draft }: { draft: CommercialDocumentDraft }) {
   const en = draft.language === 'en';
   const contract = draft.kind === 'machine_contract';
-  const imageHeader = draft.kind === 'quotation'
-    ? (en
-      ? { src: '/document-headers/hongda-quotation-header-en.jpg', width: 2048, height: 464, alt: 'HONGDA PRINTING quotation header (company and contact details)' }
-      : { src: '/document-headers/hongda-quotation-header-zh.png', width: 2047, height: 515, alt: '宏达印业中文报价抬头（公司名称及联系方式）' })
+  const imageHeader = draft.kind === 'quotation' && draft.language === 'zh'
+    ? { src: '/document-headers/hongda-quotation-header-zh.png', width: 2047, height: 515, alt: '宏达印业中文报价抬头（公司名称及联系方式）' }
     : null;
   const total = documentAmount(draft);
   const label = (zh: string, english: string) => en ? english : zh;
