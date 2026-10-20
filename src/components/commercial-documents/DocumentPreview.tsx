@@ -9,6 +9,7 @@ const printStyles = [
   '@page { size: A4; margin: 13mm 12mm; }',
   '.commercial-print { font-family: Arial, "Microsoft YaHei", "PingFang SC", sans-serif; }',
   '.commercial-print thead { display: table-header-group; }',
+  '.commercial-print[data-quotation-image-header="zh"] .document-section-title { break-after: avoid; page-break-after: avoid; }',
   '.commercial-print tr { break-inside: avoid; page-break-inside: avoid; }',
   '.commercial-print .no-split { break-inside: avoid; page-break-inside: avoid; }',
   '@media print {',
@@ -48,7 +49,7 @@ export default function DocumentPreview({ draft }: { draft: CommercialDocumentDr
       : label('报价未含税，发票及税务安排另行确认。', 'Tax not included; invoice and tax arrangements to be confirmed separately.');
 
   return (
-    <article id="commercial-print" className="commercial-print bg-white text-gray-900 w-full max-w-[810px] mx-auto border border-gray-200 shadow-sm p-7 sm:p-10">
+    <article id="commercial-print" data-quotation-image-header={imageHeader ? 'zh' : undefined} className="commercial-print bg-white text-gray-900 w-full max-w-[810px] mx-auto border border-gray-200 shadow-sm p-7 sm:p-10">
       <style>{printStyles}</style>
       <header className="no-split">
         {imageHeader ? (
