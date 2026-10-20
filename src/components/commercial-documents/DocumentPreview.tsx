@@ -35,6 +35,11 @@ const printStyles = [
 export default function DocumentPreview({ draft }: { draft: CommercialDocumentDraft }) {
   const en = draft.language === 'en';
   const contract = draft.kind === 'machine_contract';
+  const imageHeader = draft.kind === 'quotation'
+    ? (en
+      ? { src: '/document-headers/hongda-quotation-header-en.jpg', width: 2048, height: 464, alt: 'HONGDA PRINTING quotation header (company and contact details)' }
+      : { src: '/document-headers/hongda-quotation-header-zh.png', width: 2047, height: 515, alt: '宏达印业中文报价抬头（公司名称及联系方式）' })
+    : null;
   const total = documentAmount(draft);
   const label = (zh: string, english: string) => en ? english : zh;
   const amountText = (n: number) => formatMoney(n, draft.currency);
@@ -48,17 +53,30 @@ export default function DocumentPreview({ draft }: { draft: CommercialDocumentDr
     <article id="commercial-print" className="commercial-print bg-white text-gray-900 w-full max-w-[810px] mx-auto border border-gray-200 shadow-sm p-7 sm:p-10">
       <style>{printStyles}</style>
       <header className="no-split">
-        <div className="flex items-center justify-between gap-3 pb-3">
-          <div className="flex items-center gap-3">
-            <img src="/hongda-os-original-emblem.png" alt="HONGDA" width="54" height="54" className="w-14 h-14 object-contain shrink-0" />
-            <div>
-              <p className="font-extrabold text-xl tracking-wide text-gray-900">宏达印业</p>
-              <p className="text-[11px] tracking-[0.16em] font-semibold text-gray-600">HONGDA PRINTING</p>
-              <p className="text-xs text-gray-600 mt-1">{FIXED_SELLER_NAME}</p>
-            </div>
-          </div>
-         </div>
-        <div className="h-1 bg-red-700" />
+        {imageHeader ? (
+          <img
+            src={imageHeader.src}
+            alt={imageHeader.alt}
+            width={imageHeader.width}
+            height={imageHeader.height}
+            loading="eager"
+            style={{ display: 'block', width: '100%', height: 'auto' }}
+          />
+        ) : (
+          <>
+            <div className="flex items-center justify-between gap-3 pb-3">
+              <div className="flex items-center gap-3">
+                <img src="/hongda-os-original-emblem.png" alt="HONGDA" width="54" height="54" className="w-14 h-14 object-contain shrink-0" />
+                <div>
+                  <p className="font-extrabold text-xl tracking-wide text-gray-900">宏达印业</p>
+                  <p className="text-[11px] tracking-[0.16em] font-semibold text-gray-600">HONGDA PRINTING</p>
+                  <p className="text-xs text-gray-600 mt-1">{FIXED_SELLER_NAME}</p>
+                </div>
+              </div>
+             </div>
+            <div className="h-1 bg-red-700" />
+          </>
+        )}
         <div className="py-4 text-center">
           <h1 className="font-bold text-xl text-gray-900">
             {contract ? label('机器销售合同', 'MACHINE SALES CONTRACT') : label('产品报价单', 'QUOTATION')}
@@ -69,7 +87,7 @@ export default function DocumentPreview({ draft }: { draft: CommercialDocumentDr
       <section className="grid grid-cols-2 gap-x-6 gap-y-2 text-xs pb-4 border-b border-gray-200">
         <p><strong>{label('编号', 'No.')}：</strong>{safeDisplay(draft.documentNo)}</p>
         <p><strong>{label('日期', 'Date')}：</strong>{safeDisplay(draft.date)}</p>
-        <p><strong>{label('卖方 / 报价方', 'Seller')}：</strong>{FIXED_SELLER_NAME}</p>
+        {!imageHeader && <p><strong>{label('卖方 / 报价方', 'Seller')}：</strong>{FIXED_SELLER_NAME}</p>}
         <p><strong>{label('客户 / 买方', 'Buyer')}：</strong>{safeDisplay(draft.buyerName)}</p>
         <p><strong>{label('业务员', 'Sales representative')}：</strong>{safeDisplay(draft.salespersonName)}</p>
         {draft.buyerContact && <p><strong>{label('客户联系人', 'Buyer contact')}：</strong>{draft.buyerContact}</p>}

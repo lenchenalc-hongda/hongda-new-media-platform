@@ -286,7 +286,7 @@ export default function DocumentWorkbench({ userName }: { userName: string }) {
       setErrors(['草稿格式不正确，无法导入。']);
     }
   };
-  const printPdf = () => {
+  const printPdf = async () => {
     const problems = validateForPrint(draft);
     if (problems.length) {
       setErrors(problems);
@@ -294,8 +294,14 @@ export default function DocumentWorkbench({ userName }: { userName: string }) {
       return;
     }
     setErrors([]);
-    // Uses the browser's built-in print-to-PDF so CJK fonts render accurately.
-    window.print();
+    // Print the same preview only after its static image assets are decoded.
+    try {
+      const images = Array.from(document.querySelectorAll<HTMLImageElement>('#commercial-print img'));
+      await Promise.all(images.map(image => image.decode()));
+      window.print();
+    } catch {
+      setErrors(['PDF 抬头图片加载失败，请检查网络后重试。']);
+    }
   };
   const total = documentAmount(draft);
 
