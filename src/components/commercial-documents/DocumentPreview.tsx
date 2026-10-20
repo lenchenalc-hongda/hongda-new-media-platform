@@ -27,12 +27,13 @@ const printStyles = [
   '.commercial-print.compact-quotation table tfoot td { padding-top: 4px; padding-bottom: 4px; }',
   '.commercial-print.compact-quotation table tbody tr:last-child { break-after: avoid-page; page-break-after: avoid; }',
   '.commercial-print.compact-quotation table tfoot { break-inside: avoid; page-break-inside: avoid; }',
-  '.commercial-print.compact-quotation .document-total { padding: 8px 12px; gap: 12px; }',
-  '.commercial-print.compact-quotation .document-total-amount { font-size: 16px; line-height: 22px; }',
-  '.commercial-print.compact-quotation .document-total-label { font-size: 12px; }',
+  // The general print reset makes direct main children display:block!important;
+  // restore flex explicitly so the total label stays left and its amount right in the PDF.
+  '.commercial-print.compact-quotation .document-total { display: flex !important; flex-direction: row !important; justify-content: space-between !important; align-items: center !important; width: 100%; padding: 8px 12px !important; gap: 12px; }',
+  '.commercial-print.compact-quotation .document-total-amount { font-size: 16px; line-height: 22px; margin-left: auto; text-align: right; flex: 0 0 auto; white-space: nowrap; }',
+  '.commercial-print.compact-quotation .document-total-label { font-size: 12px; white-space: nowrap; }',
   '.commercial-print.compact-quotation .document-terms p { margin-top: 4px; }',
   '.commercial-print.compact-quotation .document-terms h2 { padding-bottom: 4px; }',
-  '.commercial-print.compact-quotation .document-draft-notice { margin-top: 16px; }',
   '@media print {',
   ' html, body { background: #fff !important; }',
   ' body * { visibility: hidden !important; }',
@@ -208,9 +209,11 @@ export default function DocumentPreview({ draft }: { draft: CommercialDocumentDr
           </div>
         </footer>
       )}
-      <div className="document-draft-notice no-split mt-8 pt-2 border-t border-gray-200 text-[10px] text-gray-500 text-center">
-        {label('模板草稿 · 需核对正式主体、价格、合同条款及收款账户后方可对外使用', 'DRAFT TEMPLATE · Verify legal entities, prices, terms and payment details before external use')}
-      </div>
+      {contract && (
+        <div className="document-draft-notice no-split mt-8 pt-2 border-t border-gray-200 text-[10px] text-gray-500 text-center">
+          {label('模板草稿 · 需核对正式主体、价格、合同条款及收款账户后方可对外使用', 'DRAFT TEMPLATE · Verify legal entities, prices, terms and payment details before external use')}
+        </div>
+      )}
     </article>
   );
 }
