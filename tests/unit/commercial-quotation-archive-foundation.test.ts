@@ -29,7 +29,7 @@ assert(!migration.includes('REFERENCES public.profiles(id,org_id)'), 'Do not ass
 
 for (const clause of [
   "user.authSource !== 'supabase'",
-  "profile.is_active",
+  "profile?.is_active",
   "draft.kind !== 'quotation'",
   "draft.salespersonName !== user.name",
   "pdf.subarray(0, 5).toString('ascii') !== '%PDF-'",
