@@ -23,9 +23,9 @@ for (const kind of ['quotation', 'machine_contract'] as const) {
         })),
       }));
       const html = renderToStaticMarkup(React.createElement(DocumentPreview, { draft }));
-      const imageHeader = kind === 'quotation';
+      const imageHeader = kind === 'quotation' && language === 'zh';
       assert.equal(html.includes(headerPath), imageHeader && language === 'zh');
-      assert.equal(html.includes('/document-headers/hongda-quotation-header-en.jpg'), imageHeader && language === 'en');
+      assert.equal(html.includes('/document-headers/hongda-quotation-header-en.jpg'), false);
       assert.equal(html.includes('/hongda-os-original-emblem.png'), !imageHeader);
       assert.equal(html.includes(language === 'zh' ? '卖方 / 报价方' : 'Seller'), !imageHeader);
       for (const text of ['业务员测试', '客户测试', '联系人测试', '项目测试', formatMoney(documentAmount(draft).amountMinor, draft.currency)]) {
