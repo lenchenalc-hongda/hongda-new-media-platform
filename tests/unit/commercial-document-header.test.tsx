@@ -28,13 +28,16 @@ for (const kind of ['quotation', 'machine_contract'] as const) {
       const clauseCount = (html.match(/class="document-product-note text-gray-800"/g) || []).length;
       assert.equal(clauseCount, counts.length === 1 ? 1 : 3, 'Terms must follow actual product categories without duplicates');
       assert(html.includes(language === 'zh' ? '产品及工艺说明' : 'PRODUCT / PROCESS NOTES'));
-      assert(html.includes(language === 'zh' ? '铜版自开版日起保质期18个月' : '18-month quality guarantee'));
+      assert(html.includes('document-product-note-label'), 'Category titles retain consistent typography');
+      assert(html.includes('document-product-note-body'), 'Approved body text must use a preserved multiline layout');
+      assert(html.includes('grid-template-columns: 120px minmax(0, 1fr)'), 'PDF categories should have consistent compact label widths');
+      assert(html.includes(language === 'zh' ? '1。 铜版自制版完成之日起享有18个月质量保证期' : '18-month quality guarantee'));
       if (counts.length === 1) {
-        assert(!html.includes(language === 'zh' ? '设备默认供电：' : 'Standard power:'));
+        assert(!html.includes(language === 'zh' ? '设备电压、频率、气源及技术配置以双方最终确认的设备规格为准。' : 'Standard power:'));
         assert(!html.includes(language === 'zh' ? '烫印结合力应依据' : 'Transfer adhesion must'));
       } else {
-        assert(html.includes(language === 'zh' ? '±0.3mm' : '±0.3 mm'));
-        assert(html.includes(language === 'zh' ? '220V／60Hz' : '220V / 60Hz'));
+        assert(html.includes(language === 'zh' ? '耐多轮洗碗机' : '±0.3 mm'));
+        assert(html.includes(language === 'zh' ? '设备电压、频率、气源及技术配置以双方最终确认的设备规格为准。' : '220V / 60Hz'));
       }
       assert.equal(html.includes(headerPath), imageHeader && language === 'zh');
       assert.equal(html.includes('/document-headers/hongda-quotation-header-en.jpg'), false);
