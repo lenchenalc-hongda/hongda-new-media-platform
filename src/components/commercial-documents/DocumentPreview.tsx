@@ -11,6 +11,28 @@ const printStyles = [
   '.commercial-print thead { display: table-header-group; }',
   '.commercial-print tr { break-inside: avoid; page-break-inside: avoid; }',
   '.commercial-print .no-split { break-inside: avoid; page-break-inside: avoid; }',
+  // Compact styling applies only to Chinese quotations. Avoid '>' CSS combinators:
+  // SSR encodes them as entities inside <style>, causing print/PDF discrepancies.
+  '.commercial-print.compact-quotation header .py-4 { padding-top: 9px; padding-bottom: 9px; }',
+  '.commercial-print.compact-quotation header .py-4 h1 { font-size: 18px; line-height: 24px; }',
+  '.commercial-print.compact-quotation header .py-4 p { margin-top: 2px; }',
+  '.commercial-print.compact-quotation section.grid { row-gap: 5px; padding-bottom: 10px; }',
+  '.commercial-print.compact-quotation .document-body { padding-top: 11px; }',
+  '.commercial-print.compact-quotation .document-section + .document-section { margin-top: 8px; }',
+  '.commercial-print.compact-quotation .document-section + .document-total { margin-top: 8px; }',
+  '.commercial-print.compact-quotation .document-total + .document-terms { margin-top: 10px; }',
+  '.commercial-print.compact-quotation table .document-section-title { padding: 5px 9px; line-height: 16px; }',
+  '.commercial-print.compact-quotation table th { padding: 5px 8px; }',
+  '.commercial-print.compact-quotation table td { padding: 5px 8px; line-height: 1.45; }',
+  '.commercial-print.compact-quotation table tfoot td { padding-top: 4px; padding-bottom: 4px; }',
+  '.commercial-print.compact-quotation table tbody tr:last-child { break-after: avoid-page; page-break-after: avoid; }',
+  '.commercial-print.compact-quotation table tfoot { break-inside: avoid; page-break-inside: avoid; }',
+  '.commercial-print.compact-quotation .document-total { padding: 8px 12px; gap: 12px; }',
+  '.commercial-print.compact-quotation .document-total-amount { font-size: 16px; line-height: 22px; }',
+  '.commercial-print.compact-quotation .document-total-label { font-size: 12px; }',
+  '.commercial-print.compact-quotation .document-terms p { margin-top: 4px; }',
+  '.commercial-print.compact-quotation .document-terms h2 { padding-bottom: 4px; }',
+  '.commercial-print.compact-quotation .document-draft-notice { margin-top: 16px; }',
   '@media print {',
   ' html, body { background: #fff !important; }',
   ' body * { visibility: hidden !important; }',
@@ -35,6 +57,9 @@ const printStyles = [
 export default function DocumentPreview({ draft }: { draft: CommercialDocumentDraft }) {
   const en = draft.language === 'en';
   const contract = draft.kind === 'machine_contract';
+  const imageHeader = draft.kind === 'quotation' && draft.language === 'zh'
+    ? { src: '/document-headers/hongda-quotation-header-zh.png', width: 2047, height: 515, alt: '宏达印业中文报价抬头（公司名称及联系方式）' }
+    : null;
   const total = documentAmount(draft);
   const label = (zh: string, english: string) => en ? english : zh;
   const amountText = (n: number) => formatMoney(n, draft.currency);
@@ -45,20 +70,33 @@ export default function DocumentPreview({ draft }: { draft: CommercialDocumentDr
       : label('报价未含税，发票及税务安排另行确认。', 'Tax not included; invoice and tax arrangements to be confirmed separately.');
 
   return (
-    <article id="commercial-print" className="commercial-print bg-white text-gray-900 w-full max-w-[810px] mx-auto border border-gray-200 shadow-sm p-7 sm:p-10">
+    <article id="commercial-print" className={`commercial-print${imageHeader ? " compact-quotation" : ""} bg-white text-gray-900 w-full max-w-[810px] mx-auto border border-gray-200 shadow-sm p-7 sm:p-10`}>
       <style>{printStyles}</style>
       <header className="no-split">
-        <div className="flex items-center justify-between gap-3 pb-3">
-          <div className="flex items-center gap-3">
-            <img src="/hongda-os-original-emblem.png" alt="HONGDA" width="54" height="54" className="w-14 h-14 object-contain shrink-0" />
-            <div>
-              <p className="font-extrabold text-xl tracking-wide text-gray-900">宏达印业</p>
-              <p className="text-[11px] tracking-[0.16em] font-semibold text-gray-600">HONGDA PRINTING</p>
-              <p className="text-xs text-gray-600 mt-1">{FIXED_SELLER_NAME}</p>
-            </div>
-          </div>
-         </div>
-        <div className="h-1 bg-red-700" />
+        {imageHeader ? (
+          <img
+            src={imageHeader.src}
+            alt={imageHeader.alt}
+            width={imageHeader.width}
+            height={imageHeader.height}
+            loading="eager"
+            style={{ display: 'block', width: '100%', height: 'auto' }}
+          />
+        ) : (
+          <>
+            <div className="flex items-center justify-between gap-3 pb-3">
+              <div className="flex items-center gap-3">
+                <img src="/hongda-os-original-emblem.png" alt="HONGDA" width="54" height="54" className="w-14 h-14 object-contain shrink-0" />
+                <div>
+                  <p className="font-extrabold text-xl tracking-wide text-gray-900">宏达印业</p>
+                  <p className="text-[11px] tracking-[0.16em] font-semibold text-gray-600">HONGDA PRINTING</p>
+                  <p className="text-xs text-gray-600 mt-1">{FIXED_SELLER_NAME}</p>
+                </div>
+              </div>
+             </div>
+            <div className="h-1 bg-red-700" />
+          </>
+        )}
         <div className="py-4 text-center">
           <h1 className="font-bold text-xl text-gray-900">
             {contract ? label('机器销售合同', 'MACHINE SALES CONTRACT') : label('产品报价单', 'QUOTATION')}
@@ -69,7 +107,7 @@ export default function DocumentPreview({ draft }: { draft: CommercialDocumentDr
       <section className="grid grid-cols-2 gap-x-6 gap-y-2 text-xs pb-4 border-b border-gray-200">
         <p><strong>{label('编号', 'No.')}：</strong>{safeDisplay(draft.documentNo)}</p>
         <p><strong>{label('日期', 'Date')}：</strong>{safeDisplay(draft.date)}</p>
-        <p><strong>{label('卖方 / 报价方', 'Seller')}：</strong>{FIXED_SELLER_NAME}</p>
+        {!imageHeader && <p><strong>{label('卖方 / 报价方', 'Seller')}：</strong>{FIXED_SELLER_NAME}</p>}
         <p><strong>{label('客户 / 买方', 'Buyer')}：</strong>{safeDisplay(draft.buyerName)}</p>
         <p><strong>{label('业务员', 'Sales representative')}：</strong>{safeDisplay(draft.salespersonName)}</p>
         {draft.buyerContact && <p><strong>{label('客户联系人', 'Buyer contact')}：</strong>{draft.buyerContact}</p>}
@@ -77,16 +115,22 @@ export default function DocumentPreview({ draft }: { draft: CommercialDocumentDr
         <p><strong>{label('币种', 'Currency')}：</strong>{draft.currency}</p>
         <p><strong>{label('销售区域', 'Market')}：</strong>{draft.market === 'domestic' ? label('内销', 'Domestic') : label('外销', 'Export')}</p>
       </section>
-      <main className="pt-5 space-y-5">
+      <main className="document-body pt-5 space-y-5">
         {draft.sections.map((section, index) => {
           const subtotal = sectionAmount(section);
           return (
-            <section key={section.id}>
-              <div className="document-section-title bg-gray-700 text-white text-xs font-bold py-2 px-3">
+            <section key={section.id} className="document-section">
+              {!imageHeader && <div className="document-section-title bg-gray-700 text-white text-xs font-bold py-2 px-3">
                 {index + 1}. {safeDisplay(section.title, label('未命名大项', 'Untitled section'))}
-              </div>
+              </div>}
               <table className="w-full table-fixed text-xs border-collapse">
+                {imageHeader && <colgroup>
+                  {[6, 36, 15, 18, 25].map(width => <col key={width} style={{ width: `${width}%` }} />)}
+                </colgroup>}
                 <thead className="bg-gray-100 text-gray-700">
+                  {imageHeader && <tr><th colSpan={5} className="document-section-title bg-gray-700 text-white text-xs font-bold py-2 px-3 text-left">
+                    {index + 1}. {safeDisplay(section.title, label('未命名大项', 'Untitled section'))}
+                  </th></tr>}
                   <tr>
                     <th className="w-[6%] p-2 text-left">{label('序', '#')}</th>
                     <th className="w-[36%] p-2 text-left">{label('名称 / 规格', 'Item / Specification')}</th>
@@ -131,14 +175,14 @@ export default function DocumentPreview({ draft }: { draft: CommercialDocumentDr
         })}
         <div className="document-total no-split bg-red-700 text-white px-4 py-3 flex justify-between items-center gap-4">
           <div>
-            <p className="font-bold text-sm">{total.catalogLines
+            <p className="document-total-label font-bold text-sm">{total.catalogLines
               ? label('已确定金额合计（不含单价目录）', 'Confirmed items total (catalog excluded)')
               : label('合同/报价总金额', 'TOTAL AMOUNT')}</p>
             {total.catalogLines > 0 && <p className="text-[10px] mt-1">{label('单价目录仅供选择，不计入合同/报价金额。', 'Catalog prices are not included in the total.')}</p>}
           </div>
-          <p className="text-lg font-bold whitespace-nowrap">{total.amountLines ? amountText(total.amountMinor) : '—'}</p>
+          <p className="document-total-amount text-lg font-bold whitespace-nowrap">{total.amountLines ? amountText(total.amountMinor) : '—'}</p>
         </div>
-        <section className="no-split text-xs space-y-2">
+        <section className="document-terms no-split text-xs space-y-2">
           <h2 className="font-bold text-gray-800 border-b border-gray-300 pb-2">
             {label('商务及税务说明', 'TERMS & CONDITIONS')}
           </h2>
@@ -164,7 +208,7 @@ export default function DocumentPreview({ draft }: { draft: CommercialDocumentDr
           </div>
         </footer>
       )}
-      <div className="no-split mt-8 pt-2 border-t border-gray-200 text-[10px] text-gray-500 text-center">
+      <div className="document-draft-notice no-split mt-8 pt-2 border-t border-gray-200 text-[10px] text-gray-500 text-center">
         {label('模板草稿 · 需核对正式主体、价格、合同条款及收款账户后方可对外使用', 'DRAFT TEMPLATE · Verify legal entities, prices, terms and payment details before external use')}
       </div>
     </article>
