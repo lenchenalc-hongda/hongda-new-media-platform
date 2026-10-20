@@ -36,6 +36,9 @@ for (const kind of ['quotation', 'machine_contract'] as const) {
         assert(html.includes('width:100%;height:auto'), 'Artwork must retain aspect ratio');
         assert(html.includes('table .document-section-title { padding: 5px 9px; line-height: 16px; }'));
         assert(html.includes('margin-top: 8px;'), 'Group sections must use compact vertical spacing');
+        assert(html.includes('.document-section + .document-section { margin-top: 8px; }'), 'Group spacing must use SSR-safe selectors');
+        assert(!html.includes('.compact-quotation &gt;'), 'HTML-escaped CSS combinators must never break print styles');
+        assert(html.includes('document-total-amount'), 'Subtotal and total must retain clear text hierarchy');
         assert(html.includes('.document-total { padding: 8px 12px; gap: 12px; }'));
       }
       assert.equal(html.includes(language === 'zh' ? '卖方 / 报价方' : 'Seller'), !imageHeader);
