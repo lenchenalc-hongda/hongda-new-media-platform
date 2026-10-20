@@ -5,6 +5,8 @@ export type DocumentMarket = 'domestic' | 'export';
 export type DocumentLanguage = 'zh' | 'en';
 export type TaxStatement = 'exclusive' | 'vat13';
 export type ItemMode = 'amount' | 'catalog';
+import { activeNoticeTypes, NOTICE_TYPES } from './product-notices';
+import type { NoticeOverrides, NoticeSelection } from './product-notices';
 
 export const FIXED_SELLER_NAME = '广东宏达印业股份有限公司';
 
@@ -86,6 +88,8 @@ export interface DocumentSection {
   id: string;
   title: string;
   items: DocumentItem[];
+  /** Optional for backward-compatible V1/V1.1 JSON drafts. */
+  noticeType?: NoticeSelection;
 }
 
 export interface CommercialDocumentDraft {
@@ -116,6 +120,12 @@ export interface CommercialDocumentDraft {
   warrantyTerms: string;
   acceptanceTerms: string;
   additionalTerms: string;
+  /** Machine defaults are editable for each quote, never universal equipment specs. */
+  machineVoltage?: string;
+  machineFrequency?: string;
+  machineWarrantyPeriod?: string;
+  /** User-edited notice text, per category and language. */
+  noticeOverrides?: NoticeOverrides;
   // Optional at template stage. Only enter account data approved by Finance.
   accountLabel: string;
   accountDetails: string;
@@ -155,6 +165,10 @@ export function initialDraft(salespersonName = ''): CommercialDocumentDraft {
     warrantyTerms: '',
     acceptanceTerms: '',
     additionalTerms: '',
+    machineVoltage: '220V',
+    machineFrequency: '60Hz',
+    machineWarrantyPeriod: '',
+    noticeOverrides: {},
     accountLabel: '',
     accountDetails: '',
     sections: [
@@ -270,6 +284,13 @@ export function validateForPrint(draft: CommercialDocumentDraft): string[] {
     if (!draft.acceptanceTerms.trim()) errors.push('机器合同必须填写经确认的验收条款');
     if (!draft.warrantyTerms.trim()) errors.push('机器合同必须填写经确认的售后/保修条款');
   }
+  if (activeNoticeTypes(draft.sections).includes('machine')) {
+    if (!draft.machineVoltage?.trim()) errors.push('机器大项需要确认设备电压');
+    if (!draft.machineFrequency?.trim()) errors.push('机器大项需要确认设备频率');
+    if (draft.kind === 'quotation' && !draft.machineWarrantyPeriod?.trim()) {
+      errors.push('机器报价需要填写非人为因素零部件的具体保修期（例如1年或18个月）');
+    }
+  }
   if (documentAmount(draft).invalidLines > 0) errors.push('存在无法计算的报价明细');
   return errors;
 }
@@ -294,9 +315,21 @@ export function isDraftShape(value: unknown): value is CommercialDocumentDraft {
     && (draft.paymentDays === undefined || typeof draft.paymentDays === 'string')
     && (draft.paymentPreset === undefined || draft.paymentPreset === '' || PAYMENT_PRESETS.some(option => option.value === draft.paymentPreset))
     && (draft.shippingPreset === undefined || draft.shippingPreset === '' || SHIPPING_PRESETS.some(option => option.value === draft.shippingPreset))
+    && (draft.machineVoltage === undefined || typeof draft.machineVoltage === 'string' && draft.machineVoltage.length <= 60)
+    && (draft.machineFrequency === undefined || typeof draft.machineFrequency === 'string' && draft.machineFrequency.length <= 60)
+    && (draft.machineWarrantyPeriod === undefined || typeof draft.machineWarrantyPeriod === 'string' && draft.machineWarrantyPeriod.length <= 60)
+    && (draft.noticeOverrides === undefined || (
+      !!draft.noticeOverrides && typeof draft.noticeOverrides === 'object' && !Array.isArray(draft.noticeOverrides)
+      && Object.entries(draft.noticeOverrides).every(([key, languageText]) =>
+        NOTICE_TYPES.some(type => type === key) && !!languageText
+        && typeof languageText === 'object' && !Array.isArray(languageText)
+        && Object.entries(languageText).every(([language, text]) =>
+          (language === 'zh' || language === 'en') && typeof text === 'string' && text.length <= 2000))
+    ))
     && Array.isArray(draft.sections) && draft.sections.length <= 50
     && draft.sections.every(g => typeof g?.id === 'string'
-      && typeof g?.title === 'string' && Array.isArray(g?.items) && g.items.length <= 200
+      && typeof g?.title === 'string' && (g.noticeType === undefined || g.noticeType === 'auto' || g.noticeType === 'none' || NOTICE_TYPES.some(type => type === g.noticeType))
+      && Array.isArray(g?.items) && g.items.length <= 200
       && g.items.every(i => typeof i?.id === 'string'
         && ['amount', 'catalog'].includes(i?.mode)
         && ['name', 'specification', 'quantity', 'unit', 'unitPrice', 'note']
@@ -317,6 +350,10 @@ export function normalizeImportedDraft(draft: CommercialDocumentDraft, salespers
     paymentPreset: PAYMENT_PRESETS.some(option => option.value === draft.paymentPreset)
       ? draft.paymentPreset : draft.paymentTerms ? 'other' : '',
     paymentDays: typeof draft.paymentDays === 'string' ? draft.paymentDays : '30',
+    machineVoltage: typeof draft.machineVoltage === 'string' ? draft.machineVoltage : '220V',
+    machineFrequency: typeof draft.machineFrequency === 'string' ? draft.machineFrequency : '60Hz',
+    machineWarrantyPeriod: typeof draft.machineWarrantyPeriod === 'string' ? draft.machineWarrantyPeriod : '',
+    noticeOverrides: draft.noticeOverrides ?? {},
     shippingPreset: SHIPPING_PRESETS.some(option => option.value === draft.shippingPreset)
       ? draft.shippingPreset : draft.shippingTerms ? 'other' : '',
     accountLabel: '',

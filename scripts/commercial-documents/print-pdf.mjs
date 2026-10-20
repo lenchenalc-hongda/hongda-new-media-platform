@@ -6,13 +6,22 @@ const { chromium } = require('playwright');
 const browser = await chromium.launch({ headless: true });
 const results = [];
 try {
-  for (const name of ['short', 'medium', 'long']) {
+  for (const name of ['short', 'medium', 'long', 'all_types']) {
     const page = await browser.newPage({ viewport: { width: 900, height: 1200 } });
     await page.goto('file://' + resolve(`output/quotation-qa/${name}.html`));
     await page.evaluate(async () => { await document.fonts.ready; await Promise.all([...document.images].map(img => img.decode())); });
     const image = await page.locator('header img').evaluate(img => ({ width: img.naturalWidth, height: img.naturalHeight, renderedWidth: img.width, renderedHeight: img.height }));
     if (image.width !== 2047 || image.height !== 515) throw new Error('Header did not decode');
     await page.screenshot({ path: `output/quotation-qa/${name}-preview.png`, fullPage: true });
+    const noticeTitles = await page.locator('.document-product-note strong').allTextContents();
+    const expectedTypes = name === 'short' ? 1 : name === 'all_types' ? 5 : 3;
+    if (noticeTitles.length !== expectedTypes) {
+      throw new Error('Unexpected product notice count: ' + JSON.stringify({ name, noticeTitles, expectedTypes }));
+    }
+    if (name === 'all_types' && !['开版及铜版：', '凹版热转印花膜：', '数码热转印花膜：', '机器出厂及保修：', '热转印加工：']
+      .every(title => noticeTitles.includes(title))) {
+      throw new Error('The five product note categories are not all present: ' + noticeTitles.join('; '));
+    }
     // Verify actual print-media geometry, not just the desktop preview. The
     // print reset overrides Tailwind's .flex on direct <main> children.
     await page.emulateMedia({ media: 'print' });
@@ -39,7 +48,7 @@ try {
       throw new Error('Invalid PDF total layout: ' + JSON.stringify({ name, ...totalLayout }));
     }
     await page.pdf({ path: `output/quotation-qa/${name}.pdf`, preferCSSPageSize: true, printBackground: true, displayHeaderFooter: false });
-    results.push({ name, image, totalLayout });
+    results.push({ name, image, totalLayout, noticeTitles });
     await page.close();
   }
 } finally { await browser.close(); }

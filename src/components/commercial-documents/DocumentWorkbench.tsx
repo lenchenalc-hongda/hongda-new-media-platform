@@ -10,6 +10,10 @@ import {
   type CommercialDocumentDraft, type DocumentItem, type DocumentSection,
   type PaymentPreset, type ShippingPreset,
 } from '@/lib/commercial-documents/template';
+import {
+  documentProductNotices, NOTICE_OPTIONS, NOTICE_TITLES, sectionNoticeType,
+  type NoticeSelection, type ProductNoticeType,
+} from '@/lib/commercial-documents/product-notices';
 
 const SECTION_PRESETS = ['版费', '热转印花膜', '数码花膜', '机器设备', '夹具与配件', '加工费用', '其他费用'];
 const CURRENCIES = ['CNY', 'USD', 'EUR'] as const;
@@ -217,6 +221,28 @@ export default function DocumentWorkbench({ userName }: { userName: string }) {
       ...section, items: section.items.map(item => item.id === itemId ? { ...item, ...change } : item),
     }));
   };
+  const editProductNotice = (type: ProductNoticeType, value: string) => {
+    setDraft(previous => ({
+      ...previous,
+      noticeOverrides: {
+        ...previous.noticeOverrides,
+        [type]: { ...previous.noticeOverrides?.[type], [previous.language]: value },
+      },
+    }));
+    setErrors([]);
+  };
+
+  const resetProductNotice = (type: ProductNoticeType) => {
+    setDraft(previous => ({
+      ...previous,
+      noticeOverrides: {
+        ...previous.noticeOverrides,
+        [type]: { ...previous.noticeOverrides?.[type], [previous.language]: undefined },
+      },
+    }));
+    setErrors([]);
+  };
+
   const addSection = (title: string) => {
     setDraft(previous => ({
       ...previous, sections: [
@@ -304,6 +330,7 @@ export default function DocumentWorkbench({ userName }: { userName: string }) {
     }
   };
   const total = documentAmount(draft);
+  const productNotices = documentProductNotices(draft);
 
   return (
     <div className="commercial-root space-y-4">
@@ -326,7 +353,7 @@ export default function DocumentWorkbench({ userName }: { userName: string }) {
         <strong>尚未接入服务器单据保存、历史版本及经财务批准的收款账户库</strong>。
         可搜索现有客户项目库（受原权限规则限制）或手动输入新客户。
         编号采用高随机度生成，但数据库唯一性登记尚未上线，手工修改编号暂不能跨员工防重。
-        离开页面前请下载草稿；生成文件始终带“模板草稿”提示，正式合同请复核条款后签署。
+        离开页面前请下载草稿；机器合同模板仍带草稿提示，正式合同请复核条款后签署。
       </div>
 
       {errors.length > 0 && (
@@ -446,6 +473,23 @@ export default function DocumentWorkbench({ userName }: { userName: string }) {
                     <button type="button" title="删除大项" className="text-red-700 hover:text-red-800 text-xs" onClick={() => removeSection(section)}>删除</button>
                   </div>
                   <div className="p-3 space-y-3">
+                    <div className="flex items-center gap-2">
+                      <label htmlFor={`notice-${section.id}`} className="text-xs text-gray-600 whitespace-nowrap">对应说明</label>
+                      <select id={`notice-${section.id}`} className="flex-1 min-w-0 text-xs"
+                        value={section.noticeType ?? 'auto'}
+                        onChange={event => updateSection(section.id, group => ({
+                          ...group, noticeType: event.target.value as NoticeSelection,
+                        }))}>
+                        {NOTICE_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+                      </select>
+                    </div>
+                    {(section.noticeType === undefined || section.noticeType === 'auto') && (
+                      <p className="text-[11px] text-gray-500">
+                        {sectionNoticeType(section)
+                          ? '已识别：' + NOTICE_TITLES[sectionNoticeType(section)!].zh + '（PDF 会自动附上说明）'
+                          : '大项名称无法识别时，请手动选择对应说明类型；不需要说明请选择“不附加”。'}
+                      </p>
+                    )}
                     {section.items.map((item, itemIndex) => (
                       <div key={item.id} className="border-b border-gray-100 pb-3 last:border-b-0 space-y-2">
                         <div className="flex items-center justify-between">
@@ -501,7 +545,59 @@ export default function DocumentWorkbench({ userName }: { userName: string }) {
             </div>
           </Panel>
 
-          <Panel title="04 · 税务与商务条款">
+          <Panel title="04 · 随大项自动生成的工艺说明">
+            <p className="text-xs text-gray-600">
+              根据03大项的说明类型自动匹配，每种说明只显示一次；删掉大项即自动消失。下面可以逐类修改，修改只影响当前单据。
+            </p>
+            {productNotices.length === 0
+              ? <p className="text-xs text-gray-500">当前没有需要附加的产品说明；新增大项并填写明细后将自动出现。</p>
+              : (
+                <div className="space-y-2">
+                  <p className="text-xs font-medium text-gray-800">
+                    本单自动附加 {productNotices.length} 类：{productNotices.map(note => note.title).join('、')}
+                  </p>
+                  {productNotices.some(note => note.type === 'machine') && (
+                    <div className="bg-amber-50 border border-amber-100 rounded-lg p-3 space-y-2">
+                      <p className="text-xs font-medium text-amber-900">机器出厂参数（须按本单设备实际配置核对）</p>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                        <Field label="默认电压" value={draft.machineVoltage ?? '220V'}
+                          onChange={value => patch('machineVoltage', value)} placeholder="如：220V / 380V" />
+                        <Field label="默认频率" value={draft.machineFrequency ?? '60Hz'}
+                          onChange={value => patch('machineFrequency', value)} placeholder="如：50Hz / 60Hz" />
+                        {draft.kind === 'quotation' && (
+                          <Field required label="非人为损坏零部件保修期" value={draft.machineWarrantyPeriod ?? ''}
+                            onChange={value => patch('machineWarrantyPeriod', value)} placeholder="如：1年、18个月" />
+                        )}
+                      </div>
+                      {draft.kind === 'quotation' && !draft.machineWarrantyPeriod?.trim() && (
+                        <p className="text-xs text-amber-900">尚未填写保修期；预览显示待确认，正式导出 PDF 前会要求补齐。</p>
+                      )}
+                    </div>
+                  )}
+                  {productNotices.map(note => (
+                    <details key={note.type} className="border border-gray-200 rounded-md px-3 py-2">
+                      <summary className="cursor-pointer flex justify-between gap-2 text-xs font-semibold text-gray-800">
+                        <span>{note.title}</span>
+                        <span className="text-gray-500 font-normal">{note.isCustomized ? '已自定义' : '采用默认说明'} · 点击修改</span>
+                      </summary>
+                      <div className="mt-2 space-y-2">
+                        <textarea aria-label={note.title + '说明文本'} className="w-full text-xs leading-relaxed"
+                          rows={note.type === 'gravure_film' ? 5 : 3} maxLength={2000}
+                          value={draft.noticeOverrides?.[note.type]?.[draft.language] ?? note.text}
+                          onChange={event => editProductNotice(note.type, event.target.value)} />
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-[11px] text-gray-500">随 PDF 语言切换相应说明。机器参数变化时，请核对自定义内容。</span>
+                          <button type="button" className="text-xs text-blue-700 whitespace-nowrap"
+                            onClick={() => resetProductNotice(note.type)}>恢复默认</button>
+                        </div>
+                      </div>
+                    </details>
+                  ))}
+                </div>
+              )}
+          </Panel>
+
+          <Panel title="05 · 税务与商务条款">
             {draft.market === 'domestic'
               ? <fieldset className="space-y-2">
                   <legend className="text-xs font-medium text-gray-600 mb-2">税务说明（只显示所选条款，不自动加税或拆分税额）</legend>
@@ -555,7 +651,7 @@ export default function DocumentWorkbench({ userName }: { userName: string }) {
             <Field label="其他商务条款 / 备注" multiline value={draft.additionalTerms} onChange={value => patch('additionalTerms', value)} />
           </Panel>
 
-          <Panel title="05 · 收款账户">
+          <Panel title="06 · 收款账户">
             <p className="text-xs text-amber-800 leading-relaxed">
               统一收款账户库尚未开发，当前版本不会填写、推断或自动附上任何银行账户。
               后续将由管理员维护经财务批准的账户，员工通过下拉菜单选择，合同自动显示相应信息。
