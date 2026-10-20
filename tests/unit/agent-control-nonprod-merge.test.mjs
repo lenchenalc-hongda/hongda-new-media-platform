@@ -53,6 +53,8 @@ const cases = [
   ['PR control mismatch denied', f => { f.control.active_pr = 1; }, false],
   ['control human gate denied', f => { f.control.status = 'HUMAN_GATE'; }, false],
   ['owner action required denied', f => { f.control.owner_action_required = true; }, false],
+  ['unknown owner gate denied', f => { delete f.control.owner_action_required; }, false],
+  ['unknown production flag denied', f => { delete f.control.production_execution_authorized; }, false],
   ['explicit production authorization denied', f => { f.control.current_phase = 'Production Release Gate'; }, false],
   ['failed CI denied', f => { f.checks[0].conclusion = 'failure'; }, false],
   ['pending CI denied', f => { f.checks[0].status = 'in_progress'; }, false],
