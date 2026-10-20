@@ -42,7 +42,7 @@ for (const kind of ['quotation', 'machine_contract'] as const) {
         assert(html.includes('display: flex !important; flex-direction: row !important; justify-content: space-between !important;'), 'PDF total must use flex even under print resets');
         assert(html.includes('margin-left: auto; text-align: right;'), 'Total amount must align to the right edge');
         assert(html.includes('white-space: nowrap;'), 'Total amount must never wrap');
-        assert(html.includes('padding: 8px 12px; gap: 12px;'), 'Keep the approved compact red total band');
+        assert(html.includes('padding: 8px 12px !important; gap: 12px;'), 'Keep the approved compact red total band');
         assert(html.includes('tbody tr:last-child { break-after: avoid-page; page-break-after: avoid; }'), 'Last item should stay with group subtotal');
       }
       assert.equal(html.includes(language === 'zh' ? '卖方 / 报价方' : 'Seller'), !imageHeader);
