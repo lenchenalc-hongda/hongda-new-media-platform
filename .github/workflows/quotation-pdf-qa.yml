@@ -39,7 +39,7 @@ jobs:
           done
           test "$(pdfinfo output/quotation-qa/short.pdf | awk '/Pages:/ {print $2}')" = 1
           test "$(pdfinfo output/quotation-qa/long.pdf | awk '/Pages:/ {print $2}')" -gt 1
-      - name: Reject orphaned section headings
+      - name: Reject orphaned section headings and subtotal-only pages
         run: |
           python3 - <<'PYCODE'
           import re
@@ -49,6 +49,14 @@ jobs:
                   lines = [line.strip() for line in page.splitlines() if line.strip()]
                   if lines:
                       assert not re.match(r"^\d+\.\s*(版费|花膜|机器)$", lines[-1]), (name, lines[-1])
+                  has_item = False
+                  for line in lines:
+                      if re.match(r"^\d+\.\s*(版费|花膜|机器)$", line):
+                          has_item = False
+                      if re.match(r"^\d+\s+(版费|花膜|机器)测试产品\s+\d+", line):
+                          has_item = True
+                      if "本大项小计" in line:
+                          assert has_item, (name, "subtotal stranded without any corresponding product row", line)
           PYCODE
       - uses: actions/upload-artifact@v4
         if: always()
