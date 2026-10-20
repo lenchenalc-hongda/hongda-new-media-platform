@@ -102,6 +102,9 @@ export default function DocumentPreview({ draft }: { draft: CommercialDocumentDr
                 {index + 1}. {safeDisplay(section.title, label('未命名大项', 'Untitled section'))}
               </div>}
               <table className="w-full table-fixed text-xs border-collapse">
+                {imageHeader && <colgroup>
+                  {[6, 36, 15, 18, 25].map(width => <col key={width} style={{ width: `${width}%` }} />)}
+                </colgroup>}
                 <thead className="bg-gray-100 text-gray-700">
                   {imageHeader && <tr><th colSpan={5} className="document-section-title bg-gray-700 text-white text-xs font-bold py-2 px-3 text-left">
                     {index + 1}. {safeDisplay(section.title, label('未命名大项', 'Untitled section'))}
