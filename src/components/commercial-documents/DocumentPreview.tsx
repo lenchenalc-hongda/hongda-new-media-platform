@@ -11,6 +11,24 @@ const printStyles = [
   '.commercial-print thead { display: table-header-group; }',
   '.commercial-print tr { break-inside: avoid; page-break-inside: avoid; }',
   '.commercial-print .no-split { break-inside: avoid; page-break-inside: avoid; }',
+  // Compact quotation density is scoped to Chinese quotations only.
+  // Brand artwork and machine/English document layouts remain unchanged.
+  '.commercial-print.compact-quotation header > div:last-child { padding-top: 9px; padding-bottom: 9px; }',
+  '.commercial-print.compact-quotation header > div:last-child h1 { font-size: 18px; line-height: 24px; }',
+  '.commercial-print.compact-quotation header > div:last-child p { margin-top: 2px; }',
+  '.commercial-print.compact-quotation > section.grid { row-gap: 5px; padding-bottom: 10px; }',
+  '.commercial-print.compact-quotation > main { padding-top: 11px; }',
+  '.commercial-print.compact-quotation > main > * + * { margin-top: 8px; }',
+  '.commercial-print.compact-quotation table .document-section-title { padding: 5px 9px; line-height: 16px; }',
+  '.commercial-print.compact-quotation table th { padding: 5px 8px; }',
+  '.commercial-print.compact-quotation table td { padding: 5px 8px; line-height: 1.45; }',
+  '.commercial-print.compact-quotation table tfoot td { padding-top: 4px; padding-bottom: 4px; }',
+  '.commercial-print.compact-quotation .document-total { padding: 8px 12px; gap: 12px; }',
+  '.commercial-print.compact-quotation .document-total > p { font-size: 16px; line-height: 22px; }',
+  '.commercial-print.compact-quotation .document-total div > p:first-child { font-size: 12px; }',
+  '.commercial-print.compact-quotation main > section:last-child > * + * { margin-top: 4px; }',
+  '.commercial-print.compact-quotation main > section:last-child h2 { padding-bottom: 4px; }',
+  '.commercial-print.compact-quotation > div:last-child { margin-top: 16px; }',
   '@media print {',
   ' html, body { background: #fff !important; }',
   ' body * { visibility: hidden !important; }',
@@ -48,7 +66,7 @@ export default function DocumentPreview({ draft }: { draft: CommercialDocumentDr
       : label('报价未含税，发票及税务安排另行确认。', 'Tax not included; invoice and tax arrangements to be confirmed separately.');
 
   return (
-    <article id="commercial-print" className="commercial-print bg-white text-gray-900 w-full max-w-[810px] mx-auto border border-gray-200 shadow-sm p-7 sm:p-10">
+    <article id="commercial-print" className={`commercial-print${imageHeader ? " compact-quotation" : ""} bg-white text-gray-900 w-full max-w-[810px] mx-auto border border-gray-200 shadow-sm p-7 sm:p-10`}>
       <style>{printStyles}</style>
       <header className="no-split">
         {imageHeader ? (
