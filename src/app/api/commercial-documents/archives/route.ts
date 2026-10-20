@@ -28,7 +28,7 @@ export async function GET(req: NextRequest) {
   const ctx = await context();
   if (!ctx) return respond({ ok: false, message: '未授权访问报价档案' }, 403);
   const { profile, db } = ctx;
-  const queryText = (req.nextUrl.searchParams.get('q') || '').trim().slice(0, 80).replace(/[%,_\\]/g, '');
+  const queryText = (req.nextUrl.searchParams.get('q') || '').trim().slice(0, 80).replace(/[^a-zA-Z0-9\u4e00-\u9fff -]/g, '');
   const page = Math.max(1, Math.min(1000, Number(req.nextUrl.searchParams.get('page')) || 1));
   let query = db.from('commercial_quotation_archives')
     .select('id,document_no,version,buyer_name,salesperson_name,project_name,document_date,currency,amount_minor,archived_at,owner_profile_id', { count: 'exact' })
