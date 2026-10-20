@@ -6,7 +6,7 @@ import {
   formatDocumentNumber, isGeneratedDocumentNumber, normalizeImportedDraft,
 } from '../../src/lib/commercial-documents/template';
 import { canRoleAccessPage, getPageSlugFromRoute } from '../../src/lib/auth/roles';
-import { activeNoticeTypes, documentProductNotices, inferNoticeType, sectionNoticeType } from '../../src/lib/commercial-documents/product-notices';
+import { activeNoticeTypes, documentProductNotices, inferNoticeType, sectionNoticeType, APPROVED_ZH_NOTICES } from '../../src/lib/commercial-documents/product-notices';
 import { getPortalForPath, getVisiblePortalGroups } from '../../src/lib/constants/navigation';
 
 assert.equal(moneyToMinor('3.60'), 360);
@@ -160,10 +160,10 @@ notices.sections = [
 ];
 assert.deepEqual(activeNoticeTypes(notices.sections), ['machine']);
 assert.deepEqual(documentProductNotices(notices).map(n => n.type), ['machine']);
-assert(documentProductNotices(notices)[0].text.includes('220V／60Hz'));
-assert(validateForPrint(notices).some(e => e.includes('保修期')), 'Machine quote needs actual warranty term');
+assert.equal(documentProductNotices(notices)[0].text, APPROVED_ZH_NOTICES.machine);
+assert.deepEqual(validateForPrint(notices), [], 'Fixed machine wording must not require unused quote-only voltage or warranty fields');
 notices.machineWarrantyPeriod = '18个月';
-assert(documentProductNotices(notices)[0].text.includes('18个月'));
+assert.equal(documentProductNotices(notices)[0].text, APPROVED_ZH_NOTICES.machine, 'Machine details cannot be injected into approved fixed notice');
 assert.deepEqual(validateForPrint(notices), []);
 notices.sections.push(
   { id: 'plate', title: '开版费', items: [{ ...blankItem('p1'), name: '铜版', unitPrice: '500' }] },
@@ -173,7 +173,7 @@ notices.sections.push(
 assert.deepEqual(activeNoticeTypes(notices.sections), ['machine', 'plate', 'gravure_film']);
 assert.equal(documentProductNotices(notices).length, 3, 'Repeated sections get one clause per type');
 assert(documentProductNotices(notices).find(n => n.type === 'plate')?.text.includes('18个月'));
-assert(documentProductNotices(notices).find(n => n.type === 'gravure_film')?.text.includes('±0.3mm'));
+assert(documentProductNotices(notices).find(n => n.type === 'gravure_film')?.text.includes('耐多轮洗碗机'));
 notices.sections.shift();
 assert.deepEqual(activeNoticeTypes(notices.sections), ['plate', 'gravure_film'], 'Remove machine group removes its notice');
 notices.sections.push(
@@ -218,5 +218,44 @@ const oldRestored = normalizeImportedDraft(older, '当前账号');
 assert.equal(oldRestored.machineVoltage, '220V');
 assert.equal(oldRestored.machineFrequency, '60Hz');
 assert.deepEqual(oldRestored.noticeOverrides, {});
+
+
+// Contractual words below are the user-approved canonical Chinese terms.
+// Deliberately strict about the unusual "1。" punctuation; do not autocorrect wording.
+const expectedApprovedZh = {
+  plate: [
+    '1。 铜版自制版完成之日起享有18个月质量保证期。正常保管及使用情况下，因制版质量产生的问题由我司负责免费修补；客户修改图稿、尺寸或工艺要求所产生的费用另行计算。',
+    '2. 超过质保期且连续12个月未下单的印版，期满后进行报废处理。印版实物归属及特殊保管要求以双方约定为准。',
+  ].join('\n'),
+  gravure_film: [
+    '1. 印刷颜色、图案尺寸及套印效果以双方确认的实物样品为准。正常生产过程中可能存在合理批次差异；有特殊色差、套印精度要求的，须于打样前确认具体验收标准。',
+    '2. 花膜的烫印结合力应依据客户实际产品材质、表面处理方式及烫印条件进行打样验证，并以双方确认的测试结果为准。',
+    '3. 如产品涉及耐磨、耐酒精、耐水、耐高温、耐多轮洗碗机等特殊性能要求，应在生产前提出并另行确认测试条件及验收标准。',
+  ].join('\n'),
+  digital_film: [
+    '数码热转印花膜依据客户最终确认的电子图稿及工艺要求生产。由于显示设备、印刷工艺及承印材料不同，实际印刷效果可能与屏幕显示存在一定差异；特殊色彩要求应通过实物打样确认。',
+    '产品附着力及耐磨、耐水、耐高温等特殊性能须根据实际材质及使用条件另行验证。未经双方确认的特殊性能，不视为默认产品验收要求。',
+  ].join('\n\n'),
+  machine: [
+    '设备电压、频率、气源及技术配置以双方最终确认的设备规格为准。设备生产能力应依据约定产品、花膜、夹具及测试条件进行验收。',
+    '设备在正常使用及维护条件下，因制造质量产生的零部件故障，按双方约定的保修期限和范围提供售后服务。易损件、安装培训及其他服务事项以合同约定为准。',
+  ].join('\n\n'),
+  processing: [
+    '客户提供的产品应符合双方确认的材质、尺寸及表面质量要求。我司在入库后进行约定的印前抽检；发现来料脏污、损伤或其他异常时，双方协商退回、清洁或另行处理。',
+    '常规加工建议额外预留订单数量3%的产品作为试产及工艺损耗备品，具体损耗责任按实际原因及双方约定处理。高难度或特殊工艺产品的备品比例应在生产前另行确认。',
+  ].join('\n\n'),
+};
+assert.deepEqual(APPROVED_ZH_NOTICES, expectedApprovedZh, 'Approved Chinese text must stay verbatim');
+for (const type of Object.keys(expectedApprovedZh) as Array<keyof typeof expectedApprovedZh>) {
+  const single = initialDraft('业务员');
+  single.sections = [{ id: type, title: type, noticeType: type, items: [{ ...blankItem('one'), name: '测试', unitPrice: '10' }] }];
+  assert.equal(documentProductNotices(single)[0].text, expectedApprovedZh[type], type + ' auto output must use approved text');
+  single.kind = 'machine_contract';
+  assert.equal(documentProductNotices(single)[0].text, expectedApprovedZh[type], type + ' machine contract output must use same approved text');
+  single.machineVoltage = '380V';
+  single.machineFrequency = '50Hz';
+  single.machineWarrantyPeriod = '3年';
+  assert.equal(documentProductNotices(single)[0].text, expectedApprovedZh[type], 'Old editable machine data must not alter the fixed final Chinese text');
+}
 
 console.log('commercial-document-template.test.ts: PASS');

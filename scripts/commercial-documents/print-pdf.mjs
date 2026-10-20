@@ -18,9 +18,27 @@ try {
     if (noticeTitles.length !== expectedTypes) {
       throw new Error('Unexpected product notice count: ' + JSON.stringify({ name, noticeTitles, expectedTypes }));
     }
-    if (name === 'all_types' && !['开版及铜版：', '凹版热转印花膜：', '数码热转印花膜：', '机器出厂及保修：', '热转印加工：']
+    if (name === 'all_types' && !['版费：', '凹版热转印花膜：', '数码热转印花膜：', '机器设备：', '热转印加工：']
       .every(title => noticeTitles.includes(title))) {
       throw new Error('The five product note categories are not all present: ' + noticeTitles.join('; '));
+    }
+    const noticeBodies = await page.locator('.document-product-note-body').allTextContents();
+    if (name === 'all_types') {
+      const requiredVerbatimParts = [
+        '铜版自制版完成之日起享有18个月质量保证期',
+        '超过质保期且连续12个月未下单的印版',
+        '耐多轮洗碗机',
+        '数码热转印花膜依据客户最终确认的电子图稿',
+        '设备电压、频率、气源及技术配置以双方最终确认的设备规格为准',
+        '常规加工建议额外预留订单数量3%的产品',
+      ];
+      const combined = noticeBodies.join(' ');
+      for (const phrase of requiredVerbatimParts) {
+        if (!combined.includes(phrase)) throw new Error('Approved process note absent from printed layout: ' + phrase);
+      }
+      if (combined.includes('设备默认供电：') || combined.includes('半个PANTONE色卡号')) {
+        throw new Error('Obsolete notice wording leaked into the new PDF');
+      }
     }
     // Verify actual print-media geometry, not just the desktop preview. The
     // print reset overrides Tailwind's .flex on direct <main> children.

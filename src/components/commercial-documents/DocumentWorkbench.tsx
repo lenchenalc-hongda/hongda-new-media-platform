@@ -556,24 +556,6 @@ export default function DocumentWorkbench({ userName }: { userName: string }) {
                   <p className="text-xs font-medium text-gray-800">
                     本单自动附加 {productNotices.length} 类：{productNotices.map(note => note.title).join('、')}
                   </p>
-                  {productNotices.some(note => note.type === 'machine') && (
-                    <div className="bg-amber-50 border border-amber-100 rounded-lg p-3 space-y-2">
-                      <p className="text-xs font-medium text-amber-900">机器出厂参数（须按本单设备实际配置核对）</p>
-                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                        <Field label="默认电压" value={draft.machineVoltage ?? '220V'}
-                          onChange={value => patch('machineVoltage', value)} placeholder="如：220V / 380V" />
-                        <Field label="默认频率" value={draft.machineFrequency ?? '60Hz'}
-                          onChange={value => patch('machineFrequency', value)} placeholder="如：50Hz / 60Hz" />
-                        {draft.kind === 'quotation' && (
-                          <Field required label="非人为损坏零部件保修期" value={draft.machineWarrantyPeriod ?? ''}
-                            onChange={value => patch('machineWarrantyPeriod', value)} placeholder="如：1年、18个月" />
-                        )}
-                      </div>
-                      {draft.kind === 'quotation' && !draft.machineWarrantyPeriod?.trim() && (
-                        <p className="text-xs text-amber-900">尚未填写保修期；预览显示待确认，正式导出 PDF 前会要求补齐。</p>
-                      )}
-                    </div>
-                  )}
                   {productNotices.map(note => (
                     <details key={note.type} className="border border-gray-200 rounded-md px-3 py-2">
                       <summary className="cursor-pointer flex justify-between gap-2 text-xs font-semibold text-gray-800">
@@ -586,7 +568,7 @@ export default function DocumentWorkbench({ userName }: { userName: string }) {
                           value={draft.noticeOverrides?.[note.type]?.[draft.language] ?? note.text}
                           onChange={event => editProductNotice(note.type, event.target.value)} />
                         <div className="flex items-center justify-between gap-2">
-                          <span className="text-[11px] text-gray-500">随 PDF 语言切换相应说明。机器参数变化时，请核对自定义内容。</span>
+                          <span className="text-[11px] text-gray-500">正式默认中文说明已统一；修改仅作用于当前单据，机器具体配置及保修期限在产品规格或合同条款中确认。</span>
                           <button type="button" className="text-xs text-blue-700 whitespace-nowrap"
                             onClick={() => resetProductNotice(note.type)}>恢复默认</button>
                         </div>
