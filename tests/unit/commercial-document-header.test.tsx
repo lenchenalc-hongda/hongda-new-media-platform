@@ -40,6 +40,7 @@ for (const kind of ['quotation', 'machine_contract'] as const) {
         assert(!html.includes('.compact-quotation &gt;'), 'HTML-escaped CSS combinators must never break print styles');
         assert(html.includes('document-total-amount'), 'Subtotal and total must retain clear text hierarchy');
         assert(html.includes('.document-total { padding: 8px 12px; gap: 12px; }'));
+        assert(html.includes('tbody tr:last-child { break-after: avoid-page; page-break-after: avoid; }'), 'Last item should stay with group subtotal');
       }
       assert.equal(html.includes(language === 'zh' ? '卖方 / 报价方' : 'Seller'), !imageHeader);
       for (const text of ['业务员测试', '客户测试', '联系人测试', '项目测试', formatMoney(documentAmount(draft).amountMinor, draft.currency)]) {
