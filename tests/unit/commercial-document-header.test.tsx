@@ -16,6 +16,7 @@ for (const kind of ['quotation', 'machine_contract'] as const) {
     for (const counts of [[2], [4, 3, 3], [20, 20, 20]]) {
       const draft = initialDraft('业务员测试');
       Object.assign(draft, { kind, language, buyerName: '客户测试', buyerContact: '联系人测试', projectName: '项目测试' });
+      draft.machineWarrantyPeriod = '1年';
       draft.sections = counts.map((count, i) => ({
         id: String(i), title: ['版费', '花膜', '机器'][i],
         items: Array.from({ length: count }, (_, j) => ({
@@ -24,6 +25,17 @@ for (const kind of ['quotation', 'machine_contract'] as const) {
       }));
       const html = renderToStaticMarkup(React.createElement(DocumentPreview, { draft }));
       const imageHeader = kind === 'quotation' && language === 'zh';
+      const clauseCount = (html.match(/class="document-product-note text-gray-800"/g) || []).length;
+      assert.equal(clauseCount, counts.length === 1 ? 1 : 3, 'Terms must follow actual product categories without duplicates');
+      assert(html.includes(language === 'zh' ? '产品及工艺说明' : 'PRODUCT / PROCESS NOTES'));
+      assert(html.includes(language === 'zh' ? '铜版自开版日起保质期18个月' : '18-month quality guarantee'));
+      if (counts.length === 1) {
+        assert(!html.includes(language === 'zh' ? '设备默认供电：' : 'Standard power:'));
+        assert(!html.includes(language === 'zh' ? '烫印结合力应依据' : 'Transfer adhesion must'));
+      } else {
+        assert(html.includes(language === 'zh' ? '±0.3mm' : '±0.3 mm'));
+        assert(html.includes(language === 'zh' ? '220V／60Hz' : '220V / 60Hz'));
+      }
       assert.equal(html.includes(headerPath), imageHeader && language === 'zh');
       assert.equal(html.includes('/document-headers/hongda-quotation-header-en.jpg'), false);
       assert.equal(html.includes('/hongda-os-original-emblem.png'), !imageHeader);
