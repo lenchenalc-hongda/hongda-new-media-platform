@@ -41,7 +41,7 @@ try {
       ];
       if (noticeBodies.length !== finalNumbering.length) throw new Error('Unexpected five-category body count');
       for (let i = 0; i < finalNumbering.length; i++) {
-        const normalized = noticeBodies[i].replace(/\\s+/g, ' ');
+        const normalized = noticeBodies[i].replace(/\s+/g, ' ');
         for (const expected of finalNumbering[i]) {
           if (!normalized.includes(expected)) throw new Error('Wrong final clause numbering: ' + JSON.stringify({ i, expected, actual: normalized }));
         }
