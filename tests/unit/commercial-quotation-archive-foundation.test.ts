@@ -17,7 +17,15 @@ for (const clause of [
   'REVOKE INSERT, UPDATE, DELETE',
   'snapshot jsonb NOT NULL',
   'pdf_storage_path text NOT NULL UNIQUE',
+  'CONSTRAINT fk_commercial_quotation_owner FOREIGN KEY (owner_profile_id)',
+  'REFERENCES public.profiles(id)',
+  'CREATE TRIGGER commercial_quotation_owner_org_guard',
+  'BEFORE INSERT OR UPDATE OF owner_profile_id, org_id',
+  'p.org_id = NEW.org_id',
+  'p.is_active = true',
 ]) assert(migration.includes(clause), 'Missing archive database protection: ' + clause);
+
+assert(!migration.includes('REFERENCES public.profiles(id,org_id)'), 'Do not assume a composite unique key in profiles');
 
 for (const clause of [
   "user.authSource !== 'supabase'",
