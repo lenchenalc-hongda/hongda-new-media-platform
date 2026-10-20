@@ -11,24 +11,26 @@ const printStyles = [
   '.commercial-print thead { display: table-header-group; }',
   '.commercial-print tr { break-inside: avoid; page-break-inside: avoid; }',
   '.commercial-print .no-split { break-inside: avoid; page-break-inside: avoid; }',
-  // Compact quotation density is scoped to Chinese quotations only.
-  // Brand artwork and machine/English document layouts remain unchanged.
-  '.commercial-print.compact-quotation header > div:last-child { padding-top: 9px; padding-bottom: 9px; }',
-  '.commercial-print.compact-quotation header > div:last-child h1 { font-size: 18px; line-height: 24px; }',
-  '.commercial-print.compact-quotation header > div:last-child p { margin-top: 2px; }',
-  '.commercial-print.compact-quotation > section.grid { row-gap: 5px; padding-bottom: 10px; }',
-  '.commercial-print.compact-quotation > main { padding-top: 11px; }',
-  '.commercial-print.compact-quotation > main > * + * { margin-top: 8px; }',
+  // Compact styling applies only to Chinese quotations. Avoid '>' CSS combinators:
+  // SSR encodes them as entities inside <style>, causing print/PDF discrepancies.
+  '.commercial-print.compact-quotation header .py-4 { padding-top: 9px; padding-bottom: 9px; }',
+  '.commercial-print.compact-quotation header .py-4 h1 { font-size: 18px; line-height: 24px; }',
+  '.commercial-print.compact-quotation header .py-4 p { margin-top: 2px; }',
+  '.commercial-print.compact-quotation section.grid { row-gap: 5px; padding-bottom: 10px; }',
+  '.commercial-print.compact-quotation .document-body { padding-top: 11px; }',
+  '.commercial-print.compact-quotation .document-section + .document-section { margin-top: 8px; }',
+  '.commercial-print.compact-quotation .document-section + .document-total { margin-top: 8px; }',
+  '.commercial-print.compact-quotation .document-total + .document-terms { margin-top: 10px; }',
   '.commercial-print.compact-quotation table .document-section-title { padding: 5px 9px; line-height: 16px; }',
   '.commercial-print.compact-quotation table th { padding: 5px 8px; }',
   '.commercial-print.compact-quotation table td { padding: 5px 8px; line-height: 1.45; }',
   '.commercial-print.compact-quotation table tfoot td { padding-top: 4px; padding-bottom: 4px; }',
   '.commercial-print.compact-quotation .document-total { padding: 8px 12px; gap: 12px; }',
-  '.commercial-print.compact-quotation .document-total > p { font-size: 16px; line-height: 22px; }',
-  '.commercial-print.compact-quotation .document-total div > p:first-child { font-size: 12px; }',
-  '.commercial-print.compact-quotation main > section:last-child > * + * { margin-top: 4px; }',
-  '.commercial-print.compact-quotation main > section:last-child h2 { padding-bottom: 4px; }',
-  '.commercial-print.compact-quotation > div:last-child { margin-top: 16px; }',
+  '.commercial-print.compact-quotation .document-total-amount { font-size: 16px; line-height: 22px; }',
+  '.commercial-print.compact-quotation .document-total-label { font-size: 12px; }',
+  '.commercial-print.compact-quotation .document-terms p { margin-top: 4px; }',
+  '.commercial-print.compact-quotation .document-terms h2 { padding-bottom: 4px; }',
+  '.commercial-print.compact-quotation .document-draft-notice { margin-top: 16px; }',
   '@media print {',
   ' html, body { background: #fff !important; }',
   ' body * { visibility: hidden !important; }',
@@ -111,11 +113,11 @@ export default function DocumentPreview({ draft }: { draft: CommercialDocumentDr
         <p><strong>{label('币种', 'Currency')}：</strong>{draft.currency}</p>
         <p><strong>{label('销售区域', 'Market')}：</strong>{draft.market === 'domestic' ? label('内销', 'Domestic') : label('外销', 'Export')}</p>
       </section>
-      <main className="pt-5 space-y-5">
+      <main className="document-body pt-5 space-y-5">
         {draft.sections.map((section, index) => {
           const subtotal = sectionAmount(section);
           return (
-            <section key={section.id}>
+            <section key={section.id} className="document-section">
               {!imageHeader && <div className="document-section-title bg-gray-700 text-white text-xs font-bold py-2 px-3">
                 {index + 1}. {safeDisplay(section.title, label('未命名大项', 'Untitled section'))}
               </div>}
@@ -171,14 +173,14 @@ export default function DocumentPreview({ draft }: { draft: CommercialDocumentDr
         })}
         <div className="document-total no-split bg-red-700 text-white px-4 py-3 flex justify-between items-center gap-4">
           <div>
-            <p className="font-bold text-sm">{total.catalogLines
+            <p className="document-total-label font-bold text-sm">{total.catalogLines
               ? label('已确定金额合计（不含单价目录）', 'Confirmed items total (catalog excluded)')
               : label('合同/报价总金额', 'TOTAL AMOUNT')}</p>
             {total.catalogLines > 0 && <p className="text-[10px] mt-1">{label('单价目录仅供选择，不计入合同/报价金额。', 'Catalog prices are not included in the total.')}</p>}
           </div>
-          <p className="text-lg font-bold whitespace-nowrap">{total.amountLines ? amountText(total.amountMinor) : '—'}</p>
+          <p className="document-total-amount text-lg font-bold whitespace-nowrap">{total.amountLines ? amountText(total.amountMinor) : '—'}</p>
         </div>
-        <section className="no-split text-xs space-y-2">
+        <section className="document-terms no-split text-xs space-y-2">
           <h2 className="font-bold text-gray-800 border-b border-gray-300 pb-2">
             {label('商务及税务说明', 'TERMS & CONDITIONS')}
           </h2>
@@ -204,7 +206,7 @@ export default function DocumentPreview({ draft }: { draft: CommercialDocumentDr
           </div>
         </footer>
       )}
-      <div className="no-split mt-8 pt-2 border-t border-gray-200 text-[10px] text-gray-500 text-center">
+      <div className="document-draft-notice no-split mt-8 pt-2 border-t border-gray-200 text-[10px] text-gray-500 text-center">
         {label('模板草稿 · 需核对正式主体、价格、合同条款及收款账户后方可对外使用', 'DRAFT TEMPLATE · Verify legal entities, prices, terms and payment details before external use')}
       </div>
     </article>
