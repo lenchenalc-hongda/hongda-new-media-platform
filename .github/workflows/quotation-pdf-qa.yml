@@ -39,6 +39,17 @@ jobs:
           done
           test "$(pdfinfo output/quotation-qa/short.pdf | awk '/Pages:/ {print $2}')" = 1
           test "$(pdfinfo output/quotation-qa/long.pdf | awk '/Pages:/ {print $2}')" -gt 1
+      - name: Reject orphaned section headings
+        run: |
+          python3 - <<'PYCODE'
+          import re
+          from pathlib import Path
+          for name in ["short", "medium", "long"]:
+              for page in Path(f"output/quotation-qa/{name}.txt").read_text().split("\f"):
+                  lines = [line.strip() for line in page.splitlines() if line.strip()]
+                  if lines:
+                      assert not re.match(r"^\d+\.\s*(版费|花膜|机器)$", lines[-1]), (name, lines[-1])
+          PYCODE
       - uses: actions/upload-artifact@v4
         if: always()
         with:
