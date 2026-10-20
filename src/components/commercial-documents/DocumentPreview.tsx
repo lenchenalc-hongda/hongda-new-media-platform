@@ -25,6 +25,8 @@ const printStyles = [
   '.commercial-print.compact-quotation table th { padding: 5px 8px; }',
   '.commercial-print.compact-quotation table td { padding: 5px 8px; line-height: 1.45; }',
   '.commercial-print.compact-quotation table tfoot td { padding-top: 4px; padding-bottom: 4px; }',
+  '.commercial-print.compact-quotation table tbody tr:last-child { break-after: avoid-page; page-break-after: avoid; }',
+  '.commercial-print.compact-quotation table tfoot { break-inside: avoid; page-break-inside: avoid; }',
   '.commercial-print.compact-quotation .document-total { padding: 8px 12px; gap: 12px; }',
   '.commercial-print.compact-quotation .document-total-amount { font-size: 16px; line-height: 22px; }',
   '.commercial-print.compact-quotation .document-total-label { font-size: 12px; }',
