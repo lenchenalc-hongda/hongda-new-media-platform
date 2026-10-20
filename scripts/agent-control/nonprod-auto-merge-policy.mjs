@@ -46,9 +46,9 @@ export function inspectNonprodAutoMerge({
   if (!project || !Number.isInteger(project.control_issue)) deny('PROJECT_UNREGISTERED');
   if (!control || control.status !== 'APPROVED_FOR_MERGE'
       || control.pm_review !== 'PASS'
-      || control.owner_action_required === true
+      || control.owner_action_required !== false
       || control.auto_production !== false
-      || control.production_execution_authorized === true) deny('PM_OR_HUMAN_GATE');
+      || control.production_execution_authorized !== false) deny('PM_OR_HUMAN_GATE');
   if (control?.active_pr !== pr?.number
       || control?.active_branch !== pr?.head?.ref
       || control?.verified_head !== pr?.head?.sha
