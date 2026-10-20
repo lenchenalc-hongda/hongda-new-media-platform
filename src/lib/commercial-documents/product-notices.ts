@@ -84,7 +84,6 @@ function defaultNoticeText(draft: CommercialDocumentDraft, type: ProductNoticeTy
     digital_film: 'Digital transfer film is produced to the colors in the customer’s finally approved artwork file. Any special color-matching requirements must be provided and confirmed by both parties before production.',
     processing: 'Incoming products must be clean. We conduct incoming pre-printing inspections; contamination beyond the mutually agreed threshold requires return or separate handling agreement. A 3% spare allowance is normally reserved for processing, with efforts to minimize usage; difficult products may require a separately agreed higher allowance.',
   };
-  if (type === 'machine') return '';
   return en ? english[type] : zh[type];
 }
 
