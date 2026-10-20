@@ -6,6 +6,7 @@ import {
   formatDocumentNumber, isGeneratedDocumentNumber, normalizeImportedDraft,
 } from '../../src/lib/commercial-documents/template';
 import { canRoleAccessPage, getPageSlugFromRoute } from '../../src/lib/auth/roles';
+import { activeNoticeTypes, documentProductNotices, inferNoticeType, sectionNoticeType } from '../../src/lib/commercial-documents/product-notices';
 import { getPortalForPath, getVisiblePortalGroups } from '../../src/lib/constants/navigation';
 
 assert.equal(moneyToMinor('3.60'), 360);
@@ -49,6 +50,7 @@ assert.equal(sectionAmount(draft.sections[1]).amountMinor, 360000);
 assert.equal(sectionAmount(draft.sections[1]).catalogLines, 1);
 assert.equal(documentAmount(draft).amountMinor, 2260000);
 assert.equal(documentAmount(draft).catalogLines, 1);
+draft.machineWarrantyPeriod = '1年';
 assert.deepEqual(validateForPrint(draft), []);
 
 draft.taxStatement = 'vat13';
