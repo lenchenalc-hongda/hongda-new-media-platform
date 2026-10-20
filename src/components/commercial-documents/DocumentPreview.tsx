@@ -37,8 +37,12 @@ const printStyles = [
   '.commercial-print.compact-quotation .document-terms h2 { padding-bottom: 4px; }',
   // Plain, compact product notices; each paragraph stays together across A4 page breaks.
   '.commercial-print .document-product-notices { margin-top: 9px !important; font-size: 11px; line-height: 1.5; }',
-  '.commercial-print .document-product-notices h2 { padding-bottom: 4px; margin-bottom: 4px; break-after: avoid-page; page-break-after: avoid; }',
-  '.commercial-print .document-product-note { margin-top: 4px; break-inside: avoid; page-break-inside: avoid; }',
+  '.commercial-print .document-product-notices h2 { padding-bottom: 4px; margin-bottom: 3px; break-after: avoid-page; page-break-after: avoid; }',
+  '.commercial-print .document-product-note { display: grid; grid-template-columns: 120px minmax(0, 1fr); column-gap: 9px; padding: 5px 0; margin-top: 0; border-bottom: 1px solid #e5e7eb; break-inside: avoid; page-break-inside: avoid; }',
+  '.commercial-print .document-product-note:last-child { border-bottom: none; }',
+  '.commercial-print .document-product-note-label { font-weight: 700; line-height: 1.5; }',
+  '.commercial-print .document-product-note-body { min-width: 0; white-space: pre-wrap; line-height: 1.5; overflow-wrap: anywhere; }',
+  '@media screen and (max-width: 560px) { .commercial-print .document-product-note { display: block; } .commercial-print .document-product-note-label { display: block; margin-bottom: 2px; } }',
   '@media print {',
   ' html, body { background: #fff !important; }',
   ' body * { visibility: hidden !important; }',
@@ -208,9 +212,10 @@ export default function DocumentPreview({ draft }: { draft: CommercialDocumentDr
               {label('产品及工艺说明', 'PRODUCT / PROCESS NOTES')}
             </h2>
             {productNotices.map(note => (
-              <p key={note.type} className="document-product-note text-gray-800">
-                <strong>{note.title}：</strong><span className="whitespace-pre-wrap">{note.text}</span>
-              </p>
+              <div key={note.type} className="document-product-note text-gray-800">
+                <strong className="document-product-note-label">{note.title}：</strong>
+                <span className="document-product-note-body">{note.text}</span>
+              </div>
             ))}
           </section>
         )}
