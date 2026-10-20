@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [master, main]
+    branches: [master, main, integration/hongda-dev]
   pull_request:
-    branches: [master, main]
+    branches: [master, main, integration/hongda-dev]
 
 jobs:
   lint-and-audit:
@@ -144,6 +144,9 @@ jobs:
 
       - name: Agent Control READY general runner tests
         run: pnpm exec tsx tests/unit/agent-control-ready-general-runner.test.ts
+
+      - name: Non-Production auto-merge safety regression checks
+        run: node tests/unit/agent-control-nonprod-merge.test.mjs
 
       - name: Agent Control Reliability V2 syntax checks
         run: |
