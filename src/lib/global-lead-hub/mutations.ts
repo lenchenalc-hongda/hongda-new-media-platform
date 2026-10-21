@@ -3,6 +3,8 @@ import {
   type GlhLeadAssignmentInput,
   type GlhManualLeadCreateInput,
   type GlhProductionManualIntakeInput,
+  type GlhManualHumanStageInput,
+  type GlhManualWorkCompletionInput,
   type GlhTaskOrFollowupInput,
 } from './validation';
 import { buildGlhHumanMessageIntent } from './human-messaging';
@@ -151,6 +153,34 @@ export async function createGlhProductionManualLead(
     p_quantity: input.quantity ?? null,
     p_notes: input.notes ?? null,
     p_source_detail: input.sourceDetail,
+  });
+  return requireRpcData(result);
+}
+
+/** Explicit audited human stage change; SQL enforces owner/organization and manual provenance. */
+export async function changeGlhManualHumanStage(
+  client: GlhMutationClient,
+  leadId: string,
+  input: GlhManualHumanStageInput,
+) {
+  const result = await client.rpc('glh_change_manual_lead_stage', {
+    p_lead_id: leadId,
+    p_expected_version: input.expectedVersion,
+    p_stage: input.stage,
+    p_reason: input.reason ?? null,
+  });
+  return requireRpcData(result);
+}
+
+/** Complete assigned work with version check; never invokes external providers. */
+export async function finishGlhManualWork(
+  client: GlhMutationClient,
+  input: GlhManualWorkCompletionInput,
+) {
+  const result = await client.rpc('glh_finish_manual_work', {
+    p_work_kind: input.kind,
+    p_work_id: input.workId,
+    p_expected_version: input.expectedVersion,
   });
   return requireRpcData(result);
 }
