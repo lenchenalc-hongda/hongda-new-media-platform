@@ -135,6 +135,29 @@ BEGIN
     );
   END IF;
 
+  -- Guard two near-simultaneous human submissions using the same email/phone.
+  -- Without per-contact transaction locks both can pass the EXISTS check before
+  -- either transaction inserts; serialization by request key alone is insufficient.
+  -- Identical emails/phones always lock the same keys, in a stable order to avoid
+  -- deadlocks when one request contains both contact fields.
+  IF v_email IS NOT NULL AND v_phone IS NOT NULL THEN
+    PERFORM pg_advisory_xact_lock(k.key)
+    FROM (SELECT DISTINCT hashtextextended(
+      v_actor.org_id::text || ':glh:contact:' || token, 0
+    ) AS key
+      FROM (VALUES ('email:' || v_email),('phone:' || v_phone)) AS contact(token)
+    ) AS k
+    ORDER BY k.key;
+  ELSIF v_email IS NOT NULL THEN
+    PERFORM pg_advisory_xact_lock(hashtextextended(
+      v_actor.org_id::text || ':glh:contact:email:' || v_email,0
+    ));
+  ELSE
+    PERFORM pg_advisory_xact_lock(hashtextextended(
+      v_actor.org_id::text || ':glh:contact:phone:' || v_phone,0
+    ));
+  END IF;
+
   -- A prior contact owned by another Sales must never be silently reassigned.
   -- Generic conflict response deliberately does not expose that user's identity.
   IF EXISTS (
