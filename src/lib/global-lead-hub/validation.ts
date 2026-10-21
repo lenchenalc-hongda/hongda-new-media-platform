@@ -58,6 +58,49 @@ export const glhManualLeadCreateSchema = z.object({
   }
 });
 
+/** Real authenticated manual intake, independent of the Phase 2 test/dev-only guard. */
+export const GLH_MANUAL_PRODUCTION_SOURCES = [
+  'EXHIBITION', 'WEBSITE', 'REFERRAL', 'OUTREACH', 'SOCIAL', 'OTHER',
+] as const;
+
+export const glhProductionManualIntakeSchema = z.object({
+  requestKey: z.string().uuid(),
+  displayName: z.string().trim().min(1).max(200),
+  companyName: optionalTrimmed(300),
+  countryCode: optionalTrimmed(16),
+  whatsapp: optionalTrimmed(64),
+  email: z.string().trim().email().max(320).nullable().optional()
+    .transform(value => value || null),
+  requirementType: z.enum(GLH_REQUIREMENT_TYPES).nullable().optional()
+    .transform(value => value || null),
+  ownerProfileId: z.string().uuid().nullable().optional()
+    .transform(value => value || null),
+  product: optionalTrimmed(300),
+  material: optionalTrimmed(300),
+  quantity: optionalTrimmed(200),
+  notes: optionalTrimmed(2000),
+  sourceDetail: z.enum(GLH_MANUAL_PRODUCTION_SOURCES),
+}).strict().superRefine((input, ctx) => {
+  if (!input.whatsapp && !input.email) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['whatsapp'],
+      message: 'WhatsApp or email is required for deduplication and follow-up',
+    });
+  }
+  if (input.whatsapp) {
+    const digits = input.whatsapp.replace(/[^0-9]/g, '');
+    if (digits.length < 7 || digits.length > 15) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['whatsapp'],
+        message: 'International phone number must contain 7–15 digits',
+      });
+    }
+  }
+});
+export type GlhProductionManualIntakeInput = z.infer<typeof glhProductionManualIntakeSchema>;
+
 export const glhLeadAssignmentSchema = z.object({
   assigneeProfileId: z.string().uuid(),
   expectedVersion: z.number().int().min(1),
