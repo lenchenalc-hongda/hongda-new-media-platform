@@ -170,6 +170,7 @@ jobs:
           pnpm exec tsx tests/unit/global-lead-hub-phase5-handoff-persistence.test.ts
           pnpm exec tsx tests/unit/global-lead-hub-phase9-production-readiness.test.ts
           pnpm exec tsx tests/unit/global-lead-hub-stage1-production-manual-intake.test.ts
+          pnpm exec tsx tests/unit/global-lead-hub-stage1-human-workflow.test.ts
 
       - name: Check server-only imports
         run: bash scripts/check-server-imports.sh
@@ -252,7 +253,7 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y postgresql-client
-      - name: Replay five GLH migrations, verify RLS and Production manual intake
+      - name: Replay six GLH migrations, manual intake, human closure and RLS
         run: |
           set -euo pipefail
           psql -X -v ON_ERROR_STOP=1 -f tests/sql/glh_stage1_synthetic_supabase_baseline.sql
@@ -261,5 +262,7 @@ jobs:
           psql -X -v ON_ERROR_STOP=1 -f supabase/migrations/20261010182400_global_lead_hub_phase3_whatsapp_inbound.sql
           psql -X -v ON_ERROR_STOP=1 -f supabase/migrations/20261011181500_global_lead_hub_phase5_handoff_persistence.sql
           psql -X -v ON_ERROR_STOP=1 -f supabase/migrations/20261021120000_global_lead_hub_stage1_manual_production_intake.sql
+          psql -X -v ON_ERROR_STOP=1 -f supabase/migrations/20261021135000_global_lead_hub_stage1_human_workflow.sql
           psql -X -v ON_ERROR_STOP=1 -f tests/sql/glh_stage1_synthetic_rls_smoke.sql
           psql -X -v ON_ERROR_STOP=1 -f tests/sql/glh_stage1_manual_production_intake_smoke.sql
+          psql -X -v ON_ERROR_STOP=1 -f tests/sql/glh_stage1_human_workflow_smoke.sql
