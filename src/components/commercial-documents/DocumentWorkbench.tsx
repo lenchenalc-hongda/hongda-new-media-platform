@@ -1,5 +1,6 @@
-import Link from 'next/link';
 'use client';
+
+import Link from 'next/link';
 
 import { useEffect, useRef, useState, type ChangeEvent, type ReactNode } from 'react';
 import DocumentPreview from './DocumentPreview';
