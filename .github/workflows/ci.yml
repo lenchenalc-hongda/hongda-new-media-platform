@@ -220,3 +220,43 @@ jobs:
       - name: Stop server
         if: always()
         run: kill $(lsof -t -i:3000) 2>/dev/null || true
+
+  # Disposable PostgreSQL 17 container. No Supabase/Production credentials,
+  # no external provider, and no remote database is touched.
+  glh-stage1-postgres-synthetic:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: glh-ci-only
+          POSTGRES_DB: glh_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d glh_ci"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      PGHOST: localhost
+      PGPORT: "5432"
+      PGUSER: postgres
+      PGPASSWORD: glh-ci-only
+      PGDATABASE: glh_ci
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y postgresql-client
+      - name: Replay four GLH migrations on disposable database and verify RLS
+        run: |
+          set -euo pipefail
+          psql -X -v ON_ERROR_STOP=1 -f tests/sql/glh_stage1_synthetic_supabase_baseline.sql
+          psql -X -v ON_ERROR_STOP=1 -f supabase/migrations/20261009181000_global_lead_hub_phase1_foundation.sql
+          psql -X -v ON_ERROR_STOP=1 -f supabase/migrations/20261010074500_global_lead_hub_phase2_core_human_ui.sql
+          psql -X -v ON_ERROR_STOP=1 -f supabase/migrations/20261010182400_global_lead_hub_phase3_whatsapp_inbound.sql
+          psql -X -v ON_ERROR_STOP=1 -f supabase/migrations/20261011181500_global_lead_hub_phase5_handoff_persistence.sql
+          psql -X -v ON_ERROR_STOP=1 -f tests/sql/glh_stage1_synthetic_rls_smoke.sql
