@@ -252,7 +252,7 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y postgresql-client
-      - name: Replay four GLH migrations on disposable database and verify RLS
+      - name: Replay five GLH migrations, verify RLS and Production manual intake
         run: |
           set -euo pipefail
           psql -X -v ON_ERROR_STOP=1 -f tests/sql/glh_stage1_synthetic_supabase_baseline.sql
