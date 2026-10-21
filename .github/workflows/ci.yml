@@ -169,6 +169,7 @@ jobs:
           pnpm exec tsx tests/unit/global-lead-hub-phase3-whatsapp-inbound.test.ts
           pnpm exec tsx tests/unit/global-lead-hub-phase5-handoff-persistence.test.ts
           pnpm exec tsx tests/unit/global-lead-hub-phase9-production-readiness.test.ts
+          pnpm exec tsx tests/unit/global-lead-hub-stage1-production-manual-intake.test.ts
 
       - name: Check server-only imports
         run: bash scripts/check-server-imports.sh
@@ -259,4 +260,6 @@ jobs:
           psql -X -v ON_ERROR_STOP=1 -f supabase/migrations/20261010074500_global_lead_hub_phase2_core_human_ui.sql
           psql -X -v ON_ERROR_STOP=1 -f supabase/migrations/20261010182400_global_lead_hub_phase3_whatsapp_inbound.sql
           psql -X -v ON_ERROR_STOP=1 -f supabase/migrations/20261011181500_global_lead_hub_phase5_handoff_persistence.sql
+          psql -X -v ON_ERROR_STOP=1 -f supabase/migrations/20261021120000_global_lead_hub_stage1_manual_production_intake.sql
           psql -X -v ON_ERROR_STOP=1 -f tests/sql/glh_stage1_synthetic_rls_smoke.sql
+          psql -X -v ON_ERROR_STOP=1 -f tests/sql/glh_stage1_manual_production_intake_smoke.sql
