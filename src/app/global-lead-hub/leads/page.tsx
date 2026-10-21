@@ -15,7 +15,7 @@ import {
   loadGlhLeads,
   resolveGlhAccessContext,
 } from '@/lib/global-lead-hub/server';
-import { parseGlhLeadListFilters } from '@/lib/global-lead-hub/validation';
+import { GLH_MANUAL_PRODUCTION_SOURCES, parseGlhLeadListFilters } from '@/lib/global-lead-hub/validation';
 
 export const dynamic = 'force-dynamic';
 
@@ -86,9 +86,21 @@ export default async function GlobalLeadHubLeadsPage({
           </label>
           <FilterSelect
             name="source"
-            label="Source"
+            label="Source platform"
             defaultValue={value(searchParams.source)}
             options={GLH_SOURCE_PLATFORMS.map(item => ({ value: item, label: item }))}
+          />
+          <FilterSelect
+            name="manualSource"
+            label="手工线索来源"
+            defaultValue={value(searchParams.manualSource)}
+            options={GLH_MANUAL_PRODUCTION_SOURCES.map(item => ({
+              value: item,
+              label: ({
+                EXHIBITION:'展会',WEBSITE:'网站',REFERRAL:'转介绍',
+                OUTREACH:'主动开发',SOCIAL:'社交媒体',OTHER:'其他',
+              } as Record<string,string>)[item] || item,
+            }))}
           />
           <FilterSelect
             name="requirement"
