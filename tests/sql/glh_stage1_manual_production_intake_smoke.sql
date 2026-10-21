@@ -15,7 +15,7 @@ BEGIN
       'EXECUTE')
   THEN RAISE EXCEPTION 'Anonymous manual intake RPC exposed'; END IF;
   IF NOT has_function_privilege('authenticated',
-      'public.glh_create_manual_production_lead(uuid,text,text,text,text,text,text,uuid,text,text,text,text,text,text)',
+      'public.glh_create_manual_production_lead(uuid,text,text,text,text,text,text,uuid,text,text,text,text,text)',
       'EXECUTE')
   THEN RAISE EXCEPTION 'Authorized intake RPC grant missing'; END IF;
   IF NOT (SELECT relrowsecurity FROM pg_class WHERE oid='public.glh_manual_intake_requests'::regclass)
