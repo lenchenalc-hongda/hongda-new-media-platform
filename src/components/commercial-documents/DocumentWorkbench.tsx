@@ -1,3 +1,4 @@
+import Link from 'next/link';
 'use client';
 
 import { useEffect, useRef, useState, type ChangeEvent, type ReactNode } from 'react';
@@ -337,10 +338,11 @@ export default function DocumentWorkbench({ userName }: { userName: string }) {
       <div className="commercial-top-bar flex flex-wrap items-start justify-between gap-3">
         <div>
           <p className="text-xs text-gray-500 mb-1">HongdaOS / 商务单据中心</p>
-          <h1 className="text-xl font-bold text-gray-900">报价单与机器合同模板</h1>
+          <h1 className="text-xl font-bold text-gray-900">报价单、机器合同与对账单</h1>
           <p className="text-xs text-gray-500 mt-1">登录用户：{userName} · 所有已登录员工可使用</p>
         </div>
         <div className="flex gap-2 flex-wrap">
+          <Link href="/commercial-documents/statement" className="btn-primary btn-sm">+ 月度对账单（中文）</Link>
           <button type="button" className="btn-secondary btn-sm" onClick={saveJson}>下载草稿 JSON</button>
           <button type="button" className="btn-secondary btn-sm" onClick={() => fileRef.current?.click()}>导入草稿</button>
           <input aria-label="导入报价草稿 JSON" className="hidden" type="file" ref={fileRef} accept=".json,application/json" onChange={importJson} />
