@@ -1,6 +1,5 @@
 'use client';
 
-import Link from 'next/link';
 
 import { useEffect, useRef, useState, type ChangeEvent, type ReactNode } from 'react';
 import DocumentPreview from './DocumentPreview';
@@ -343,7 +342,6 @@ export default function DocumentWorkbench({ userName }: { userName: string }) {
           <p className="text-xs text-gray-500 mt-1">登录用户：{userName} · 所有已登录员工可使用</p>
         </div>
         <div className="flex gap-2 flex-wrap">
-          <Link href="/commercial-documents/statement" className="btn-primary btn-sm">+ 月度对账单（中文）</Link>
           <button type="button" className="btn-secondary btn-sm" onClick={saveJson}>下载草稿 JSON</button>
           <button type="button" className="btn-secondary btn-sm" onClick={() => fileRef.current?.click()}>导入草稿</button>
           <input aria-label="导入报价草稿 JSON" className="hidden" type="file" ref={fileRef} accept=".json,application/json" onChange={importJson} />
