@@ -101,6 +101,33 @@ export const glhProductionManualIntakeSchema = z.object({
 });
 export type GlhProductionManualIntakeInput = z.infer<typeof glhProductionManualIntakeSchema>;
 
+/** Human-only lifecycle; no AI/customer-provider state transitions in Stage 1. */
+export const GLH_MANUAL_HUMAN_STAGES = [
+  'NEW', 'HUMAN_FOLLOWING', 'QUOTATION', 'SAMPLE', 'NEGOTIATION',
+  'WON', 'LOST', 'DORMANT', 'INVALID',
+] as const;
+
+export const glhManualHumanStageSchema = z.object({
+  expectedVersion: z.number().int().min(1),
+  stage: z.enum(GLH_MANUAL_HUMAN_STAGES),
+  reason: z.string().trim().max(500).nullable().optional()
+    .transform(value => value || null),
+}).strict().superRefine((value, ctx) => {
+  if (['LOST','INVALID'].includes(value.stage) && (!value.reason || value.reason.length < 4)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom, path: ['reason'],
+      message: 'Reason of at least four characters required for LOST or INVALID',
+    });
+  }
+});
+export const glhManualWorkCompletionSchema = z.object({
+  workId: z.string().uuid(),
+  kind: z.enum(['TASK','FOLLOWUP']),
+  expectedVersion: z.number().int().min(1),
+}).strict();
+export type GlhManualHumanStageInput = z.infer<typeof glhManualHumanStageSchema>;
+export type GlhManualWorkCompletionInput = z.infer<typeof glhManualWorkCompletionSchema>;
+
 export const glhLeadAssignmentSchema = z.object({
   assigneeProfileId: z.string().uuid(),
   expectedVersion: z.number().int().min(1),
