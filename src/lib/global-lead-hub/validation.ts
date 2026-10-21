@@ -6,6 +6,7 @@ import {
 } from './domain';
 import {
   GLH_LEAD_DUE_FILTERS,
+  GLH_MANUAL_SOURCE_VALUES,
   GLH_REQUIREMENT_TYPES,
   GLH_SOURCE_PLATFORMS,
   type GlhLeadListFilters,
@@ -59,9 +60,7 @@ export const glhManualLeadCreateSchema = z.object({
 });
 
 /** Real authenticated manual intake, independent of the Phase 2 test/dev-only guard. */
-export const GLH_MANUAL_PRODUCTION_SOURCES = [
-  'EXHIBITION', 'WEBSITE', 'REFERRAL', 'OUTREACH', 'SOCIAL', 'OTHER',
-] as const;
+export const GLH_MANUAL_PRODUCTION_SOURCES = GLH_MANUAL_SOURCE_VALUES;
 
 export const glhProductionManualIntakeSchema = z.object({
   requestKey: z.string().uuid(),
@@ -234,6 +233,7 @@ export function parseGlhLeadListFilters(
 ): GlhLeadListFilters {
   const filters: GlhLeadListFilters = {};
   const source = searchParams.get('source');
+  const manualSource = searchParams.get('manualSource');
   const requirement = searchParams.get('requirement');
   const grade = searchParams.get('grade');
   const lifecycle = searchParams.get('lifecycle');
@@ -241,6 +241,9 @@ export function parseGlhLeadListFilters(
 
   if (source && (GLH_SOURCE_PLATFORMS as readonly string[]).includes(source)) {
     filters.source = source as GlhLeadListFilters['source'];
+  }
+  if (manualSource && (GLH_MANUAL_PRODUCTION_SOURCES as readonly string[]).includes(manualSource)) {
+    filters.manualSource = manualSource as GlhLeadListFilters['manualSource'];
   }
   if (requirement && (GLH_REQUIREMENT_TYPES as readonly string[]).includes(requirement)) {
     filters.requirement = requirement as GlhLeadListFilters['requirement'];
