@@ -156,6 +156,19 @@ export const PORTAL_GROUPS: PortalGroup[] = [
     ],
   },
   {
+    id: 'glh',
+    label: '外贸工具',
+    description: '海外线索、客户开发与销售跟进',
+    icon: '🌍',
+    color: 'green',
+    items: [
+      { label: '外贸工作台', path: '/global-lead-hub', icon: '🏠', matchExact: true },
+      { label: '客户线索', path: '/global-lead-hub/leads', icon: '🎯' },
+      { label: '新增线索', path: '/global-lead-hub/leads/new', icon: '➕' },
+      { label: '跟进任务', path: '/global-lead-hub/tasks', icon: '✅' },
+    ],
+  },
+  {
     id: 'commercial',
     label: '商务单据',
     description: '报价单与机器合同模板',
@@ -195,6 +208,7 @@ export function getVisiblePortalGroups({
 }: PortalVisibilityOptions): PortalGroup[] {
   const groups = PORTAL_GROUPS.filter(group => {
     if (group.id === 'review') return projectReviewCenterEnabled;
+    if (group.id === 'glh') return ['admin','manager','sales'].includes(currentRole || '');
     if (group.id === 'sales') {
       return customerProjectCenterEnabled && canAccessCustomerProjectCenter;
     }
@@ -236,7 +250,8 @@ export function getVisiblePortalGroups({
 
   const order: Record<string, number> = {
     sales: 0,
-    commercial: 1,
+    glh: 1,
+    commercial: 2,
     review: 2,
     media: 3,
   };
@@ -270,6 +285,7 @@ export function getPortalForPath(path: string): string {
   if (path.startsWith('/oa')) return 'official';
   if (path.startsWith('/knowledge')) return 'knowledge';
   if (path.startsWith('/commercial-documents')) return 'commercial';
+  if (path === '/global-lead-hub' || path.startsWith('/global-lead-hub/')) return 'glh';
   if (path.startsWith('/customer-projects')) return 'sales';
   if (path.startsWith('/settings')) return 'admin';
   if (path.startsWith('/review-center')) return 'review';
