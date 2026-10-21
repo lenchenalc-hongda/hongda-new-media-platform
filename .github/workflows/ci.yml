@@ -171,6 +171,7 @@ jobs:
           pnpm exec tsx tests/unit/global-lead-hub-phase9-production-readiness.test.ts
           pnpm exec tsx tests/unit/global-lead-hub-stage1-production-manual-intake.test.ts
           pnpm exec tsx tests/unit/global-lead-hub-stage1-human-workflow.test.ts
+          pnpm exec tsx tests/unit/glh-stage1-navigation.test.ts
 
       - name: Check server-only imports
         run: bash scripts/check-server-imports.sh
