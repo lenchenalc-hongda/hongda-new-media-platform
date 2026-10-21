@@ -156,7 +156,7 @@ END
 $$;
 RESET ROLE;
 
-DO $
+DO $$
 BEGIN
   IF (SELECT count(*) FROM public.glh_audit_events a
     JOIN public.glh_contacts c ON c.id=(
