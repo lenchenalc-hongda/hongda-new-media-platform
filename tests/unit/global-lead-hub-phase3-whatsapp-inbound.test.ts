@@ -100,6 +100,27 @@ assert(!route.includes('console.'), 'webhook route does not log payloads or secr
 assert(!route.includes('fetch('), 'inbound route makes no provider or outbound call');
 assert(!route.includes('api.whatsapp.com'), 'inbound route contains no WhatsApp outbound endpoint');
 
+// Internal-only Phase 9: even if WhatsApp credentials are accidentally configured,
+// neither webhook challenge nor inbound processing may execute until a separate cutover.
+const channelModule = source('src/lib/global-lead-hub/channels.ts');
+assert(channelModule.includes('export const GLH_PROVIDER_CALLS_ENABLED = false;'));
+assert(route.includes("import { GLH_PROVIDER_CALLS_ENABLED } from '@/lib/global-lead-hub/channels';"));
+for (const method of ['GET', 'POST'] as const) {
+  const start = route.indexOf('export async function ' + method + '(');
+  assert(start !== -1, method + ' webhook handler exists');
+  const end = method === 'GET' ? route.indexOf('export async function POST(', start) : route.length;
+  const handler = route.slice(start, end);
+  const gate = handler.indexOf('if (!GLH_PROVIDER_CALLS_ENABLED)');
+  assert(gate !== -1, method + ' webhook must fail closed before processing');
+  const approvalError = handler.indexOf("error: 'Channel activation not authorized'");
+  assert(approvalError > gate, method + ' gate must return explicit disabled response');
+  const firstDanger = method === 'GET'
+    ? handler.indexOf("request.nextUrl.searchParams.get('hub.mode')")
+    : handler.indexOf('request.arrayBuffer()');
+  assert(gate < firstDanger, method + ' must check gate before reading/processing input');
+}
+assert(route.indexOf("admin.rpc('glh_ingest_whatsapp_inbound'") > route.lastIndexOf('if (!GLH_PROVIDER_CALLS_ENABLED)'));
+
 const parser = source('src/lib/global-lead-hub/whatsapp-inbound.ts');
 assert(parser.includes("createHmac('sha256'"));
 assert(parser.includes('timingSafeEqual'));
