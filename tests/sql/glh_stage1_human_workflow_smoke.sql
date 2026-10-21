@@ -124,6 +124,19 @@ SELECT set_config('test.sales_a_task_id',(
   WHERE t.title='Internal call notes'
 ),false);
 
+-- Keep one additional OPEN task assigned to Sales A while owner later changes.
+DO $$
+DECLARE v_open jsonb;
+BEGIN
+  v_open := public.glh_create_task_or_followup(
+    p_lead_id := current_setting('test.sales_a_lead_id')::uuid,
+    p_work_kind := 'TASK',p_work_type := 'FOLLOW_UP',
+    p_title := 'Old-owner task after reassignment'
+  );
+  PERFORM set_config('test.stale_assignee_task_id',v_open->>'work_id',false);
+END
+$$;
+
 SELECT set_config('request.jwt.claim.sub','00000000-0000-4000-8000-000000001002',false);
 DO $$
 DECLARE v_lead uuid;
@@ -150,6 +163,37 @@ BEGIN
     PERFORM public.glh_change_manual_lead_stage(
       current_setting('test.sales_a_lead_id')::uuid,1,'WON',NULL);
     RAISE EXCEPTION 'Cross-org stage spoof accepted';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
+END
+$$;
+-- Current lead ownership is authoritative. A former task assignee must lose
+-- the SECURITY DEFINER completion power after Manager reassigns the customer.
+SELECT set_config('request.jwt.claim.sub','00000000-0000-4000-8000-000000001003',false);
+DO $$
+DECLARE v_cur integer;
+BEGIN
+  SELECT version INTO v_cur FROM public.glh_leads
+    WHERE id=current_setting('test.sales_a_lead_id')::uuid;
+  PERFORM public.glh_assign_lead(
+    current_setting('test.sales_a_lead_id')::uuid,
+    '00000000-0000-4000-8000-000000002002',
+    v_cur,
+    'Assignment for stale-assignee authorization test'
+  );
+END
+$$;
+
+SELECT set_config('request.jwt.claim.sub','00000000-0000-4000-8000-000000001001',false);
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM public.glh_leads
+    WHERE id=current_setting('test.sales_a_lead_id')::uuid)
+  THEN RAISE EXCEPTION 'Old owner still has row-level lead access'; END IF;
+  BEGIN
+    PERFORM public.glh_finish_manual_work(
+      'TASK',current_setting('test.stale_assignee_task_id')::uuid,1);
+    RAISE EXCEPTION 'Old assignee completed work after owner transfer';
   EXCEPTION WHEN insufficient_privilege THEN NULL;
   END;
 END
