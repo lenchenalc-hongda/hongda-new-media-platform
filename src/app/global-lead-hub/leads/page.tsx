@@ -15,10 +15,7 @@ import {
   loadGlhLeads,
   resolveGlhAccessContext,
 } from '@/lib/global-lead-hub/server';
-import {
-  getGlhManualCreationGuard,
-  parseGlhLeadListFilters,
-} from '@/lib/global-lead-hub/validation';
+import { parseGlhLeadListFilters } from '@/lib/global-lead-hub/validation';
 
 export const dynamic = 'force-dynamic';
 
@@ -46,21 +43,20 @@ export default async function GlobalLeadHubLeadsPage({
   });
   const filters = parseGlhLeadListFilters(query);
   const leads = await loadGlhLeads(access.context, filters);
-  const manualCreation = getGlhManualCreationGuard();
 
   return (
     <AppLayout>
       <PageHeader
         title="Lead Library"
         description="Search organization-scoped leads by the frozen Phase 2 filters."
-        actions={manualCreation.allowed ? (
+        actions={(
           <Link
             href="/global-lead-hub/leads/new"
             className="rounded-lg bg-gray-900 px-3 py-2 text-xs font-medium text-white hover:bg-gray-800"
           >
-            Create test lead
+            新增线索
           </Link>
-        ) : undefined}
+        )}
       />
 
       <nav aria-label="Global Lead Hub sections" className="mb-4 flex gap-3 text-xs">
