@@ -74,7 +74,7 @@ export default function MonthlyStatementWorkbench({ userName }: { userName: stri
   const [draft, setDraft] = useState<Statement>(initialStatement);
   const [error, setError] = useState('');
   const uploadRef = useRef<HTMLInputElement>(null);
-  const patch = <K extends keyof Statement>(key: K, value: Statement[K]) => setDraft(previous => ({ ...previous, [key]: value }));
+  const patch = <K extends keyof Statement,>(key: K, value: Statement[K]) => setDraft(previous => ({ ...previous, [key]: value }));
   const patchEntry = (id: string, key: keyof Entry, value: string) => setDraft(previous => ({
     ...previous, entries: previous.entries.map(row => row.id === id ? { ...row, [key]: value } : row),
   }));
