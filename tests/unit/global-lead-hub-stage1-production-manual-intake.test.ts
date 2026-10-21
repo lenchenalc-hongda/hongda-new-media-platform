@@ -90,6 +90,12 @@ assert(!migration.includes('api.whatsapp.com'));
 assert(!migration.includes('DROP TABLE'));
 assert(!migration.includes('DELETE FROM public.'));
 assert(migration.includes("normalized_email") && migration.includes("normalized_whatsapp"));
+// Prevent check-then-insert duplicate contacts under concurrent requests.
+assert(migration.includes("':glh:contact:' || token"));
+assert(migration.includes('ORDER BY k.key'));
+assert(migration.includes("':glh:contact:email:' || v_email"));
+assert(migration.includes("':glh:contact:phone:' || v_phone"));
+assert(migration.indexOf('ORDER BY k.key') < migration.indexOf("RAISE EXCEPTION 'CONTACT_ALREADY_EXISTS'"));
 assert(migration.includes("source_platform,created_by_profile_id"));
 assert(migration.includes("'UNKNOWN',v_actor.id"));
 assert(migration.includes("'PAUSED',0,0,'UNKNOWN'"));
