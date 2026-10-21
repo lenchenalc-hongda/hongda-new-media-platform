@@ -4,7 +4,9 @@ import {
   glhProductionManualIntakeSchema,
   GLH_MANUAL_PRODUCTION_SOURCES,
   getGlhManualCreationGuard,
+  parseGlhLeadListFilters,
 } from '../../src/lib/global-lead-hub/validation';
+import { buildGlhLeadList } from '../../src/lib/global-lead-hub/read-model';
 import {
   createGlhProductionManualLead,
   GlhMutationError,
@@ -101,6 +103,46 @@ assert(form.includes('requestKey.current = null'));
 assert(form.includes('submittingRef.current = true'));
 assert(detail.includes("manualFacts?.origin === 'MANUAL_PRODUCTION'"));
 assert(detail.includes('销售录入备注'));
+
+// Manual provenance must remain distinct from WhatsApp/Meta source; list filtering
+// should use the actual captured source_detail, not misleading provider='UNKNOWN'.
+const parsedManual = parseGlhLeadListFilters(new URLSearchParams('manualSource=EXHIBITION'));
+assert.equal(parsedManual.manualSource, 'EXHIBITION');
+assert.equal(
+  parseGlhLeadListFilters(new URLSearchParams('manualSource=WHATSAPP')).manualSource,
+  undefined,
+);
+const fixtureLead = {
+  id:'lead-manual',org_id:'org-a',contact_id:'contact-manual',
+  owner_profile_id:'sales-a',lifecycle_state:'NEW',conversation_mode:'PAUSED',
+  priority_grade:null,score:0,completeness:0,source_platform:'UNKNOWN',
+  campaign_id:null,creative_id:null,referral_identifier:null,last_message_at:null,
+  next_follow_up_at:null,version:1,created_at:'2026-10-21T00:00:00Z',
+  updated_at:'2026-10-21T00:00:00Z',
+} as const;
+const manualInput = {
+  leads:[fixtureLead],
+  contacts:[{
+    id:'contact-manual',org_id:'org-a',display_name:'Synthetic',
+    company_name:'Synthetic Group',country_code:'VN',
+    normalized_whatsapp:null,normalized_email:'test@example.invalid',source_platform:'UNKNOWN',
+  } as const],
+  leadProfiles:[{
+    lead_id:'lead-manual',org_id:'org-a',requirement_type:'FILM',
+    extracted_facts:{origin:'MANUAL_PRODUCTION',source_detail:'EXHIBITION'},
+    customer_company_name:'Synthetic Group',
+  } as any],
+  profiles:[{id:'sales-a',org_id:'org-a',full_name:'Sales A',role:'sales',is_active:true}],
+  tasks:[],followups:[],
+};
+const manualRows = buildGlhLeadList({ ...manualInput, filters:parsedManual });
+assert.equal(manualRows.length,1);
+assert.equal(manualRows[0].source,'UNKNOWN');
+assert.equal(manualRows[0].manualSourceDetail,'EXHIBITION');
+assert.equal(buildGlhLeadList({
+  ...manualInput,
+  filters:parseGlhLeadListFilters(new URLSearchParams('manualSource=WEBSITE')),
+}).length,0);
 
 async function testRpc() {
   let count = 0;
