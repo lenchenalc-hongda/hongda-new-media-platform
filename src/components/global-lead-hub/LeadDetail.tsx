@@ -47,6 +47,10 @@ export default function LeadDetail({
   const [workType, setWorkType] = useState<string>(GLH_TASK_TYPES[0]);
   const lead = detail.listItem;
   const audit = summarizeGlhAuditTimeline(detail);
+  const manualFacts = detail.profile?.extracted_facts;
+  const isManualIntake = manualFacts?.origin === 'MANUAL_PRODUCTION';
+  const manualNotes = isManualIntake && typeof manualFacts?.sales_notes === 'string'
+    ? manualFacts.sales_notes : null;
 
   async function submitAssignment(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -147,7 +151,7 @@ export default function LeadDetail({
           <dl className="mt-4 grid grid-cols-2 gap-x-5 gap-y-3 text-sm xl:grid-cols-3">
             <Info label="Company" value={lead.companyName} />
             <Info label="Country" value={lead.country} />
-            <Info label="Source" value={lead.source} />
+            <Info label="Source" value={isManualIntake ? 'Manual / 手工录入' : lead.source} />
             <Info label="Lifecycle" value={lead.lifecycle} />
             <Info label="Conversation mode" value={lead.conversationMode} />
             <Info label="Owner" value={lead.ownerName || lead.ownerProfileId} />
@@ -191,6 +195,12 @@ export default function LeadDetail({
           <Info label="Machine capacity" value={detail.profile?.machine_capacity_requirements} />
           <Info label="Automation" value={detail.profile?.automation_requirements} />
           <Info label="Machine + process" value={detail.profile?.machine_plus_process_solution_required} />
+          {isManualIntake && (
+            <>
+              <Info label="手工录入渠道" value={manualFacts?.source_detail} />
+              <Info label="销售录入备注" value={manualNotes} />
+            </>
+          )}
           <Info label="AI summary" value={detail.profile?.ai_summary} />
         </dl>
       </section>
