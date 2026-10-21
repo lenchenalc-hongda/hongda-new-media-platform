@@ -160,6 +160,16 @@ jobs:
       - name: Agent Control Reliability V2 failure-injection tests
         run: pnpm exec tsx tests/unit/agent-control-reliability-v2.test.ts
 
+      # PM-serialized shared CI path: first-stage GLH rollout safety requires actual
+      # deterministic GLH unit tests, not only TypeScript/build green.
+      - name: GLH Stage 1 schema / role / webhook / handoff / readiness tests
+        run: |
+          pnpm exec tsx tests/unit/global-lead-hub-phase1-foundation.test.ts
+          pnpm exec tsx tests/unit/global-lead-hub-phase2-core-human-ui.test.ts
+          pnpm exec tsx tests/unit/global-lead-hub-phase3-whatsapp-inbound.test.ts
+          pnpm exec tsx tests/unit/global-lead-hub-phase5-handoff-persistence.test.ts
+          pnpm exec tsx tests/unit/global-lead-hub-phase9-production-readiness.test.ts
+
       - name: Check server-only imports
         run: bash scripts/check-server-imports.sh
 
