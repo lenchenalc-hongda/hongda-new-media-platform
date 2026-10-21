@@ -16,7 +16,7 @@
 - 产品、材质、预计数量、业务备注；
 - 负责人：销售员默认是自己；管理员/经理可选本组织启用的其他负责人。
 
-保存成功后直接进入该客户的 GLH 线索详情页。线索初始状态为 `NEW`，会话模式为 `PAUSED`；不创建虚假的 WhatsApp 会话、不自动回复、不代替人工开展业务。用户可在详情页按现有权限新增任务、跟进及由管理者重新分配。
+保存成功后直接进入该客户的 GLH 线索详情页。线索初始状态为 `NEW`，会话模式为 `PAUSED`；不创建虚假的 WhatsApp 会话、不自动回复、不代替人工开展业务。用户可在详情页按现有权限新增任务、跟进、推进阶段及由管理者重新分配。个人任务页面可将自己负责的手工任务/跟进标记完成；完成跟进后重新计算下一次提醒时间，避免已完成事项误报逾期。
 
 ## 重复检查与追踪
 
@@ -33,15 +33,15 @@
 - 销售员不能替其他员工建档或跨组织指派；管理员/经理也只能选择本组织启用的人员。
 - 用户没有直接写入 GLH 表的权限；操作通过受限制的 PostgreSQL SECURITY DEFINER RPC；幂等键记录表没有向浏览器开放 SELECT/INSERT。
 - 原有 `glh_create_manual_test_lead`、原有 `/api/global-lead-hub/leads` POST **继续仅限 test/dev**；没有放开其 Production 环境开关。
-- 针对手工录入的数据库迁移文件是 `20261021120000_global_lead_hub_stage1_manual_production_intake.sql`，属于第五份 GLH 迁移，必须在前四份成功后执行。
+- 第五份数据库迁移是 `20261021120000_global_lead_hub_stage1_manual_production_intake.sql`（手工录入）；第六份是 `20261021135000_global_lead_hub_stage1_human_workflow.sql`（人工阶段变更及任务闭环）。必须按照 1–6 顺序执行并单独验收。
 
 ## 上线验收表
 
-- [x] GitHub CI 中一次性 PostgreSQL 17 容器实际执行五份迁移，验证当前基本角色与 SQL 安全性（以最新 exact HEAD CI 为最终依据）
-- [x] 合成组织 Sales A / Sales B / Manager 的跨组织隔离、重复邮箱、重复国际号码、幂等重放与冲突、审计、无外部副作用测试（同上）
-- [ ] 在真实 Supabase 隔离测试项目复验第 1–5 份 SQL、RPC 和 Auth/RLS；其 `hongda-review-dev` 数据库连接此前超时
+- [ ] GitHub CI 中一次性 PostgreSQL 17 容器实际执行六份迁移、手工录入及工作闭环，验证角色与 SQL 安全性（待最新 exact HEAD 全部通过后勾选）
+- [ ] 合成组织 Sales A / Sales B / Manager 的跨组织隔离、重复邮箱、重复国际号码、幂等重放与冲突、审计、阶段/任务闭环及无外部副作用测试（待最新 exact HEAD 验证）
+- [ ] 在真实 Supabase 隔离测试项目复验第 1–6 份 SQL、RPC 和 Auth/RLS；其 `hongda-review-dev` 数据库连接此前超时
 - [ ] 在可登录的 GLH Vercel Preview 环境完成管理员和业务员浏览器验收，包括原始录入、连续点击、断网重试、同组织跨人归属权限、客户详情、任务/跟进
-- [ ] 冻结准确 app release SHA 和五份 SQL 校验值
+- [ ] 冻结准确 app release SHA 和六份 SQL 校验值
 - [ ] 获得老板对第一道 Production schema/RLS/部署的单项明确批准
 - [ ] 变更后再检查 RLS、安全、CPC/报价页回归与 WhatsApp GET/POST 全部禁用
 
