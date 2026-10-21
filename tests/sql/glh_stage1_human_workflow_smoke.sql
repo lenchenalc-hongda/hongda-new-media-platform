@@ -107,10 +107,8 @@ BEGIN
   IF (SELECT count(*) FROM public.glh_manual_work_updates
     WHERE lead_id=v_lead)<>3
   THEN RAISE EXCEPTION 'Work completion audit missing'; END IF;
-  IF (SELECT count(*) FROM public.glh_audit_events
-    WHERE lead_id=v_lead AND event_type='LEAD_STAGE_CHANGED'
-      AND context->>'human_stage_change'='true')<>1
-  THEN RAISE EXCEPTION 'Stage-change audit missing'; END IF;
+  -- Formal glh_audit_events are intentionally manager/admin-only under RLS.
+  -- Verify those rows as a privileged reviewer below; don't broaden sales access.
 END
 $$;
 
@@ -158,8 +156,16 @@ END
 $$;
 RESET ROLE;
 
-DO $$
+DO $
 BEGIN
+  IF (SELECT count(*) FROM public.glh_audit_events a
+    JOIN public.glh_contacts c ON c.id=(
+      SELECT l.contact_id FROM public.glh_leads l WHERE l.id=a.lead_id
+    )
+    WHERE c.normalized_email='a-synthetic@example.invalid'
+      AND a.event_type='LEAD_STAGE_CHANGED'
+      AND a.context->>'human_stage_change'='true')<>1
+  THEN RAISE EXCEPTION 'Privileged audit inspection: stage-change row missing'; END IF;
   IF (SELECT count(*) FROM public.glh_ai_actions)>0
      OR (SELECT count(*) FROM public.glh_messages)>0
      OR (SELECT count(*) FROM public.glh_conversations)>0
