@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import type { GlhTaskBoardItem } from '@/lib/global-lead-hub/read-model';
 
@@ -32,6 +33,9 @@ function formatDue(value: string | null): string {
 }
 
 export default function TaskBoard({ items }: { items: GlhTaskBoardItem[] }) {
+  const router = useRouter();
+  const [workingId, setWorkingId] = useState('');
+  const [actionError, setActionError] = useState('');
   const [filter, setFilter] = useState<TaskFilter>('OPEN');
   const [kind, setKind] = useState<'ALL' | 'TASK' | 'FOLLOWUP'>('ALL');
 
@@ -42,8 +46,40 @@ export default function TaskBoard({ items }: { items: GlhTaskBoardItem[] }) {
     return isOpen(item.status) && item.dueBucket === filter;
   }), [filter, items, kind]);
 
+  async function completeWork(item: GlhTaskBoardItem) {
+    if (workingId || !isOpen(item.status)) return;
+    setWorkingId(item.id);
+    setActionError('');
+    try {
+      const response = await fetch('/api/global-lead-hub/tasks/complete', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          workId: item.id,
+          kind: item.kind,
+          expectedVersion: item.version,
+        }),
+      });
+      const body = await response.json().catch(() => null);
+      if (!response.ok || body?.ok !== true) {
+        setActionError(response.status === 409
+          ? '该任务已被更新，请刷新后重试。'
+          : response.status === 403
+            ? '当前仅允许完成自己负责的手工线索任务。'
+            : '任务完成操作失败，请稍后重试。');
+        return;
+      }
+      router.refresh();
+    } catch {
+      setActionError('网络异常，请刷新列表核对任务状态后再操作。');
+    } finally {
+      setWorkingId('');
+    }
+  }
+
   return (
     <div className="space-y-4">
+      {actionError && <p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-700">{actionError}</p>}
       <div className="flex flex-col gap-3 rounded-lg border border-gray-200 bg-white p-3 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex flex-wrap gap-1" role="tablist" aria-label="Task due filters">
           {FILTERS.map(item => (
@@ -122,7 +158,16 @@ export default function TaskBoard({ items }: { items: GlhTaskBoardItem[] }) {
                   {item.status.replaceAll('_', ' ')}
                 </span>
               </div>
-              <p className="mt-3 text-xs text-gray-500">{formatDue(item.dueAt)}</p>
+              <div className="mt-3 flex items-center justify-between gap-2">
+                <p className="text-xs text-gray-500">{formatDue(item.dueAt)}</p>
+                {isOpen(item.status) && (
+                  <button type="button" disabled={Boolean(workingId)}
+                    onClick={() => completeWork(item)}
+                    className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 disabled:opacity-50">
+                    {workingId === item.id ? '保存中…' : '标记完成'}
+                  </button>
+                )}
+              </div>
             </article>
           ))}
         </div>
