@@ -141,9 +141,11 @@ BEGIN
     v_status := v_followup.status;
     v_version := v_followup.version;
   END IF;
+  -- SECURITY DEFINER must not let an old task assignee mutate a lead
+  -- after the owner has been reassigned. Match glh_tasks/followups SELECT RLS.
   IF NOT (
     v_actor.role IN ('admin','manager') OR v_assignee=v_actor.id
-  ) OR NOT EXISTS (
+  ) OR NOT public.glh_can_access_lead(v_lead_id) OR NOT EXISTS (
     SELECT 1 FROM public.glh_lead_profiles lp
       WHERE lp.org_id=v_actor.org_id AND lp.lead_id=v_lead_id
         AND lp.extracted_facts->>'origin'='MANUAL_PRODUCTION'
