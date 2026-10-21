@@ -50,8 +50,8 @@ assert(
 // A PL/pgSQL %ROWTYPE record cannot be mixed with a scalar in one INTO list.
 // This was caught by the real PostgreSQL 17 four-migration CI replay.
 assert(!migration.includes('INTO v_conversation, v_provider'));
-assert(migration.includes('SELECT c.*\\n  INTO v_conversation'));
-assert(migration.includes('SELECT ca.provider\\n  INTO v_provider'));
+assert(migration.includes('SELECT c.*\n  INTO v_conversation'));
+assert(migration.includes('SELECT ca.provider\n  INTO v_provider'));
 assert(migration.includes('FOR UPDATE OF c'));
 assert(migration.includes('IF NOT FOUND OR v_provider IS NULL THEN'));
 
