@@ -37,7 +37,7 @@ function dueLabel(item: GlhLeadListItem): string {
 export default function LeadTable({
   leads,
   emptyTitle = 'No leads in this view',
-  emptyDescription = 'Adjust the filters or create a test lead in an allowed environment.',
+  emptyDescription = '请调整筛选条件，或点击“新增线索”手工录入真实外贸客户。',
 }: {
   leads: GlhLeadListItem[];
   emptyTitle?: string;
