@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 type Entry = {
   id: string;
@@ -16,6 +16,7 @@ type Entry = {
 };
 type Statement = {
   customer: string;
+  customerReferenceId?: string;
   contact: string;
   month: string;
   documentNo: string;
@@ -24,6 +25,7 @@ type Statement = {
   notes: string;
   entries: Entry[];
 };
+interface CustomerOption { id: string; name: string; }
 let entrySequence = 0;
 const freshEntry = (): Entry => ({ id: 'line-' + Date.now() + '-' + ++entrySequence, date: '', reference: '', description: '', quantity: '', unit: '件', price: '', receipt: '', remark: '' });
 const today = () => {
@@ -31,7 +33,7 @@ const today = () => {
   return [d.getFullYear(), String(d.getMonth() + 1).padStart(2, '0'), String(d.getDate()).padStart(2, '0')].join('-');
 };
 const initialStatement = (): Statement => ({
-  customer: '', contact: '', month: today().slice(0, 7), issueDate: today(),
+  customer: '', customerReferenceId: '', contact: '', month: today().slice(0, 7), issueDate: today(),
   documentNo: 'DZ-' + today().slice(0, 7).replace('-', '') + '-' + Math.random().toString(36).slice(2, 10).toUpperCase(),
   opening: '0', notes: '', entries: [freshEntry()],
 });
@@ -73,6 +75,42 @@ const styles = `
 export default function MonthlyStatementWorkbench({ userName }: { userName: string }) {
   const [draft, setDraft] = useState<Statement>(initialStatement);
   const [error, setError] = useState('');
+  const [customerSearchOpen, setCustomerSearchOpen] = useState(false);
+  const [customerOptions, setCustomerOptions] = useState<CustomerOption[]>([]);
+  const [customerLoading, setCustomerLoading] = useState(false);
+  const [customerError, setCustomerError] = useState('');
+  useEffect(() => {
+    const query = draft.customer.trim();
+    if (!customerSearchOpen || !query || draft.customerReferenceId) {
+      setCustomerOptions([]);
+      setCustomerLoading(false);
+      return;
+    }
+    const controller = new AbortController();
+    const timer = window.setTimeout(async () => {
+      setCustomerLoading(true);
+      setCustomerError('');
+      try {
+        const response = await fetch('/api/commercial-documents/customer-options?q=' + encodeURIComponent(query),
+          { cache: 'no-store', signal: controller.signal });
+        const json: { ok?: boolean; message?: string; customers?: CustomerOption[] } = await response.json();
+        if (!response.ok || !json.ok) {
+          setCustomerOptions([]);
+          setCustomerError(json.message || '客户池暂不可用，可直接输入名称');
+        } else {
+          setCustomerOptions(Array.isArray(json.customers) ? json.customers : []);
+        }
+      } catch {
+        if (!controller.signal.aborted) {
+          setCustomerOptions([]);
+          setCustomerError('无法读取客户池，可直接输入名称');
+        }
+      } finally {
+        if (!controller.signal.aborted) setCustomerLoading(false);
+      }
+    }, 250);
+    return () => { window.clearTimeout(timer); controller.abort(); };
+  }, [customerSearchOpen, draft.customer, draft.customerReferenceId]);
   const uploadRef = useRef<HTMLInputElement>(null);
   const patch = <K extends keyof Statement,>(key: K, value: Statement[K]) => setDraft(previous => ({ ...previous, [key]: value }));
   const patchEntry = (id: string, key: keyof Entry, value: string) => setDraft(previous => ({
@@ -132,6 +170,9 @@ export default function MonthlyStatementWorkbench({ userName }: { userName: stri
           !value.entries.every((entry: unknown) => !!entry && typeof entry === 'object' &&
              ['id','date','reference','description','quantity','unit','price','receipt','remark'].every(k => typeof (entry as Record<string, unknown>)[k] === 'string'))) throw new Error('invalid');
       setDraft(value);
+      setCustomerSearchOpen(false);
+      setCustomerOptions([]);
+      setCustomerError('');
       setError('');
     } catch { setError('对账单 JSON 文件不符合本模板格式。'); }
     if (uploadRef.current) uploadRef.current.value = '';
@@ -160,7 +201,41 @@ export default function MonthlyStatementWorkbench({ userName }: { userName: stri
       <section className="statement-toolbar space-y-4 bg-white border rounded-lg p-4">
         <h2 className="font-bold">01 · 对账基础资料</h2>
         <div className="grid sm:grid-cols-2 gap-3">
-          {field('客户全称 *', 'customer')}
+          <div className="relative sm:col-span-2">
+            <label htmlFor="statement-customer" className="block mb-1 text-sm text-gray-700">客户全称 *</label>
+            <input id="statement-customer" className={input} autoComplete="off" maxLength={300}
+              value={draft.customer} placeholder="搜索已有客户，或直接输入新客户名称"
+              onChange={event => {
+                setDraft(previous => ({ ...previous, customer: event.target.value, customerReferenceId: '' }));
+                setCustomerSearchOpen(true);
+                setError('');
+              }}
+              onFocus={() => { if (!draft.customerReferenceId) setCustomerSearchOpen(true); }}
+              onBlur={() => setCustomerSearchOpen(false)} />
+            {draft.customerReferenceId && <p className="mt-1 text-xs text-green-700">已选中客户池现有客户；修改名称将取消关联</p>}
+            {customerSearchOpen && draft.customer.trim() && !draft.customerReferenceId && (
+              <div role="listbox" aria-label="已有客户搜索结果"
+                className="absolute left-0 right-0 top-full z-20 mt-1 max-h-60 overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-md">
+                {customerLoading && <p className="p-3 text-xs text-gray-500">正在查询客户池…</p>}
+                {!customerLoading && customerError && <p className="p-3 text-xs text-amber-700">{customerError}</p>}
+                {!customerLoading && !customerError && customerOptions.length === 0 && <p className="p-3 text-xs text-gray-500">暂无匹配客户，可直接填写新客户名称</p>}
+                {!customerLoading && !customerError && customerOptions.map(option => (
+                  <button key={option.id} type="button" role="option" aria-selected={false}
+                    onMouseDown={event => event.preventDefault()}
+                    onClick={() => {
+                      setDraft(previous => ({ ...previous, customer: option.name, customerReferenceId: option.id }));
+                      setCustomerSearchOpen(false);
+                      setCustomerOptions([]);
+                      setCustomerError('');
+                    }}
+                    className="w-full border-b border-gray-100 px-3 py-2 text-left text-sm text-gray-800 hover:bg-blue-50 last:border-0">
+                    {option.name}
+                  </button>
+                ))}
+              </div>
+            )}
+            <p className="mt-1 text-xs text-gray-500">仅查询当前账号有权查看的客户；手填新客户不会修改客户池。</p>
+          </div>
           {field('客户联系人', 'contact')}
           {field('对账月份 *', 'month', 'month')}
           {field('出单日期 *', 'issueDate', 'date')}
