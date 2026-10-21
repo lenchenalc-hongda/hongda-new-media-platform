@@ -24,10 +24,16 @@ export const GLH_SOURCE_PLATFORMS = [
   'UNKNOWN',
 ] as const;
 export type GlhSourcePlatform = (typeof GLH_SOURCE_PLATFORMS)[number];
+// Manual provenance is not an external provider.
+export const GLH_MANUAL_SOURCE_VALUES = [
+  'EXHIBITION','WEBSITE','REFERRAL','OUTREACH','SOCIAL','OTHER',
+] as const;
+export type GlhManualSource = (typeof GLH_MANUAL_SOURCE_VALUES)[number];
 
 export interface GlhLeadListFilters {
   country?: string;
   source?: GlhSourcePlatform;
+  manualSource?: GlhManualSource;
   requirement?: GlhRequirementType;
   grade?: GlhPriorityGrade;
   lifecycle?: GlhLifecycleState;
@@ -242,6 +248,7 @@ export interface GlhLeadListItem {
   score: number;
   completeness: number;
   source: GlhSourcePlatform;
+  manualSourceDetail?: GlhManualSource | null;
   requirementType: GlhRequirementType | null;
   adCreativeReference: string | null;
   nextFollowupAt: string | null;
@@ -371,6 +378,12 @@ export function buildGlhLeadList(input: {
     .map(lead => {
       const contact = contacts.get(lead.contact_id) ?? null;
       const profile = leadProfiles.get(lead.id) ?? null;
+      const rawManual = profile?.extracted_facts?.origin === 'MANUAL_PRODUCTION'
+        ? profile.extracted_facts?.source_detail : null;
+      const manualSourceDetail: GlhManualSource | null =
+        typeof rawManual === 'string'
+        && (GLH_MANUAL_SOURCE_VALUES as readonly string[]).includes(rawManual)
+          ? rawManual as GlhManualSource : null;
       const nextDueAt = nextOpenWorkDue({
         leadId: lead.id,
         tasks: input.tasks,
@@ -401,6 +414,7 @@ export function buildGlhLeadList(input: {
         score: lead.score,
         completeness: lead.completeness,
         source: lead.source_platform,
+        manualSourceDetail,
         requirementType: profile?.requirement_type ?? null,
         adCreativeReference: lead.creative_id
           || lead.referral_identifier
@@ -418,6 +432,7 @@ export function buildGlhLeadList(input: {
     .filter(item => {
       if (filters.country && normalize(item.country) !== normalize(filters.country)) return false;
       if (filters.source && item.source !== filters.source) return false;
+      if (filters.manualSource && item.manualSourceDetail !== filters.manualSource) return false;
       if (filters.requirement && item.requirementType !== filters.requirement) return false;
       if (filters.grade && item.grade !== filters.grade) return false;
       if (filters.lifecycle && item.lifecycle !== filters.lifecycle) return false;
