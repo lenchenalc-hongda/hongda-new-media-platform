@@ -114,24 +114,31 @@ BEGIN
 END
 $$;
 
+-- Preserve synthetic IDs in session-only GUCs before switching to a restricted role.
+SELECT set_config('test.sales_a_lead_id',(
+  SELECT l.id::text FROM public.glh_leads l
+  JOIN public.glh_contacts c ON c.id=l.contact_id
+  WHERE c.normalized_email='a-synthetic@example.invalid'
+    AND l.org_id='00000000-0000-4000-8000-000000000001'
+),false);
+SELECT set_config('test.sales_a_task_id',(
+  SELECT t.id::text FROM public.glh_tasks t
+  WHERE t.title='Internal call notes'
+),false);
+
 SELECT set_config('request.jwt.claim.sub','00000000-0000-4000-8000-000000001002',false);
 DO $$
 DECLARE v_lead uuid;
 BEGIN
-  SELECT l.id INTO v_lead FROM public.glh_leads l
-    JOIN public.glh_contacts c ON c.id=l.contact_id
-    WHERE c.normalized_email='b-synthetic@example.invalid';
+  v_lead := current_setting('test.sales_a_lead_id')::uuid;
   BEGIN
     PERFORM public.glh_change_manual_lead_stage(v_lead,1,'WON','Wrong owner');
     RAISE EXCEPTION 'Wrong-owner stage update accepted';
   EXCEPTION WHEN insufficient_privilege THEN NULL;
   END;
   BEGIN
-    PERFORM public.glh_finish_manual_work('TASK',(
-      SELECT t.id FROM public.glh_tasks t
-        WHERE t.org_id='00000000-0000-4000-8000-000000000001'
-        LIMIT 1
-    ),1);
+    PERFORM public.glh_finish_manual_work('TASK',
+      current_setting('test.sales_a_task_id')::uuid,1);
     RAISE EXCEPTION 'Wrong-assignee closure accepted';
   EXCEPTION WHEN insufficient_privilege THEN NULL;
   END;
@@ -143,7 +150,7 @@ DO $$
 BEGIN
   BEGIN
     PERFORM public.glh_change_manual_lead_stage(
-      (SELECT lead_id FROM public.glh_manual_work_updates LIMIT 1),1,'WON',NULL);
+      current_setting('test.sales_a_lead_id')::uuid,1,'WON',NULL);
     RAISE EXCEPTION 'Cross-org stage spoof accepted';
   EXCEPTION WHEN insufficient_privilege THEN NULL;
   END;
