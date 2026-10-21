@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminSupabaseClient } from '@/lib/supabase/admin';
+import { GLH_PROVIDER_CALLS_ENABLED } from '@/lib/global-lead-hub/channels';
 import {
   GLH_WHATSAPP_MAX_WEBHOOK_BYTES,
   parseGlhWhatsAppInbound,
@@ -15,6 +16,10 @@ function response(body: Record<string, unknown>, status = 200) {
 }
 
 export async function GET(request: NextRequest) {
+  // Phase 9 internal-only rollout: never activate a real channel by adding secrets alone.
+  if (!GLH_PROVIDER_CALLS_ENABLED) {
+    return response({ ok: false, error: 'Channel activation not authorized' }, 503);
+  }
   const mode = request.nextUrl.searchParams.get('hub.mode');
   const token = request.nextUrl.searchParams.get('hub.verify_token');
   const challenge = request.nextUrl.searchParams.get('hub.challenge');
@@ -34,6 +39,10 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  // Inbound persistence is also an external channel cutover; gate before reading requests.
+  if (!GLH_PROVIDER_CALLS_ENABLED) {
+    return response({ ok: false, error: 'Channel activation not authorized' }, 503);
+  }
   const declaredLength = Number(request.headers.get('content-length') ?? '0');
   if (Number.isFinite(declaredLength) && declaredLength > GLH_WHATSAPP_MAX_WEBHOOK_BYTES) {
     return response({ ok: false, error: 'Payload too large' }, 413);
