@@ -42,14 +42,15 @@ Apply in the exact order below only after a separate exact-SHA owner approval an
 3. `supabase/migrations/20261010182400_global_lead_hub_phase3_whatsapp_inbound.sql` — storage-bound RPC only; no live provider connection.
 4. `supabase/migrations/20261011181500_global_lead_hub_phase5_handoff_persistence.sql` — controlled handoff and queued human-message persistence; provider sends remain disabled.
 5. `supabase/migrations/20261021120000_global_lead_hub_stage1_manual_production_intake.sql` — private idempotency ledger and real authenticated, audited manual Production lead creation with organization-scoped role enforcement.
+6. `supabase/migrations/20261021135000_global_lead_hub_stage1_human_workflow.sql` — manual-lead lifecycle transitions, assigned task/followup completion, append-only work status history, stale-version checks and next-followup recalculation.
 
 These are additive, forward-only migrations, but **still affect Production schema, RLS and grants**. No part of this plan is implicit permission to apply them. Record exact reviewed SQL content SHAs and final approved app release SHA; never approve only by branch name. Unrelated GLH/CPC/Commercial PRs must not be silently incorporated into release approval.
 
 ## Database / app prerequisites
 
-1. Restore reliable connection to the isolated `hongda-review-dev` test project. The Supabase SQL/migrations endpoint timed out repeatedly on 2026-10-21 despite metadata indicating ACTIVE_HEALTHY. **Do not treat static CI as equivalent to actual DB migration/RLS testing.**
+1. Restore reliable connection to the isolated `hongda-review-dev` test project. The Supabase SQL/migrations endpoint timed out repeatedly on 2026-10-21 despite metadata indicating ACTIVE_HEALTHY. Later Security Advisors exposed that the project is hibernated; restore_project then reported it is no longer paused / ACTIVE_HEALTHY but database calls continued to time out. This is a control-plane/data-plane state mismatch; stop automated retries and require genuine restored SQL connectivity before real Supabase validation. **Do not treat static CI as equivalent to actual DB migration/RLS testing.**
 2. Verify isolated test DB baseline includes organizations, profiles, `(id,org_id)` unique index, `set_updated_at()` and required grants; compare to Production read-only inventory.
-3. Apply five migrations in test project only after a fresh no-conflict confirmation. Exercise:
+3. Apply six migrations in test project only after a fresh no-conflict confirmation. Exercise:
    - migration atomicity and no changes to CPC/legacy business records;
    - `anon` cannot select/execute GLH business mutations;
    - Sales A cannot read Sales B restricted lead, cross-organization reads denied;
@@ -58,17 +59,18 @@ These are additive, forward-only migrations, but **still affect Production schem
    - public WhatsApp webhook GET/POST disabled with HTTP 503, no provider call or inbound persistence;
    - manual test/dev create remains inaccessible on real Production; the NEW production intake is separate and checks live `auth.uid()`.
    - Sales self-ownership, Manager/Admin same-org assignment, Sales A vs B isolation, duplicate email/WhatsApp avoidance, same-key retry and modified-key collision, complete source/audit provenance, and no provider action.
+   - Manual-only human stage progression with optimistic version and manager-visible audit, assignee/admin completion of tasks/followups, immutable work completion trail, recalculated next follow-up pointer, cross-org denial and no provider action.
 4. Run current repo CI and GLH unit tests against the exact PR HEAD; Vercel Preview must be READY. Record source branch and head SHA.
 5. Confirm GLH UI on real app target using active Supabase sign-in for relevant roles (in a controlled Pilot). Do not fabricate pass status from static test fixtures.
 
 ## Proposed phased Production execution (requires exact separate owner approval)
 
-- Freeze **one** exact release SHA and 5 exact SQL contents, obtain named Production execution/rollback owners, record prior Production deployment.
+- Freeze **one** exact release SHA and 6 exact SQL contents, obtain named Production execution/rollback owners, record prior Production deployment.
 - Read-only preflight rechecks target identity, source schema, roles/indexes, zero GLH tables and migration version, RLS advisor baseline, project env-name inventory and provider-off constant.
-- Apply 5 SQL migrations *one at a time*, abort immediately on SQL failure/partial state; verify relations/functions/foreign keys/grants/RLS and post-migration Security/Performance Advisors.
+- Apply 6 SQL migrations *one at a time*, abort immediately on SQL failure/partial state; verify relations/functions/foreign keys/grants/RLS and post-migration Security/Performance Advisors.
 - Keep Meta secrets absent and provider traffic disabled. No external account/channel subscription.
 - Deploy/verify only the exact owner-approved app release if the code guard requires deployment; protect CPC, commercial documents and existing web routes.
-- Verify admin, manager and sales authentication and read-only list/dashboard; verify real manual lead creation and safe idempotent replay in approved canary records, default/assigned owner visibility, cross-organization denial, duplicate protection, audit history, task/assignment permissions and blocked inbound/outbound.
+- Verify admin, manager and sales authentication and read-only list/dashboard; verify real manual lead creation and safe idempotent replay in approved canary records, default/assigned owner visibility, cross-organization denial, duplicate protection, auditable stage progression and completion of human work, accurate next-followup due date, task/assignment permissions and blocked inbound/outbound.
 - Record postflight observations, known empty-data limitation, and rollback deployment. On failure stop promotion/traffic, preserve records, revert app if necessary; **never DROP newly created Production tables or delete Production records as casual rollback**.
 
 ## Stop/rollback criteria
