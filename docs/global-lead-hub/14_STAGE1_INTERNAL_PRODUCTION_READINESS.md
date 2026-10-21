@@ -8,18 +8,18 @@
 > PRODUCTION_SQL_EXECUTED = NO
 > PRODUCTION_ENV_OR_SECRETS_CHANGED = NO
 > PRODUCTION_DEPLOYMENT_CHANGED = NO
-> GLH_MANUAL_PRODUCTION_LEAD_CREATION = NOT AUTHORIZED
+> GLH_MANUAL_PRODUCTION_LEAD_CREATION = OWNER_APPROVED_SCOPE; CODE NOT DEPLOYED
 > OWNER_EXACT_SCOPE_APPROVAL = PENDING
 
 ## Stage 1 scope and separation
 
-**In scope:** Internal authenticated GLH workspace with current read models and previously reviewed human task/assignment RPCs, once GLH schema and RLS have been independently verified. Do not move legacy customer or financial records. Initial dataset may legitimately be empty.
+**In scope:** Internal authenticated GLH workspace plus owner-approved human manual lead intake with real logged-in Supabase roles, audited creator and owner, contact de-duplication, idempotent retry, and human task/assignment RPCs, once schema and RLS are verified. Do not move legacy customer or financial records. Initial dataset may legitimately be empty.
 
-**Out of scope:** Any real Meta Business / WABA channel connection; webhook registration; AI-facing customer messaging; live provider inbound/outbound; modifying Production WhatsApp tokens/secrets; copying prior CPC/legacy leads; unapproved manual Production lead creation; changing any existing customer attribution/owner or financial authority.
+**Out of scope:** Any real Meta Business / WABA channel connection; webhook registration; AI-facing customer messaging; live provider inbound/outbound; modifying Production WhatsApp tokens/secrets; copying prior CPC/legacy leads; test/dev guard bypass or unapproved direct-table manual creation; changing any existing customer attribution/owner or financial authority.
 
 The first-stage release MUST keep the existing `GLH_PROVIDER_CALLS_ENABLED = false` code constant. The WhatsApp GET and POST webhook handlers must fail closed before challenge processing or request parsing. The existing human messaging adapter returns `providerAction: NONE` and queues messages without sending. A real WhatsApp channel requires a separate, later code review and owner approval.
 
-The existing `glh_create_manual_test_lead` path is **test/dev only**, guarded in both Next.js and PostgreSQL by non-Production environment settings. It must remain disabled in Production. If Sales needs manual intake before Meta cutover, create an independently reviewed, role/organization-scoped Production intake flow as a new business-authorized scope; do not weaken test-only safeguards.
+The existing `glh_create_manual_test_lead` path remains **test/dev only**, guarded in both Next.js and PostgreSQL. The owner separately approved **formal manual Production lead intake** on 2026-10-21. A new, isolated `glh_create_manual_production_lead` RPC and `/api/global-lead-hub/leads/manual` endpoint are reviewed in PR #138, with a unique per-user request key, private idempotency ledger, duplicate-contact rejection, activity/assignment/audit trails, owner defaulting to self, and no external channel actions. **This approval covers development only, not Production SQL/RLS/Release execution.**
 
 ## Latest known Production baseline (read-only; reverify at approval time)
 
@@ -41,6 +41,7 @@ Apply in the exact order below only after a separate exact-SHA owner approval an
 2. `supabase/migrations/20261010074500_global_lead_hub_phase2_core_human_ui.sql` — activity, manual **test/dev-only** RPC, assignment, tasks and followups.
 3. `supabase/migrations/20261010182400_global_lead_hub_phase3_whatsapp_inbound.sql` — storage-bound RPC only; no live provider connection.
 4. `supabase/migrations/20261011181500_global_lead_hub_phase5_handoff_persistence.sql` — controlled handoff and queued human-message persistence; provider sends remain disabled.
+5. `supabase/migrations/20261021120000_global_lead_hub_stage1_manual_production_intake.sql` — private idempotency ledger and real authenticated, audited manual Production lead creation with organization-scoped role enforcement.
 
 These are additive, forward-only migrations, but **still affect Production schema, RLS and grants**. No part of this plan is implicit permission to apply them. Record exact reviewed SQL content SHAs and final approved app release SHA; never approve only by branch name. Unrelated GLH/CPC/Commercial PRs must not be silently incorporated into release approval.
 
@@ -48,25 +49,26 @@ These are additive, forward-only migrations, but **still affect Production schem
 
 1. Restore reliable connection to the isolated `hongda-review-dev` test project. The Supabase SQL/migrations endpoint timed out repeatedly on 2026-10-21 despite metadata indicating ACTIVE_HEALTHY. **Do not treat static CI as equivalent to actual DB migration/RLS testing.**
 2. Verify isolated test DB baseline includes organizations, profiles, `(id,org_id)` unique index, `set_updated_at()` and required grants; compare to Production read-only inventory.
-3. Apply four migrations in test project only after a fresh no-conflict confirmation. Exercise:
+3. Apply five migrations in test project only after a fresh no-conflict confirmation. Exercise:
    - migration atomicity and no changes to CPC/legacy business records;
    - `anon` cannot select/execute GLH business mutations;
    - Sales A cannot read Sales B restricted lead, cross-organization reads denied;
    - Manager/Admin limited to their own organization;
    - task/assignment/handoff auditing, replay/idempotency and database error paths;
    - public WhatsApp webhook GET/POST disabled with HTTP 503, no provider call or inbound persistence;
-   - manual test/dev create remains inaccessible on real Production.
+   - manual test/dev create remains inaccessible on real Production; the NEW production intake is separate and checks live `auth.uid()`.
+   - Sales self-ownership, Manager/Admin same-org assignment, Sales A vs B isolation, duplicate email/WhatsApp avoidance, same-key retry and modified-key collision, complete source/audit provenance, and no provider action.
 4. Run current repo CI and GLH unit tests against the exact PR HEAD; Vercel Preview must be READY. Record source branch and head SHA.
 5. Confirm GLH UI on real app target using active Supabase sign-in for relevant roles (in a controlled Pilot). Do not fabricate pass status from static test fixtures.
 
 ## Proposed phased Production execution (requires exact separate owner approval)
 
-- Freeze **one** exact release SHA and 4 exact SQL contents, obtain named Production execution/rollback owners, record prior Production deployment.
+- Freeze **one** exact release SHA and 5 exact SQL contents, obtain named Production execution/rollback owners, record prior Production deployment.
 - Read-only preflight rechecks target identity, source schema, roles/indexes, zero GLH tables and migration version, RLS advisor baseline, project env-name inventory and provider-off constant.
-- Apply 4 SQL migrations *one at a time*, abort immediately on SQL failure/partial state; verify relations/functions/foreign keys/grants/RLS and post-migration Security/Performance Advisors.
+- Apply 5 SQL migrations *one at a time*, abort immediately on SQL failure/partial state; verify relations/functions/foreign keys/grants/RLS and post-migration Security/Performance Advisors.
 - Keep Meta secrets absent and provider traffic disabled. No external account/channel subscription.
 - Deploy/verify only the exact owner-approved app release if the code guard requires deployment; protect CPC, commercial documents and existing web routes.
-- Verify admin, manager and sales authentication and read-only list/dashboard; verify empty state, API denial for unauthorized access, task/assignment permissions with isolated authorized canaries; verify blocked inbound and outbound.
+- Verify admin, manager and sales authentication and read-only list/dashboard; verify real manual lead creation and safe idempotent replay in approved canary records, default/assigned owner visibility, cross-organization denial, duplicate protection, audit history, task/assignment permissions and blocked inbound/outbound.
 - Record postflight observations, known empty-data limitation, and rollback deployment. On failure stop promotion/traffic, preserve records, revert app if necessary; **never DROP newly created Production tables or delete Production records as casual rollback**.
 
 ## Stop/rollback criteria
@@ -77,4 +79,4 @@ Any unauthorized cross-org access; RLS bypass; missing GLH schema/RPC; unexpecte
 
 **Still required before database changes:** Exact Production migration/RLS/grant + code release approval for a frozen SHA, with DB test evidence and rollback identity attached. The earlier owner's instruction to *lead preparation* is not treated as blanket authorization to write Production schema.
 
-**Business choice (separate):** Should Stage 1 allow salespeople to *manually add real leads* before WhatsApp launch? Current frozen V1 deliberately prohibits this path in Production. A yes requires an audited, genuinely Production-safe manual intake API/RPC and UI—not merely setting test/dev flags.
+**Business choice resolved:** On 2026-10-21 the owner explicitly requested **正式环境支持手工录入外贸线索**. Implement a genuinely Production-safe intake API/RPC/UI and dedicated migration, not by changing the test/dev guard. This is *not* approval to execute database changes or deploy the website. Production release and SQL approval remain separate and exact-SHA-scoped.
