@@ -48,8 +48,10 @@ These are additive, forward-only migrations, but **still affect Production schem
 
 ## Database / app prerequisites
 
-1. Restore reliable connection to the isolated `hongda-review-dev` test project. The Supabase SQL/migrations endpoint timed out repeatedly on 2026-10-21 despite metadata indicating ACTIVE_HEALTHY. Later Security Advisors exposed that the project is hibernated; restore_project then reported it is no longer paused / ACTIVE_HEALTHY but database calls continued to time out. This is a control-plane/data-plane state mismatch; stop automated retries and require genuine restored SQL connectivity before real Supabase validation. **Do not treat static CI as equivalent to actual DB migration/RLS testing.**
-2. Verify isolated test DB baseline includes organizations, profiles, `(id,org_id)` unique index, `set_updated_at()` and required grants; compare to Production read-only inventory.
+1. **Resolved 2026-10-22:** isolated `hongda-review-dev` SQL connectivity recovered. A live `SELECT now(), current_database(), current_user` succeeded against project `xulmpqaknlwqqculbsek`. The project reports ACTIVE_HEALTHY and database SQL is now responsive. Do not regress this evidence back to UNKNOWN unless a fresh supported request fails.
+2. Hosted Supabase migration presence is now confirmed on the isolated dev project: **6 GLH migrations, 20 GLH tables, 19 GLH RLS policies**. All 20 `glh_*` tables have RLS enabled. `anon` has no GLH table grants and no GLH function EXECUTE grants. `authenticated` has SELECT only on the intended readable GLH tables and EXECUTE only on controlled GLH RPCs; `PUBLIC` does not retain EXECUTE on GLH RPCs. The private `glh_manual_intake_requests` ledger intentionally has RLS enabled with no direct policy and no authenticated table grant.
+3. Security Advisor was run after the live hosted verification. It reports the private `glh_manual_intake_requests` no-policy condition as INFO and reports authenticated-callable SECURITY DEFINER RPCs as WARN. For GLH, these RPCs are intentionally exposed only to `authenticated`, have `anon`/`PUBLIC` EXECUTE revoked, and rely on explicit in-function identity/organization authorization. This still requires role-behavior verification before release; advisor warnings are not silently treated as PASS.
+4. Verify isolated test DB baseline includes organizations, profiles, `(id,org_id)` unique index, `set_updated_at()` and required grants; compare to Production read-only inventory.
 3. Apply six migrations in test project only after a fresh no-conflict confirmation. Exercise:
    - migration atomicity and no changes to CPC/legacy business records;
    - `anon` cannot select/execute GLH business mutations;
@@ -62,6 +64,23 @@ These are additive, forward-only migrations, but **still affect Production schem
    - Manual-only human stage progression with optimistic version and manager-visible audit, assignee/admin completion of tasks/followups, immutable work completion trail, recalculated next follow-up pointer, cross-org denial and no provider action.
 4. Run current repo CI and GLH unit tests against the exact PR HEAD; Vercel Preview must be READY. Record source branch and head SHA.
 5. Confirm GLH UI on real app target using active Supabase sign-in for relevant roles (in a controlled Pilot). Do not fabricate pass status from static test fixtures.
+
+
+## 2026-10-22 hosted Supabase recovery evidence
+
+- Project: `hongda-review-dev` / `xulmpqaknlwqqculbsek`.
+- Live SQL data plane: **RECOVERED / PASS**.
+- GLH migration history count: **6**.
+- GLH table count: **20**.
+- GLH RLS policy count: **19**.
+- `anon` direct GLH table grants: **0**.
+- `anon` GLH RPC EXECUTE grants: **0**.
+- `PUBLIC` GLH RPC EXECUTE grants: **0**.
+- `authenticated` direct GLH data access: SELECT-only on intended readable tables; write behavior remains through controlled RPCs.
+- Provider ingress/egress remains disabled; no Meta/WhatsApp cutover or customer send was performed.
+- Production project was not modified.
+
+This removes the former **BLOCKER_A: dev SQL timeout**. The remaining pre-release gap is real authenticated role/browser behavior on the hosted dev project plus final exact release/SQL identity and separate Production approval.
 
 ## Proposed phased Production execution (requires exact separate owner approval)
 
