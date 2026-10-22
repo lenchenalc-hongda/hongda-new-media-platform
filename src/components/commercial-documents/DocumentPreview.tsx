@@ -199,7 +199,7 @@ export default function DocumentPreview({ draft }: { draft: CommercialDocumentDr
           <h2 className="font-bold text-gray-800 border-b border-gray-300 pb-2">
             {label('商务及税务说明', 'TERMS & CONDITIONS')}
           </h2>
-          <p><strong>{label('税务说明', 'Tax / Invoice')}：</strong>{taxText}</p>
+          {!(en && !contract) && <p><strong>{label('税务说明', 'Tax / Invoice')}：</strong>{taxText}</p>}
           {draft.validity && !contract && <p><strong>{label('报价有效期', 'Validity')}：</strong>{draft.validity}</p>}
           {draft.paymentTerms && <p className="whitespace-pre-wrap"><strong>{label('付款方式', 'Payment terms')}：</strong>{draft.paymentTerms}</p>}
           {draft.deliveryTerms && <p className="whitespace-pre-wrap"><strong>{label('交付期限', 'Lead time')}：</strong>{draft.deliveryTerms}</p>}
