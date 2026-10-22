@@ -9,6 +9,10 @@ import { NOTICE_TYPES } from './product-notices';
 import type { NoticeOverrides, NoticeSelection } from './product-notices';
 
 export const FIXED_SELLER_NAME = '广东宏达印业股份有限公司';
+export const FIXED_SELLER_NAME_EN = 'GUANGDONG HONGDA PRINTING CO.,LTD.';
+export function fixedSellerName(language: DocumentLanguage): string {
+  return language === 'en' ? FIXED_SELLER_NAME_EN : FIXED_SELLER_NAME;
+}
 
 export const PAYMENT_PRESETS = [
   { value: 'film_monthly', label: '版费先付，花膜月结', text: '版费先付，花膜月结。' },
