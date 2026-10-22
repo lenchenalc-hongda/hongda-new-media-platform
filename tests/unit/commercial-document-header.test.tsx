@@ -24,7 +24,7 @@ for (const kind of ['quotation', 'machine_contract'] as const) {
         })),
       }));
       const html = renderToStaticMarkup(React.createElement(DocumentPreview, { draft }));
-      const imageHeader = kind === 'quotation' && language === 'zh';
+      const imageHeader = kind === 'quotation';
       const clauseCount = (html.match(/class="document-product-note text-gray-800"/g) || []).length;
       assert.equal(clauseCount, counts.length === 1 ? 1 : 3, 'Terms must follow actual product categories without duplicates');
       assert(html.includes(language === 'zh' ? '产品及工艺说明' : 'PRODUCT / PROCESS NOTES'));
@@ -40,14 +40,13 @@ for (const kind of ['quotation', 'machine_contract'] as const) {
         assert(html.includes(language === 'zh' ? '设备电压、频率、气源及技术配置以双方最终确认的设备规格为准。' : '220V / 60Hz'));
       }
       assert.equal(html.includes(headerPath), imageHeader && language === 'zh');
-      assert.equal(html.includes('/document-headers/hongda-quotation-header-en.jpg'), false);
+      assert.equal(html.includes('/document-headers/hongda-quotation-header-en.jpg'), imageHeader && language === 'en');
       assert.equal(html.includes('/hongda-os-original-emblem.png'), !imageHeader);
-      // Compact styling is applied only to the Chinese quotation; machine contracts and English quotes
-      // retain the exact previous density and header structure.
+      // Both quotation languages share image-header layout; contracts retain their existing header.
       assert.equal(html.includes('class="commercial-print compact-quotation bg-white'), imageHeader);
       // Keep the original PNG width/height; never stretch or crop brand artwork.
       if (imageHeader) {
-        assert(html.includes('width="2047" height="515"'), 'Original artwork dimensions must be retained');
+        assert(html.includes(language === 'zh' ? 'width="2047" height="515"' : 'width="2048" height="464"'), 'Original artwork dimensions must be retained');
         assert(html.includes('width:100%;height:auto'), 'Artwork must retain aspect ratio');
         assert(html.includes('table .document-section-title { padding: 5px 9px; line-height: 16px; }'));
         assert(html.includes('margin-top: 8px;'), 'Group sections must use compact vertical spacing');
