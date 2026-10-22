@@ -111,7 +111,8 @@ jobs:
     if: needs.validate.outputs.result == 'READY'
     concurrency:
       group: agent-control-${{ github.repository }}-global-lead-hub
-      cancel-in-progress: false
+      # The latest exact-head validated task supersedes an older execute that is stuck on runner transport.
+      cancel-in-progress: true
     runs-on: [self-hosted, macOS, X64, hongda-agent-control]
     timeout-minutes: 90
     permissions:
