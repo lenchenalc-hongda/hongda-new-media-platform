@@ -125,34 +125,7 @@ jobs:
       failed_check: ${{ steps.run.outputs.failed_check }}
       infra_local_attempts: ${{ steps.run.outputs.infra_local_attempts }}
     steps:
-      - name: Download validated source snapshot
-        id: source_artifact
-        continue-on-error: true
-        timeout-minutes: 3
-        uses: actions/download-artifact@v4
-        with:
-          name: project-lane-source-${{ github.run_id }}
-          path: ${{ runner.temp }}/project-lane-source
-
-      - name: Restore validated source snapshot
-        if: steps.source_artifact.outcome == 'success'
-        shell: bash
-        env:
-          EXPECTED_HEAD: ${{ needs.validate.outputs.expected_head }}
-        run: |
-          set -euo pipefail
-          find "$GITHUB_WORKSPACE" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
-          tar -xzf "$RUNNER_TEMP/project-lane-source/project-lane-source.tgz" -C "$GITHUB_WORKSPACE"
-          cd "$GITHUB_WORKSPACE"
-          test "$(git rev-parse HEAD)" = "$EXPECTED_HEAD"
-          git reset --hard "$EXPECTED_HEAD"
-          git clean -ffdx
-          test -z "$(git status --porcelain)"
-          echo "PROJECT_LANE_LOCAL_EXPECTED_HEAD=$EXPECTED_HEAD" >> "$GITHUB_ENV"
-          echo "PROJECT_LANE_SOURCE_TRANSPORT=ARTIFACT" >> "$GITHUB_ENV"
-
-      - name: Restore source from local Git cache or GitHub archive fallback
-        if: steps.source_artifact.outcome != 'success'
+      - name: Restore exact validated source without marketplace actions
         shell: bash
         env:
           REAL_EXPECTED_HEAD: ${{ needs.validate.outputs.expected_head }}
@@ -161,6 +134,8 @@ jobs:
           set -euo pipefail
           cd "$GITHUB_WORKSPACE"
 
+          # Fast path: the persistent self-hosted worktree already has the exact
+          # validator-approved commit. This needs no network access at all.
           if [ -d .git ] && git cat-file -e "$REAL_EXPECTED_HEAD^{commit}" 2>/dev/null; then
             git reset --hard "$REAL_EXPECTED_HEAD"
             git clean -ffdx
@@ -170,10 +145,11 @@ jobs:
             exit 0
           fi
 
+          # Bounded fallback: fetch the exact validated SHA as an archive. Avoid
+          # actions/download-artifact, checkout and setup actions on the Mac lane
+          # because downloading action bundles was the recurring transport stall.
           archive="$RUNNER_TEMP/project-lane-source-fallback.tgz"
-          extract_dir="$RUNNER_TEMP/project-lane-source-fallback"
-          rm -rf "$extract_dir"
-          mkdir -p "$extract_dir"
+          rm -f "$archive"
           curl -fL --retry 4 --retry-delay 3 --retry-all-errors \
             --connect-timeout 20 --max-time 180 \
             -H "Authorization: Bearer $GITHUB_TOKEN" \
@@ -185,6 +161,9 @@ jobs:
           tar -xzf "$archive" --strip-components=1 -C "$GITHUB_WORKSPACE"
           cd "$GITHUB_WORKSPACE"
 
+          # The archive is cryptographically selected by the validated Git SHA,
+          # but has no .git directory. Create an isolated local baseline only so
+          # project-lane-run.sh can enforce clean-head/path/diff invariants.
           git init -q
           git config user.name "hongda-agent-control-baseline"
           git config user.email "agent-control@hongda.local"
@@ -196,16 +175,32 @@ jobs:
           echo "PROJECT_LANE_LOCAL_EXPECTED_HEAD=$local_head" >> "$GITHUB_ENV"
           echo "PROJECT_LANE_SOURCE_TRANSPORT=GITHUB_ARCHIVE_SYNTHETIC_BASELINE" >> "$GITHUB_ENV"
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
+      - name: Verify local Node and pnpm runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          for dir in /opt/homebrew/bin /usr/local/bin "$HOME/Library/pnpm" "$HOME/.local/share/pnpm"; do
+            if [ -d "$dir" ]; then echo "$dir" >> "$GITHUB_PATH"; fi
+          done
 
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 10
+          node_path="$(command -v node || true)"
+          pnpm_path="$(command -v pnpm || true)"
+          if [ -z "$node_path" ]; then
+            echo "LOCAL_NODE_RUNTIME=MISSING"
+            exit 1
+          fi
+          if [ -z "$pnpm_path" ]; then
+            echo "LOCAL_PNPM_RUNTIME=MISSING"
+            exit 1
+          fi
+          echo "LOCAL_NODE_RUNTIME=$("$node_path" --version)"
+          echo "LOCAL_PNPM_RUNTIME=$("$pnpm_path" --version)"
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm install --frozen-lockfile --prefer-offline
 
       - name: Run bounded project task
         id: run
