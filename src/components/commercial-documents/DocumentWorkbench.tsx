@@ -32,20 +32,20 @@ function localizeSectionTitle(title: string, language: CommercialDocumentDraft['
   return SECTION_TITLES.get(title)?.[language] ?? title;
 }
 const UNIT_PRESETS = [
-  { zh: '支', en: 'pcs' },
+  { zh: '支', en: 'sticks' },
   { zh: '张', en: 'sheets' },
   { zh: '平方米', en: 'm²' },
   { zh: 'pcs', en: 'pcs' },
   { zh: '套', en: 'sets' },
   { zh: '台', en: 'units' },
-  { zh: '个', en: 'pcs' },
+  { zh: '个', en: 'pieces' },
   { zh: '项', en: 'items' },
 ] as const;
 function localizeUnit(unit: string, from: CommercialDocumentDraft['language'], to: CommercialDocumentDraft['language']): string {
   if (from === to) return unit;
   const mapping: Record<string, string> = from === 'zh'
-    ? { '支': 'pcs', '张': 'sheets', '平方米': 'm²', 'pcs': 'pcs', '套': 'sets', '台': 'units', '个': 'pcs', '项': 'items' }
-    : { 'pcs': 'pcs', 'sheets': '张', 'm²': '平方米', 'sets': '套', 'units': '台', 'items': '项' };
+    ? { '支': 'sticks', '张': 'sheets', '平方米': 'm²', 'pcs': 'pcs', '套': 'sets', '台': 'units', '个': 'pieces', '项': 'items' }
+    : { 'sticks': '支', 'pcs': 'pcs', 'pieces': '个', 'sheets': '张', 'm²': '平方米', 'sets': '套', 'units': '台', 'items': '项' };
   return mapping[unit.trim()] ?? unit;
 }
 const CURRENCIES = ['CNY', 'USD', 'EUR'] as const;
