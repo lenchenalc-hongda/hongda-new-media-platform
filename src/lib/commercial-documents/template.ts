@@ -34,7 +34,7 @@ export const SHIPPING_PRESETS = [
 ] as const;
 export const INCOTERMS_2020 = [
   { value: 'exw', label: 'EXW — Ex Works', text: 'EXW — Ex Works (seller makes goods available at the named place; buyer arranges collection; named place/port: [specify]) — Incoterms® 2020.' },
-  { value: 'fca', label: 'FCA — Free Carrier', text: 'FCA — Free Carrier (seller delivers to the buyer's nominated carrier at the named place; named place/port: [specify]) — Incoterms® 2020.' },
+  { value: 'fca', label: 'FCA — Free Carrier', text: 'FCA — Free Carrier (seller delivers to the buyer’s nominated carrier at the named place; named place/port: [specify]) — Incoterms® 2020.' },
   { value: 'cpt', label: 'CPT — Carriage Paid To', text: 'CPT — Carriage Paid To (seller pays carriage to the named destination; risk transfers on delivery to the carrier; named place/port: [specify]) — Incoterms® 2020.' },
   { value: 'cip', label: 'CIP — Carriage and Insurance Paid To', text: 'CIP — Carriage and Insurance Paid To (seller pays carriage and insurance to destination; risk transfers on delivery to the carrier; named place/port: [specify]) — Incoterms® 2020.' },
   { value: 'dap', label: 'DAP — Delivered at Place', text: 'DAP — Delivered at Place (seller delivers ready for unloading at the named destination; buyer handles import clearance; named place/port: [specify]) — Incoterms® 2020.' },
