@@ -7,7 +7,7 @@ import {
   blankItem, documentAmount, formatMoney, initialDraft, isDraftShape,
   itemAmountMinor, sectionAmount, validateForPrint, formatDocumentNumber,
   isGeneratedDocumentNumber, fixedSellerName, PAYMENT_PRESETS,
-  SHIPPING_PRESETS, paymentPresetText, shippingPresetText, normalizeImportedDraft,
+  SHIPPING_PRESETS, INCOTERMS_2020, paymentPresetText, shippingPresetText, normalizeImportedDraft,
   type CommercialDocumentDraft, type DocumentItem, type DocumentSection,
   type PaymentPreset, type ShippingPreset,
 } from '@/lib/commercial-documents/template';
@@ -656,16 +656,24 @@ export default function DocumentWorkbench({ userName }: { userName: string }) {
               placeholder="选择上方预设，或自行填写双方确认的付款条件" />
             <Field required={draft.kind === 'machine_contract'} label="交付条件与期限" multiline value={draft.deliveryTerms} onChange={value => patch('deliveryTerms', value)} />
             <label className="block text-xs text-gray-600">
-              <span className="block mb-1 font-medium">运输方式 / 贸易术语 · 快速选择</span>
+              <span className="block mb-1 font-medium">{draft.language === 'en' && draft.kind === 'quotation' ? 'Terms of Sale · Quick Select' : '运输方式 / 贸易术语 · 快速选择'}</span>
               <select className="w-full" value={draft.shippingPreset}
                 onChange={event => chooseShipping(event.target.value as ShippingPreset)}>
-                <option value="">请选择运输方式 / 贸易术语</option>
-                {SHIPPING_PRESETS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+                <option value="">{draft.language === 'en' && draft.kind === 'quotation' ? 'Select Terms of Sale (Incoterms® 2020)' : '请选择运输方式 / 贸易术语'}</option>
+                {draft.language === 'en' && draft.kind === 'quotation' ? (
+                  <>
+                    {INCOTERMS_2020.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+                    {draft.shippingPreset && !INCOTERMS_2020.some(option => option.value === draft.shippingPreset) && draft.shippingPreset !== 'other' && (
+                      <option value={draft.shippingPreset}>{SHIPPING_PRESETS.find(option => option.value === draft.shippingPreset)?.label ?? draft.shippingPreset} (previous selection)</option>
+                    )}
+                    <option value="other">Other (enter manually)</option>
+                  </>
+                ) : SHIPPING_PRESETS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
               </select>
             </label>
-            <Field label="运输方式 / 贸易术语 · 最终显示文字（可修改）"
+            <Field label={draft.language === 'en' && draft.kind === 'quotation' ? 'Terms of Sale · Final Text (editable)' : '运输方式 / 贸易术语 · 最终显示文字（可修改）'}
               multiline value={draft.shippingTerms} onChange={value => patch('shippingTerms', value)}
-              placeholder="选择上方预设，或自行填写交货地点与运输安排" />
+              placeholder={draft.language === 'en' && draft.kind === 'quotation' ? 'Confirm the named delivery place or port before sending the quotation' : '选择上方预设，或自行填写交货地点与运输安排'} />
             {draft.kind === 'machine_contract' && (
               <>
                 <Field required label="设备验收标准" multiline value={draft.acceptanceTerms} onChange={value => patch('acceptanceTerms', value)} placeholder="产品范围、产能、验收条件须双方明确" />
