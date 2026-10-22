@@ -31,6 +31,23 @@ const SECTION_TITLES = new Map<string, { zh: string; en: string }>(
 function localizeSectionTitle(title: string, language: CommercialDocumentDraft['language']): string {
   return SECTION_TITLES.get(title)?.[language] ?? title;
 }
+const UNIT_PRESETS = [
+  { zh: '支', en: 'pcs' },
+  { zh: '张', en: 'sheets' },
+  { zh: '平方米', en: 'm²' },
+  { zh: 'pcs', en: 'pcs' },
+  { zh: '套', en: 'sets' },
+  { zh: '台', en: 'units' },
+  { zh: '个', en: 'pcs' },
+  { zh: '项', en: 'items' },
+] as const;
+function localizeUnit(unit: string, from: CommercialDocumentDraft['language'], to: CommercialDocumentDraft['language']): string {
+  if (from === to) return unit;
+  const mapping: Record<string, string> = from === 'zh'
+    ? { '支': 'pcs', '张': 'sheets', '平方米': 'm²', 'pcs': 'pcs', '套': 'sets', '台': 'units', '个': 'pcs', '项': 'items' }
+    : { 'pcs': 'pcs', 'sheets': '张', 'm²': '平方米', 'sets': '套', 'units': '台', 'items': '项' };
+  return mapping[unit.trim()] ?? unit;
+}
 const CURRENCIES = ['CNY', 'USD', 'EUR'] as const;
 let sequence = 1;
 function id(prefix: string) { return prefix + '-' + Date.now() + '-' + sequence++; }
@@ -188,7 +205,7 @@ export default function DocumentWorkbench({ userName }: { userName: string }) {
       return {
         ...previous,
         language,
-        sections: previous.sections.map(section => ({ ...section, title: localizeSectionTitle(section.title, language) })),
+        sections: previous.sections.map(section => ({ ...section, title: localizeSectionTitle(section.title, language), items: section.items.map(item => ({ ...item, unit: localizeUnit(item.unit, previous.language, language) })) })),
         paymentTerms: previousPaymentPreset && previous.paymentTerms === previousPaymentPreset
           ? paymentPresetText(previous.paymentPreset, previous.paymentDays, language) : previous.paymentTerms,
         shippingTerms: previousShippingPreset && previous.shippingTerms === previousShippingPreset
@@ -529,7 +546,16 @@ export default function DocumentWorkbench({ userName }: { userName: string }) {
                           {item.mode === 'catalog'
                             ? <div><span className="block text-xs text-gray-600 mb-1">数量</span><div className="text-xs text-gray-500 bg-gray-100 rounded-lg p-2">目录不适用</div></div>
                             : <Field label="数量" value={item.quantity} onChange={value => updateItem(section.id, item.id, { quantity: value })} placeholder="1" />}
-                          <Field label="单位" value={item.unit} onChange={value => updateItem(section.id, item.id, { unit: value })} placeholder="支/㎡/台" />
+                          <label className="block min-w-0">
+                            <span className="block text-xs font-medium text-gray-600 mb-1">{draft.language === 'en' ? 'Unit' : '单位'}</span>
+                            <input className="w-full" type="text" list={`unit-options-${item.id}`}
+                              aria-label={draft.language === 'en' ? 'Unit' : '单位'}
+                              value={item.unit} onChange={event => updateItem(section.id, item.id, { unit: event.target.value })}
+                              placeholder={draft.language === 'en' ? 'Select or type a unit' : '选择或输入单位'} />
+                            <datalist id={`unit-options-${item.id}`}>
+                              {[...new Set(UNIT_PRESETS.map(unit => unit[draft.language]))].map(unit => <option key={unit} value={unit} />)}
+                            </datalist>
+                          </label>
                           <Field required label="单价" value={item.unitPrice}
                             onChange={value => updateItem(section.id, item.id, { unitPrice: value })} placeholder="0.00" />
                         </div>
