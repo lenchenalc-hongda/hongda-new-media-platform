@@ -171,11 +171,12 @@ export const PORTAL_GROUPS: PortalGroup[] = [
   {
     id: 'commercial',
     label: '商务单据',
-    description: '报价单与机器合同模板',
+    description: '报价、合同与月度对账单',
     icon: '📑',
     color: 'red',
     items: [
-      { label: '报价 / 合同模板', path: '/commercial-documents', icon: '📄' },
+      { label: '报价 / 合同模板', path: '/commercial-documents', icon: '📄', matchExact: true },
+      { label: '月度对账单', path: '/commercial-documents/statement', icon: '🧾' },
     ],
   },
   {
