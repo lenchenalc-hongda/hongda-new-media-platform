@@ -1,5 +1,5 @@
 import type { CommercialDocumentDraft } from '@/lib/commercial-documents/template';
-import { documentAmount, formatMoney, itemAmountMinor, sectionAmount, FIXED_SELLER_NAME } from '@/lib/commercial-documents/template';
+import { documentAmount, formatMoney, itemAmountMinor, sectionAmount, fixedSellerName } from '@/lib/commercial-documents/template';
 import { documentProductNotices } from '@/lib/commercial-documents/product-notices';
 
 function safeDisplay(value: string, fallback = '—'): string {
@@ -103,7 +103,7 @@ export default function DocumentPreview({ draft }: { draft: CommercialDocumentDr
                 <div>
                   <p className="font-extrabold text-xl tracking-wide text-gray-900">宏达印业</p>
                   <p className="text-[11px] tracking-[0.16em] font-semibold text-gray-600">HONGDA PRINTING</p>
-                  <p className="text-xs text-gray-600 mt-1">{FIXED_SELLER_NAME}</p>
+                  <p className="text-xs text-gray-600 mt-1">{fixedSellerName(draft.language)}</p>
                 </div>
               </div>
              </div>
@@ -120,7 +120,7 @@ export default function DocumentPreview({ draft }: { draft: CommercialDocumentDr
       <section className="grid grid-cols-2 gap-x-6 gap-y-2 text-xs pb-4 border-b border-gray-200">
         <p><strong>{label('编号', 'No.')}：</strong>{safeDisplay(draft.documentNo)}</p>
         <p><strong>{label('日期', 'Date')}：</strong>{safeDisplay(draft.date)}</p>
-        {!imageHeader && <p><strong>{label('卖方 / 报价方', 'Seller')}：</strong>{FIXED_SELLER_NAME}</p>}
+        {!imageHeader && <p><strong>{label('卖方 / 报价方', 'Seller')}：</strong>{fixedSellerName(draft.language)}</p>}
         <p><strong>{label('客户 / 买方', 'Buyer')}：</strong>{safeDisplay(draft.buyerName)}</p>
         <p><strong>{label('业务员', 'Sales representative')}：</strong>{safeDisplay(draft.salespersonName)}</p>
         {draft.buyerContact && <p><strong>{label('客户联系人', 'Buyer contact')}：</strong>{draft.buyerContact}</p>}
