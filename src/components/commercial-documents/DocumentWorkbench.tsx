@@ -280,7 +280,7 @@ export default function DocumentWorkbench({ userName }: { userName: string }) {
     setDraft(previous => ({
       ...previous, sections: [
         ...previous.sections,
-        { id: id('section'), title: localizeSectionTitle(title, previous.language), items: [blankItem(id('item'))] },
+        { id: id('section'), title: localizeSectionTitle(title, previous.language), items: [{ ...blankItem(id('item')), unit: localizeUnit('项', 'zh', previous.language) }] },
       ],
     }));
     setErrors([]);
@@ -567,7 +567,7 @@ export default function DocumentWorkbench({ userName }: { userName: string }) {
                       </div>
                     ))}
                     <button type="button" onClick={() => updateSection(section.id, group => ({
-                      ...group, items: [...group.items, blankItem(id('item'))],
+                      ...group, items: [...group.items, { ...blankItem(id('item')), unit: localizeUnit('项', 'zh', draft.language) }],
                     }))} className="btn-secondary btn-sm w-full">+ 新增产品明细</button>
                     <div className="flex justify-between items-center bg-gray-100 p-3 rounded-md text-sm font-semibold">
                       <span>本大项已确定金额小计</span>
