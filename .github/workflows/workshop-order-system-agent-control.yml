@@ -124,12 +124,16 @@ jobs:
       infra_local_attempts: ${{ steps.run.outputs.infra_local_attempts }}
     steps:
       - name: Download validated source snapshot
+        id: source_artifact
+        continue-on-error: true
+        timeout-minutes: 3
         uses: actions/download-artifact@v4
         with:
           name: project-lane-source-${{ github.run_id }}
           path: ${{ runner.temp }}/project-lane-source
 
       - name: Restore validated source snapshot
+        if: steps.source_artifact.outcome == 'success'
         shell: bash
         env:
           EXPECTED_HEAD: ${{ needs.validate.outputs.expected_head }}
@@ -142,6 +146,53 @@ jobs:
           git reset --hard "$EXPECTED_HEAD"
           git clean -ffdx
           test -z "$(git status --porcelain)"
+          echo "PROJECT_LANE_LOCAL_EXPECTED_HEAD=$EXPECTED_HEAD" >> "$GITHUB_ENV"
+          echo "PROJECT_LANE_SOURCE_TRANSPORT=ARTIFACT" >> "$GITHUB_ENV"
+
+      - name: Restore source from local Git cache or GitHub archive fallback
+        if: steps.source_artifact.outcome != 'success'
+        shell: bash
+        env:
+          REAL_EXPECTED_HEAD: ${{ needs.validate.outputs.expected_head }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          cd "$GITHUB_WORKSPACE"
+
+          if [ -d .git ] && git cat-file -e "$REAL_EXPECTED_HEAD^{commit}" 2>/dev/null; then
+            git reset --hard "$REAL_EXPECTED_HEAD"
+            git clean -ffdx
+            test -z "$(git status --porcelain)"
+            echo "PROJECT_LANE_LOCAL_EXPECTED_HEAD=$REAL_EXPECTED_HEAD" >> "$GITHUB_ENV"
+            echo "PROJECT_LANE_SOURCE_TRANSPORT=LOCAL_GIT_CACHE" >> "$GITHUB_ENV"
+            exit 0
+          fi
+
+          archive="$RUNNER_TEMP/project-lane-source-fallback.tgz"
+          extract_dir="$RUNNER_TEMP/project-lane-source-fallback"
+          rm -rf "$extract_dir"
+          mkdir -p "$extract_dir"
+          curl -fL --retry 4 --retry-delay 3 --retry-all-errors \
+            --connect-timeout 20 --max-time 180 \
+            -H "Authorization: Bearer $GITHUB_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/$GITHUB_REPOSITORY/tarball/$REAL_EXPECTED_HEAD" \
+            -o "$archive"
+
+          find "$GITHUB_WORKSPACE" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
+          tar -xzf "$archive" --strip-components=1 -C "$GITHUB_WORKSPACE"
+          cd "$GITHUB_WORKSPACE"
+
+          git init -q
+          git config user.name "hongda-agent-control-baseline"
+          git config user.email "agent-control@hongda.local"
+          git add -A
+          git commit -q -m "Verified source snapshot $REAL_EXPECTED_HEAD"
+          local_head="$(git rev-parse HEAD)"
+          test -n "$local_head"
+          test -z "$(git status --porcelain)"
+          echo "PROJECT_LANE_LOCAL_EXPECTED_HEAD=$local_head" >> "$GITHUB_ENV"
+          echo "PROJECT_LANE_SOURCE_TRANSPORT=GITHUB_ARCHIVE_SYNTHETIC_BASELINE" >> "$GITHUB_ENV"
 
       - uses: actions/setup-node@v4
         with:
@@ -163,7 +214,7 @@ jobs:
           TASK_ID: ${{ needs.validate.outputs.task_id }}
           STATUS: ${{ needs.validate.outputs.status }}
           BASE_MASTER_SHA: ${{ needs.validate.outputs.base_master_sha }}
-          EXPECTED_HEAD: ${{ needs.validate.outputs.expected_head }}
+          EXPECTED_HEAD: ${{ env.PROJECT_LANE_LOCAL_EXPECTED_HEAD || needs.validate.outputs.expected_head }}
           BRANCH_NAME: ${{ needs.validate.outputs.branch }}
           OBJECTIVE_B64: ${{ needs.validate.outputs.objective_b64 }}
           ALLOWED_PATHS_B64: ${{ needs.validate.outputs.allowed_paths_b64 }}
