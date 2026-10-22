@@ -18,11 +18,11 @@ export const NOTICE_OPTIONS: { value: NoticeSelection; label: string }[] = [
 ];
 
 export const NOTICE_TITLES: Record<ProductNoticeType, { zh: string; en: string }> = {
-  plate: { zh: '版费', en: 'Copper gravure plate' },
-  gravure_film: { zh: '凹版热转印花膜', en: 'Gravure transfer film' },
-  digital_film: { zh: '数码热转印花膜', en: 'Digital transfer film' },
-  machine: { zh: '机器设备', en: 'Machine configuration and warranty' },
-  processing: { zh: '热转印加工', en: 'Transfer printing service' },
+  plate: { zh: '版费', en: 'Plate-making Fees' },
+  gravure_film: { zh: '凹版热转印花膜', en: 'Gravure Heat Transfer Film' },
+  digital_film: { zh: '数码热转印花膜', en: 'Digital Heat Transfer Film' },
+  machine: { zh: '机器设备', en: 'Machinery and Equipment' },
+  processing: { zh: '热转印加工', en: 'Heat Transfer Printing Services' },
 };
 
 /** Classification never looks at price or tax fields. Unclear names require explicit selection. */
@@ -85,21 +85,30 @@ export const APPROVED_ZH_NOTICES: Record<ProductNoticeType, string> = {
 
 function defaultNoticeText(draft: CommercialDocumentDraft, type: ProductNoticeType): string {
   if (draft.language === 'zh') return APPROVED_ZH_NOTICES[type];
-  // English wording stays on the existing template until the English version is approved.
-  const voltage = draft.machineVoltage?.trim() || 'to be confirmed';
-  const frequency = draft.machineFrequency?.trim() || 'to be confirmed';
-  const warranty = draft.machineWarrantyPeriod?.trim() || 'to be confirmed';
-  if (type === 'machine') {
-    if (draft.kind === 'machine_contract') {
-      return `Power specification: ${voltage} / ${frequency}, subject to the final confirmed equipment configuration. The warranty for non-human-caused component faults follows the agreed warranty terms of this contract.`;
-    }
-    return `Standard power: ${voltage} / ${frequency}, subject to the confirmed machine configuration. Warranty for component faults not caused by human factors: ${warranty}; scope and start date subject to written agreement.`;
-  }
-  const english: Record<Exclude<ProductNoticeType, 'machine'>, string> = {
-    plate: 'Copper gravure plates have an 18-month quality guarantee from the plate-making date. We bear repair costs during this period. Plates older than 18 months with no orders for one full year will be scrapped.',
-    gravure_film: '(1) Printing color and registration may vary by batch (generally about half a PANTONE shade designation and ±0.3 mm registration). The mutually approved proof or customer-provided sample governs. A physical sample must be supplied before plate making and proofing if sample matching is required.\n(2) Transfer adhesion must be verified on the buyer’s actual substrate through supplier sampling and buyer trial approval.',
-    digital_film: 'Digital transfer film is produced to the colors in the customer’s finally approved artwork file. Any special color-matching requirements must be provided and confirmed by both parties before production.',
-    processing: 'Incoming products must be clean. We conduct incoming pre-printing inspections; contamination beyond the mutually agreed threshold requires return or separate handling agreement. A 3% spare allowance is normally reserved for processing, with efforts to minimize usage; difficult products may require a separately agreed higher allowance.',
+  // Match the approved Chinese clauses in scope, conditions, time periods and exclusions.
+  // Keep language-specific overrides in the draft separate from these defaults.
+  const english: Record<ProductNoticeType, string> = {
+    plate: [
+      '1. Copper gravure plates are covered by an 18-month quality warranty from the date plate-making is completed. Under normal storage and use, we will repair defects caused by plate-making quality at no charge. Changes requested by the buyer to artwork, dimensions or process specifications will be charged separately.',
+      '2. Plates that are beyond the warranty period and have not been used for orders for 12 consecutive months will be disposed of upon expiry of that period. Ownership of the physical plates and any special storage requirements are subject to the agreement between both parties.',
+    ].join('\n'),
+    gravure_film: [
+      '1. Print colors, artwork dimensions and color registration shall be based on the physical sample mutually approved by both parties. Reasonable variation between production batches may occur. Any special requirements for color tolerance or registration accuracy must be agreed, together with specific acceptance criteria, before sampling.',
+      '2. Transfer adhesion must be verified through sample testing using the buyer’s actual product material, surface treatment and transfer conditions, and shall be assessed against the test results mutually approved by both parties.',
+      '3. Any special performance requirements, including abrasion resistance, alcohol resistance, water resistance, high-temperature resistance or repeated dishwasher-cycle resistance, must be disclosed before production. The corresponding test conditions and acceptance criteria shall be agreed separately.',
+    ].join('\n'),
+    digital_film: [
+      'Digital heat transfer film is produced according to the final digital artwork and process requirements approved by the buyer. Actual printed results may differ from on-screen appearance due to differences in display devices, printing processes and substrates. Special color requirements must be verified using a physical proof.',
+      'Adhesion and special performance requirements, including abrasion, water and high-temperature resistance, must be verified separately based on the actual substrate and intended use conditions. Special performance requirements not mutually agreed shall not be treated as default product acceptance criteria.',
+    ].join('\n\n'),
+    machine: [
+      'Machine voltage, frequency, air supply and technical configuration shall be based on the equipment specifications finally agreed by both parties. Production capacity shall be verified under the agreed product, transfer film, tooling and testing conditions.',
+      'Under normal operation and maintenance, after-sales service for component failures arising from manufacturing defects shall be provided within the warranty period and scope agreed by both parties. Wear parts, installation, training and other services shall be governed by the contract.',
+    ].join('\n\n'),
+    processing: [
+      'Products supplied by the buyer must meet the mutually agreed requirements for material, dimensions and surface quality. We will carry out the agreed pre-printing incoming inspection after receipt. If contamination, damage or other abnormalities are found, both parties shall agree on return, cleaning or other handling arrangements.',
+      'For standard processing, we recommend providing an additional 3% of the order quantity as spare products for trial production and process loss. Responsibility for any loss shall be determined according to its actual cause and the agreement between both parties. The spare allowance for complex products or special processes must be agreed separately before production.',
+    ].join('\n\n'),
   };
   return english[type];
 }
