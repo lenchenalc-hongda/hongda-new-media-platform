@@ -621,8 +621,8 @@ export default function DocumentWorkbench({ userName }: { userName: string }) {
               )}
           </Panel>
 
-          <Panel title="05 · 税务与商务条款">
-            {draft.market === 'domestic'
+          <Panel title={draft.language === 'en' && draft.kind === 'quotation' ? '05 · Business Terms' : '05 · 税务与商务条款'}>
+            {draft.language === 'en' && draft.kind === 'quotation' ? null : draft.market === 'domestic'
               ? <fieldset className="space-y-2">
                   <legend className="text-xs font-medium text-gray-600 mb-2">税务说明（只显示所选条款，不自动加税或拆分税额）</legend>
                   <label className="flex gap-2 text-xs text-gray-700 items-center">
@@ -680,7 +680,7 @@ export default function DocumentWorkbench({ userName }: { userName: string }) {
               统一收款账户库尚未开发，当前版本不会填写、推断或自动附上任何银行账户。
               后续将由管理员维护经财务批准的账户，员工通过下拉菜单选择，合同自动显示相应信息。
             </p>
-            <p className="text-xs text-gray-500">税务选择与价格独立，系统不会自动调整业务员输入的单价。</p>
+            {!(draft.language === 'en' && draft.kind === 'quotation') && <p className="text-xs text-gray-500">税务选择与价格独立，系统不会自动调整业务员输入的单价。</p>}
           </Panel>
 
           <div className="flex justify-between gap-3 pb-8">
