@@ -79,6 +79,13 @@ These are additive, forward-only migrations, but **still affect Production schem
 - `authenticated` direct GLH data access: SELECT-only on intended readable tables; write behavior remains through controlled RPCs.
 - Provider ingress/egress remains disabled; no Meta/WhatsApp cutover or customer send was performed.
 - Production project was not modified.
+- Hosted-role behavior test used existing dev Auth user IDs plus temporary dev-only profiles/organizations, then removed all temporary GLH/profile/org rows after verification.
+- Sales A could create one manual Production-intake lead through the authenticated RPC and could read it through hosted RLS.
+- Same-org Sales B could not read Sales A's restricted lead.
+- Same-org Manager could read the lead.
+- Cross-organization Sales could not read the lead.
+- Reusing the same request UUID and identical normalized payload returned the same lead/contact with `idempotentReplay=true`.
+- Temporary verification data cleanup was confirmed: remaining test profiles = 0; remaining test leads = 0.
 
 This removes the former **BLOCKER_A: dev SQL timeout**. The remaining pre-release gap is real authenticated role/browser behavior on the hosted dev project plus final exact release/SQL identity and separate Production approval.
 
