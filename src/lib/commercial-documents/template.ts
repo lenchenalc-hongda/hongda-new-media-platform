@@ -328,7 +328,7 @@ export function isDraftShape(value: unknown): value is CommercialDocumentDraft {
     && (draft.buyerCustomerReferenceId === undefined || typeof draft.buyerCustomerReferenceId === 'string')
     && (draft.paymentDays === undefined || typeof draft.paymentDays === 'string')
     && (draft.paymentPreset === undefined || draft.paymentPreset === '' || PAYMENT_PRESETS.some(option => option.value === draft.paymentPreset))
-    && (draft.shippingPreset === undefined || draft.shippingPreset === '' || SHIPPING_PRESETS.some(option => option.value === draft.shippingPreset))
+    && (draft.shippingPreset === undefined || draft.shippingPreset === '' || [...SHIPPING_PRESETS, ...INCOTERMS_2020].some(option => option.value === draft.shippingPreset))
     && (draft.machineVoltage === undefined || typeof draft.machineVoltage === 'string' && draft.machineVoltage.length <= 60)
     && (draft.machineFrequency === undefined || typeof draft.machineFrequency === 'string' && draft.machineFrequency.length <= 60)
     && (draft.machineWarrantyPeriod === undefined || typeof draft.machineWarrantyPeriod === 'string' && draft.machineWarrantyPeriod.length <= 60)
@@ -368,7 +368,7 @@ export function normalizeImportedDraft(draft: CommercialDocumentDraft, salespers
     machineFrequency: typeof draft.machineFrequency === 'string' ? draft.machineFrequency : '60Hz',
     machineWarrantyPeriod: typeof draft.machineWarrantyPeriod === 'string' ? draft.machineWarrantyPeriod : '',
     noticeOverrides: draft.noticeOverrides ?? {},
-    shippingPreset: SHIPPING_PRESETS.some(option => option.value === draft.shippingPreset)
+    shippingPreset: [...SHIPPING_PRESETS, ...INCOTERMS_2020].some(option => option.value === draft.shippingPreset)
       ? draft.shippingPreset : draft.shippingTerms ? 'other' : '',
     accountLabel: '',
     accountDetails: '',
