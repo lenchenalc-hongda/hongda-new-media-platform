@@ -201,7 +201,7 @@ export default function DocumentWorkbench({ userName }: { userName: string }) {
   const changeLanguage = (language: CommercialDocumentDraft['language']) => {
     setDraft(previous => {
       const previousPaymentPreset = paymentPresetText(previous.paymentPreset, previous.paymentDays, previous.language);
-      const previousShippingPreset = shippingPresetText(previous.shippingPreset, previous.language);
+      const previousShippingPreset = shippingPresetText(previous.shippingPreset, previous.language, previous.kind === 'quotation' && previous.language === 'en');
       return {
         ...previous,
         language,
@@ -209,7 +209,7 @@ export default function DocumentWorkbench({ userName }: { userName: string }) {
         paymentTerms: previousPaymentPreset && previous.paymentTerms === previousPaymentPreset
           ? paymentPresetText(previous.paymentPreset, previous.paymentDays, language) : previous.paymentTerms,
         shippingTerms: previousShippingPreset && previous.shippingTerms === previousShippingPreset
-          ? shippingPresetText(previous.shippingPreset, language) : previous.shippingTerms,
+          ? shippingPresetText(previous.shippingPreset, language, previous.kind === 'quotation' && language === 'en') : previous.shippingTerms,
       };
     });
     setErrors([]);
@@ -238,7 +238,7 @@ export default function DocumentWorkbench({ userName }: { userName: string }) {
     setDraft(previous => ({
       ...previous,
       shippingPreset: preset,
-      shippingTerms: preset === 'other' ? '' : shippingPresetText(preset, previous.language),
+      shippingTerms: preset === 'other' ? '' : shippingPresetText(preset, previous.language, previous.kind === 'quotation' && previous.language === 'en'),
     }));
     setErrors([]);
   };
