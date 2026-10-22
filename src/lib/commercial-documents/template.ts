@@ -74,8 +74,8 @@ export function paymentPresetText(preset: PaymentPreset, days: string, language:
     : PAYMENT_PRESETS.find(option => option.value === preset)?.text ?? '';
 }
 
-export function shippingPresetText(preset: ShippingPreset, language: DocumentLanguage = 'zh'): string {
-  if (language === 'en') {
+export function shippingPresetText(preset: ShippingPreset, language: DocumentLanguage = 'zh', useIncoterms = false): string {
+  if (language === 'en' && useIncoterms) {
     const incoterm = INCOTERMS_2020.find(option => option.value === preset);
     if (incoterm) return incoterm.text;
   }
