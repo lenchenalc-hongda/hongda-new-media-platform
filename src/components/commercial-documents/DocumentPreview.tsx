@@ -12,7 +12,7 @@ const printStyles = [
   '.commercial-print thead { display: table-header-group; }',
   '.commercial-print tr { break-inside: avoid; page-break-inside: avoid; }',
   '.commercial-print .no-split { break-inside: avoid; page-break-inside: avoid; }',
-  // Compact styling applies only to Chinese quotations. Avoid '>' CSS combinators:
+  // Compact styling applies to image-header quotations. Avoid '>' CSS combinators:
   // SSR encodes them as entities inside <style>, causing print/PDF discrepancies.
   '.commercial-print.compact-quotation header .py-4 { padding-top: 9px; padding-bottom: 9px; }',
   '.commercial-print.compact-quotation header .py-4 h1 { font-size: 18px; line-height: 24px; }',
@@ -67,8 +67,10 @@ const printStyles = [
 export default function DocumentPreview({ draft }: { draft: CommercialDocumentDraft }) {
   const en = draft.language === 'en';
   const contract = draft.kind === 'machine_contract';
-  const imageHeader = draft.kind === 'quotation' && draft.language === 'zh'
-    ? { src: '/document-headers/hongda-quotation-header-zh.png', width: 2047, height: 515, alt: '宏达印业中文报价抬头（公司名称及联系方式）' }
+  const imageHeader = draft.kind === 'quotation'
+    ? en
+      ? { src: '/document-headers/hongda-quotation-header-en.jpg', width: 2048, height: 464, alt: 'Hongda Printing quotation header (company and contact details)' }
+      : { src: '/document-headers/hongda-quotation-header-zh.png', width: 2047, height: 515, alt: '宏达印业中文报价抬头（公司名称及联系方式）' }
     : null;
   const total = documentAmount(draft);
   const productNotices = documentProductNotices(draft);
