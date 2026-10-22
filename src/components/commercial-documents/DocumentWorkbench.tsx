@@ -6,7 +6,7 @@ import DocumentPreview from './DocumentPreview';
 import {
   blankItem, documentAmount, formatMoney, initialDraft, isDraftShape,
   itemAmountMinor, sectionAmount, validateForPrint, formatDocumentNumber,
-  isGeneratedDocumentNumber, FIXED_SELLER_NAME, PAYMENT_PRESETS,
+  isGeneratedDocumentNumber, fixedSellerName, PAYMENT_PRESETS,
   SHIPPING_PRESETS, paymentPresetText, shippingPresetText, normalizeImportedDraft,
   type CommercialDocumentDraft, type DocumentItem, type DocumentSection,
   type PaymentPreset, type ShippingPreset,
@@ -435,7 +435,7 @@ export default function DocumentWorkbench({ userName }: { userName: string }) {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="sm:col-span-2 rounded-lg bg-gray-50 border border-gray-200 p-3">
                 <p className="text-xs text-gray-500 mb-1">卖方正式主体（固定，不可更改）</p>
-                <p className="text-sm font-bold text-gray-800">{FIXED_SELLER_NAME}</p>
+                <p className="text-sm font-bold text-gray-800">{fixedSellerName(draft.language)}</p>
               </div>
               <div className="rounded-lg bg-gray-50 border border-gray-200 p-3">
                 <p className="text-xs text-gray-500 mb-1">业务员（当前登录账号）</p>
