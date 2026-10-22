@@ -1,6 +1,25 @@
 import type { CommercialDocumentDraft } from '@/lib/commercial-documents/template';
 import { documentAmount, formatMoney, itemAmountMinor, sectionAmount, FIXED_SELLER_NAME } from '@/lib/commercial-documents/template';
-import { documentProductNotices } from '@/lib/commercial-documents/product-notices';
+import { documentProductNotices, sectionNoticeType } from '@/lib/commercial-documents/product-notices';
+
+const EN_SECTION_TITLES: Record<string, string> = {
+  '版费': 'Plate-making Fees',
+  '热转印花膜': 'Heat Transfer Film',
+  '数码花膜': 'Digital Heat Transfer Film',
+  '机器设备': 'Machinery and Equipment',
+  '夹具与配件': 'Tooling and Accessories',
+  '加工费用': 'Printing Service Fees',
+  '其他费用': 'Other Charges',
+};
+function displaySectionTitle(title: string, en: boolean): string {
+  if (!en) return title;
+  return EN_SECTION_TITLES[title.trim()] ?? title;
+}
+function displayItemUnit(unit: string, en: boolean): string {
+  if (!en) return unit;
+  const units: Record<string, string> = { '项': 'item', '个': 'pc', '件': 'pc', '套': 'set', '台': 'unit', '张': 'sheet', '卷': 'roll', '米': 'm', '平方米': 'm²' };
+  return units[unit.trim()] ?? unit;
+}
 
 function safeDisplay(value: string, fallback = '—'): string {
   return value.trim() || fallback;
@@ -67,8 +86,8 @@ const printStyles = [
 export default function DocumentPreview({ draft }: { draft: CommercialDocumentDraft }) {
   const en = draft.language === 'en';
   const contract = draft.kind === 'machine_contract';
-  const imageHeader = draft.kind === 'quotation' && draft.language === 'zh'
-    ? { src: '/document-headers/hongda-quotation-header-zh.png', width: 2047, height: 515, alt: '宏达印业中文报价抬头（公司名称及联系方式）' }
+  const imageHeader = draft.kind === 'quotation'
+    ? { src: draft.language === 'zh' ? '/document-headers/hongda-quotation-header-zh.png' : '/hongda-os-original-emblem.png', width: 2047, height: 515, alt: draft.language === 'zh' ? '宏达印业中文报价抬头（公司名称及联系方式）' : 'Hongda Printing quotation header' }
     : null;
   const total = documentAmount(draft);
   const productNotices = documentProductNotices(draft);
@@ -132,7 +151,7 @@ export default function DocumentPreview({ draft }: { draft: CommercialDocumentDr
           return (
             <section key={section.id} className="document-section">
               {!imageHeader && <div className="document-section-title bg-gray-700 text-white text-xs font-bold py-2 px-3">
-                {index + 1}. {safeDisplay(section.title, label('未命名大项', 'Untitled section'))}
+                {index + 1}. {safeDisplay(displaySectionTitle(section.title, en), label('未命名大项', 'Untitled section'))}
               </div>}
               <table className="w-full table-fixed text-xs border-collapse">
                 {imageHeader && <colgroup>
@@ -161,8 +180,8 @@ export default function DocumentPreview({ draft }: { draft: CommercialDocumentDr
                           {item.specification && <p className="text-[11px] text-gray-600 whitespace-pre-wrap">{item.specification}</p>}
                           {item.note && <p className="text-[11px] text-gray-500 whitespace-pre-wrap">{item.note}</p>}
                         </td>
-                        <td className="p-2 text-right">{item.mode === 'catalog' ? '—' : (item.quantity + ' ' + item.unit)}</td>
-                        <td className="p-2 text-right">{item.unitPrice && /^\d+(?:\.\d+)?$/.test(item.unitPrice) ? item.unitPrice + ' / ' + item.unit : '—'}</td>
+                        <td className="p-2 text-right">{item.mode === 'catalog' ? '—' : (item.quantity + ' ' + displayItemUnit(item.unit, en))}</td>
+                        <td className="p-2 text-right">{item.unitPrice && /^\d+(?:\.\d+)?$/.test(item.unitPrice) ? item.unitPrice + ' / ' + displayItemUnit(item.unit, en) : '—'}</td>
                         <td className="p-2 text-right">{amount === null ? '—' : amountText(amount)}</td>
                       </tr>
                     );
