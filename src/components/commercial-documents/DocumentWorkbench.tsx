@@ -16,7 +16,21 @@ import {
   type NoticeSelection, type ProductNoticeType,
 } from '@/lib/commercial-documents/product-notices';
 
-const SECTION_PRESETS = ['版费', '热转印花膜', '数码花膜', '机器设备', '夹具与配件', '加工费用', '其他费用'];
+const SECTION_PRESETS = [
+  { zh: '版费', en: 'Plate-making Fees' },
+  { zh: '热转印花膜', en: 'Heat Transfer Film' },
+  { zh: '数码花膜', en: 'Digital Heat Transfer Film' },
+  { zh: '机器设备', en: 'Machinery and Equipment' },
+  { zh: '夹具与配件', en: 'Tooling and Accessories' },
+  { zh: '加工费用', en: 'Printing Service Fees' },
+  { zh: '其他费用', en: 'Other Charges' },
+] as const;
+const SECTION_TITLES = new Map<string, { zh: string; en: string }>(
+  SECTION_PRESETS.flatMap(preset => [[preset.zh, preset], [preset.en, preset]]),
+);
+function localizeSectionTitle(title: string, language: CommercialDocumentDraft['language']): string {
+  return SECTION_TITLES.get(title)?.[language] ?? title;
+}
 const CURRENCIES = ['CNY', 'USD', 'EUR'] as const;
 let sequence = 1;
 function id(prefix: string) { return prefix + '-' + Date.now() + '-' + sequence++; }
@@ -174,6 +188,7 @@ export default function DocumentWorkbench({ userName }: { userName: string }) {
       return {
         ...previous,
         language,
+        sections: previous.sections.map(section => ({ ...section, title: localizeSectionTitle(section.title, language) })),
         paymentTerms: previousPaymentPreset && previous.paymentTerms === previousPaymentPreset
           ? paymentPresetText(previous.paymentPreset, previous.paymentDays, language) : previous.paymentTerms,
         shippingTerms: previousShippingPreset && previous.shippingTerms === previousShippingPreset
@@ -248,7 +263,7 @@ export default function DocumentWorkbench({ userName }: { userName: string }) {
     setDraft(previous => ({
       ...previous, sections: [
         ...previous.sections,
-        { id: id('section'), title, items: [blankItem(id('item'))] },
+        { id: id('section'), title: localizeSectionTitle(title, previous.language), items: [blankItem(id('item'))] },
       ],
     }));
     setErrors([]);
@@ -537,8 +552,8 @@ export default function DocumentWorkbench({ userName }: { userName: string }) {
               );
             })}
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-              {SECTION_PRESETS.map(name => <button key={name} type="button" className="btn-secondary btn-sm" onClick={() => addSection(name)}>+ {name}</button>)}
-              <button type="button" className="btn-primary btn-sm" onClick={() => addSection('新增大项')}>+ 自定义大项</button>
+              {SECTION_PRESETS.map(preset => <button key={preset.zh} type="button" className="btn-secondary btn-sm" onClick={() => addSection(preset.zh)}>+ {preset[draft.language]}</button>)}
+              <button type="button" className="btn-primary btn-sm" onClick={() => addSection(draft.language === 'en' ? 'New Section' : '新增大项')}>+ {draft.language === 'en' ? 'Custom Section' : '自定义大项'}</button>
             </div>
             <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 flex justify-between items-center gap-3">
               <span className="text-sm font-bold text-red-800">{total.catalogLines ? '已确定金额合计（单价目录除外）' : '整张单据总金额'}</span>
