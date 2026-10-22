@@ -178,11 +178,41 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for dir in /opt/homebrew/bin /usr/local/bin "$HOME/Library/pnpm" "$HOME/.local/share/pnpm"; do
-            if [ -d "$dir" ]; then echo "$dir" >> "$GITHUB_PATH"; fi
-          done
 
+          add_runtime_dir() {
+            local dir="$1"
+            if [ -d "$dir" ]; then
+              export PATH="$dir:$PATH"
+              echo "$dir" >> "$GITHUB_PATH"
+            fi
+          }
+
+          # Normal machine-level locations plus pnpm/action-setup's persistent
+          # install from previous successful runs.
+          add_runtime_dir /opt/homebrew/bin
+          add_runtime_dir /usr/local/bin
+          add_runtime_dir "$HOME/Library/pnpm"
+          add_runtime_dir "$HOME/.local/share/pnpm"
+          add_runtime_dir "$HOME/setup-pnpm/node_modules/.bin"
+
+          # setup-node caches Node under the runner work tool directory. Reuse
+          # that cache directly so the self-hosted lane does not need to
+          # download the setup-node action on every task.
+          runner_work_dir="$(dirname "$RUNNER_TEMP")"
           node_path="$(command -v node || true)"
+          if [ -z "$node_path" ]; then
+            for candidate in \
+              "$runner_work_dir"/_tool/node/20.*/x64/bin/node \
+              "$runner_work_dir"/_tool/node/22.*/x64/bin/node \
+              "$runner_work_dir"/_tool/node/24.*/x64/bin/node; do
+              if [ -x "$candidate" ]; then
+                add_runtime_dir "$(dirname "$candidate")"
+                node_path="$candidate"
+                break
+              fi
+            done
+          fi
+
           pnpm_path="$(command -v pnpm || true)"
           if [ -z "$node_path" ]; then
             echo "LOCAL_NODE_RUNTIME=MISSING"
