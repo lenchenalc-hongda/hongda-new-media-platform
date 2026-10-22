@@ -91,24 +91,24 @@ function defaultNoticeText(draft: CommercialDocumentDraft, type: ProductNoticeTy
     plate: [
       '1. Copper gravure plates are covered by an 18-month quality warranty from the date plate-making is completed. Under normal storage and use, we will repair defects caused by plate-making quality at no charge. Changes requested by the buyer to artwork, dimensions or process specifications will be charged separately.',
       '2. Plates that are beyond the warranty period and have not been used for orders for 12 consecutive months will be disposed of upon expiry of that period. Ownership of the physical plates and any special storage requirements are subject to the agreement between both parties.',
-    ].join('\\n'),
+    ].join('\n'),
     gravure_film: [
       '1. Print colors, artwork dimensions and color registration shall be based on the physical sample mutually approved by both parties. Reasonable variation between production batches may occur. Any special requirements for color tolerance or registration accuracy must be agreed, together with specific acceptance criteria, before sampling.',
       '2. Transfer adhesion must be verified through sample testing using the buyer’s actual product material, surface treatment and transfer conditions, and shall be assessed against the test results mutually approved by both parties.',
       '3. Any special performance requirements, including abrasion resistance, alcohol resistance, water resistance, high-temperature resistance or repeated dishwasher-cycle resistance, must be disclosed before production. The corresponding test conditions and acceptance criteria shall be agreed separately.',
-    ].join('\\n'),
+    ].join('\n'),
     digital_film: [
       'Digital heat transfer film is produced according to the final digital artwork and process requirements approved by the buyer. Actual printed results may differ from on-screen appearance due to differences in display devices, printing processes and substrates. Special color requirements must be verified using a physical proof.',
       'Adhesion and special performance requirements, including abrasion, water and high-temperature resistance, must be verified separately based on the actual substrate and intended use conditions. Special performance requirements not mutually agreed shall not be treated as default product acceptance criteria.',
-    ].join('\\n\\n'),
+    ].join('\n\n'),
     machine: [
       'Machine voltage, frequency, air supply and technical configuration shall be based on the equipment specifications finally agreed by both parties. Production capacity shall be verified under the agreed product, transfer film, tooling and testing conditions.',
       'Under normal operation and maintenance, after-sales service for component failures arising from manufacturing defects shall be provided within the warranty period and scope agreed by both parties. Wear parts, installation, training and other services shall be governed by the contract.',
-    ].join('\\n\\n'),
+    ].join('\n\n'),
     processing: [
       'Products supplied by the buyer must meet the mutually agreed requirements for material, dimensions and surface quality. We will carry out the agreed pre-printing incoming inspection after receipt. If contamination, damage or other abnormalities are found, both parties shall agree on return, cleaning or other handling arrangements.',
       'For standard processing, we recommend providing an additional 3% of the order quantity as spare products for trial production and process loss. Responsibility for any loss shall be determined according to its actual cause and the agreement between both parties. The spare allowance for complex products or special processes must be agreed separately before production.',
-    ].join('\\n\\n'),
+    ].join('\n\n'),
   };
   return english[type];
 }
