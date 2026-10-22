@@ -32,7 +32,20 @@ export const SHIPPING_PRESETS = [
   { value: 'pickup', label: '客户自提', text: '客户自提。' },
   { value: 'other', label: '其他（自行填写）', text: '' },
 ] as const;
-export type ShippingPreset = '' | (typeof SHIPPING_PRESETS)[number]['value'];
+export const INCOTERMS_2020 = [
+  { value: 'exw', label: 'EXW — Ex Works', text: 'EXW — Ex Works (seller makes goods available at the named place; buyer arranges collection; named place/port: [specify]) — Incoterms® 2020.' },
+  { value: 'fca', label: 'FCA — Free Carrier', text: 'FCA — Free Carrier (seller delivers to the buyer’s nominated carrier at the named place; named place/port: [specify]) — Incoterms® 2020.' },
+  { value: 'cpt', label: 'CPT — Carriage Paid To', text: 'CPT — Carriage Paid To (seller pays carriage to the named destination; risk transfers on delivery to the carrier; named place/port: [specify]) — Incoterms® 2020.' },
+  { value: 'cip', label: 'CIP — Carriage and Insurance Paid To', text: 'CIP — Carriage and Insurance Paid To (seller pays carriage and insurance to destination; risk transfers on delivery to the carrier; named place/port: [specify]) — Incoterms® 2020.' },
+  { value: 'dap', label: 'DAP — Delivered at Place', text: 'DAP — Delivered at Place (seller delivers ready for unloading at the named destination; buyer handles import clearance; named place/port: [specify]) — Incoterms® 2020.' },
+  { value: 'dpu', label: 'DPU — Delivered at Place Unloaded', text: 'DPU — Delivered at Place Unloaded (seller delivers and unloads at the named destination; buyer handles import clearance; named place/port: [specify]) — Incoterms® 2020.' },
+  { value: 'ddp', label: 'DDP — Delivered Duty Paid', text: 'DDP — Delivered Duty Paid (seller delivers ready for unloading with import clearance and duties paid; named place/port: [specify]) — Incoterms® 2020.' },
+  { value: 'fas', label: 'FAS — Free Alongside Ship', text: 'FAS — Free Alongside Ship (seller delivers alongside the vessel at the named port of shipment; named place/port: [specify]) — Incoterms® 2020.' },
+  { value: 'fob', label: 'FOB — Free On Board', text: 'FOB — Free On Board (seller loads goods on board at the named port of shipment; named place/port: [specify]) — Incoterms® 2020.' },
+  { value: 'cfr', label: 'CFR — Cost and Freight', text: 'CFR — Cost and Freight (seller pays freight to the named destination port; risk transfers once on board; named place/port: [specify]) — Incoterms® 2020.' },
+  { value: 'cif', label: 'CIF — Cost, Insurance and Freight', text: 'CIF — Cost, Insurance and Freight (seller pays freight and insurance to destination port; risk transfers once on board; named place/port: [specify]) — Incoterms® 2020.' },
+] as const;
+export type ShippingPreset = '' | (typeof SHIPPING_PRESETS)[number]['value'] | (typeof INCOTERMS_2020)[number]['value'];
 
 const PAYMENT_TEXT_EN: Partial<Record<PaymentPreset, string>> = {
   film_monthly: 'Plate-making fees payable in advance; transfer film payments settled monthly.',
@@ -61,7 +74,11 @@ export function paymentPresetText(preset: PaymentPreset, days: string, language:
     : PAYMENT_PRESETS.find(option => option.value === preset)?.text ?? '';
 }
 
-export function shippingPresetText(preset: ShippingPreset, language: DocumentLanguage = 'zh'): string {
+export function shippingPresetText(preset: ShippingPreset, language: DocumentLanguage = 'zh', useIncoterms = false): string {
+  if (language === 'en' && useIncoterms) {
+    const incoterm = INCOTERMS_2020.find(option => option.value === preset);
+    if (incoterm) return incoterm.text;
+  }
   return language === 'en'
     ? SHIPPING_TEXT_EN[preset] ?? ''
     : SHIPPING_PRESETS.find(option => option.value === preset)?.text ?? '';
@@ -311,7 +328,7 @@ export function isDraftShape(value: unknown): value is CommercialDocumentDraft {
     && (draft.buyerCustomerReferenceId === undefined || typeof draft.buyerCustomerReferenceId === 'string')
     && (draft.paymentDays === undefined || typeof draft.paymentDays === 'string')
     && (draft.paymentPreset === undefined || draft.paymentPreset === '' || PAYMENT_PRESETS.some(option => option.value === draft.paymentPreset))
-    && (draft.shippingPreset === undefined || draft.shippingPreset === '' || SHIPPING_PRESETS.some(option => option.value === draft.shippingPreset))
+    && (draft.shippingPreset === undefined || draft.shippingPreset === '' || [...SHIPPING_PRESETS, ...INCOTERMS_2020].some(option => option.value === draft.shippingPreset))
     && (draft.machineVoltage === undefined || typeof draft.machineVoltage === 'string' && draft.machineVoltage.length <= 60)
     && (draft.machineFrequency === undefined || typeof draft.machineFrequency === 'string' && draft.machineFrequency.length <= 60)
     && (draft.machineWarrantyPeriod === undefined || typeof draft.machineWarrantyPeriod === 'string' && draft.machineWarrantyPeriod.length <= 60)
@@ -351,7 +368,7 @@ export function normalizeImportedDraft(draft: CommercialDocumentDraft, salespers
     machineFrequency: typeof draft.machineFrequency === 'string' ? draft.machineFrequency : '60Hz',
     machineWarrantyPeriod: typeof draft.machineWarrantyPeriod === 'string' ? draft.machineWarrantyPeriod : '',
     noticeOverrides: draft.noticeOverrides ?? {},
-    shippingPreset: SHIPPING_PRESETS.some(option => option.value === draft.shippingPreset)
+    shippingPreset: [...SHIPPING_PRESETS, ...INCOTERMS_2020].some(option => option.value === draft.shippingPreset)
       ? draft.shippingPreset : draft.shippingTerms ? 'other' : '',
     accountLabel: '',
     accountDetails: '',
