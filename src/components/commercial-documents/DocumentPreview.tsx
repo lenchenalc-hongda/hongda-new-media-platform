@@ -203,7 +203,7 @@ export default function DocumentPreview({ draft }: { draft: CommercialDocumentDr
           {draft.validity && !contract && <p><strong>{label('报价有效期', 'Validity')}：</strong>{draft.validity}</p>}
           {draft.paymentTerms && <p className="whitespace-pre-wrap"><strong>{label('付款方式', 'Payment terms')}：</strong>{draft.paymentTerms}</p>}
           {draft.deliveryTerms && <p className="whitespace-pre-wrap"><strong>{label('交付期限', 'Lead time')}：</strong>{draft.deliveryTerms}</p>}
-          {draft.shippingTerms && <p className="whitespace-pre-wrap"><strong>{label('运输 / 贸易术语', 'Shipping / Incoterms')}：</strong>{draft.shippingTerms}</p>}
+          {draft.shippingTerms && <p className="whitespace-pre-wrap"><strong>{en && !contract ? 'Terms of Sale' : label('运输 / 贸易术语', 'Shipping / Incoterms')}：</strong>{draft.shippingTerms}</p>}
           {contract && draft.acceptanceTerms && <p className="whitespace-pre-wrap"><strong>{label('验收条件', 'Acceptance terms')}：</strong>{draft.acceptanceTerms}</p>}
           {contract && draft.warrantyTerms && <p className="whitespace-pre-wrap"><strong>{label('售后与保修', 'Warranty / After-sales')}：</strong>{draft.warrantyTerms}</p>}
           {draft.additionalTerms && <p className="whitespace-pre-wrap"><strong>{label('其他约定', 'Additional terms')}：</strong>{draft.additionalTerms}</p>}
