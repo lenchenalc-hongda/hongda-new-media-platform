@@ -96,6 +96,7 @@ jobs:
           echo "CODEX_EXEC_EXIT=$code"
           if [ "$code" -ne 0 ]; then
             echo "CODEX_STDERR_CLASSIFICATION:"
+            sed -E 's/sk-[A-Za-z0-9_-]{8,}/[REDACTED]/g; s/(Bearer )[A-Za-z0-9_.-]+/\1[REDACTED]/g' "$tmp/stderr" | tail -12
             if grep -Eqi '401|unauthorized|invalid.api.key' "$tmp/stderr"; then echo "PROVIDER_AUTH"; \
             elif grep -Eqi 'model|config|wire_api|unknown variant' "$tmp/stderr"; then echo "MODEL_OR_CONFIG"; \
             elif grep -Eqi 'network|timeout|connect|proxy|TLS' "$tmp/stderr"; then echo "NETWORK"; \
