@@ -29,14 +29,15 @@ jobs:
       - name: Real minimal DeepSeek model roundtrip, no output or secret disclosure
         id: model
         shell: bash
-        env:
-          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
         run: |
           set -euo pipefail
-          if [ -z "${DEEPSEEK_API_KEY:-}" ]; then
-            echo "MODEL_AUTH=NOT_CONFIGURED_IN_GITHUB_ACTIONS_SECRET"
+          DEEPSEEK_API_KEY="$(/bin/launchctl getenv DEEPSEEK_API_KEY 2>/dev/null || true)"
+          if [ -z "$DEEPSEEK_API_KEY" ]; then
+            echo "MODEL_AUTH=NOT_CONFIGURED_IN_LAUNCHCTL"
             exit 1
           fi
+          echo "MODEL_AUTH=LAUNCHCTL_AVAILABLE"
+          export DEEPSEEK_API_KEY
           response_file="$(mktemp)"
           trap 'rm -f "$response_file"' EXIT
           status=$(curl -x http://127.0.0.1:10808 --silent --show-error --connect-timeout 8 --max-time 35 \
