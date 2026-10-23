@@ -90,7 +90,7 @@ jobs:
             DEEPSEEK_API_KEY="$key" HTTPS_PROXY="http://127.0.0.1:10808" HTTP_PROXY="http://127.0.0.1:10808" \
             "$codex" --no-daemon exec -m deepseek-chat -C "$tmp/work" -s read-only \
             -c 'approval_policy="never"' --ephemeral --ignore-rules \
-            --output-last-message "$tmp/result" - < "$tmp/prompt" > "$tmp/stdout" 2> "$tmp/stderr"
+            --skip-git-repo-check --output-last-message "$tmp/result" - < "$tmp/prompt" > "$tmp/stdout" 2> "$tmp/stderr"
           code=$?
           set -e
           echo "CODEX_EXEC_EXIT=$code"
