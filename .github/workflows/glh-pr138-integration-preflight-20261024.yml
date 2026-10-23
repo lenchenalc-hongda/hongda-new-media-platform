@@ -26,14 +26,14 @@ jobs:
           ref: 057fe083cf4b373bb6a042c963f54454dad60c22
           path: base
           persist-credentials: false
-          fetch-depth: 1
+          fetch-depth: 0
       - name: Checkout exact GLH PR 138 HEAD without retained credentials
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           ref: 7a445b20383e48e15a96346f12584b3e6a8b190e
           path: pr
           persist-credentials: false
-          fetch-depth: 1
+          fetch-depth: 0
       - name: Merge PR into frozen master in a disposable workspace
         id: merge
         shell: bash
@@ -43,6 +43,9 @@ jobs:
           test "$(git rev-parse HEAD)" = "$FROZEN_MASTER"
           test "$(git -C ../pr rev-parse HEAD)" = "$PR_HEAD"
           git -c protocol.file.allow=always fetch -q --no-tags ../pr "$PR_HEAD"
+          test "$(git rev-parse FETCH_HEAD)" = "$PR_HEAD"
+          git cat-file -e "$PR_HEAD^{commit}"
+          test -n "$(git merge-base "$FROZEN_MASTER" "$PR_HEAD")"
           set +e
           git -c user.name="GLH Merge Rehearsal" -c user.email="glh-preflight@invalid.local" merge --no-commit --no-ff FETCH_HEAD
           rc=$?
@@ -57,6 +60,9 @@ jobs:
           fi
           echo 'result=CLEAN' >> "$GITHUB_OUTPUT"
           echo 'conflicts=NONE' >> "$GITHUB_OUTPUT"
+          test -f tests/unit/global-lead-hub-stage1-production-manual-intake.test.ts
+          test -f src/app/api/global-lead-hub/leads/manual/route.ts
+          test -f docs/global-lead-hub/14_STAGE1_INTERNAL_PRODUCTION_READINESS.md
           echo "MERGE_REHEARSAL=CLEAN"
           echo "FROZEN_MASTER=$FROZEN_MASTER"
           echo "PR_HEAD=$PR_HEAD"
@@ -64,7 +70,7 @@ jobs:
         if: steps.merge.outputs.result == 'CLEAN'
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
       - name: Set up pnpm
         if: steps.merge.outputs.result == 'CLEAN'
         uses: pnpm/action-setup@v4
