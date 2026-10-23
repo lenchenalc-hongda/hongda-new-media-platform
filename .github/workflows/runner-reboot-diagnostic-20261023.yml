@@ -81,7 +81,7 @@ jobs:
           base_url = "https://api.deepseek.com"
           env_key = "DEEPSEEK_API_KEY"
           requires_openai_auth = false
-          wire_api = "chat"
+          wire_api = "responses"
           CFG
           printf 'Reply with the word OK only. Do not execute commands or write files.\n' > "$tmp/prompt"
           set +e
