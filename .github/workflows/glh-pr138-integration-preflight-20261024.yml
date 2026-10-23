@@ -1,0 +1,139 @@
+name: GLH PR138 Nonproduction Merge Preflight
+on:
+  push:
+    branches:
+      - diagnostics/glh-pr138-preflight-20261024
+
+permissions:
+  contents: read
+
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    permissions:
+      contents: read
+    env:
+      PR_HEAD: 7a445b20383e48e15a96346f12584b3e6a8b190e
+      FROZEN_MASTER: 057fe083cf4b373bb6a042c963f54454dad60c22
+    outputs:
+      merge_result: ${{ steps.merge.outputs.result }}
+      conflicts: ${{ steps.merge.outputs.conflicts }}
+    steps:
+      - name: Checkout verified master without retained credentials
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: 057fe083cf4b373bb6a042c963f54454dad60c22
+          path: base
+          persist-credentials: false
+          fetch-depth: 1
+      - name: Checkout exact GLH PR 138 HEAD without retained credentials
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: 7a445b20383e48e15a96346f12584b3e6a8b190e
+          path: pr
+          persist-credentials: false
+          fetch-depth: 1
+      - name: Merge PR into frozen master in a disposable workspace
+        id: merge
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd base
+          test "$(git rev-parse HEAD)" = "$FROZEN_MASTER"
+          test "$(git -C ../pr rev-parse HEAD)" = "$PR_HEAD"
+          git -c protocol.file.allow=always fetch -q --no-tags ../pr "$PR_HEAD"
+          set +e
+          git -c user.name="GLH Merge Rehearsal" -c user.email="glh-preflight@invalid.local" merge --no-commit --no-ff FETCH_HEAD
+          rc=$?
+          set -e
+          if [ "$rc" -ne 0 ]; then
+            echo 'result=CONFLICT' >> "$GITHUB_OUTPUT"
+            conflict_paths="$(git diff --name-only --diff-filter=U | tr '\n' ',' | sed 's/,$//')"
+            echo "conflicts=$conflict_paths" >> "$GITHUB_OUTPUT"
+            echo "MERGE_REHEARSAL=CONFLICT"
+            echo "CONFLICT_PATHS=$conflict_paths"
+            exit 1
+          fi
+          echo 'result=CLEAN' >> "$GITHUB_OUTPUT"
+          echo 'conflicts=NONE' >> "$GITHUB_OUTPUT"
+          echo "MERGE_REHEARSAL=CLEAN"
+          echo "FROZEN_MASTER=$FROZEN_MASTER"
+          echo "PR_HEAD=$PR_HEAD"
+      - name: Set up Node runtime
+        if: steps.merge.outputs.result == 'CLEAN'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Set up pnpm
+        if: steps.merge.outputs.result == 'CLEAN'
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - name: Install dependencies
+        if: steps.merge.outputs.result == 'CLEAN'
+        working-directory: base
+        run: pnpm install --frozen-lockfile
+      - name: TypeScript check against frozen-master integration
+        if: steps.merge.outputs.result == 'CLEAN'
+        working-directory: base
+        run: pnpm exec tsc --noEmit
+      - name: GLH eight unit suites on merged source
+        if: steps.merge.outputs.result == 'CLEAN'
+        working-directory: base
+        shell: bash
+        run: |
+          set -euo pipefail
+          for file in \
+            tests/unit/global-lead-hub-phase1-foundation.test.ts \
+            tests/unit/global-lead-hub-phase2-core-human-ui.test.ts \
+            tests/unit/global-lead-hub-phase3-whatsapp-inbound.test.ts \
+            tests/unit/global-lead-hub-phase5-handoff-persistence.test.ts \
+            tests/unit/global-lead-hub-phase9-production-readiness.test.ts \
+            tests/unit/global-lead-hub-stage1-production-manual-intake.test.ts \
+            tests/unit/global-lead-hub-stage1-human-workflow.test.ts \
+            tests/unit/glh-stage1-navigation.test.ts; do
+            pnpm exec tsx "$file"
+          done
+      - name: Server-only import audit
+        if: steps.merge.outputs.result == 'CLEAN'
+        working-directory: base
+        run: bash scripts/check-server-imports.sh
+      - name: Build merged Next.js application (no Production credentials)
+        if: steps.merge.outputs.result == 'CLEAN'
+        working-directory: base
+        run: pnpm next build
+      - name: Secret bundle audit
+        if: steps.merge.outputs.result == 'CLEAN'
+        working-directory: base
+        run: bash scripts/audit-bundle-secrets.sh
+
+  report:
+    if: always()
+    needs: preflight
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      contents: read
+    steps:
+      - name: Report exact preflight result without credentials
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REHEARSAL_RESULT: ${{ needs.preflight.result }}
+          MERGE_RESULT: ${{ needs.preflight.outputs.merge_result }}
+          CONFLICTS: ${{ needs.preflight.outputs.conflicts }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          body="$(printf 'GLH_PR138_INTEGRATION_PREFLIGHT_V1\nRUN_ID=%s\nMASTER_SHA=057fe083cf4b373bb6a042c963f54454dad60c22\nPR_HEAD_SHA=7a445b20383e48e15a96346f12584b3e6a8b190e\nMERGE_RESULT=%s\nCONFLICT_FILES=%s\nNONPROD_CHECKS_RESULT=%s\nPRODUCTION_CHANGED=NO\nRELEASE_APPROVAL=NOT_GRANTED' "$GITHUB_RUN_ID" "$MERGE_RESULT" "$CONFLICTS" "$REHEARSAL_RESULT")"
+          REPORT_BODY="$body" python3 - <<'PY'
+          import json,os
+          with open(os.environ["RUNNER_TEMP"]+"/report.json","w") as out:
+              json.dump({"body":os.environ["REPORT_BODY"]},out)
+          PY
+          curl --fail --silent --show-error --connect-timeout 10 --max-time 25 \
+            -X POST -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            -H "Content-Type: application/json" \
+            --data-binary "@$RUNNER_TEMP/report.json" \
+            "https://api.github.com/repos/$GITHUB_REPOSITORY/issues/155/comments" >/dev/null
