@@ -1,4 +1,4 @@
-name: Hongda Runner Reboot Diagnostic 2026-10-23
+name: Hongda Runner Reboot Diagnostic 2026-10-23 (key retest)
 on:
   push:
     branches:
