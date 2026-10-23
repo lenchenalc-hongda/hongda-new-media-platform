@@ -59,6 +59,51 @@ jobs:
             grep -q '"choices"' "$response_file"
             echo "MODEL_ROUNDTRIP=PASS"
           fi
+      - name: Real isolated Codex CLI inference smoke
+        id: codex
+        shell: bash
+        run: |
+          set -euo pipefail
+          codex="$HOME/.codex/plugins/.plugin-appserver/codex-cli/bin/codex"
+          test -x "$codex" || { echo "CODEX_BINARY=MISSING"; exit 1; }
+          echo "CODEX_VERSION=$("$codex" --version)"
+          key="$(/bin/launchctl getenv DEEPSEEK_API_KEY 2>/dev/null || true)"
+          test -n "$key" || { echo "CODEX_AUTH=MISSING"; exit 1; }
+          tmp="$(mktemp -d)"
+          trap 'rm -rf "$tmp"' EXIT
+          mkdir -p "$tmp/codex" "$tmp/home" "$tmp/work"
+          cat > "$tmp/codex/config.toml" <<'CFG'
+          model = "deepseek-chat"
+          model_provider = "deepseek"
+          model_reasoning_effort = "low"
+          [model_providers.deepseek]
+          name = "DeepSeek"
+          base_url = "https://api.deepseek.com"
+          env_key = "DEEPSEEK_API_KEY"
+          requires_openai_auth = false
+          wire_api = "chat"
+          CFG
+          printf 'Reply with the word OK only. Do not execute commands or write files.\n' > "$tmp/prompt"
+          set +e
+          env -i HOME="$tmp/home" CODEX_HOME="$tmp/codex" \
+            PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin" \
+            DEEPSEEK_API_KEY="$key" HTTPS_PROXY="http://127.0.0.1:10808" HTTP_PROXY="http://127.0.0.1:10808" \
+            "$codex" --no-daemon exec -m deepseek-chat -C "$tmp/work" -s read-only \
+            -c 'approval_policy="never"' --ephemeral --ignore-rules \
+            --output-last-message "$tmp/result" - < "$tmp/prompt" > "$tmp/stdout" 2> "$tmp/stderr"
+          code=$?
+          set -e
+          echo "CODEX_EXEC_EXIT=$code"
+          if [ "$code" -ne 0 ]; then
+            echo "CODEX_STDERR_CLASSIFICATION:"
+            if grep -Eqi '401|unauthorized|invalid.api.key' "$tmp/stderr"; then echo "PROVIDER_AUTH"; \
+            elif grep -Eqi 'model|config|wire_api|unknown variant' "$tmp/stderr"; then echo "MODEL_OR_CONFIG"; \
+            elif grep -Eqi 'network|timeout|connect|proxy|TLS' "$tmp/stderr"; then echo "NETWORK"; \
+            else echo "OTHER"; fi
+            exit 1
+          fi
+          test -s "$tmp/result"
+          echo "CODEX_INFERENCE=PASS"
       - name: Report diagnostic status to issue 154
         if: always()
         shell: bash
@@ -66,9 +111,10 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           CONNECTIVITY: ${{ steps.connectivity.outcome }}
           MODEL: ${{ steps.model.outcome }}
+          CODEX: ${{ steps.codex.outcome }}
         run: |
           set -euo pipefail
-          msg=$(printf 'RUNNER_REBOOT_DIAGNOSTIC_20261023\nRUN_ID=%s\nRUNNER=%s\nCONNECTIVITY=%s\nMODEL=%s\nPRODUCTION_CHANGED=NO' "$GITHUB_RUN_ID" "$RUNNER_NAME" "$CONNECTIVITY" "$MODEL")
+          msg=$(printf 'RUNNER_REBOOT_DIAGNOSTIC_20261023\nRUN_ID=%s\nRUNNER=%s\nCONNECTIVITY=%s\nMODEL=%s\nCODEX=%s\nPRODUCTION_CHANGED=NO' "$GITHUB_RUN_ID" "$RUNNER_NAME" "$CONNECTIVITY" "$MODEL" "$CODEX")
           GH_BODY="$msg" python3 - <<'PY'
           import json,os
           with open(os.environ["RUNNER_TEMP"]+"/health-report.json","w") as f: json.dump({"body":os.environ["GH_BODY"]},f)
