@@ -5,12 +5,14 @@ on:
       - diagnostics/runner-reboot-20261023
 permissions:
   contents: read
+  issues: write
 jobs:
   mac-lane-health:
     runs-on: [self-hosted, macOS, X64, hongda-agent-control]
     timeout-minutes: 8
     steps:
       - name: Verify service and network with no repository checkout
+        id: connectivity
         shell: bash
         run: |
           set -euo pipefail
@@ -25,6 +27,7 @@ jobs:
           echo "GITHUB_API_HTTP=$status"
           test "$status" = "200"
       - name: Real minimal DeepSeek model roundtrip, no output or secret disclosure
+        id: model
         shell: bash
         env:
           DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
@@ -55,3 +58,22 @@ jobs:
             grep -q '"choices"' "$response_file"
             echo "MODEL_ROUNDTRIP=PASS"
           fi
+      - name: Report diagnostic status to issue 154
+        if: always()
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CONNECTIVITY: ${{ steps.connectivity.outcome }}
+          MODEL: ${{ steps.model.outcome }}
+        run: |
+          set -euo pipefail
+          msg=$(printf 'RUNNER_REBOOT_DIAGNOSTIC_20261023\nRUN_ID=%s\nRUNNER=%s\nCONNECTIVITY=%s\nMODEL=%s\nPRODUCTION_CHANGED=NO' "$GITHUB_RUN_ID" "$RUNNER_NAME" "$CONNECTIVITY" "$MODEL")
+          GH_BODY="$msg" python3 - <<'PY'
+          import json,os
+          with open(os.environ["RUNNER_TEMP"]+"/health-report.json","w") as f: json.dump({"body":os.environ["GH_BODY"]},f)
+          PY
+          curl --silent --show-error --fail --connect-timeout 8 --max-time 20 \
+            -X POST -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" \
+            -H "Content-Type: application/json" \
+            --data-binary "@$RUNNER_TEMP/health-report.json" \
+            "https://api.github.com/repos/$GITHUB_REPOSITORY/issues/154/comments" >/dev/null
