@@ -3,6 +3,7 @@
 
 import { useEffect, useRef, useState, type ChangeEvent, type ReactNode } from 'react';
 import DocumentPreview from './DocumentPreview';
+import { methodLabel, type CommercialPaymentMethod } from '@/lib/commercial-documents/payment-methods';
 import {
   blankItem, documentAmount, formatMoney, initialDraft, isDraftShape,
   itemAmountMinor, sectionAmount, validateForPrint, formatDocumentNumber,
@@ -97,7 +98,7 @@ function Panel({ title, children }: { title: string; children: ReactNode }) {
   );
 }
 
-export default function DocumentWorkbench({ userName }: { userName: string }) {
+export default function DocumentWorkbench({ userName, userRole }: { userName: string; userRole: string }) {
   const [draft, setDraft] = useState<CommercialDocumentDraft>(() => initialDraft(userName));
   const [errors, setErrors] = useState<string[]>([]);
   const [activeTab, setActiveTab] = useState<'edit' | 'preview'>('edit');
@@ -106,6 +107,61 @@ export default function DocumentWorkbench({ userName }: { userName: string }) {
   const [customerError, setCustomerError] = useState('');
   const [customerLoading, setCustomerLoading] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  const paymentFileRef = useRef<HTMLInputElement>(null);
+  const [paymentMethods, setPaymentMethods] = useState<CommercialPaymentMethod[]>([]);
+  const [paymentLoadError, setPaymentLoadError] = useState('');
+  const [paymentUploadMessage, setPaymentUploadMessage] = useState('');
+  const [paymentBusy, setPaymentBusy] = useState(false);
+  const selectedMethod = paymentMethods.find(method => method.id === draft.paymentMethodId) ?? null;
+
+  async function loadPaymentMethods() {
+    try {
+      const response = await fetch('/api/commercial-documents/payment-methods', { cache: 'no-store' });
+      const json: { ok?: boolean; methods?: CommercialPaymentMethod[]; message?: string } = await response.json();
+      if (!response.ok || !json.ok || !Array.isArray(json.methods)) {
+        setPaymentMethods([]);
+        setPaymentLoadError(json.message || '暂时无法读取收款账户');
+        return;
+      }
+      setPaymentMethods(json.methods);
+      setPaymentLoadError('');
+    } catch {
+      setPaymentMethods([]);
+      setPaymentLoadError('网络异常：无法读取收款账户');
+    }
+  }
+
+  useEffect(() => { void loadPaymentMethods(); }, []);
+
+  async function importPaymentWorkbook(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    if (userRole !== 'admin') return;
+    if (!window.confirm('仅导入至当前测试环境的待审核账户库，暂不开放业务员。继续吗？')) return;
+    setPaymentBusy(true);
+    setPaymentUploadMessage('正在核验 Excel 文字单元格及二维码原始文件…');
+    try {
+      const form = new FormData();
+      form.set('workbook', file, file.name);
+      const response = await fetch('/api/commercial-documents/payment-methods', {
+        method: 'POST', body: form, cache: 'no-store',
+      });
+      const json: { ok?: boolean; imported?: number; warnings?: string[]; message?: string } = await response.json();
+      if (!response.ok || !json.ok) {
+        setPaymentUploadMessage(json.message || '导入失败，未确认数据完整性');
+      } else {
+        setPaymentUploadMessage('已导入 ' + json.imported + ' 种方式，全部待审核；未开放业务员。' +
+          (json.warnings?.length ? ' 重点核查：' + json.warnings.join('；') : ''));
+        await loadPaymentMethods();
+      }
+    } catch {
+      setPaymentUploadMessage('导入失败，请检查预览环境网络连接');
+    } finally {
+      setPaymentBusy(false);
+    }
+  }
+
 
   // Generate after hydration to avoid server/client random-ID mismatches.
   useEffect(() => {
@@ -347,6 +403,12 @@ export default function DocumentWorkbench({ userName }: { userName: string }) {
   };
   const printPdf = async () => {
     const problems = validateForPrint(draft);
+    if (draft.paymentMethodId && !selectedMethod) {
+      problems.push('所选收款方式已失效或账户库未加载，不能输出错误账户');
+    }
+    if (selectedMethod && selectedMethod.kind === 'qr' && !selectedMethod.qrUrl) {
+      problems.push('收款二维码不存在或无法读取');
+    }
     if (problems.length) {
       setErrors(problems);
       setActiveTab('edit');
@@ -359,7 +421,7 @@ export default function DocumentWorkbench({ userName }: { userName: string }) {
       await Promise.all(images.map(image => image.decode()));
       window.print();
     } catch {
-      setErrors(['PDF 抬头图片加载失败，请检查网络后重试。']);
+      setErrors(['PDF 图片（报价抬头或原始收款二维码）加载失败，请检查网络后重试。']);
     }
   };
   const total = documentAmount(draft);
@@ -383,7 +445,7 @@ export default function DocumentWorkbench({ userName }: { userName: string }) {
 
       <div className="commercial-warning bg-amber-50 text-amber-900 border border-amber-200 rounded-lg p-3 text-xs leading-relaxed">
         <strong>模板试运行：</strong>本阶段仅支持页面编辑、PDF 打印和 JSON 草稿下载/导入，
-        <strong>尚未接入服务器单据保存、历史版本及经财务批准的收款账户库</strong>。
+        <strong>尚未接入服务器单据保存及历史版本；收款账户须经财务核准后才能对客户使用</strong>。
         可搜索现有客户项目库（受原权限规则限制）或手动输入新客户。
         编号采用高随机度生成，但数据库唯一性登记尚未上线，手工修改编号暂不能跨员工防重。
         离开页面前请下载草稿；机器合同模板仍带草稿提示，正式合同请复核条款后签署。
@@ -683,12 +745,77 @@ export default function DocumentWorkbench({ userName }: { userName: string }) {
             <Field label="其他商务条款 / 备注" multiline value={draft.additionalTerms} onChange={value => patch('additionalTerms', value)} />
           </Panel>
 
-          <Panel title="06 · 收款账户">
-            <p className="text-xs text-amber-800 leading-relaxed">
-              统一收款账户库尚未开发，当前版本不会填写、推断或自动附上任何银行账户。
-              后续将由管理员维护经财务批准的账户，员工通过下拉菜单选择，合同自动显示相应信息。
+          <Panel title={draft.language === 'en' ? '06 · Payment Method' : '06 · 收款方式'}>
+            <p className="text-xs text-gray-600 leading-relaxed">
+              {draft.language === 'en'
+                ? 'Select one payment method. The original beneficiary and account strings are never translated or edited.'
+                : '选择一种收款方式；户名、银行账号均从经核对的账户库原文读取，业务员不可修改。'}
             </p>
-            {!(draft.language === 'en' && draft.kind === 'quotation') && <p className="text-xs text-gray-500">税务选择与价格独立，系统不会自动调整业务员输入的单价。</p>}
+            <label className="block text-xs text-gray-700">
+              <span className="block mb-1 font-medium">
+                {draft.language === 'en' ? 'Payment account · Select' : '收款账户 · 选择'}
+              </span>
+              <select className="w-full" aria-label="选择收款账户" value={draft.paymentMethodId ?? ''}
+                onChange={event => patch('paymentMethodId', event.target.value)}>
+                <option value="">{draft.language === 'en' ? 'Do not include payment details' : '不附加收款账户'}</option>
+                {paymentMethods.map(method => (
+                  <option value={method.id} key={method.id}>
+                    {methodLabel(method, draft.language)}{!method.approved ? ' · 待审核' : ''}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {paymentLoadError && <p role="alert" className="text-xs text-amber-800">{paymentLoadError}</p>}
+            {selectedMethod && (
+              <div className="border rounded-lg bg-gray-50 px-3 py-3 space-y-1 text-xs text-gray-800">
+                {!selectedMethod.approved && <p className="font-bold text-red-700">待审核 / INTERNAL REVIEW ONLY — 不得向客户发送</p>}
+                <p><strong>{draft.language === 'en' ? 'Beneficiary / Account name' : '收款人 / 户名'}：</strong>
+                  <span className="whitespace-pre-wrap break-all">{selectedMethod.beneficiary}</span></p>
+                {selectedMethod.kind === 'bank' ? (
+                  <>
+                    <p><strong>{draft.language === 'en' ? 'Bank' : '开户行'}：</strong>
+                      <span className="whitespace-pre-wrap break-all">{selectedMethod.bankName}</span></p>
+                    <p><strong>{draft.language === 'en' ? 'Account number' : '银行账号'}：</strong>
+                      <span className="whitespace-pre-wrap break-all font-mono">{selectedMethod.accountNo}</span></p>
+                  </>
+                ) : selectedMethod.qrUrl ? (
+                  <img src={selectedMethod.qrUrl} width={175} height={175}
+                    alt={methodLabel(selectedMethod, draft.language) + '原始收款二维码'}
+                    className="w-44 h-auto border border-gray-200 rounded bg-white" />
+                ) : <p className="text-red-700">原始二维码不可用</p>}
+                {selectedMethod.notes && <p><strong>{draft.language === 'en' ? 'Original source notes' : '原始备注'}：</strong>
+                  <span className="whitespace-pre-wrap break-all">{selectedMethod.notes}</span></p>}
+                {selectedMethod.sourceNumeric && <p className="font-bold text-red-700">
+                  Excel 来源格为数值格式，必须核对原始银行账号是否存在丢失前导零的风险。
+                </p>}
+                {userRole === 'admin' && (
+                  <p className="text-gray-500">校验来源：{selectedMethod.sourceCell}
+                    {selectedMethod.qrSha256 ? ' · PNG SHA-256: ' + selectedMethod.qrSha256 : ''}</p>
+                )}
+                {draft.currency !== 'CNY' && <p className="text-amber-700">
+                  {draft.language === 'en' ? 'Finance must confirm that this account supports the selected currency.' : '请财务确认该收款方式支持当前报价币种。'}
+                </p>}
+              </div>
+            )}
+            {userRole === 'admin' && (
+              <div className="border border-amber-200 bg-amber-50 rounded p-3 space-y-2">
+                <p className="text-xs font-semibold text-amber-900">管理员验收｜仅在非 Production 环境导入原始 Excel</p>
+                <p className="text-xs text-amber-800">导入后全部标记「待审核」，普通业务员无法选择。账号不会进入 GitHub、浏览器草稿或日志。</p>
+                <button type="button" className="btn-secondary btn-sm" disabled={paymentBusy}
+                  onClick={() => paymentFileRef.current?.click()}>
+                  {paymentBusy ? '正在核验…' : '导入《收款账号.xlsx》进行核对'}
+                </button>
+                <input type="file" className="hidden" aria-label="导入收款账号 Excel" ref={paymentFileRef}
+                  accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                  onChange={importPaymentWorkbook} />
+                {paymentUploadMessage && <p role="status" className="text-xs text-amber-900 whitespace-pre-wrap">{paymentUploadMessage}</p>}
+              </div>
+            )}
+            {paymentMethods.length === 0 && !paymentLoadError && (
+              <p className="text-xs text-gray-500">
+                {draft.language === 'en' ? 'No approved payment methods yet.' : '暂无已审核可用的收款方式。'}
+              </p>
+            )}
           </Panel>
 
           <div className="flex justify-between gap-3 pb-8">
@@ -710,7 +837,7 @@ export default function DocumentWorkbench({ userName }: { userName: string }) {
               <button type="button" className="btn-secondary btn-sm" onClick={printPdf}>保存为 PDF</button>
             </div>
             <div className="commercial-preview-scroll max-h-[78vh] overflow-auto border border-gray-200 rounded-lg bg-gray-100 p-2">
-              <DocumentPreview draft={draft} />
+              <DocumentPreview draft={draft} selectedMethod={selectedMethod} />
             </div>
             <p className="commercial-preview-help text-xs text-gray-500">点击“保存为 PDF”会打开浏览器打印窗口，选择“另存为 PDF”。</p>
           </div>
