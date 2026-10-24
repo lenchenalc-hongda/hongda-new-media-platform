@@ -34,6 +34,7 @@ const pr = {
 const args = {
   registry, state, pr, controlIssue: 160, eventHead: head, masterHead: sha,
   changedPaths: ['.github/workflows/ci.yml', 'scripts/agent-control/shared-infra-lock.mjs'],
+  openPulls: [pr, { number: 121, state: 'open', head: { ref: 'fix/agent-control-watchdog-confirm-dispatch-v2', sha: 'c'.repeat(40) } }],
 };
 const pass = verifySharedInfraLock(args);
 assert.equal(pass.status, 'PASS');
@@ -64,4 +65,22 @@ block('CHANGED_PATH_OUT_OF_SCOPE', { changedPaths: ['.github/workflows/../secret
 block('ALLOWLIST_NOT_SHARED_INFRA_OWNED', { state: { ...state, allowed_paths: ['src/app/workshop-orders/page.tsx'] } });
 block('INVALID_ALLOWLIST', { state: { ...state, allowed_paths: ['.github/workflows/ci.yml', '.github/workflows/ci.yml'] } });
 block('QUEUED_LOCK_CONFLICT', { state: { ...state, queued_shared_prs: [159] } });
+block('OPEN_PRS_UNAVAILABLE', { openPulls: [] });
+block('OPEN_PRS_UNAVAILABLE', { openPulls: undefined });
+block('DUPLICATE_OPEN_PR', { openPulls: [pr, pr] });
+block('INVALID_OPEN_PR', { openPulls: [pr, { number: 190, state: 'closed', head: { ref: 'infra/old', sha: head } }] });
+block('MULTIPLE_OR_MISMATCHED_INFRA_PRS', {
+  openPulls: [pr, { number: 190, state: 'open', head: { ref: 'infra/other-active-task', sha: head } }],
+});
+block('MULTIPLE_OR_MISMATCHED_INFRA_PRS', {
+  openPulls: [{ number: 190, state: 'open', head: { ref: state.active_branch, sha: head } }],
+});
+block('MULTIPLE_OR_MISMATCHED_INFRA_PRS', {
+  openPulls: [{ ...pr, head: { ref: state.active_branch, sha } }],
+});
+block('MULTIPLE_OR_MISMATCHED_INFRA_PRS', {
+  openPulls: [pr, { number: 190, state: 'open', head: { ref: 'infra/queued-but-active', sha: head } }],
+  state: { ...state, queued_shared_prs: [121, 190] },
+});
+
 console.log('agent-control-infra-lock.test.ts: PASS');
