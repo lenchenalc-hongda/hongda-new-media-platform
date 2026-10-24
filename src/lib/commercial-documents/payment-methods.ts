@@ -18,15 +18,17 @@ export interface CommercialPaymentMethod {
   qrUrl: string | null;
 }
 
-export const PAYMENT_METHOD_SOURCE_ROWS = [
-  { row: 3, key: 'abc_corporate', labelZh: '农业银行（对公）', labelEn: 'Agricultural Bank of China (Corporate)', kind: 'bank' },
-  { row: 4, key: 'ccb_personal', labelZh: '建设银行（个人）', labelEn: 'China Construction Bank (Personal)', kind: 'bank' },
-  { row: 5, key: 'wechat_qr', labelZh: '微信收款码', labelEn: 'WeChat Pay QR', kind: 'qr' },
-  { row: 9, key: 'alipay_qr', labelZh: '支付宝收款码', labelEn: 'Alipay QR', kind: 'qr' },
-  { row: 14, key: 'abc_personal', labelZh: '农业银行（个人）', labelEn: 'Agricultural Bank of China (Personal)', kind: 'bank' },
-  { row: 15, key: 'hsbc_hk', labelZh: '汇丰香港账户', labelEn: 'HSBC Hong Kong Account', kind: 'bank' },
-  { row: 16, key: 'jpmorgan_hk', labelZh: '摩根大通香港账户', labelEn: 'JPMorgan Hong Kong Account', kind: 'bank' },
-  { row: 17, key: 'bocom_foreign', labelZh: '交通银行外币对公账户', labelEn: 'Bank of Communications Foreign Currency Account', kind: 'bank' },
+/** Stable order for the sales drop-down. No account details are ever stored here. */
+export const PAYMENT_METHOD_SORT_ORDER = [
+  'abc_corporate',
+  'ccb_personal',
+  'abc_personal',
+  'hsbc_hk',
+  'jpmorgan_hk',
+  'bocom_foreign',
+  // Enable existing image path once independently approved QR records are provisioned.
+  'wechat_qr',
+  'alipay_qr',
 ] as const;
 
 export function methodLabel(method: CommercialPaymentMethod, language: 'zh' | 'en') {
