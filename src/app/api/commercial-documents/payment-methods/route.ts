@@ -51,7 +51,7 @@ export async function GET() {
       ? '/api/commercial-documents/payment-methods/' + encodeURIComponent(row.id) + '/image'
       : null,
   }));
-  const order = PAYMENT_METHOD_SOURCE_ROWS.map(method => method.key as string);
+  const order: readonly string[] = PAYMENT_METHOD_SORT_ORDER;
   methods.sort((a, b) => order.indexOf(a.methodKey) - order.indexOf(b.methodKey));
   return reply({ ok: true, methods });
 }
