@@ -150,6 +150,8 @@ export interface CommercialDocumentDraft {
   // Optional at template stage. Only enter account data approved by Finance.
   accountLabel: string;
   accountDetails: string;
+  /** Selected approved catalog UUID; account values never stored in editable JSON. */
+  paymentMethodId?: string;
   sections: DocumentSection[];
 }
 
@@ -192,6 +194,7 @@ export function initialDraft(salespersonName = ''): CommercialDocumentDraft {
     noticeOverrides: {},
     accountLabel: '',
     accountDetails: '',
+    paymentMethodId: '',
     sections: [
       { id: 'section-initial', title: '版费', items: [blankItem('item-initial')] },
     ],
@@ -324,6 +327,7 @@ export function isDraftShape(value: unknown): value is CommercialDocumentDraft {
       'deliveryTerms', 'paymentTerms', 'shippingTerms', 'warrantyTerms',
       'acceptanceTerms', 'additionalTerms', 'accountLabel', 'accountDetails']
       .every(k => typeof (draft as Record<string, unknown>)[k] === 'string')
+    && (draft.paymentMethodId === undefined || typeof draft.paymentMethodId === 'string' && /^(?:[0-9a-f-]{36})?$/i.test(draft.paymentMethodId))
     && (draft.salespersonName === undefined || typeof draft.salespersonName === 'string')
     && (draft.buyerCustomerReferenceId === undefined || typeof draft.buyerCustomerReferenceId === 'string')
     && (draft.paymentDays === undefined || typeof draft.paymentDays === 'string')
@@ -372,5 +376,7 @@ export function normalizeImportedDraft(draft: CommercialDocumentDraft, salespers
       ? draft.shippingPreset : draft.shippingTerms ? 'other' : '',
     accountLabel: '',
     accountDetails: '',
+    paymentMethodId: typeof draft.paymentMethodId === 'string' && /^(?:[0-9a-f-]{36})?$/i.test(draft.paymentMethodId)
+      ? draft.paymentMethodId : '',
   };
 }
