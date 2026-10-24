@@ -57,8 +57,10 @@ export async function GET() {
 
 /** Review-only import. Payment data and raw QR are never committed to GitHub. */
 export async function POST(req: NextRequest) {
-  if (process.env.VERCEL_ENV === 'production') {
-    return reply({ ok: false, message: '正式环境尚未批准启用账户导入' }, 403);
+  const configuredUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? '';
+  if (process.env.VERCEL_ENV === 'production' ||
+      !configuredUrl.startsWith('https://xulmpqaknlwqqculbsek.supabase.co')) {
+    return reply({ ok: false, message: '安全保护：仅允许已核验的独立测试数据库导入，不允许操作正式环境' }, 403);
   }
   const ctx = await context();
   if (!ctx || ctx.user.role !== 'admin') return reply({ ok: false, message: '仅测试环境管理员可以导入' }, 403);
