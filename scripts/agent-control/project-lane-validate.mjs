@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import {trustedGeneratedTask} from './owner-decision-core.mjs';
+import {FIX_TASK_SENTINEL, parseTrustedFixTask} from './project-lane-fix-task.mjs';
 
 const REPOSITORY = 'lenchenalc-hongda/hongda-new-media-platform';
 const TRUSTED_ACTOR = 'lenchenalc-hongda';
@@ -195,17 +196,33 @@ async function main() {
     if (pr.state !== 'open' || pr.base?.ref !== 'master' || pr.head?.ref !== state.active_branch || pr.head?.sha !== state.verified_head) fail('active PR does not match FIX state');
   }
 
-  const sourceIssue = state.status === 'FIX_REQUIRED' ? state.active_pr : CONTROL_ISSUE;
-  const allComments = await comments(sourceIssue);
-  const candidates = allComments
-    .filter(comment => (comment.user?.login === TRUSTED_ACTOR || trustedGeneratedTask(comment,state,allComments)) && String(comment.body || '').replaceAll('\r\n', '\n').split('\n')[0] === TASK_SENTINEL)
+  // FIX instructions are owner-authored on the CONTROL ISSUE, not on the PR.
+  // Select an exact original READY task before accepting its bounded FIX subset.
+  const allComments = await comments(CONTROL_ISSUE);
+  const originalTasks = allComments
+    .filter(comment => (
+      comment.user?.login === TRUSTED_ACTOR
+      || trustedGeneratedTask(comment, state, allComments)
+    ) && String(comment.body || '').replaceAll('\r\n', '\n').split('\n')[0] === TASK_SENTINEL)
     .sort((a, b) => b.id - a.id)
     .map(comment => ({ comment, task: parseTask(comment.body) }))
     .filter(({ task }) => task
       && task.taskId === state.current_task_id
-      && task.status === state.status
+      && task.status === 'READY_FOR_CODEX'
       && task.baseMasterSha === state.master_sha);
-  const selected = candidates[0];
+  let selected;
+  if (state.status === 'FIX_REQUIRED') {
+    const original = originalTasks[0]?.task;
+    if (!original) fail('trusted original READY task not found for FIX subset');
+    selected = allComments
+      .filter(comment => comment.user?.login === TRUSTED_ACTOR
+        && String(comment.body || '').replaceAll('\r\n', '\n').split('\n')[0] === FIX_TASK_SENTINEL)
+      .sort((a, b) => b.id - a.id)
+      .map(comment => ({ comment, task: parseTrustedFixTask(comment.body, original, state) }))
+      .find(({ task }) => task !== null);
+  } else {
+    selected = originalTasks.find(({ task }) => task.status === state.status);
+  }
   if (!selected) fail('trusted valid project task comment not found');
   const { comment, task } = selected;
   const checks = validateTaskAgainstState(task, state, masterSha, projectConfig, registry);

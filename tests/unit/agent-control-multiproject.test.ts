@@ -115,6 +115,12 @@ assert(validator.includes("const TASK_SENTINEL = 'AGENT_CONTROL_PROJECT_TASK_V1'
 assert(validator.includes('shared path requires serialized shared lock'));
 assert(validator.includes('path is outside project ownership'));
 
+const ciWorkflow = read('.github/workflows/ci.yml');
+assert(ciWorkflow.includes('pnpm exec tsx tests/unit/workshop-order-suite.test.ts'));
+assert(ciWorkflow.includes('pnpm exec tsx tests/unit/agent-control-fix-task.test.ts'));
+assert(validator.includes('parseTrustedFixTask'));
+assert(validator.includes('const allComments = await comments(CONTROL_ISSUE);'));
+
 const runner = read('scripts/agent-control/project-lane-run.sh');
 assert(runner.includes('pnpm next start -p 3000'));
 assert(!runner.includes('pnam next'));
