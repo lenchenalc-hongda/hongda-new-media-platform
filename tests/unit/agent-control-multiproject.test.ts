@@ -8,6 +8,20 @@ const registry = JSON.parse(read('.github/agent-control/project-registry.json'))
 assert.equal(registry.schema_version, 1);
 assert.equal(registry.max_parallel_projects, 2);
 assert.equal(registry.shared_path_lock, true);
+const infra = registry.shared_infrastructure_lane;
+assert(infra, 'shared infrastructure must have independent serialized control lane');
+assert.equal(infra.project, 'agent-control-infrastructure');
+assert.equal(infra.control_issue, 160);
+assert.equal(infra.task_prefix, 'AC-INFRA-');
+assert.equal(infra.branch_prefix, 'infra/');
+assert.equal(infra.requires_serialized_shared_path_lock, true);
+assert.equal(infra.max_active_infrastructure_prs, 1);
+assert.equal(infra.auto_merge, false);
+assert.equal(infra.auto_production, false);
+assert(infra.owned_shared_prefixes.includes('.github/workflows/'));
+assert(infra.owned_shared_prefixes.includes('scripts/agent-control/'));
+assert(infra.owned_shared_exact_paths.includes('.github/agent-control/project-registry.json'));
+
 
 const cpc = registry.projects['customer-project-center'];
 const glh = registry.projects['global-lead-hub'];
@@ -117,6 +131,9 @@ assert(validator.includes('path is outside project ownership'));
 
 const ciWorkflow = read('.github/workflows/ci.yml');
 assert(ciWorkflow.includes('pnpm exec tsx tests/unit/workshop-order-suite.test.ts'));
+assert(ciWorkflow.includes('pnpm exec tsx tests/unit/global-lead-hub-whatsapp-simulation.test.ts'));
+assert(ciWorkflow.includes('GLH_PHASE3_WHATSAPP_SIMULATION_CI=NOT_PRESENT_IN_THIS_HEAD'));
+
 assert(ciWorkflow.includes('pnpm exec tsx tests/unit/agent-control-fix-task.test.ts'));
 assert(validator.includes('parseTrustedFixTask'));
 assert(validator.includes('const allComments = await comments(CONTROL_ISSUE);'));
