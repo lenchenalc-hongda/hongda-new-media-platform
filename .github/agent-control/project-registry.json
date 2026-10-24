@@ -76,5 +76,23 @@
     "postcss.config.mjs",
     "src/app/layout.tsx",
     "src/middleware.ts"
-  ]
+  ],
+  "shared_infrastructure_lane": {
+    "project": "agent-control-infrastructure",
+    "control_issue": 160,
+    "task_prefix": "AC-INFRA-",
+    "branch_prefix": "infra/",
+    "requires_serialized_shared_path_lock": true,
+    "max_active_infrastructure_prs": 1,
+    "owned_shared_prefixes": [
+      ".github/workflows/",
+      "scripts/agent-control/",
+      "tests/unit/agent-control-"
+    ],
+    "owned_shared_exact_paths": [
+      ".github/agent-control/project-registry.json"
+    ],
+    "auto_merge": false,
+    "auto_production": false
+  }
 }
