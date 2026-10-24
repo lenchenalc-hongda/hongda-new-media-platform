@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getCurrentUser } from '@/lib/auth/current-user';
 import { createClient } from '@/lib/supabase/server';
-import { PAYMENT_METHOD_SOURCE_ROWS } from '@/lib/commercial-documents/payment-methods';
+import { PAYMENT_METHOD_SORT_ORDER } from '@/lib/commercial-documents/payment-methods';
 
 export const dynamic = 'force-dynamic';
 
