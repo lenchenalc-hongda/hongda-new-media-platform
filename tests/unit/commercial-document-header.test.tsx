@@ -4,6 +4,13 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { readFileSync } from 'node:fs';
 import DocumentPreview from '../../src/components/commercial-documents/DocumentPreview';
 import { initialDraft, blankItem, documentAmount, formatMoney } from '../../src/lib/commercial-documents/template';
+import {
+  ALIPAY_QR_METHOD_KEY,
+  WECHAT_ALIPAY_LABEL,
+  WECHAT_ALIPAY_METHOD_ID,
+  WECHAT_QR_METHOD_KEY,
+  type CommercialPaymentMethod,
+} from '../../src/lib/commercial-documents/payment-methods';
 
 // The repository's tsx runner uses the classic JSX transform.
 Object.assign(globalThis, { React });
@@ -70,4 +77,47 @@ for (const kind of ['quotation', 'machine_contract'] as const) {
     }
   }
 }
+
+const qrPairDraft = initialDraft('业务员测试');
+Object.assign(qrPairDraft, { buyerName: '客户测试', language: 'zh' });
+const qrPair: CommercialPaymentMethod = {
+  id: WECHAT_ALIPAY_METHOD_ID,
+  methodKey: WECHAT_ALIPAY_METHOD_ID,
+  kind: 'qr_pair',
+  labelZh: WECHAT_ALIPAY_LABEL,
+  labelEn: WECHAT_ALIPAY_LABEL,
+  beneficiary: '',
+  bankName: '',
+  accountNo: '',
+  notes: '',
+  sourceCell: 'test',
+  sourceNumeric: false,
+  approved: false,
+  qrSha256: null,
+  qrUrl: null,
+  qrCodes: [
+    {
+      id: '00000000-0000-4000-8000-000000000011',
+      methodKey: WECHAT_QR_METHOD_KEY,
+      qrSha256: 'a'.repeat(64),
+      qrUrl: 'https://example.invalid/wechat.png',
+    },
+    {
+      id: '00000000-0000-4000-8000-000000000012',
+      methodKey: ALIPAY_QR_METHOD_KEY,
+      qrSha256: 'b'.repeat(64),
+      qrUrl: 'https://example.invalid/alipay.png',
+    },
+  ],
+};
+const pairHtml = renderToStaticMarkup(React.createElement(DocumentPreview, {
+  draft: qrPairDraft,
+  selectedMethod: qrPair,
+}));
+assert.equal((pairHtml.match(/data-payment-qr="true"/g) || []).length, 2,
+  'The combined payment option must render both QR images');
+assert(pairHtml.indexOf('微信收款') < pairHtml.indexOf('支付宝收款'), 'WeChat must precede Alipay');
+assert(pairHtml.includes('WeChat / Alipay'));
+assert(pairHtml.includes('document-payment-qr-grid'));
+assert(!pairHtml.includes('Beneficiary / Account name'), 'QR pair must not display bank-only fields');
 console.log('commercial-document-header: PASS (12 template/length combinations)');
