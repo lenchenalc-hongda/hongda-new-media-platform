@@ -8,7 +8,8 @@ export type PageSlug =
   | 'reports' | 'settings'
   | 'review_center' | 'review_center_settings'
   | 'customer_project_center' | 'customer_project_center_team'
-  | 'customer_project_center_settings' | 'commercial_documents';
+  | 'customer_project_center_settings' | 'commercial_documents'
+  | 'global_lead_hub';
 
 // ===== Page Access Matrix =====
 // Each page defines which roles can access it, and optional sub-resource restrictions.
@@ -32,6 +33,7 @@ const PAGE_ACCESS: Record<PageSlug, { roles: Role[]; description: string; resour
   customer_project_center_team: { roles: ['admin', 'manager'], description: '客户项目团队看板' },
   customer_project_center_settings: { roles: ['admin'], description: '客户项目中心设置' },
   commercial_documents: { roles: ['admin', 'manager', 'operator', 'sales', 'viewer'], description: '商务单据模板' },
+  global_lead_hub: { roles: ['admin','manager','sales'], description: '外贸客户线索与跟进' },
 };
 
 // ===== Action Permission Matrix =====
@@ -108,6 +110,7 @@ export function getRouteFromPage(page: PageSlug): string {
     customer_project_center_team: '/customer-projects/team',
     customer_project_center_settings: '/customer-projects/settings',
     commercial_documents: '/commercial-documents',
+    global_lead_hub: '/global-lead-hub',
   };
   return routeMap[page] || '/';
 }
@@ -129,6 +132,7 @@ export function getPageSlugFromRoute(pathname: string): PageSlug | null {
   if (route === '/review-center/settings') return 'review_center_settings';
   if (route === '/review-center' || route.startsWith('/review-center/')) return 'review_center';
   if (route === '/commercial-documents' || route.startsWith('/commercial-documents/')) return 'commercial_documents';
+  if (route === '/global-lead-hub' || route.startsWith('/global-lead-hub/')) return 'global_lead_hub';
   if (route === '/customer-projects/settings') return 'customer_project_center_settings';
   if (route === '/customer-projects/team') return 'customer_project_center_team';
   if (route === '/customer-projects' || route.startsWith('/customer-projects/')) {

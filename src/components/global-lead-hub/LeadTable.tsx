@@ -1,6 +1,11 @@
 import Link from 'next/link';
 import type { GlhLeadListItem } from '@/lib/global-lead-hub/read-model';
 
+const MANUAL_SOURCE_LABELS: Record<string,string> = {
+  EXHIBITION: '展会', WEBSITE: '网站', REFERRAL: '转介绍',
+  OUTREACH: '主动开发', SOCIAL: '社交媒体', OTHER: '其他',
+};
+
 function gradeClass(grade: GlhLeadListItem['grade']): string {
   if (grade === 'A') return 'bg-emerald-50 text-emerald-700 ring-emerald-200';
   if (grade === 'B') return 'bg-amber-50 text-amber-700 ring-amber-200';
@@ -37,7 +42,7 @@ function dueLabel(item: GlhLeadListItem): string {
 export default function LeadTable({
   leads,
   emptyTitle = 'No leads in this view',
-  emptyDescription = 'Adjust the filters or create a test lead in an allowed environment.',
+  emptyDescription = '请调整筛选条件，或点击“新增线索”手工录入真实外贸客户。',
 }: {
   leads: GlhLeadListItem[];
   emptyTitle?: string;
@@ -81,6 +86,11 @@ export default function LeadTable({
                   <p className="mt-0.5 truncate text-xs text-gray-500">
                     {helpCompanyLine(lead)}
                   </p>
+                  {lead.manualSourceDetail && (
+                    <p className="mt-1 text-[11px] text-blue-700">
+                      手工录入 · {MANUAL_SOURCE_LABELS[lead.manualSourceDetail] || lead.manualSourceDetail}
+                    </p>
+                  )}
                 </td>
                 <td className="px-3 py-3">
                   <span

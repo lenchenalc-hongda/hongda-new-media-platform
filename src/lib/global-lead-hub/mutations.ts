@@ -2,6 +2,9 @@ import type { GlhAccessContext } from './access';
 import {
   type GlhLeadAssignmentInput,
   type GlhManualLeadCreateInput,
+  type GlhProductionManualIntakeInput,
+  type GlhManualHumanStageInput,
+  type GlhManualWorkCompletionInput,
   type GlhTaskOrFollowupInput,
 } from './validation';
 import { buildGlhHumanMessageIntent } from './human-messaging';
@@ -32,6 +35,8 @@ export type GlhMutationErrorCode =
   | 'INVALID_INPUT'
   | 'VERSION_CONFLICT'
   | 'MANUAL_CREATION_DISABLED'
+  | 'CONTACT_ALREADY_EXISTS'
+  | 'IDEMPOTENCY_CONFLICT'
   | 'RPC_UNAVAILABLE'
   | 'MUTATION_FAILED';
 
@@ -64,6 +69,20 @@ function mapRpcError(error: GlhRpcError): GlhMutationError {
       'MANUAL_CREATION_DISABLED',
       'Manual test/dev lead creation is disabled',
       403,
+    );
+  }
+  if (message.includes('CONTACT_ALREADY_EXISTS') || error.code === '23505') {
+    return new GlhMutationError(
+      'CONTACT_ALREADY_EXISTS',
+      'This contact may already exist in the organization. Ask a manager to review it.',
+      409,
+    );
+  }
+  if (message.includes('IDEMPOTENCY_CONFLICT')) {
+    return new GlhMutationError(
+      'IDEMPOTENCY_CONFLICT',
+      'The request key was already used for different lead information',
+      409,
     );
   }
   if (error.code === '40001' || message.includes('VERSION_CONFLICT')) {
@@ -111,6 +130,57 @@ export async function createGlhManualTestLead(
     p_material: input.material ?? null,
     p_quantity: input.quantity ?? null,
     p_notes: input.notes ?? null,
+  });
+  return requireRpcData(result);
+}
+
+/** Production-capable path. Does not use test/dev manual-create RPC or service-role. */
+export async function createGlhProductionManualLead(
+  client: GlhMutationClient,
+  input: GlhProductionManualIntakeInput,
+) {
+  const result = await client.rpc('glh_create_manual_production_lead', {
+    p_request_key: input.requestKey,
+    p_display_name: input.displayName,
+    p_company_name: input.companyName ?? null,
+    p_country_code: input.countryCode ?? null,
+    p_whatsapp: input.whatsapp ?? null,
+    p_email: input.email ?? null,
+    p_requirement_type: input.requirementType ?? null,
+    p_owner_profile_id: input.ownerProfileId ?? null,
+    p_product: input.product ?? null,
+    p_material: input.material ?? null,
+    p_quantity: input.quantity ?? null,
+    p_notes: input.notes ?? null,
+    p_source_detail: input.sourceDetail,
+  });
+  return requireRpcData(result);
+}
+
+/** Explicit audited human stage change; SQL enforces owner/organization and manual provenance. */
+export async function changeGlhManualHumanStage(
+  client: GlhMutationClient,
+  leadId: string,
+  input: GlhManualHumanStageInput,
+) {
+  const result = await client.rpc('glh_change_manual_lead_stage', {
+    p_lead_id: leadId,
+    p_expected_version: input.expectedVersion,
+    p_stage: input.stage,
+    p_reason: input.reason ?? null,
+  });
+  return requireRpcData(result);
+}
+
+/** Complete assigned work with version check; never invokes external providers. */
+export async function finishGlhManualWork(
+  client: GlhMutationClient,
+  input: GlhManualWorkCompletionInput,
+) {
+  const result = await client.rpc('glh_finish_manual_work', {
+    p_work_kind: input.kind,
+    p_work_id: input.workId,
+    p_expected_version: input.expectedVersion,
   });
   return requireRpcData(result);
 }

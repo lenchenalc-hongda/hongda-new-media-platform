@@ -48,6 +48,7 @@ export default function Sidebar() {
     review: 'border-l-orange-500 bg-orange-50 text-orange-700',
     sales: 'border-l-cyan-500 bg-cyan-50 text-cyan-700',
     commercial: 'border-l-red-600 bg-red-50 text-red-800',
+    glh: 'border-l-emerald-600 bg-emerald-50 text-emerald-800',
   };
 
   return (

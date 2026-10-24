@@ -15,10 +15,7 @@ import {
   loadGlhLeads,
   resolveGlhAccessContext,
 } from '@/lib/global-lead-hub/server';
-import {
-  getGlhManualCreationGuard,
-  parseGlhLeadListFilters,
-} from '@/lib/global-lead-hub/validation';
+import { GLH_MANUAL_PRODUCTION_SOURCES, parseGlhLeadListFilters } from '@/lib/global-lead-hub/validation';
 
 export const dynamic = 'force-dynamic';
 
@@ -46,21 +43,20 @@ export default async function GlobalLeadHubLeadsPage({
   });
   const filters = parseGlhLeadListFilters(query);
   const leads = await loadGlhLeads(access.context, filters);
-  const manualCreation = getGlhManualCreationGuard();
 
   return (
     <AppLayout>
       <PageHeader
         title="Lead Library"
         description="Search organization-scoped leads by the frozen Phase 2 filters."
-        actions={manualCreation.allowed ? (
+        actions={(
           <Link
             href="/global-lead-hub/leads/new"
             className="rounded-lg bg-gray-900 px-3 py-2 text-xs font-medium text-white hover:bg-gray-800"
           >
-            Create test lead
+            新增线索
           </Link>
-        ) : undefined}
+        )}
       />
 
       <nav aria-label="Global Lead Hub sections" className="mb-4 flex gap-3 text-xs">
@@ -90,9 +86,21 @@ export default async function GlobalLeadHubLeadsPage({
           </label>
           <FilterSelect
             name="source"
-            label="Source"
+            label="Source platform"
             defaultValue={value(searchParams.source)}
             options={GLH_SOURCE_PLATFORMS.map(item => ({ value: item, label: item }))}
+          />
+          <FilterSelect
+            name="manualSource"
+            label="手工线索来源"
+            defaultValue={value(searchParams.manualSource)}
+            options={GLH_MANUAL_PRODUCTION_SOURCES.map(item => ({
+              value: item,
+              label: ({
+                EXHIBITION:'展会',WEBSITE:'网站',REFERRAL:'转介绍',
+                OUTREACH:'主动开发',SOCIAL:'社交媒体',OTHER:'其他',
+              } as Record<string,string>)[item] || item,
+            }))}
           />
           <FilterSelect
             name="requirement"

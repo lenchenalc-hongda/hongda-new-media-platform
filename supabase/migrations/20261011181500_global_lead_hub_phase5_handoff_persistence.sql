@@ -248,8 +248,10 @@ BEGIN
     RAISE EXCEPTION 'ACCESS_DENIED' USING ERRCODE = '42501';
   END IF;
 
-  SELECT c, ca.provider
-  INTO v_conversation, v_provider
+  -- A typed %ROWTYPE record cannot share a multi-target INTO list in PL/pgSQL.
+  -- Load the locked conversation as a complete row, then resolve its provider.
+  SELECT c.*
+  INTO v_conversation
   FROM public.glh_conversations c
   JOIN public.glh_channel_accounts ca
     ON ca.id = c.channel_account_id
@@ -260,6 +262,14 @@ BEGIN
   FOR UPDATE OF c;
 
   IF NOT FOUND THEN
+    RAISE EXCEPTION 'ACCESS_DENIED' USING ERRCODE = '42501';
+  END IF;
+  SELECT ca.provider
+  INTO v_provider
+  FROM public.glh_channel_accounts ca
+  WHERE ca.id = v_conversation.channel_account_id
+    AND ca.org_id = v_actor.org_id;
+  IF NOT FOUND OR v_provider IS NULL THEN
     RAISE EXCEPTION 'ACCESS_DENIED' USING ERRCODE = '42501';
   END IF;
   IF v_conversation.conversation_mode <> 'HUMAN_ACTIVE'

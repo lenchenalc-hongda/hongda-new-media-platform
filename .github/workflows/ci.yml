@@ -160,6 +160,19 @@ jobs:
       - name: Agent Control Reliability V2 failure-injection tests
         run: pnpm exec tsx tests/unit/agent-control-reliability-v2.test.ts
 
+      # PM-serialized shared CI path: first-stage GLH rollout safety requires actual
+      # deterministic GLH unit tests, not only TypeScript/build green.
+      - name: GLH Stage 1 schema / role / webhook / handoff / readiness tests
+        run: |
+          pnpm exec tsx tests/unit/global-lead-hub-phase1-foundation.test.ts
+          pnpm exec tsx tests/unit/global-lead-hub-phase2-core-human-ui.test.ts
+          pnpm exec tsx tests/unit/global-lead-hub-phase3-whatsapp-inbound.test.ts
+          pnpm exec tsx tests/unit/global-lead-hub-phase5-handoff-persistence.test.ts
+          pnpm exec tsx tests/unit/global-lead-hub-phase9-production-readiness.test.ts
+          pnpm exec tsx tests/unit/global-lead-hub-stage1-production-manual-intake.test.ts
+          pnpm exec tsx tests/unit/global-lead-hub-stage1-human-workflow.test.ts
+          pnpm exec tsx tests/unit/glh-stage1-navigation.test.ts
+
       - name: Check server-only imports
         run: bash scripts/check-server-imports.sh
 
@@ -210,3 +223,47 @@ jobs:
       - name: Stop server
         if: always()
         run: kill $(lsof -t -i:3000) 2>/dev/null || true
+
+  # Disposable PostgreSQL 17 container. No Supabase/Production credentials,
+  # no external provider, and no remote database is touched.
+  glh-stage1-postgres-synthetic:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: glh-ci-only
+          POSTGRES_DB: glh_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d glh_ci"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      PGHOST: localhost
+      PGPORT: "5432"
+      PGUSER: postgres
+      PGPASSWORD: glh-ci-only
+      PGDATABASE: glh_ci
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y postgresql-client
+      - name: Replay six GLH migrations, manual intake, human closure and RLS
+        run: |
+          set -euo pipefail
+          psql -X -v ON_ERROR_STOP=1 -f tests/sql/glh_stage1_synthetic_supabase_baseline.sql
+          psql -X -v ON_ERROR_STOP=1 -f supabase/migrations/20261009181000_global_lead_hub_phase1_foundation.sql
+          psql -X -v ON_ERROR_STOP=1 -f supabase/migrations/20261010074500_global_lead_hub_phase2_core_human_ui.sql
+          psql -X -v ON_ERROR_STOP=1 -f supabase/migrations/20261010182400_global_lead_hub_phase3_whatsapp_inbound.sql
+          psql -X -v ON_ERROR_STOP=1 -f supabase/migrations/20261011181500_global_lead_hub_phase5_handoff_persistence.sql
+          psql -X -v ON_ERROR_STOP=1 -f supabase/migrations/20261021120000_global_lead_hub_stage1_manual_production_intake.sql
+          psql -X -v ON_ERROR_STOP=1 -f supabase/migrations/20261021135000_global_lead_hub_stage1_human_workflow.sql
+          psql -X -v ON_ERROR_STOP=1 -f tests/sql/glh_stage1_synthetic_rls_smoke.sql
+          psql -X -v ON_ERROR_STOP=1 -f tests/sql/glh_stage1_manual_production_intake_smoke.sql
+          psql -X -v ON_ERROR_STOP=1 -f tests/sql/glh_stage1_human_workflow_smoke.sql

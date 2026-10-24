@@ -8,6 +8,7 @@ import {
 } from '@/lib/global-lead-hub/read-model';
 import {
   GLH_FOLLOWUP_TYPES,
+  GLH_MANUAL_HUMAN_STAGES,
   GLH_TASK_TYPES,
   serializeGlhLocalDateTime,
 } from '@/lib/global-lead-hub/validation';
@@ -47,6 +48,10 @@ export default function LeadDetail({
   const [workType, setWorkType] = useState<string>(GLH_TASK_TYPES[0]);
   const lead = detail.listItem;
   const audit = summarizeGlhAuditTimeline(detail);
+  const manualFacts = detail.profile?.extracted_facts;
+  const isManualIntake = manualFacts?.origin === 'MANUAL_PRODUCTION';
+  const manualNotes = isManualIntake && typeof manualFacts?.sales_notes === 'string'
+    ? manualFacts.sales_notes : null;
 
   async function submitAssignment(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -81,6 +86,44 @@ export default function LeadDetail({
       );
     } catch {
       setActionError('The assignment could not be completed.');
+    } finally {
+      setWorking('');
+    }
+  }
+
+  async function submitManualStage(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (working || !isManualIntake) return;
+    const form = new FormData(event.currentTarget);
+    setWorking('manual-stage');
+    setActionError('');
+    try {
+      const response = await fetch(
+        '/api/global-lead-hub/leads/' + encodeURIComponent(lead.id) + '/stage',
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            stage: String(form.get('stage') || ''),
+            expectedVersion: lead.version,
+            reason: String(form.get('reason') || '').trim() || null,
+          }),
+        },
+      );
+      const body = await response.json().catch(() => null);
+      if (!response.ok || body?.ok !== true) {
+        setActionError(response.status === 409
+          ? '该客户已被更新，请刷新后重新选择阶段。'
+          : response.status === 400
+            ? '阶段或原因填写有误；丢单、无效线索至少填写4字原因。'
+            : response.status === 403
+              ? '仅客户负责人、本组织管理员或授权协作人员可以推进阶段。'
+              : '阶段保存失败，请稍后再试。');
+        return;
+      }
+      router.refresh();
+    } catch {
+      setActionError('网络异常，无法确认阶段是否保存，请刷新后检查。');
     } finally {
       setWorking('');
     }
@@ -147,7 +190,7 @@ export default function LeadDetail({
           <dl className="mt-4 grid grid-cols-2 gap-x-5 gap-y-3 text-sm xl:grid-cols-3">
             <Info label="Company" value={lead.companyName} />
             <Info label="Country" value={lead.country} />
-            <Info label="Source" value={lead.source} />
+            <Info label="Source" value={isManualIntake ? 'Manual / 手工录入' : lead.source} />
             <Info label="Lifecycle" value={lead.lifecycle} />
             <Info label="Conversation mode" value={lead.conversationMode} />
             <Info label="Owner" value={lead.ownerName || lead.ownerProfileId} />
@@ -191,9 +234,42 @@ export default function LeadDetail({
           <Info label="Machine capacity" value={detail.profile?.machine_capacity_requirements} />
           <Info label="Automation" value={detail.profile?.automation_requirements} />
           <Info label="Machine + process" value={detail.profile?.machine_plus_process_solution_required} />
+          {isManualIntake && (
+            <>
+              <Info label="手工录入渠道" value={manualFacts?.source_detail} />
+              <Info label="销售录入备注" value={manualNotes} />
+            </>
+          )}
           <Info label="AI summary" value={detail.profile?.ai_summary} />
         </dl>
       </section>
+
+      {isManualIntake && (
+        <section className="rounded-lg border border-gray-200 bg-white p-4">
+          <h2 className="text-sm font-semibold text-gray-900">手工推进客户阶段</h2>
+          <p className="mt-1 text-xs text-gray-500">仅更新 GLH 内部阶段，不同步覆盖客户池归属或财务数据。</p>
+          <form onSubmit={submitManualStage} className="mt-3 grid gap-3 sm:grid-cols-[minmax(0,220px)_1fr_auto] sm:items-end">
+            <label className="text-xs font-medium text-gray-600">
+              当前阶段
+              <select name="stage" defaultValue={lead.lifecycle}
+                className="mt-1 block w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm">
+                {GLH_MANUAL_HUMAN_STAGES.map(value => (
+                  <option key={value} value={value}>{value.replaceAll('_', ' ')}</option>
+                ))}
+              </select>
+            </label>
+            <label className="text-xs font-medium text-gray-600">
+              变更原因（丢单/无效必填）
+              <input name="reason" maxLength={500}
+                className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" />
+            </label>
+            <button type="submit" disabled={Boolean(working)}
+              className="rounded-lg bg-gray-900 px-4 py-2 text-xs font-medium text-white disabled:opacity-50">
+              {working === 'manual-stage' ? '保存中…' : '保存阶段'}
+            </button>
+          </form>
+        </section>
+      )}
 
       <section className="grid gap-4 xl:grid-cols-2">
         <div className="rounded-lg border border-gray-200 bg-white p-4">

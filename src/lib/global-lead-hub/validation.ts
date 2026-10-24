@@ -6,6 +6,7 @@ import {
 } from './domain';
 import {
   GLH_LEAD_DUE_FILTERS,
+  GLH_MANUAL_SOURCE_VALUES,
   GLH_REQUIREMENT_TYPES,
   GLH_SOURCE_PLATFORMS,
   type GlhLeadListFilters,
@@ -57,6 +58,74 @@ export const glhManualLeadCreateSchema = z.object({
     });
   }
 });
+
+/** Real authenticated manual intake, independent of the Phase 2 test/dev-only guard. */
+export const GLH_MANUAL_PRODUCTION_SOURCES = GLH_MANUAL_SOURCE_VALUES;
+
+export const glhProductionManualIntakeSchema = z.object({
+  requestKey: z.string().uuid(),
+  displayName: z.string().trim().min(1).max(200),
+  companyName: optionalTrimmed(300),
+  countryCode: optionalTrimmed(16),
+  whatsapp: optionalTrimmed(64),
+  email: z.string().trim().email().max(320).nullable().optional()
+    .transform(value => value || null),
+  requirementType: z.enum(GLH_REQUIREMENT_TYPES).nullable().optional()
+    .transform(value => value || null),
+  ownerProfileId: z.string().uuid().nullable().optional()
+    .transform(value => value || null),
+  product: optionalTrimmed(300),
+  material: optionalTrimmed(300),
+  quantity: optionalTrimmed(200),
+  notes: optionalTrimmed(2000),
+  sourceDetail: z.enum(GLH_MANUAL_PRODUCTION_SOURCES),
+}).strict().superRefine((input, ctx) => {
+  if (!input.whatsapp && !input.email) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['whatsapp'],
+      message: 'WhatsApp or email is required for deduplication and follow-up',
+    });
+  }
+  if (input.whatsapp) {
+    const digits = input.whatsapp.replace(/[^0-9]/g, '');
+    if (digits.length < 7 || digits.length > 15) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['whatsapp'],
+        message: 'International phone number must contain 7–15 digits',
+      });
+    }
+  }
+});
+export type GlhProductionManualIntakeInput = z.infer<typeof glhProductionManualIntakeSchema>;
+
+/** Human-only lifecycle; no AI/customer-provider state transitions in Stage 1. */
+export const GLH_MANUAL_HUMAN_STAGES = [
+  'NEW', 'HUMAN_FOLLOWING', 'QUOTATION', 'SAMPLE', 'NEGOTIATION',
+  'WON', 'LOST', 'DORMANT', 'INVALID',
+] as const;
+
+export const glhManualHumanStageSchema = z.object({
+  expectedVersion: z.number().int().min(1),
+  stage: z.enum(GLH_MANUAL_HUMAN_STAGES),
+  reason: z.string().trim().max(500).nullable().optional()
+    .transform(value => value || null),
+}).strict().superRefine((value, ctx) => {
+  if (['LOST','INVALID'].includes(value.stage) && (!value.reason || value.reason.length < 4)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom, path: ['reason'],
+      message: 'Reason of at least four characters required for LOST or INVALID',
+    });
+  }
+});
+export const glhManualWorkCompletionSchema = z.object({
+  workId: z.string().uuid(),
+  kind: z.enum(['TASK','FOLLOWUP']),
+  expectedVersion: z.number().int().min(1),
+}).strict();
+export type GlhManualHumanStageInput = z.infer<typeof glhManualHumanStageSchema>;
+export type GlhManualWorkCompletionInput = z.infer<typeof glhManualWorkCompletionSchema>;
 
 export const glhLeadAssignmentSchema = z.object({
   assigneeProfileId: z.string().uuid(),
@@ -164,6 +233,7 @@ export function parseGlhLeadListFilters(
 ): GlhLeadListFilters {
   const filters: GlhLeadListFilters = {};
   const source = searchParams.get('source');
+  const manualSource = searchParams.get('manualSource');
   const requirement = searchParams.get('requirement');
   const grade = searchParams.get('grade');
   const lifecycle = searchParams.get('lifecycle');
@@ -171,6 +241,9 @@ export function parseGlhLeadListFilters(
 
   if (source && (GLH_SOURCE_PLATFORMS as readonly string[]).includes(source)) {
     filters.source = source as GlhLeadListFilters['source'];
+  }
+  if (manualSource && (GLH_MANUAL_PRODUCTION_SOURCES as readonly string[]).includes(manualSource)) {
+    filters.manualSource = manualSource as GlhLeadListFilters['manualSource'];
   }
   if (requirement && (GLH_REQUIREMENT_TYPES as readonly string[]).includes(requirement)) {
     filters.requirement = requirement as GlhLeadListFilters['requirement'];
