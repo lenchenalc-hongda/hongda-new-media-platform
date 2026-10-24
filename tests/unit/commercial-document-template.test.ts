@@ -266,7 +266,7 @@ assert.deepEqual(PAYMENT_METHOD_SORT_ORDER.slice(0, 7), [
   'jpmorgan_hk', 'bocom_usd_cn', 'bocom_hkd_cn',
 ], 'Original two overseas choices must become three separate bank options');
 assert.equal(PAYMENT_METHOD_SORT_ORDER.length, 9, 'Seven bank options plus optional WeChat and Alipay');
-assert(!PAYMENT_METHOD_SORT_ORDER.some(key => key === 'bocom_foreign'), 'No obsolete combined USD/HKD bank option');
+assert(!PAYMENT_METHOD_SORT_ORDER.join(',').includes('bocom_foreign'), 'No obsolete combined USD/HKD bank option');
 assert.deepEqual(HONGDA_FOREIGN_ACCOUNT_LABELS, {
   jpmorgan_hk: 'Hongda USD Account HK',
   bocom_usd_cn: 'Hongda USD Account CN (Default)',
