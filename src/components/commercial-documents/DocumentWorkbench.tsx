@@ -107,11 +107,8 @@ export default function DocumentWorkbench({ userName, userRole }: { userName: st
   const [customerError, setCustomerError] = useState('');
   const [customerLoading, setCustomerLoading] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
-  const paymentFileRef = useRef<HTMLInputElement>(null);
   const [paymentMethods, setPaymentMethods] = useState<CommercialPaymentMethod[]>([]);
   const [paymentLoadError, setPaymentLoadError] = useState('');
-  const [paymentUploadMessage, setPaymentUploadMessage] = useState('');
-  const [paymentBusy, setPaymentBusy] = useState(false);
   const selectedMethod = paymentMethods.find(method => method.id === draft.paymentMethodId) ?? null;
 
   async function loadPaymentMethods() {
@@ -132,36 +129,6 @@ export default function DocumentWorkbench({ userName, userRole }: { userName: st
   }
 
   useEffect(() => { void loadPaymentMethods(); }, []);
-
-  async function importPaymentWorkbook(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
-    event.target.value = '';
-    if (!file) return;
-    if (userRole !== 'admin') return;
-    if (!window.confirm('仅导入至当前测试环境的待审核账户库，暂不开放业务员。继续吗？')) return;
-    setPaymentBusy(true);
-    setPaymentUploadMessage('正在核验 Excel 文字单元格及二维码原始文件…');
-    try {
-      const form = new FormData();
-      form.set('workbook', file, file.name);
-      const response = await fetch('/api/commercial-documents/payment-methods', {
-        method: 'POST', body: form, cache: 'no-store',
-      });
-      const json: { ok?: boolean; imported?: number; warnings?: string[]; message?: string } = await response.json();
-      if (!response.ok || !json.ok) {
-        setPaymentUploadMessage(json.message || '导入失败，未确认数据完整性');
-      } else {
-        setPaymentUploadMessage('已导入 ' + json.imported + ' 种方式，全部待审核；未开放业务员。' +
-          (json.warnings?.length ? ' 重点核查：' + json.warnings.join('；') : ''));
-        await loadPaymentMethods();
-      }
-    } catch {
-      setPaymentUploadMessage('导入失败，请检查预览环境网络连接');
-    } finally {
-      setPaymentBusy(false);
-    }
-  }
-
 
   // Generate after hydration to avoid server/client random-ID mismatches.
   useEffect(() => {
@@ -786,7 +753,7 @@ export default function DocumentWorkbench({ userName, userRole }: { userName: st
                 {selectedMethod.notes && <p><strong>{draft.language === 'en' ? 'Original source notes' : '原始备注'}：</strong>
                   <span className="whitespace-pre-wrap break-all">{selectedMethod.notes}</span></p>}
                 {selectedMethod.sourceNumeric && <p className="font-bold text-red-700">
-                  Excel 来源格为数值格式，必须核对原始银行账号是否存在丢失前导零的风险。
+                  原始资料曾采用数值格式存储，请核对是否存在前导零风险。
                 </p>}
                 {userRole === 'admin' && (
                   <p className="text-gray-500">校验来源：{selectedMethod.sourceCell}
@@ -797,23 +764,14 @@ export default function DocumentWorkbench({ userName, userRole }: { userName: st
                 </p>}
               </div>
             )}
-            {userRole === 'admin' && (
-              <div className="border border-amber-200 bg-amber-50 rounded p-3 space-y-2">
-                <p className="text-xs font-semibold text-amber-900">管理员验收｜仅在非 Production 环境导入原始 Excel</p>
-                <p className="text-xs text-amber-800">导入后全部标记「待审核」，普通业务员无法选择。账号不会进入 GitHub、浏览器草稿或日志。</p>
-                <button type="button" className="btn-secondary btn-sm" disabled={paymentBusy}
-                  onClick={() => paymentFileRef.current?.click()}>
-                  {paymentBusy ? '正在核验…' : '导入《收款账号.xlsx》进行核对'}
-                </button>
-                <input type="file" className="hidden" aria-label="导入收款账号 Excel" ref={paymentFileRef}
-                  accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                  onChange={importPaymentWorkbook} />
-                {paymentUploadMessage && <p role="status" className="text-xs text-amber-900 whitespace-pre-wrap">{paymentUploadMessage}</p>}
-              </div>
+            {userRole === 'admin' && paymentMethods.some(method => !method.approved) && (
+              <p className="text-xs text-amber-800">
+                这批账号已录入独立测试库，仅供管理人员核对，正式开放前需审核确认。
+              </p>
             )}
             {paymentMethods.length === 0 && !paymentLoadError && (
               <p className="text-xs text-gray-500">
-                {draft.language === 'en' ? 'No approved payment methods yet.' : '暂无已审核可用的收款方式。'}
+                {draft.language === 'en' ? 'No payment methods available yet.' : '暂无可选择的收款方式。'}
               </p>
             )}
           </Panel>
