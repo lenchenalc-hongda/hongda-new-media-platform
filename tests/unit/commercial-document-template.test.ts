@@ -259,3 +259,5 @@ for (const type of Object.keys(expectedApprovedZh) as Array<keyof typeof expecte
 }
 
 console.log('commercial-document-template.test.ts: PASS');
+// Keep quotation archive foundation checks inside the existing CI test job.
+import './commercial-quotation-archive-foundation.test';
