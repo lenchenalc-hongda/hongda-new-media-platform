@@ -15,7 +15,7 @@ export default async function CommercialDocumentsPage() {
 
   return (
     <AppLayout>
-      <DocumentWorkbench userName={user.name} />
+      <DocumentWorkbench userName={user.name} userRole={user.role} />
     </AppLayout>
   );
 }

@@ -9,8 +9,21 @@ on:
 jobs:
   lint-and-audit:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: read
+      pull-requests: read
     steps:
       - uses: actions/checkout@v4
+
+      - name: Agent Control shared-infra exact-head lock preflight
+        if: github.event_name == 'pull_request' && startsWith(github.head_ref, 'infra/')
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GH_INFRA_REPOSITORY: ${{ github.repository }}
+          GH_INFRA_PR_NUMBER: ${{ github.event.pull_request.number }}
+          GH_INFRA_PR_HEAD: ${{ github.event.pull_request.head.sha }}
+        run: node scripts/agent-control/shared-infra-lock.mjs
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -153,9 +166,19 @@ jobs:
           node --check scripts/agent-control/project-lane-recover.mjs
           node --check scripts/agent-control/reliability-core.mjs
           node --check scripts/agent-control/reliability-watchdog.mjs
+          node --check scripts/agent-control/shared-infra-lock.mjs
 
       - name: Agent Control multi-project lane tests
         run: pnpm exec tsx tests/unit/agent-control-multiproject.test.ts
+
+      - name: Agent Control FIX task parser regression tests
+        run: pnpm exec tsx tests/unit/agent-control-fix-task.test.ts
+
+      - name: Agent Control shared-infra lock negative tests
+        run: pnpm exec tsx tests/unit/agent-control-infra-lock.test.ts
+
+      - name: Workshop Order System full contract suite
+        run: pnpm exec tsx tests/unit/workshop-order-suite.test.ts
 
       - name: Agent Control Reliability V2 failure-injection tests
         run: pnpm exec tsx tests/unit/agent-control-reliability-v2.test.ts
@@ -172,6 +195,13 @@ jobs:
           pnpm exec tsx tests/unit/global-lead-hub-stage1-production-manual-intake.test.ts
           pnpm exec tsx tests/unit/global-lead-hub-stage1-human-workflow.test.ts
           pnpm exec tsx tests/unit/glh-stage1-navigation.test.ts
+          # Only certify Phase 3 when its exact test file exists in this tree.
+          if test -f tests/unit/global-lead-hub-whatsapp-simulation.test.ts; then
+            pnpm exec tsx tests/unit/global-lead-hub-whatsapp-simulation.test.ts
+            echo 'GLH_PHASE3_WHATSAPP_SIMULATION_CI=EXECUTED'
+          else
+            echo 'GLH_PHASE3_WHATSAPP_SIMULATION_CI=NOT_PRESENT_IN_THIS_HEAD (not a Phase 3 PASS)'
+          fi
 
       - name: Check server-only imports
         run: bash scripts/check-server-imports.sh
