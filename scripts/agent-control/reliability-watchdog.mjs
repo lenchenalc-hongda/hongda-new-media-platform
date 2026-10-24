@@ -71,6 +71,7 @@ function ageMinutes(timestamp) {
 
 async function dispatch(project, issue, state, config, reason) {
   const expectedHead = state.status === 'FIX_REQUIRED' ? state.verified_head : state.master_sha;
+  const dispatchedAt = Date.now();
   await api(`/repos/${REPOSITORY}/actions/workflows/${encodeURIComponent(config.workflow_file)}/dispatches`, {
     method: 'POST',
     body: JSON.stringify({
@@ -84,17 +85,41 @@ async function dispatch(project, issue, state, config, reason) {
     }),
     headers: { 'Content-Type': 'application/json' },
   });
+
+  // A 204 from workflow_dispatch is only acceptance of the request, not evidence
+  // that Actions created an executable run. Never report DISPATCHED without a run.
+  let confirmed = null;
+  for (let attempt = 0; attempt < 12; attempt++) {
+    await new Promise(resolve => setTimeout(resolve, 5000));
+    const runs = await workflowRuns(config.workflow_file);
+    const matches = runs.filter(run =>
+      run.event === 'workflow_dispatch' &&
+      run.head_sha === expectedHead &&
+      Number.isFinite(Date.parse(run.created_at || '')) &&
+      Date.parse(run.created_at) >= dispatchedAt - 2000
+    );
+    // Cannot safely attribute concurrent dispatches to this request.
+    if (matches.length > 1) throw new Error('WATCHDOG_DISPATCH_AMBIGUOUS_RUN');
+    if (matches.length === 1) {
+      confirmed = matches[0];
+      break;
+    }
+  }
+  if (!confirmed) throw new Error('WATCHDOG_DISPATCH_UNCONFIRMED_NO_RUN_ID');
   await comment(
     issue.number,
     [
       'AGENT_CONTROL_WATCHDOG_V2',
       `PROJECT = ${project}`,
       `TASK_ID = ${state.current_task_id}`,
-      `ACTION = DISPATCH`,
+      'ACTION = DISPATCH_CONFIRMED',
       `REASON = ${reason}`,
+      `RUN_ID = ${confirmed.id}`,
+      `RUN_URL = ${confirmed.html_url}`,
       'PRODUCTION_CHANGED = NO',
     ].join('\n'),
   );
+  return confirmed;
 }
 
 async function reconcileMergedPr(project, issue, state) {
@@ -200,8 +225,8 @@ async function inspectProject(project, config) {
 
   state.runtime_status = 'DISPATCHING';
   await updateState(issue, state);
-  await dispatch(project, issue, state, config, latest?.conclusion === 'failure' ? 'FAILED_RUN_WITHOUT_ACTIVE_RECOVERY' : 'LOST_TRIGGER');
-  console.log(`WATCHDOG_PROJECT=${project} RESULT=DISPATCHED`);
+  const confirmed = await dispatch(project, issue, state, config, latest?.conclusion === 'failure' ? 'FAILED_RUN_WITHOUT_ACTIVE_RECOVERY' : 'LOST_TRIGGER');
+  console.log(`WATCHDOG_PROJECT=${project} RESULT=DISPATCHED RUN_ID=${confirmed.id}`);
 }
 
 async function main() {
