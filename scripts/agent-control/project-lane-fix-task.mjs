@@ -92,3 +92,58 @@ export function parseTrustedFixTask(body, originalTask, state) {
     objectiveB64: Buffer.from(instructions, 'utf8').toString('base64'),
   };
 }
+
+
+// Bind a FIX to the exact, trusted READY comment saved when the PR was created.
+// A later same-task READY comment must never replace the original scope/checks.
+export function selectBoundOriginalReadyTask(pr, trustedOriginalTasks, state) {
+  if (
+    !pr || typeof pr.body !== 'string'
+    || !Array.isArray(trustedOriginalTasks)
+    || !state || state.status !== 'FIX_REQUIRED'
+    || pr.number !== state.active_pr
+  ) return null;
+
+  const keys = ['PROJECT', 'TASK_ID', 'BASE_MASTER_SHA', 'BRANCH', 'TASK_COMMENT_ID'];
+  const fields = new Map();
+  for (const line of pr.body.replaceAll('\r\n', '\n').split('\n')) {
+    const match = /^([A-Z0-9_]+) = (.*)$/.exec(line);
+    if (match && keys.includes(match[1])) {
+      if (fields.has(match[1])) return null;
+      fields.set(match[1], match[2]);
+    } else if (keys.some(key => line === key || line.startsWith(key + ' ') || line.startsWith(key + '='))) {
+      return null;
+    }
+  }
+  if (
+    fields.size !== keys.length
+    || fields.get('PROJECT') !== state.project
+    || fields.get('TASK_ID') !== state.current_task_id
+    || fields.get('BASE_MASTER_SHA') !== state.master_sha
+    || fields.get('BRANCH') !== state.active_branch
+    || !/^[1-9][0-9]*$/.test(fields.get('TASK_COMMENT_ID') || '')
+  ) return null;
+
+  const originalCommentId = Number(fields.get('TASK_COMMENT_ID'));
+  if (!Number.isSafeInteger(originalCommentId)) return null;
+  const matching = trustedOriginalTasks.filter(entry => (
+    entry?.comment?.id === originalCommentId
+    && entry?.task?.status === 'READY_FOR_CODEX'
+    && entry.task.project === state.project
+    && entry.task.taskId === state.current_task_id
+    && entry.task.baseMasterSha === state.master_sha
+  ));
+  if (matching.length !== 1) return null;
+  const bound = matching[0];
+  const prCreated = Date.parse(pr.created_at || '');
+  const commentCreated = Date.parse(bound.comment.created_at || '');
+  const commentUpdated = Date.parse(bound.comment.updated_at || '');
+  if (
+    !Number.isFinite(prCreated)
+    || !Number.isFinite(commentCreated)
+    || !Number.isFinite(commentUpdated)
+    || commentCreated > prCreated
+    || commentUpdated > prCreated
+  ) return null;
+  return bound.task;
+}
