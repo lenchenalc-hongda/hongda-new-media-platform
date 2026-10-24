@@ -34,6 +34,20 @@ try {
         '设备电压、频率、气源及技术配置以双方最终确认的设备规格为准',
         '常规加工建议额外预留订单数量3%的产品',
       ];
+      const finalNumbering = [
+        ['1.铜版自制版完成之日起', '2. 超过质保期且连续12个月未下单'],
+        ['1. 印刷颜色、图案尺寸及套印效果', '2. 花膜的烫印结合力', '3. 如产品涉及耐磨'],
+        ['1.设备电压、频率、气源', '2.设备在正常使用及维护条件下'],
+        ['1.数码热转印花膜依据', '2.产品附着力及耐磨'],
+        ['1.客户提供的产品应符合', '2.常规加工建议额外预留订单数量3%'],
+      ];
+      if (noticeBodies.length !== finalNumbering.length) throw new Error('Unexpected five-category body count');
+      for (let i = 0; i < finalNumbering.length; i++) {
+        const normalized = noticeBodies[i].replace(/\s+/g, ' ');
+        for (const expected of finalNumbering[i]) {
+          if (!normalized.includes(expected)) throw new Error('Wrong final clause numbering: ' + JSON.stringify({ i, expected, actual: normalized }));
+        }
+      }
       const combined = noticeBodies.join(' ');
       for (const phrase of requiredVerbatimParts) {
         if (!combined.includes(phrase)) throw new Error('Approved process note absent from printed layout: ' + phrase);
