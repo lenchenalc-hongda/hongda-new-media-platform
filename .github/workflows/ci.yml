@@ -178,6 +178,13 @@ jobs:
           pnpm exec tsx tests/unit/global-lead-hub-stage1-production-manual-intake.test.ts
           pnpm exec tsx tests/unit/global-lead-hub-stage1-human-workflow.test.ts
           pnpm exec tsx tests/unit/glh-stage1-navigation.test.ts
+          # Only certify Phase 3 when its exact test file exists in this tree.
+          if test -f tests/unit/global-lead-hub-whatsapp-simulation.test.ts; then
+            pnpm exec tsx tests/unit/global-lead-hub-whatsapp-simulation.test.ts
+            echo 'GLH_PHASE3_WHATSAPP_SIMULATION_CI=EXECUTED'
+          else
+            echo 'GLH_PHASE3_WHATSAPP_SIMULATION_CI=NOT_PRESENT_IN_THIS_HEAD (not a Phase 3 PASS)'
+          fi
 
       - name: Check server-only imports
         run: bash scripts/check-server-imports.sh
