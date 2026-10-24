@@ -52,7 +52,9 @@ export async function GET() {
       : null,
   }));
   const order: readonly string[] = PAYMENT_METHOD_SORT_ORDER;
-  methods.sort((a, b) => order.indexOf(a.methodKey) - order.indexOf(b.methodKey));
-  return reply({ ok: true, methods });
+  // Fail closed for legacy keys: never show the superseded combined USD/HKD choice.
+  const available = methods.filter(method => order.includes(method.methodKey));
+  available.sort((a, b) => order.indexOf(a.methodKey) - order.indexOf(b.methodKey));
+  return reply({ ok: true, methods: available });
 }
 
