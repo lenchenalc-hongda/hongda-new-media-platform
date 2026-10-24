@@ -226,6 +226,9 @@ export default function DocumentPreview({ draft, selectedMethod }: { draft: Comm
             {selectedMethod.kind === 'bank' ? (
               <>
                 <p className="document-payment-account"><strong>{label('开户银行', 'Bank name')}：</strong>{selectedMethod.bankName}</p>
+                {selectedMethod.notes.startsWith('ADD:') && (
+                  <p className="document-payment-account"><strong>{label('银行地址 / SWIFT', 'Bank address / SWIFT')}：</strong>{selectedMethod.notes}</p>
+                )}
                 <p className="document-payment-account"><strong>{label('银行账号', 'Account number')}：</strong>{selectedMethod.accountNo}</p>
               </>
             ) : (
@@ -240,7 +243,7 @@ export default function DocumentPreview({ draft, selectedMethod }: { draft: Comm
                 />
               )
             )}
-            {selectedMethod.notes && <p className="document-payment-account text-gray-600 mt-1"><strong>{label('原始备注', 'Source notes')}：</strong>{selectedMethod.notes}</p>}
+            {selectedMethod.notes && !selectedMethod.notes.startsWith('ADD:') && <p className="document-payment-account text-gray-600 mt-1"><strong>{label('原始备注', 'Source notes')}：</strong>{selectedMethod.notes}</p>}
           </section>
         )}
         {productNotices.length > 0 && (
