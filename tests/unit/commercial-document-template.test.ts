@@ -1,6 +1,17 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { PAYMENT_METHOD_SORT_ORDER, HONGDA_FOREIGN_ACCOUNT_LABELS, methodLabel, type CommercialPaymentMethod } from '../../src/lib/commercial-documents/payment-methods';
+import {
+  ALIPAY_QR_METHOD_KEY,
+  WECHAT_ALIPAY_LABEL,
+  WECHAT_ALIPAY_METHOD_ID,
+  WECHAT_QR_METHOD_KEY,
+  PAYMENT_METHOD_SORT_ORDER,
+  HONGDA_FOREIGN_ACCOUNT_LABELS,
+  buildPaymentMethodChoices,
+  methodLabel,
+  qrCodeLabel,
+  type CommercialPaymentMethod,
+} from '../../src/lib/commercial-documents/payment-methods';
 import {
   initialDraft, blankItem, moneyToMinor, quantityToMilli, itemAmountMinor,
   sectionAmount, documentAmount, validateForPrint, isDraftShape,
@@ -265,7 +276,9 @@ assert.deepEqual(PAYMENT_METHOD_SORT_ORDER.slice(0, 7), [
   'abc_corporate', 'ccb_personal', 'abc_personal', 'hsbc_hk',
   'jpmorgan_hk', 'bocom_usd_cn', 'bocom_hkd_cn',
 ], 'Original two overseas choices must become three separate bank options');
-assert.equal(PAYMENT_METHOD_SORT_ORDER.length, 9, 'Seven bank options plus optional WeChat and Alipay');
+assert.deepEqual(PAYMENT_METHOD_SORT_ORDER.slice(7), [WECHAT_ALIPAY_METHOD_ID],
+  'Seven bank options plus one combined WeChat / Alipay option');
+assert.equal(PAYMENT_METHOD_SORT_ORDER.length, 8, 'The QR pair must be one selection, not two');
 assert(!PAYMENT_METHOD_SORT_ORDER.join(',').includes('bocom_foreign'), 'No obsolete combined USD/HKD bank option');
 assert.deepEqual(HONGDA_FOREIGN_ACCOUNT_LABELS, {
   jpmorgan_hk: 'Hongda USD Account HK',
@@ -295,9 +308,62 @@ assert(isDraftShape(selector), 'UUID selection must be compatible with local JSO
 assert(!isDraftShape({ ...selector, paymentMethodId: 'spoofed-payment-account' }), 'Invalid IDs cannot be imported');
 assert.equal(normalizeImportedDraft(selector, 'owner').paymentMethodId, sampleMethod.id);
 assert.deepEqual(validateForPrint(selector).filter(problem => problem.includes('账号')), []);
+
+const sampleWechatQr: CommercialPaymentMethod = {
+  ...sampleMethod,
+  id: '00000000-0000-4000-8000-000000000002',
+  methodKey: WECHAT_QR_METHOD_KEY,
+  kind: 'qr',
+  labelZh: '微信收款',
+  labelEn: 'WeChat Pay',
+  beneficiary: '',
+  bankName: '',
+  accountNo: '',
+  qrSha256: 'a'.repeat(64),
+  qrUrl: '/api/commercial-documents/payment-methods/00000000-0000-4000-8000-000000000002/image',
+};
+const sampleAlipayQr: CommercialPaymentMethod = {
+  ...sampleWechatQr,
+  id: '00000000-0000-4000-8000-000000000003',
+  methodKey: ALIPAY_QR_METHOD_KEY,
+  labelZh: '支付宝收款',
+  labelEn: 'Alipay',
+  qrSha256: 'b'.repeat(64),
+  qrUrl: '/api/commercial-documents/payment-methods/00000000-0000-4000-8000-000000000003/image',
+};
+const combinedMethods = buildPaymentMethodChoices([sampleMethod, sampleWechatQr, sampleAlipayQr]);
+assert.equal(combinedMethods.length, 2, 'One bank plus one combined QR option');
+const combinedQr = combinedMethods.find(method => method.kind === 'qr_pair');
+assert(combinedQr, 'Complete same-status QR records must produce the combined option');
+assert.equal(combinedQr.id, WECHAT_ALIPAY_METHOD_ID);
+assert.equal(methodLabel(combinedQr, 'zh'), WECHAT_ALIPAY_LABEL);
+assert.equal(methodLabel(combinedQr, 'en'), WECHAT_ALIPAY_LABEL);
+assert.deepEqual(combinedQr.qrCodes?.map(code => code.methodKey), [WECHAT_QR_METHOD_KEY, ALIPAY_QR_METHOD_KEY],
+  'WeChat must display before Alipay');
+assert.equal(qrCodeLabel(combinedQr.qrCodes![0], 'zh'), '微信收款');
+assert.equal(qrCodeLabel(combinedQr.qrCodes![1], 'zh'), '支付宝收款');
+assert.equal(qrCodeLabel(combinedQr.qrCodes![0], 'en'), 'WeChat Pay');
+assert.equal(qrCodeLabel(combinedQr.qrCodes![1], 'en'), 'Alipay');
+assert.equal(buildPaymentMethodChoices([sampleMethod, sampleWechatQr]).length, 1,
+  'A single QR member must fail the whole combination closed');
+assert.equal(buildPaymentMethodChoices([
+  sampleMethod, { ...sampleWechatQr, approved: true }, sampleAlipayQr,
+]).length, 1, 'Mismatched approval states must fail the whole combination closed');
+assert.equal(buildPaymentMethodChoices([
+  sampleMethod, { ...sampleWechatQr, qrUrl: null }, sampleAlipayQr,
+]).length, 1, 'A missing QR URL must hide the combination');
+
+selector.paymentMethodId = WECHAT_ALIPAY_METHOD_ID;
+assert(isDraftShape(selector), 'The stable combined selection ID must survive JSON import');
+assert.equal(JSON.stringify(selector).includes('qrUrl'), false, 'Draft JSON must not persist QR URLs');
+assert.equal(JSON.stringify(selector).includes('qrSha256'), false, 'Draft JSON must not persist QR bytes or hashes');
+assert.equal(isDraftShape({ ...selector, paymentMethodId: 'wechat_qr' }), false,
+  'Low-level QR row keys cannot be persisted as a selection');
+
 const editorCode = readFileSync(new URL('../../src/components/commercial-documents/DocumentWorkbench.tsx', import.meta.url), 'utf8');
 const apiCode = readFileSync(new URL('../../src/app/api/commercial-documents/payment-methods/route.ts', import.meta.url), 'utf8');
 const previewCode = readFileSync(new URL('../../src/components/commercial-documents/DocumentPreview.tsx', import.meta.url), 'utf8');
+const imageApiCode = readFileSync(new URL('../../src/app/api/commercial-documents/payment-methods/[id]/image/route.ts', import.meta.url), 'utf8');
 assert(editorCode.includes('选择收款账户'), 'Section 06 must contain a direct selector');
 assert(!editorCode.includes('importPaymentWorkbook'), 'The editor must not request XLSX uploads');
 assert(!editorCode.includes('导入《收款账号.xlsx》'), 'No account Excel import UI');
@@ -309,5 +375,12 @@ assert(previewCode.includes('Bank address / SWIFT'), 'Overseas wire instructions
 assert(editorCode.includes('Bank address / SWIFT'), 'Editor must show overseas SWIFT and bank address');
 assert(apiCode.includes('order.includes(method.methodKey)'), 'Retired account option must not be returned by API');
 assert(previewCode.includes('selectedMethod.qrUrl'), 'Payment QR must use the original authenticated image');
+assert(apiCode.includes('buildPaymentMethodChoices'), 'API must aggregate the QR pair through the shared fail-closed helper');
+assert(apiCode.includes('isCompleteQrPng'), 'API must verify both private QR byte streams before exposing the pair');
+assert(editorCode.includes('expectedQrCount !== 2'), 'Editor must block incomplete QR-pair PDF output');
+assert(editorCode.includes('data-payment-qr'), 'Print readiness must identify payment QR images explicitly');
+assert(previewCode.includes('document-payment-qr-grid'), 'PDF preview must provide a two-image QR layout');
+assert(previewCode.includes('data-payment-qr'), 'Preview QR images must participate in print readiness');
+assert(imageApiCode.includes('privateResponse'), 'QR image errors must also use private no-store headers');
 
 console.log('commercial-document-template.test.ts: PASS');

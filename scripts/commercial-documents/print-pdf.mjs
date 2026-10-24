@@ -6,7 +6,10 @@ const { chromium } = require('playwright');
 const browser = await chromium.launch({ headless: true });
 const results = [];
 try {
-  for (const name of ['short', 'medium', 'long', 'all_types', 'en-short', 'en-medium', 'en-long', 'en-all_types']) {
+  for (const name of [
+    'short', 'medium', 'long', 'all_types', 'qr_pair',
+    'en-short', 'en-medium', 'en-long', 'en-all_types', 'en-qr_pair',
+  ]) {
     const english = name.startsWith('en-');
     const baseName = name.replace(/^en-/, '');
     const page = await browser.newPage({ viewport: { width: 900, height: 1200 } });
@@ -16,7 +19,8 @@ try {
     if (image.width !== (english ? 2048 : 2047) || image.height !== (english ? 464 : 515)) throw new Error('Header did not decode');
     await page.screenshot({ path: `output/quotation-qa/${name}-preview.png`, fullPage: true });
     const noticeTitles = await page.locator('.document-product-note strong').allTextContents();
-    const expectedTypes = baseName === 'short' ? 1 : baseName === 'all_types' ? 5 : 3;
+    const expectedTypes = baseName === 'short' || baseName === 'qr_pair'
+      ? 1 : baseName === 'all_types' ? 5 : 3;
     if (noticeTitles.length !== expectedTypes) {
       throw new Error('Unexpected product notice count: ' + JSON.stringify({ name, noticeTitles, expectedTypes }));
     }
@@ -66,6 +70,31 @@ try {
         totalLayout.horizontalGap < 8 || totalLayout.leftInset < 8 ||
         totalLayout.rightInset < 8 || totalLayout.disclaimerPresent) {
       throw new Error('Invalid PDF total layout: ' + JSON.stringify({ name, ...totalLayout }));
+    }
+    if (baseName === 'qr_pair') {
+      const qrLayout = await page.evaluate(() => {
+        const payment = document.querySelector('#commercial-print .document-payment');
+        const grid = payment?.querySelector('.document-payment-qr-grid');
+        const images = Array.from(payment?.querySelectorAll('[data-payment-qr]') ?? []);
+        if (!payment || !grid || images.length !== 2) {
+          throw new Error('Expected exactly two payment QR images');
+        }
+        const gridBox = grid.getBoundingClientRect();
+        const boxes = images.map(image => image.getBoundingClientRect());
+        return {
+          display: getComputedStyle(grid).display,
+          gridInsidePayment: gridBox.left >= payment.getBoundingClientRect().left
+            && gridBox.right <= payment.getBoundingClientRect().right,
+          sideBySide: boxes[0].right <= boxes[1].left,
+          ratios: boxes.map((box, index) => box.height / box.width),
+          naturalSizes: images.map(image => ({ width: image.naturalWidth, height: image.naturalHeight })),
+        };
+      });
+      if (qrLayout.display !== 'grid' || !qrLayout.gridInsidePayment || !qrLayout.sideBySide
+          || qrLayout.ratios.some(ratio => Math.abs(ratio - (1402 / 1122)) > 0.03)
+          || qrLayout.naturalSizes.some(size => size.width !== 1122 || size.height !== 1402)) {
+        throw new Error('Invalid QR-pair print layout: ' + JSON.stringify({ name, ...qrLayout }));
+      }
     }
     await page.pdf({ path: `output/quotation-qa/${name}.pdf`, preferCSSPageSize: true, printBackground: true, displayHeaderFooter: false });
     results.push({ name, image, totalLayout, noticeTitles });

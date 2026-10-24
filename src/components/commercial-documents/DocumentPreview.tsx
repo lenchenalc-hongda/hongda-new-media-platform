@@ -1,5 +1,9 @@
 import type { CommercialDocumentDraft } from '@/lib/commercial-documents/template';
-import { methodLabel, type CommercialPaymentMethod } from '@/lib/commercial-documents/payment-methods';
+import {
+  methodLabel,
+  qrCodeLabel,
+  type CommercialPaymentMethod,
+} from '@/lib/commercial-documents/payment-methods';
 import { documentAmount, formatMoney, itemAmountMinor, sectionAmount, fixedSellerName } from '@/lib/commercial-documents/template';
 import { documentProductNotices } from '@/lib/commercial-documents/product-notices';
 
@@ -39,13 +43,17 @@ const printStyles = [
   // Plain, compact product notices; each paragraph stays together across A4 page breaks.
   '.commercial-print .document-payment { margin-top: 9px; font-size: 11px; line-height: 1.5; break-inside: avoid; page-break-inside: avoid; }',
   '.commercial-print .document-payment-account { overflow-wrap: anywhere; white-space: pre-wrap; }',
+  '.commercial-print .document-payment-qr-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; gap: 12px; margin-top: 8px; break-inside: avoid; page-break-inside: avoid; }',
+  '.commercial-print .document-payment-qr { min-width: 0; margin: 0; text-align: center; break-inside: avoid; page-break-inside: avoid; }',
+  '.commercial-print .document-payment-qr img { display: block; width: 100%; max-width: 58mm; height: auto; margin: 0 auto 4px; border: 1px solid #d1d5db; border-radius: 4px; background: #fff; object-fit: contain; }',
+  '.commercial-print .document-payment-qr figcaption { font-weight: 700; line-height: 1.35; }',
   '.commercial-print .document-product-notices { margin-top: 9px !important; font-size: 11px; line-height: 1.5; }',
   '.commercial-print .document-product-notices h2 { padding-bottom: 4px; margin-bottom: 3px; break-after: avoid-page; page-break-after: avoid; }',
   '.commercial-print .document-product-note { display: grid; grid-template-columns: 120px minmax(0, 1fr); column-gap: 9px; padding: 5px 0; margin-top: 0; border-bottom: 1px solid #e5e7eb; break-inside: avoid; page-break-inside: avoid; }',
   '.commercial-print .document-product-note:last-child { border-bottom: none; }',
   '.commercial-print .document-product-note-label { font-weight: 700; line-height: 1.5; }',
   '.commercial-print .document-product-note-body { min-width: 0; white-space: pre-wrap; line-height: 1.5; overflow-wrap: anywhere; }',
-  '@media screen and (max-width: 560px) { .commercial-print .document-product-note { display: block; } .commercial-print .document-product-note-label { display: block; margin-bottom: 2px; } }',
+  '@media screen and (max-width: 560px) { .commercial-print .document-product-note { display: block; } .commercial-print .document-product-note-label { display: block; margin-bottom: 2px; } .commercial-print .document-payment-qr-grid { grid-template-columns: minmax(0, 1fr); } }',
   '@media print {',
   ' html, body { background: #fff !important; }',
   ' body * { visibility: hidden !important; }',
@@ -64,6 +72,7 @@ const printStyles = [
   '  margin: 0 !important; border: 0 !important; box-shadow: none !important; overflow: visible !important; }',
   ' #commercial-print .document-section-title, #commercial-print .document-total {',
   '  print-color-adjust: exact; -webkit-print-color-adjust: exact; }',
+  ' #commercial-print .document-payment-qr-grid { display: grid !important; grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }',
   '}',
 ].join('\n');
 
@@ -222,25 +231,44 @@ export default function DocumentPreview({ draft, selectedMethod }: { draft: Comm
               </p>
             )}
             <p><strong>{label('收款方式', 'Payment method')}：</strong>{methodLabel(selectedMethod, draft.language)}</p>
-            <p className="document-payment-account"><strong>{label('收款人 / 户名', 'Beneficiary / Account name')}：</strong>{selectedMethod.beneficiary}</p>
             {selectedMethod.kind === 'bank' ? (
               <>
+                <p className="document-payment-account"><strong>{label('收款人 / 户名', 'Beneficiary / Account name')}：</strong>{selectedMethod.beneficiary}</p>
                 <p className="document-payment-account"><strong>{label('开户银行', 'Bank name')}：</strong>{selectedMethod.bankName}</p>
                 {selectedMethod.notes.startsWith('ADD:') && (
                   <p className="document-payment-account"><strong>{label('银行地址 / SWIFT', 'Bank address / SWIFT')}：</strong>{selectedMethod.notes}</p>
                 )}
                 <p className="document-payment-account"><strong>{label('银行账号', 'Account number')}：</strong>{selectedMethod.accountNo}</p>
               </>
+            ) : selectedMethod.kind === 'qr_pair' && selectedMethod.qrCodes?.length === 2 ? (
+              <div className="document-payment-qr-grid">
+                {selectedMethod.qrCodes.map(code => (
+                  <figure key={code.id} className="document-payment-qr">
+                    <img
+                      src={code.qrUrl}
+                      alt={qrCodeLabel(code, draft.language)}
+                      width={1122}
+                      height={1402}
+                      loading="eager"
+                      data-payment-qr="true"
+                    />
+                    <figcaption>{qrCodeLabel(code, draft.language)}</figcaption>
+                  </figure>
+                ))}
+              </div>
             ) : (
               selectedMethod.qrUrl && (
-                <img
-                  src={selectedMethod.qrUrl}
-                  alt={methodLabel(selectedMethod, draft.language)}
-                  width={160}
-                  height={160}
-                  loading="eager"
-                  style={{ width: '160px', height: 'auto', marginTop: '9px', objectFit: 'contain' }}
-                />
+                <figure className="document-payment-qr">
+                  <img
+                    src={selectedMethod.qrUrl}
+                    alt={methodLabel(selectedMethod, draft.language)}
+                    width={1122}
+                    height={1402}
+                    loading="eager"
+                    data-payment-qr="true"
+                  />
+                  <figcaption>{methodLabel(selectedMethod, draft.language)}</figcaption>
+                </figure>
               )
             )}
             {selectedMethod.notes && !selectedMethod.notes.startsWith('ADD:') && <p className="document-payment-account text-gray-600 mt-1"><strong>{label('原始备注', 'Source notes')}：</strong>{selectedMethod.notes}</p>}

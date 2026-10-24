@@ -3,7 +3,11 @@
 
 import { useEffect, useRef, useState, type ChangeEvent, type ReactNode } from 'react';
 import DocumentPreview from './DocumentPreview';
-import { methodLabel, type CommercialPaymentMethod } from '@/lib/commercial-documents/payment-methods';
+import {
+  methodLabel,
+  qrCodeLabel,
+  type CommercialPaymentMethod,
+} from '@/lib/commercial-documents/payment-methods';
 import {
   blankItem, documentAmount, formatMoney, initialDraft, isDraftShape,
   itemAmountMinor, sectionAmount, validateForPrint, formatDocumentNumber,
@@ -373,7 +377,13 @@ export default function DocumentWorkbench({ userName, userRole }: { userName: st
     if (draft.paymentMethodId && !selectedMethod) {
       problems.push('所选收款方式已失效或账户库未加载，不能输出错误账户');
     }
-    if (selectedMethod && selectedMethod.kind === 'qr' && !selectedMethod.qrUrl) {
+    const expectedQrCount = selectedMethod?.kind === 'qr_pair'
+      ? selectedMethod.qrCodes?.length ?? 0
+      : selectedMethod?.kind === 'qr' && selectedMethod.qrUrl ? 1 : 0;
+    if (selectedMethod?.kind === 'qr_pair' && expectedQrCount !== 2) {
+      problems.push('微信及支付宝收款二维码不完整，不能生成 PDF');
+    }
+    if (selectedMethod?.kind === 'qr' && !selectedMethod.qrUrl) {
       problems.push('收款二维码不存在或无法读取');
     }
     if (problems.length) {
@@ -382,13 +392,24 @@ export default function DocumentWorkbench({ userName, userRole }: { userName: st
       return;
     }
     setErrors([]);
-    // Print the same preview only after its static image assets are decoded.
+    // Print the same preview only after every header and payment image is decoded.
     try {
-      const images = Array.from(document.querySelectorAll<HTMLImageElement>('#commercial-print img'));
+      const printRoot = document.querySelector('#commercial-print');
+      const images = Array.from(printRoot?.querySelectorAll<HTMLImageElement>('img') ?? []);
+      const paymentImages = Array.from(
+        printRoot?.querySelectorAll<HTMLImageElement>('[data-payment-qr]') ?? [],
+      );
+      if (paymentImages.length !== expectedQrCount) {
+        throw new Error('payment QR image count mismatch');
+      }
       await Promise.all(images.map(image => image.decode()));
+      if (images.some(image => image.naturalWidth <= 0 || image.naturalHeight <= 0)) {
+        throw new Error('decoded image has no pixels');
+      }
       window.print();
     } catch {
-      setErrors(['PDF 图片（报价抬头或原始收款二维码）加载失败，请检查网络后重试。']);
+      setErrors(['PDF 图片（报价抬头或原始收款二维码）加载失败，已阻止输出；请刷新后重试。']);
+      setActiveTab('edit');
     }
   };
   const total = documentAmount(draft);
@@ -736,10 +757,10 @@ export default function DocumentWorkbench({ userName, userRole }: { userName: st
             {selectedMethod && (
               <div className="border rounded-lg bg-gray-50 px-3 py-3 space-y-1 text-xs text-gray-800">
                 {!selectedMethod.approved && <p className="font-bold text-red-700">待审核 / INTERNAL REVIEW ONLY — 不得向客户发送</p>}
-                <p><strong>{draft.language === 'en' ? 'Beneficiary / Account name' : '收款人 / 户名'}：</strong>
-                  <span className="whitespace-pre-wrap break-all">{selectedMethod.beneficiary}</span></p>
                 {selectedMethod.kind === 'bank' ? (
                   <>
+                    <p><strong>{draft.language === 'en' ? 'Beneficiary / Account name' : '收款人 / 户名'}：</strong>
+                      <span className="whitespace-pre-wrap break-all">{selectedMethod.beneficiary}</span></p>
                     <p><strong>{draft.language === 'en' ? 'Bank' : '开户行'}：</strong>
                       <span className="whitespace-pre-wrap break-all">{selectedMethod.bankName}</span></p>
                     {selectedMethod.notes.startsWith('ADD:') && (
@@ -749,11 +770,24 @@ export default function DocumentWorkbench({ userName, userRole }: { userName: st
                     <p><strong>{draft.language === 'en' ? 'Account number' : '银行账号'}：</strong>
                       <span className="whitespace-pre-wrap break-all font-mono">{selectedMethod.accountNo}</span></p>
                   </>
+                ) : selectedMethod.kind === 'qr_pair' && selectedMethod.qrCodes?.length === 2 ? (
+                  <div className="document-payment-qr-grid pt-1">
+                    {selectedMethod.qrCodes.map(code => (
+                      <figure key={code.id} className="document-payment-qr">
+                        <img src={code.qrUrl} width={175} height={219} data-payment-qr="true"
+                          alt={qrCodeLabel(code, draft.language) + '原始收款二维码'}
+                          className="w-full max-w-[175px] h-auto border border-gray-200 rounded bg-white" />
+                        <figcaption className="font-semibold text-gray-800">
+                          {qrCodeLabel(code, draft.language)}
+                        </figcaption>
+                      </figure>
+                    ))}
+                  </div>
                 ) : selectedMethod.qrUrl ? (
-                  <img src={selectedMethod.qrUrl} width={175} height={175}
+                  <img src={selectedMethod.qrUrl} width={175} height={219} data-payment-qr="true"
                     alt={methodLabel(selectedMethod, draft.language) + '原始收款二维码'}
-                    className="w-44 h-auto border border-gray-200 rounded bg-white" />
-                ) : <p className="text-red-700">原始二维码不可用</p>}
+                    className="w-full max-w-[175px] h-auto border border-gray-200 rounded bg-white" />
+                ) : <p className="text-red-700">收款二维码不完整或不可用</p>}
                 {selectedMethod.notes && !selectedMethod.notes.startsWith('ADD:') && <p><strong>{draft.language === 'en' ? 'Original source notes' : '原始备注'}：</strong>
                   <span className="whitespace-pre-wrap break-all">{selectedMethod.notes}</span></p>}
                 {selectedMethod.sourceNumeric && <p className="font-bold text-red-700">
@@ -761,7 +795,10 @@ export default function DocumentWorkbench({ userName, userRole }: { userName: st
                 </p>}
                 {userRole === 'admin' && (
                   <p className="text-gray-500">校验来源：{selectedMethod.sourceCell}
-                    {selectedMethod.qrSha256 ? ' · PNG SHA-256: ' + selectedMethod.qrSha256 : ''}</p>
+                    {selectedMethod.qrSha256 ? ' · PNG SHA-256: ' + selectedMethod.qrSha256 : ''}
+                    {selectedMethod.qrCodes?.length
+                      ? ' · ' + selectedMethod.qrCodes.map(code => qrCodeLabel(code, 'en') + ': ' + code.qrSha256).join(' · ')
+                      : ''}</p>
                 )}
                 {draft.currency !== 'CNY' && <p className="text-amber-700">
                   {draft.language === 'en' ? 'Finance must confirm that this account supports the selected currency.' : '请财务确认该收款方式支持当前报价币种。'}

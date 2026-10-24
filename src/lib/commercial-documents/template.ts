@@ -7,6 +7,7 @@ export type TaxStatement = 'exclusive' | 'vat13';
 export type ItemMode = 'amount' | 'catalog';
 import { NOTICE_TYPES } from './product-notices';
 import type { NoticeOverrides, NoticeSelection } from './product-notices';
+import { isPaymentMethodSelectionId } from './payment-methods';
 
 export const FIXED_SELLER_NAME = '广东宏达印业股份有限公司';
 export const FIXED_SELLER_NAME_EN = 'GUANGDONG HONGDA PRINTING CO.,LTD.';
@@ -327,7 +328,8 @@ export function isDraftShape(value: unknown): value is CommercialDocumentDraft {
       'deliveryTerms', 'paymentTerms', 'shippingTerms', 'warrantyTerms',
       'acceptanceTerms', 'additionalTerms', 'accountLabel', 'accountDetails']
       .every(k => typeof (draft as Record<string, unknown>)[k] === 'string')
-    && (draft.paymentMethodId === undefined || typeof draft.paymentMethodId === 'string' && /^(?:[0-9a-f-]{36})?$/i.test(draft.paymentMethodId))
+    && (draft.paymentMethodId === undefined
+      || typeof draft.paymentMethodId === 'string' && isPaymentMethodSelectionId(draft.paymentMethodId))
     && (draft.salespersonName === undefined || typeof draft.salespersonName === 'string')
     && (draft.buyerCustomerReferenceId === undefined || typeof draft.buyerCustomerReferenceId === 'string')
     && (draft.paymentDays === undefined || typeof draft.paymentDays === 'string')
@@ -376,7 +378,7 @@ export function normalizeImportedDraft(draft: CommercialDocumentDraft, salespers
       ? draft.shippingPreset : draft.shippingTerms ? 'other' : '',
     accountLabel: '',
     accountDetails: '',
-    paymentMethodId: typeof draft.paymentMethodId === 'string' && /^(?:[0-9a-f-]{36})?$/i.test(draft.paymentMethodId)
+    paymentMethodId: typeof draft.paymentMethodId === 'string' && isPaymentMethodSelectionId(draft.paymentMethodId)
       ? draft.paymentMethodId : '',
   };
 }
