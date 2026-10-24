@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { PAYMENT_METHOD_SORT_ORDER, methodLabel, type CommercialPaymentMethod } from '../../src/lib/commercial-documents/payment-methods';
 import {
   initialDraft, blankItem, moneyToMinor, quantityToMilli, itemAmountMinor,
   sectionAmount, documentAmount, validateForPrint, isDraftShape,
@@ -257,5 +259,40 @@ for (const type of Object.keys(expectedApprovedZh) as Array<keyof typeof expecte
   single.machineWarrantyPeriod = '3年';
   assert.equal(documentProductNotices(single)[0].text, expectedApprovedZh[type], 'Old editable machine data must not alter the fixed final Chinese text');
 }
+
+// Direct account selection regression: no Excel upload surface, no financial data in source.
+assert.deepEqual(PAYMENT_METHOD_SORT_ORDER.slice(0, 6), [
+  'abc_corporate', 'ccb_personal', 'abc_personal', 'hsbc_hk', 'jpmorgan_hk', 'bocom_foreign',
+], 'The six authorized bank methods must be shown in the exact approved review order');
+assert.equal(PAYMENT_METHOD_SORT_ORDER.length, 8, 'WeChat and Alipay may later be supplied only as private PNGs');
+const selector = initialDraft('业务员');
+assert.equal(selector.paymentMethodId, '');
+const sampleMethod: CommercialPaymentMethod = {
+  id: '00000000-0000-4000-8000-000000000001',
+  methodKey: 'abc_corporate', kind: 'bank',
+  labelZh: '对公账户', labelEn: 'Corporate Account',
+  beneficiary: 'Sample beneficiary (not a real account)',
+  bankName: 'Sample bank (not a real account)', accountNo: 'PLACEHOLDER_ONLY',
+  notes: '', sourceCell: 'test', sourceNumeric: false, approved: false,
+  qrSha256: null, qrUrl: null,
+};
+assert.equal(methodLabel(sampleMethod, 'zh'), '对公账户');
+assert.equal(methodLabel(sampleMethod, 'en'), 'Corporate Account');
+selector.paymentMethodId = sampleMethod.id;
+assert(isDraftShape(selector), 'UUID selection must be compatible with local JSON drafts');
+assert(!isDraftShape({ ...selector, paymentMethodId: 'spoofed-payment-account' }), 'Invalid IDs cannot be imported');
+assert.equal(normalizeImportedDraft(selector, 'owner').paymentMethodId, sampleMethod.id);
+assert.deepEqual(validateForPrint(selector).filter(problem => problem.includes('账号')), []);
+const editorCode = readFileSync(new URL('../../src/components/commercial-documents/DocumentWorkbench.tsx', import.meta.url), 'utf8');
+const apiCode = readFileSync(new URL('../../src/app/api/commercial-documents/payment-methods/route.ts', import.meta.url), 'utf8');
+const previewCode = readFileSync(new URL('../../src/components/commercial-documents/DocumentPreview.tsx', import.meta.url), 'utf8');
+assert(editorCode.includes('选择收款账户'), 'Section 06 must contain a direct selector');
+assert(!editorCode.includes('importPaymentWorkbook'), 'The editor must not request XLSX uploads');
+assert(!editorCode.includes('导入《收款账号.xlsx》'), 'No account Excel import UI');
+assert(!apiCode.includes('export async function POST'), 'Client must not import or modify payment catalogs');
+assert(apiCode.includes("Cache-Control"), 'Sensitive account reads must not be cached publicly');
+assert(apiCode.includes(".eq('org_id'"), 'Payment catalog must scope to organization');
+assert(previewCode.includes('selectedMethod.accountNo'), 'Bilingual PDF must show the source account text');
+assert(previewCode.includes('selectedMethod.qrUrl'), 'Payment QR must use the original authenticated image');
 
 console.log('commercial-document-template.test.ts: PASS');
