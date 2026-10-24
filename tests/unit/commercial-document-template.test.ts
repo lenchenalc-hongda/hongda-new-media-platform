@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { PAYMENT_METHOD_SORT_ORDER, methodLabel, type CommercialPaymentMethod } from '../../src/lib/commercial-documents/payment-methods';
+import { PAYMENT_METHOD_SORT_ORDER, HONGDA_FOREIGN_ACCOUNT_LABELS, methodLabel, type CommercialPaymentMethod } from '../../src/lib/commercial-documents/payment-methods';
 import {
   initialDraft, blankItem, moneyToMinor, quantityToMilli, itemAmountMinor,
   sectionAmount, documentAmount, validateForPrint, isDraftShape,
@@ -261,10 +261,17 @@ for (const type of Object.keys(expectedApprovedZh) as Array<keyof typeof expecte
 }
 
 // Direct account selection regression: no Excel upload surface, no financial data in source.
-assert.deepEqual(PAYMENT_METHOD_SORT_ORDER.slice(0, 6), [
-  'abc_corporate', 'ccb_personal', 'abc_personal', 'hsbc_hk', 'jpmorgan_hk', 'bocom_foreign',
-], 'The six authorized bank methods must be shown in the exact approved review order');
-assert.equal(PAYMENT_METHOD_SORT_ORDER.length, 8, 'WeChat and Alipay may later be supplied only as private PNGs');
+assert.deepEqual(PAYMENT_METHOD_SORT_ORDER.slice(0, 7), [
+  'abc_corporate', 'ccb_personal', 'abc_personal', 'hsbc_hk',
+  'jpmorgan_hk', 'bocom_usd_cn', 'bocom_hkd_cn',
+], 'Original two overseas choices must become three separate bank options');
+assert.equal(PAYMENT_METHOD_SORT_ORDER.length, 9, 'Seven bank options plus optional WeChat and Alipay');
+assert(!PAYMENT_METHOD_SORT_ORDER.some(key => key === 'bocom_foreign'), 'No obsolete combined USD/HKD bank option');
+assert.deepEqual(HONGDA_FOREIGN_ACCOUNT_LABELS, {
+  jpmorgan_hk: 'Hongda USD Account HK',
+  bocom_usd_cn: 'Hongda USD Account CN (Default)',
+  bocom_hkd_cn: 'Hongda HKD Account CN',
+}, 'Overseas option English labels must match approved wording exactly');
 const selector = initialDraft('业务员');
 assert.equal(selector.paymentMethodId, '');
 const sampleMethod: CommercialPaymentMethod = {
@@ -278,6 +285,11 @@ const sampleMethod: CommercialPaymentMethod = {
 };
 assert.equal(methodLabel(sampleMethod, 'zh'), '对公账户');
 assert.equal(methodLabel(sampleMethod, 'en'), 'Corporate Account');
+for (const [methodKey, expectedEnglish] of Object.entries(HONGDA_FOREIGN_ACCOUNT_LABELS)) {
+  const foreign = { ...sampleMethod, methodKey, labelZh: '不应该显示此中文户名', labelEn: 'Database editable label' };
+  assert.equal(methodLabel(foreign, 'zh'), expectedEnglish, 'Chinese quote must preserve approved English method name');
+  assert.equal(methodLabel(foreign, 'en'), expectedEnglish, 'English quote must preserve approved English method name');
+}
 selector.paymentMethodId = sampleMethod.id;
 assert(isDraftShape(selector), 'UUID selection must be compatible with local JSON drafts');
 assert(!isDraftShape({ ...selector, paymentMethodId: 'spoofed-payment-account' }), 'Invalid IDs cannot be imported');
@@ -293,6 +305,9 @@ assert(!apiCode.includes('export async function POST'), 'Client must not import 
 assert(apiCode.includes("Cache-Control"), 'Sensitive account reads must not be cached publicly');
 assert(apiCode.includes(".eq('org_id'"), 'Payment catalog must scope to organization');
 assert(previewCode.includes('selectedMethod.accountNo'), 'Bilingual PDF must show the source account text');
+assert(previewCode.includes('Bank address / SWIFT'), 'Overseas wire instructions must include address and SWIFT');
+assert(editorCode.includes('Bank address / SWIFT'), 'Editor must show overseas SWIFT and bank address');
+assert(apiCode.includes('order.includes(method.methodKey)'), 'Retired account option must not be returned by API');
 assert(previewCode.includes('selectedMethod.qrUrl'), 'Payment QR must use the original authenticated image');
 
 console.log('commercial-document-template.test.ts: PASS');
