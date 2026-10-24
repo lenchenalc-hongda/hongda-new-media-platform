@@ -1,4 +1,5 @@
 import type { CommercialDocumentDraft } from '@/lib/commercial-documents/template';
+import { methodLabel, type CommercialPaymentMethod } from '@/lib/commercial-documents/payment-methods';
 import { documentAmount, formatMoney, itemAmountMinor, sectionAmount, fixedSellerName } from '@/lib/commercial-documents/template';
 import { documentProductNotices } from '@/lib/commercial-documents/product-notices';
 
@@ -36,6 +37,8 @@ const printStyles = [
   '.commercial-print.compact-quotation .document-terms p { margin-top: 4px; }',
   '.commercial-print.compact-quotation .document-terms h2 { padding-bottom: 4px; }',
   // Plain, compact product notices; each paragraph stays together across A4 page breaks.
+  '.commercial-print .document-payment { margin-top: 9px; font-size: 11px; line-height: 1.5; break-inside: avoid; page-break-inside: avoid; }',
+  '.commercial-print .document-payment-account { overflow-wrap: anywhere; white-space: pre-wrap; }',
   '.commercial-print .document-product-notices { margin-top: 9px !important; font-size: 11px; line-height: 1.5; }',
   '.commercial-print .document-product-notices h2 { padding-bottom: 4px; margin-bottom: 3px; break-after: avoid-page; page-break-after: avoid; }',
   '.commercial-print .document-product-note { display: grid; grid-template-columns: 120px minmax(0, 1fr); column-gap: 9px; padding: 5px 0; margin-top: 0; border-bottom: 1px solid #e5e7eb; break-inside: avoid; page-break-inside: avoid; }',
@@ -64,7 +67,7 @@ const printStyles = [
   '}',
 ].join('\n');
 
-export default function DocumentPreview({ draft }: { draft: CommercialDocumentDraft }) {
+export default function DocumentPreview({ draft, selectedMethod }: { draft: CommercialDocumentDraft; selectedMethod?: CommercialPaymentMethod | null }) {
   const en = draft.language === 'en';
   const contract = draft.kind === 'machine_contract';
   const imageHeader = draft.kind === 'quotation'
@@ -208,6 +211,38 @@ export default function DocumentPreview({ draft }: { draft: CommercialDocumentDr
           {contract && draft.warrantyTerms && <p className="whitespace-pre-wrap"><strong>{label('售后与保修', 'Warranty / After-sales')}：</strong>{draft.warrantyTerms}</p>}
           {draft.additionalTerms && <p className="whitespace-pre-wrap"><strong>{label('其他约定', 'Additional terms')}：</strong>{draft.additionalTerms}</p>}
         </section>
+        {selectedMethod && (
+          <section className="document-payment no-split text-xs border border-gray-300 rounded p-3">
+            <h2 className="font-bold text-gray-800 border-b border-gray-300 pb-2 mb-2">
+              {label('收款方式 / 账户信息', 'PAYMENT METHOD / ACCOUNT DETAILS')}
+            </h2>
+            {!selectedMethod.approved && (
+              <p className="font-bold text-red-700 bg-red-50 p-2 mb-2">
+                {label('待审核，仅供内部核对，不得向客户发送', 'PENDING APPROVAL — INTERNAL REVIEW ONLY. DO NOT SEND TO CUSTOMERS.')}
+              </p>
+            )}
+            <p><strong>{label('收款方式', 'Payment method')}：</strong>{methodLabel(selectedMethod, draft.language)}</p>
+            <p className="document-payment-account"><strong>{label('收款人 / 户名', 'Beneficiary / Account name')}：</strong>{selectedMethod.beneficiary}</p>
+            {selectedMethod.kind === 'bank' ? (
+              <>
+                <p className="document-payment-account"><strong>{label('开户银行', 'Bank name')}：</strong>{selectedMethod.bankName}</p>
+                <p className="document-payment-account"><strong>{label('银行账号', 'Account number')}：</strong>{selectedMethod.accountNo}</p>
+              </>
+            ) : (
+              selectedMethod.qrUrl && (
+                <img
+                  src={selectedMethod.qrUrl}
+                  alt={methodLabel(selectedMethod, draft.language)}
+                  width={160}
+                  height={160}
+                  loading="eager"
+                  style={{ width: '160px', height: 'auto', marginTop: '9px', objectFit: 'contain' }}
+                />
+              )
+            )}
+            {selectedMethod.notes && <p className="document-payment-account text-gray-600 mt-1"><strong>{label('原始备注', 'Source notes')}：</strong>{selectedMethod.notes}</p>}
+          </section>
+        )}
         {productNotices.length > 0 && (
           <section className="document-product-notices">
             <h2 className="font-bold text-gray-800 border-b border-gray-300">
