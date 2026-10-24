@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { parseTrustedFixTask, FIX_TASK_SENTINEL } from '../../scripts/agent-control/project-lane-fix-task.mjs';
+import { parseTrustedFixTask, FIX_TASK_SENTINEL, selectBoundOriginalReadyTask } from '../../scripts/agent-control/project-lane-fix-task.mjs';
 
 const master = 'a'.repeat(40);
 const head = 'b'.repeat(40);
@@ -86,4 +86,33 @@ assert.equal(parseTrustedFixTask(body, {...original, baseMasterSha:head}, state)
 assert.equal(parseTrustedFixTask(body, original, {...state, status:'WAITING_REVIEW'}), null, 'FIX parser requires FIX state');
 assert.equal(parseTrustedFixTask(body, original, {...state, active_pr:158}), null, 'PR must match state');
 assert.equal(parseTrustedFixTask(body, original, {...state, fix_round:3}), null, 'max fix rounds must fail closed');
+
+const prIdentity = {
+  number:157,
+  created_at:'2026-10-24T06:09:54Z',
+  body:[
+    'PROJECT = workshop-order-system',
+    'TASK_ID = ' + taskId,
+    'BASE_MASTER_SHA = ' + master,
+    'BRANCH = ' + branch,
+    'TASK_COMMENT_ID = 6380615465',
+  ].join('\n'),
+};
+const readyRecord = {
+  comment:{id:6380615465,created_at:'2026-10-24T05:56:00Z',updated_at:'2026-10-24T05:56:00Z'},
+  task:original,
+};
+const laterWeakTask = {
+  comment:{id:6380999999,created_at:'2026-10-24T07:00:00Z',updated_at:'2026-10-24T07:00:00Z'},
+  task:{...original,checks:'typecheck',allowedPaths:['src/lib/workshop-orders/scheduling.ts']},
+};
+assert.deepEqual(selectBoundOriginalReadyTask(prIdentity,[laterWeakTask,readyRecord],state),original,'later task cannot weaken original checks or allowlist');
+assert.equal(selectBoundOriginalReadyTask(prIdentity,[laterWeakTask],state),null,'missing bound comment fails closed');
+assert.equal(selectBoundOriginalReadyTask({...prIdentity,body:prIdentity.body.replace('6380615465','6380999999')},[laterWeakTask,readyRecord],state),null,'comment created after PR fails closed');
+assert.equal(selectBoundOriginalReadyTask({...prIdentity,body:prIdentity.body+'\nTASK_COMMENT_ID = 6380615465'},[readyRecord],state),null,'duplicate identity fails closed');
+assert.equal(selectBoundOriginalReadyTask({...prIdentity,body:prIdentity.body.replace('BRANCH = '+branch,'BRANCH = codex/wrong')},[readyRecord],state),null,'branch mismatch fails closed');
+assert.equal(selectBoundOriginalReadyTask({...prIdentity,number:158},[readyRecord],state),null,'PR identity mismatch fails closed');
+assert.equal(selectBoundOriginalReadyTask(prIdentity,[{...readyRecord,comment:{...readyRecord.comment,updated_at:'2026-10-24T07:10:00Z'}}],state),null,'edited original after PR fails closed');
+assert.equal(selectBoundOriginalReadyTask(prIdentity,[readyRecord,readyRecord],state),null,'ambiguous original fails closed');
+
 console.log('agent-control-fix-task.test.ts: PASS');
