@@ -13,7 +13,7 @@ function safePath(path) {
     && !path.split('/').some(segment => !segment || segment === '.' || segment === '..');
 }
 
-export function verifySharedInfraLock({ registry, state, pr, changedPaths, eventHead, masterHead, controlIssue }) {
+export function verifySharedInfraLock({ registry, state, pr, changedPaths, openPulls, eventHead, masterHead, controlIssue }) {
   const lane = registry?.shared_infrastructure_lane;
   requireCondition(registry?.shared_path_lock === true, 'REGISTRY_LOCK_DISABLED');
   requireCondition(lane && lane.project === 'agent-control-infrastructure', 'UNREGISTERED_LANE');
@@ -50,6 +50,22 @@ export function verifySharedInfraLock({ registry, state, pr, changedPaths, event
   requireCondition(changedPaths.every(path => allowedPaths.includes(path) && pathOwned(path)), 'CHANGED_PATH_OUT_OF_SCOPE');
   requireCondition(Array.isArray(state.queued_shared_prs)
     && !state.queued_shared_prs.includes(pr.number), 'QUEUED_LOCK_CONFLICT');
+  // The registry limit is not proof of an exclusive lock. Query every LIVE open
+  // pull request, including drafts, and refuse a second infra-prefixed branch.
+  requireCondition(Array.isArray(openPulls) && openPulls.length > 0, 'OPEN_PRS_UNAVAILABLE');
+  requireCondition(openPulls.every(item => Number.isSafeInteger(item?.number)
+    && item.number > 0 && item.state === 'open'
+    && typeof item.head?.ref === 'string' && item.head.ref.length > 0
+    && typeof item.head?.sha === 'string'), 'INVALID_OPEN_PR');
+  requireCondition(new Set(openPulls.map(item => item.number)).size === openPulls.length,
+    'DUPLICATE_OPEN_PR');
+  const activeInfraPrs = openPulls.filter(item => item.head.ref.startsWith(lane.branch_prefix));
+  requireCondition(activeInfraPrs.length === lane.max_active_infrastructure_prs
+    && activeInfraPrs[0].number === pr.number
+    && activeInfraPrs[0].head.ref === state.active_branch
+    && activeInfraPrs[0].head.sha === state.verified_head,
+    'MULTIPLE_OR_MISMATCHED_INFRA_PRS');
+
   return {
     status: 'PASS',
     task_id: state.current_task_id,
@@ -93,6 +109,14 @@ async function main() {
   const match = machine.exec(issue.body || '');
   requireCondition(match, 'MACHINE_BLOCK_MISSING');
   const state = JSON.parse(match[1]);
+  const openPulls = [];
+  for (let page = 1; page <= 10; page++) {
+    const batch = await githubGet(prefix + '/pulls?state=open&per_page=100&page=' + page, token);
+    requireCondition(Array.isArray(batch), 'OPEN_PRS_UNAVAILABLE');
+    openPulls.push(...batch);
+    if (batch.length < 100) break;
+    requireCondition(page < 10, 'OPEN_PRS_TOO_MANY');
+  }
   const changedPaths = [];
   for (let page = 1; page <= 10; page++) {
     const files = await githubGet(prefix + '/pulls/' + prNumber + '/files?per_page=100&page=' + page, token);
@@ -104,7 +128,7 @@ async function main() {
     requireCondition(page < 10, 'DIFF_TOO_LARGE');
   }
   const result = verifySharedInfraLock({
-    registry, state, pr, changedPaths, eventHead,
+    registry, state, pr, changedPaths, openPulls, eventHead,
     masterHead: master.commit?.sha,
     controlIssue,
   });
