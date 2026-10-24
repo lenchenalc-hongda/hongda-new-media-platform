@@ -104,6 +104,7 @@ export type SchedulingBlockerCode =
   | 'TECHNICIAN_UNAVAILABLE'
   | 'CAPACITY_ESTIMATE_MISSING'
   | 'CAPACITY_ESTIMATE_INVALID'
+  | 'CAPACITY_ESTIMATE_TECHNICIAN_MISMATCH'
   | 'CAPACITY_ESTIMATE_INSUFFICIENT'
   | 'DURATION_ESTIMATE_MISMATCH'
   | 'MACHINE_TIME_CONFLICT'
@@ -138,7 +139,10 @@ export type RescheduleProposalError =
   | 'RESCHEDULE_OWNER_INVALID'
   | 'PROPOSAL_REASON_MISSING'
   | 'RESCHEDULE_TIME_INVALID'
-  | 'RESCHEDULE_TIME_UNCHANGED';
+  | 'RESCHEDULE_TIME_UNCHANGED'
+  | 'RESCHEDULE_BASE_MISSING'
+  | 'RESCHEDULE_BASE_DUPLICATE'
+  | 'RESCHEDULE_BASE_STALE';
 
 export interface RescheduleRequest {
   readonly proposalId: string;
@@ -283,6 +287,10 @@ const SCHEDULING_BLOCKER_COPY: Readonly<
   CAPACITY_ESTIMATE_INVALID: {
     label: '产能与工时估算无效',
     actionLabel: '请技术员重新确认正整数产能与估时',
+  },
+  CAPACITY_ESTIMATE_TECHNICIAN_MISMATCH: {
+    label: '产能估算人和排期技术员不一致',
+    actionLabel: '请当前执行技术员重新确认产能和工时估算',
   },
   CAPACITY_ESTIMATE_INSUFFICIENT: {
     label: '估时产能不足以覆盖排期数量',
@@ -464,11 +472,17 @@ function readinessMatchesCandidate(candidate: ScheduleCandidate): boolean {
 
   if (candidate.entityType === 'PRODUCTION_ORDER') {
     const order = readiness.order;
-    return isRecord(order) && order.id === candidate.entityId;
+    return isRecord(order)
+      && order.id === candidate.entityId
+      && isNonEmptyString(order.versionLabel)
+      && order.versionLabel === candidate.versionLabel;
   }
 
   const request = readiness.request;
-  return isRecord(request) && request.id === candidate.entityId;
+  return isRecord(request)
+    && request.id === candidate.entityId
+    && isNonEmptyString(request.versionLabel)
+    && request.versionLabel === candidate.versionLabel;
 }
 
 function safeReadinessEvaluation(
@@ -800,6 +814,12 @@ export function evaluateScheduleCandidate(
     addBlocker(blockers, 'CAPACITY_ESTIMATE_INVALID');
   } else {
     if (
+      candidate.capacityEstimate.estimatedByTechnicianProfileId
+      !== candidate.technicianProfileId
+    ) {
+      addBlocker(blockers, 'CAPACITY_ESTIMATE_TECHNICIAN_MISMATCH');
+    }
+    if (
       isPositiveInteger(candidate.quantity)
       && candidate.capacityEstimate.estimatedQuantity < candidate.quantity
     ) {
@@ -870,6 +890,55 @@ export function evaluateScheduleCandidate(
   };
 }
 
+function bookingMatchesCurrentBase(
+  currentBooking: ExistingBooking,
+  liveBooking: ExistingBooking,
+  context: SchedulingContext,
+): boolean {
+  if (
+    !isExistingBooking(currentBooking, context)
+    || !isExistingBooking(liveBooking, context)
+    || !isNonEmptyString(currentBooking.entityId)
+    || !isNonEmptyString(currentBooking.identifier)
+    || !isNonEmptyString(currentBooking.versionLabel)
+    || !isValidDueDate(currentBooking.dueDate)
+    || !isPositiveInteger(currentBooking.quantity)
+  ) {
+    return false;
+  }
+
+  const currentEstimate = currentBooking.capacityEstimate;
+  const liveEstimate = liveBooking.capacityEstimate;
+  const capacityMatches = (
+    (currentEstimate === null && liveEstimate === null)
+    || (
+      isCapacityEstimate(currentEstimate)
+      && isCapacityEstimate(liveEstimate)
+      && currentEstimate.estimateId === liveEstimate.estimateId
+      && currentEstimate.estimatedQuantity === liveEstimate.estimatedQuantity
+      && currentEstimate.durationMinutes === liveEstimate.durationMinutes
+      && currentEstimate.estimatedByTechnicianProfileId
+        === liveEstimate.estimatedByTechnicianProfileId
+    )
+  );
+
+  return capacityMatches
+    && currentBooking.bookingId === liveBooking.bookingId
+    && currentBooking.version === liveBooking.version
+    && currentBooking.taskType === liveBooking.taskType
+    && currentBooking.entityType === liveBooking.entityType
+    && currentBooking.entityId === liveBooking.entityId
+    && currentBooking.identifier === liveBooking.identifier
+    && currentBooking.versionLabel === liveBooking.versionLabel
+    && currentBooking.priority === liveBooking.priority
+    && currentBooking.machineSlotId === liveBooking.machineSlotId
+    && currentBooking.technicianProfileId === liveBooking.technicianProfileId
+    && currentBooking.scheduledStart === liveBooking.scheduledStart
+    && currentBooking.scheduledEnd === liveBooking.scheduledEnd
+    && currentBooking.dueDate === liveBooking.dueDate
+    && currentBooking.quantity === liveBooking.quantity;
+}
+
 export function createRescheduleProposal(
   currentBooking: ExistingBooking,
   request: RescheduleRequest,
@@ -903,6 +972,29 @@ export function createRescheduleProposal(
     && request.scheduledEnd === currentBooking.scheduledEnd
   ) {
     errors.push('RESCHEDULE_TIME_UNCHANGED');
+  }
+
+  // An old caller snapshot must never remove a newer, live booking from
+  // conflict checks. A matching and unique live baseline is mandatory.
+  if (
+    !isRecord(context)
+    || !Array.isArray(context.existingBookings)
+    || !Array.isArray(context.machineSlots)
+    || !isNonEmptyString(currentBooking.bookingId)
+  ) {
+    errors.push('RESCHEDULE_BASE_MISSING');
+  } else {
+    const liveBases = context.existingBookings.filter(
+      (booking) => isRecord(booking)
+        && booking.bookingId === currentBooking.bookingId,
+    );
+    if (liveBases.length === 0) {
+      errors.push('RESCHEDULE_BASE_MISSING');
+    } else if (liveBases.length !== 1) {
+      errors.push('RESCHEDULE_BASE_DUPLICATE');
+    } else if (!bookingMatchesCurrentBase(currentBooking, liveBases[0], context)) {
+      errors.push('RESCHEDULE_BASE_STALE');
+    }
   }
 
   if (errors.length > 0) {

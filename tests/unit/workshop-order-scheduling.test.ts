@@ -195,6 +195,47 @@ const readySampling = evaluateScheduleCandidate(samplingCandidate, context);
 assert.equal(readySampling.isSchedulable, true);
 assert.deepEqual(readySampling.blockers, []);
 
+const productionVersionMismatch = evaluateScheduleCandidate(
+  withCandidate({ versionLabel: 'V2' }),
+  context,
+);
+assert.equal(productionVersionMismatch.isSchedulable, false);
+assert(
+  productionVersionMismatch.blockers.some(
+    (blocker) => blocker.code === 'READINESS_INPUT_INCOMPLETE',
+  ),
+  'a production V2 candidate must not borrow V1 readiness or sign-off',
+);
+
+const samplingVersionMismatch = evaluateScheduleCandidate(
+  { ...samplingCandidate, versionLabel: 'V2' },
+  context,
+);
+assert.equal(samplingVersionMismatch.isSchedulable, false);
+assert(
+  samplingVersionMismatch.blockers.some(
+    (blocker) => blocker.code === 'READINESS_INPUT_INCOMPLETE',
+  ),
+  'a sampling V2 candidate must not borrow V1 readiness or baseline',
+);
+
+const technicianEstimateMismatch = evaluateScheduleCandidate(
+  withCandidate({
+    capacityEstimate: {
+      ...productionCandidate.capacityEstimate!,
+      estimatedByTechnicianProfileId: 'technician-2',
+    },
+  }),
+  context,
+);
+assert.equal(technicianEstimateMismatch.isSchedulable, false);
+assert(
+  technicianEstimateMismatch.blockers.some(
+    (blocker) => blocker.code === 'CAPACITY_ESTIMATE_TECHNICIAN_MISMATCH',
+  ),
+  'estimate must be authored for the scheduled executing technician',
+);
+
 const negativeDuration = evaluateScheduleCandidate(
   withCandidate({
     scheduledStart: '2026-11-02T11:00',
@@ -507,6 +548,70 @@ assert.equal(
 );
 assert(Object.isFrozen(reschedule.proposal));
 assert(Object.isFrozen(reschedule.proposal?.candidate));
+
+const savedSamplingBooking: ExistingBooking = {
+  ...samplingCandidate,
+  bookingId: 'booking-sampling-1',
+  version: 1,
+};
+
+const missingRescheduleBase = createRescheduleProposal(
+  savedSamplingBooking,
+  rescheduleRequest,
+  withContext({ existingBookings: [] }),
+);
+assert.equal(missingRescheduleBase.proposal, null);
+assert(missingRescheduleBase.errors.includes('RESCHEDULE_BASE_MISSING'));
+
+const duplicateRescheduleBase = createRescheduleProposal(
+  savedSamplingBooking,
+  rescheduleRequest,
+  withContext({
+    existingBookings: [
+      savedSamplingBooking,
+      { ...savedSamplingBooking, version: 2 },
+    ],
+  }),
+);
+assert.equal(duplicateRescheduleBase.proposal, null);
+assert(duplicateRescheduleBase.errors.includes('RESCHEDULE_BASE_DUPLICATE'));
+
+const staleRescheduleVersion = createRescheduleProposal(
+  savedSamplingBooking,
+  rescheduleRequest,
+  withContext({
+    existingBookings: [{ ...savedSamplingBooking, version: 2 }],
+  }),
+);
+assert.equal(staleRescheduleVersion.proposal, null);
+assert(staleRescheduleVersion.errors.includes('RESCHEDULE_BASE_STALE'));
+assert.equal(staleRescheduleVersion.evaluation, null);
+
+const staleRescheduleFacts = createRescheduleProposal(
+  savedSamplingBooking,
+  rescheduleRequest,
+  withContext({
+    existingBookings: [{ ...savedSamplingBooking, priority: 'LOW' }],
+  }),
+);
+assert.equal(staleRescheduleFacts.proposal, null);
+assert(staleRescheduleFacts.errors.includes('RESCHEDULE_BASE_STALE'));
+
+const staleRescheduleEstimate = createRescheduleProposal(
+  savedSamplingBooking,
+  rescheduleRequest,
+  withContext({
+    existingBookings: [{
+      ...savedSamplingBooking,
+      capacityEstimate: {
+        ...samplingCandidate.capacityEstimate!,
+        estimatedByTechnicianProfileId: 'technician-2',
+      },
+    }],
+  }),
+);
+assert.equal(staleRescheduleEstimate.proposal, null);
+assert(staleRescheduleEstimate.errors.includes('RESCHEDULE_BASE_STALE'));
 
 const unchangedReschedule = createRescheduleProposal(
   {
