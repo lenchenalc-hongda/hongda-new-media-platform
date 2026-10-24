@@ -742,6 +742,10 @@ export default function DocumentWorkbench({ userName, userRole }: { userName: st
                   <>
                     <p><strong>{draft.language === 'en' ? 'Bank' : '开户行'}：</strong>
                       <span className="whitespace-pre-wrap break-all">{selectedMethod.bankName}</span></p>
+                    {selectedMethod.notes.startsWith('ADD:') && (
+                      <p><strong>{draft.language === 'en' ? 'Bank address / SWIFT' : '银行地址 / SWIFT'}：</strong>
+                        <span className="whitespace-pre-wrap break-words">{selectedMethod.notes}</span></p>
+                    )}
                     <p><strong>{draft.language === 'en' ? 'Account number' : '银行账号'}：</strong>
                       <span className="whitespace-pre-wrap break-all font-mono">{selectedMethod.accountNo}</span></p>
                   </>
@@ -750,7 +754,7 @@ export default function DocumentWorkbench({ userName, userRole }: { userName: st
                     alt={methodLabel(selectedMethod, draft.language) + '原始收款二维码'}
                     className="w-44 h-auto border border-gray-200 rounded bg-white" />
                 ) : <p className="text-red-700">原始二维码不可用</p>}
-                {selectedMethod.notes && <p><strong>{draft.language === 'en' ? 'Original source notes' : '原始备注'}：</strong>
+                {selectedMethod.notes && !selectedMethod.notes.startsWith('ADD:') && <p><strong>{draft.language === 'en' ? 'Original source notes' : '原始备注'}：</strong>
                   <span className="whitespace-pre-wrap break-all">{selectedMethod.notes}</span></p>}
                 {selectedMethod.sourceNumeric && <p className="font-bold text-red-700">
                   原始资料曾采用数值格式存储，请核对是否存在前导零风险。
