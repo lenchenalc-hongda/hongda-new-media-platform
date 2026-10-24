@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import {trustedGeneratedTask} from './owner-decision-core.mjs';
-import {FIX_TASK_SENTINEL, parseTrustedFixTask} from './project-lane-fix-task.mjs';
+import {FIX_TASK_SENTINEL, parseTrustedFixTask, selectBoundOriginalReadyTask} from './project-lane-fix-task.mjs';
 
 const REPOSITORY = 'lenchenalc-hongda/hongda-new-media-platform';
 const TRUSTED_ACTOR = 'lenchenalc-hongda';
@@ -191,9 +191,11 @@ async function main() {
     return;
   }
 
+  let prForFix;
   if (state.status === 'FIX_REQUIRED') {
     const pr = await api(`/repos/${REPOSITORY}/pulls/${state.active_pr}`);
     if (pr.state !== 'open' || pr.base?.ref !== 'master' || pr.head?.ref !== state.active_branch || pr.head?.sha !== state.verified_head) fail('active PR does not match FIX state');
+    prForFix = pr;
   }
 
   // FIX instructions are owner-authored on the CONTROL ISSUE, not on the PR.
@@ -212,8 +214,8 @@ async function main() {
       && task.baseMasterSha === state.master_sha);
   let selected;
   if (state.status === 'FIX_REQUIRED') {
-    const original = originalTasks[0]?.task;
-    if (!original) fail('trusted original READY task not found for FIX subset');
+    const original = selectBoundOriginalReadyTask(prForFix, originalTasks, state);
+    if (!original) fail('trusted original READY task does not match active PR task comment');
     selected = allComments
       .filter(comment => comment.user?.login === TRUSTED_ACTOR
         && String(comment.body || '').replaceAll('\r\n', '\n').split('\n')[0] === FIX_TASK_SENTINEL)
