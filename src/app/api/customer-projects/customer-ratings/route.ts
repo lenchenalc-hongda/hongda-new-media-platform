@@ -154,6 +154,7 @@ export async function GET(req: NextRequest) {
         maintenanceOwnerProfileId: owner?.owner_profile_id ?? null,
         maintenanceOwnerName: owner?.owner_name ?? null,
         canAssess: owner?.can_assess === true,
+        isMaintenanceOwner: owner?.owner_profile_id === profile.id,
         nextAction: rating?.next_action ?? null,
         nextCheckOn: rating?.next_check_on ?? null,
         strategy: customerSalesStrategy(actualGrade, potentialGrade),
