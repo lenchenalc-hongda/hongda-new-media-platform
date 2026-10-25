@@ -17,6 +17,7 @@ import {
   uuidSchema,
 } from './schemas';
 import { RELATIONSHIP_CONVERSION_SOURCE_KEY } from './old-customer-proactive';
+import { isUsableCustomerName } from './customer-name-integrity';
 
 export type CpcProfile = {
   id: string;
@@ -54,7 +55,7 @@ type RpcResult = {
 const cpcRoleSchema = z.enum(['admin', 'manager', 'sales']);
 
 const createProvisionalSchema = z.object({
-  displayNameSnapshot: z.string().trim().min(1).max(300),
+  displayNameSnapshot: z.string().trim().min(1).max(300).refine(isUsableCustomerName, '客户名称包含损坏字符，请核对原始名称'),
   provisionalSourceReference: z.string().trim().min(1).max(300),
 }).strict();
 
