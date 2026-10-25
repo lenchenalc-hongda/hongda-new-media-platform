@@ -25,27 +25,14 @@ const saveSchema = z.object({
   customerReferenceId: uuidSchema,
   scores: scoresSchema,
   evidenceSummary: z.string().max(3000),
-  submit: z.boolean(),
   expectedVersion: z.number().int().min(1).nullable(),
 }).strict().superRefine((value, ctx) => {
-  if (!value.submit) return;
   if (value.evidenceSummary.trim().length < 20) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
       path: ['evidenceSummary'],
-      message: '提交审核前，请填写至少20字的客户事实依据',
+      message: '评级生效前，请填写至少20字的客户事实依据',
     });
-  }
-});
-
-const reviewSchema = z.object({
-  customerReferenceId: uuidSchema,
-  expectedVersion: z.number().int().min(1),
-  decision: z.enum(['approve', 'request_changes']),
-  reviewNote: z.string().max(1000),
-}).strict().superRefine((value, ctx) => {
-  if (value.decision === 'request_changes' && value.reviewNote.trim().length < 5) {
-    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['reviewNote'], message: '退回必须填写原因' });
   }
 });
 
@@ -62,9 +49,9 @@ function rpcReply(result: any) {
   const code = value?.code;
   return fail(
     code === 'VERSION_CONFLICT' ? '此客户评级已被其他人更新，请刷新后重试'
-      : code === 'FORBIDDEN' ? '你没有该客户的评级或审核权限'
+      : code === 'FORBIDDEN' ? '仅客户负责人或该客户的项目负责人可保存潜力评级'
         : code === 'INVALID_TRANSITION' ? '当前评级状态不能进行此操作'
-          : code === 'NOT_FOUND' ? '客户或待审评级不存在'
+          : code === 'NOT_FOUND' ? '客户评级不存在'
             : '请检查评分和证明材料是否完整',
     code === 'FORBIDDEN' ? 403 : code === 'NOT_FOUND' ? 404
       : code === 'VERSION_CONFLICT' || code === 'INVALID_TRANSITION' ? 409 : 422,
@@ -102,12 +89,12 @@ export async function GET(req: NextRequest) {
     if (customers.length === 0) {
       return NextResponse.json({
         ok: true,
-        data: { summaries: [], detail: null, canReview: profile.role === 'admin' || profile.role === 'manager' },
+        data: { summaries: [], detail: null },
       });
     }
 
     const ids = customers.map(row => row.id);
-    const [assessmentResult, ownerResult, workspaceResult] = await Promise.all([
+    const [assessmentResult, ownerResult, workspaceResult, ratingAccessResult] = await Promise.all([
       supabase.from('cpc_customer_potential_assessments')
         .select('id,customer_reference_id,assessor_profile_id,scores,assessment_score,evidence_summary,opportunity_summary,estimated_annual_opportunity_cny_yuan,next_action,next_check_on,status,published_grade,published_score,published_at,review_note,reviewed_at,version,updated_at')
         .eq('org_id', profile.orgId)
@@ -119,9 +106,10 @@ export async function GET(req: NextRequest) {
         .eq('org_id', profile.orgId)
         .in('customer_reference_id', ids)
         .limit(MAX_RATING_CUSTOMERS),
+      supabase.rpc('cpc_customer_self_rating_access', { p_customer_ids: ids }),
     ]);
 
-    if (assessmentResult.error || ownerResult.error || workspaceResult.error) {
+    if (assessmentResult.error || ownerResult.error || workspaceResult.error || ratingAccessResult.error) {
       // No silent N fallback if the migration is missing: it would misstate data.
       return fail('客户评级服务尚未完成数据库初始化，请联系管理员', 503);
     }
@@ -135,11 +123,15 @@ export async function GET(req: NextRequest) {
     const workspaceByCustomer = new Map<string, any>(
       (workspaceResult.data ?? []).map((row: any) => [row.customer_reference_id, row]),
     );
+    const ratingAccessByCustomer = new Map<string, any>(
+      (ratingAccessResult.data ?? []).map((row: any) => [row.customer_reference_id, row]),
+    );
 
     const summaries = customers.map(customer => {
       const rating = ratingByCustomer.get(customer.id) ?? null;
       const owner = ownerByCustomer.get(customer.id) ?? null;
       const workspace = workspaceByCustomer.get(customer.id) ?? null;
+      const ratingAccess = ratingAccessByCustomer.get(customer.id) ?? null;
       const actualGrade = 'N' as const;
       const potentialGrade = publishedPotentialGrade({ publishedGrade: rating?.published_grade });
       return {
@@ -154,6 +146,8 @@ export async function GET(req: NextRequest) {
         maintenanceOwnerProfileId: owner?.owner_profile_id ?? null,
         maintenanceOwnerName: owner?.owner_name ?? null,
         canAssess: owner?.can_assess === true,
+        canRate: ratingAccess?.can_rate === true,
+        lastRaterName: ratingAccess?.last_rater_name ?? null,
         isMaintenanceOwner: owner?.owner_profile_id === profile.id,
         customerNotePreview: workspace?.customer_note ? String(workspace.customer_note).slice(0, 140) : null,
         nextAction: workspace?.next_action || null,
@@ -177,6 +171,7 @@ export async function GET(req: NextRequest) {
         publishedAt: rating.published_at,
         reviewNote: rating.review_note,
         reviewedAt: rating.reviewed_at,
+        lastRaterName: ratingAccessByCustomer.get(parsedId.data)?.last_rater_name ?? null,
         version: rating.version,
         updatedAt: rating.updated_at,
       } : null;
@@ -203,7 +198,6 @@ export async function GET(req: NextRequest) {
         summaries,
         detail,
         workspace,
-        canReview: profile.role === 'admin' || profile.role === 'manager',
       },
     }, { headers: { 'Cache-Control': 'private, no-store' } });
   } catch {
@@ -228,29 +222,8 @@ export async function POST(req: NextRequest) {
     p_estimated_annual_opportunity_cny_yuan: null,
     p_next_action: '',
     p_next_check_on: null,
-    p_submit: input.submit,
+    p_submit: true,
     p_expected_version: input.expectedVersion,
-    p_request_id: crypto.randomUUID(),
-  });
-  return rpcReply(result);
-}
-
-export async function PATCH(req: NextRequest) {
-  const body = reviewSchema.safeParse(await req.json().catch(() => null));
-  if (!body.success) return fail('审核决定或原因无效', 422);
-  const supabase = await createClient();
-  if (!supabase) return fail('数据库不可用', 503);
-  const auth = await resolveCpcProfile(supabase);
-  if (!auth.ok) return fail(auth.message, auth.status);
-  if (auth.profile.role !== 'admin' && auth.profile.role !== 'manager') {
-    return fail('仅管理人员可以审核', 403);
-  }
-  const input = body.data;
-  const result = await supabase.rpc('cpc_review_customer_potential_rating', {
-    p_customer_reference_id: input.customerReferenceId,
-    p_expected_version: input.expectedVersion,
-    p_decision: input.decision,
-    p_review_note: input.reviewNote,
     p_request_id: crypto.randomUUID(),
   });
   return rpcReply(result);

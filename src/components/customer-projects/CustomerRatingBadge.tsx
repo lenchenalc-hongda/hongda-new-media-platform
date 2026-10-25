@@ -8,7 +8,7 @@ import {
 } from './customer-rating-colors';
 
 /**
- * Shared for customer list, detail, assessment preview, and manager review.
+ * Shared for customer list, detail and self-rating calculation preview.
  * A grade never appears as just a colored dot: R/P, grade, and N status are
  * always readable without distinguishing colors.
  */
@@ -62,7 +62,7 @@ export function CustomerRatingLegend() {
       <div className="space-y-2 border-t border-slate-100 px-3 py-3">
         <p className="text-xs leading-5 text-slate-500">
           相同等级使用相同色系：SS金、S紫、A蓝、B绿、C橙、D红；N灰。
-          等级显示已审核或财务已核实的结果，试算评级会明确标记“未生效”。
+          实际R仅以财务核实数据为准；潜力P由客户或项目负责人保存后立即生效。试算评级标记“未生效”。
         </p>
         <div className="space-y-1.5">
           {CUSTOMER_RATING_GRADES.map(grade => (

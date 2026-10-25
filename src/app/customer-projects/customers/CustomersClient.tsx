@@ -47,6 +47,7 @@ interface CustomerRatingSummary {
   potentialGrade: CustomerRatingGrade;
   potentialStatus: string;
   potentialScore: number | null;
+  lastRaterName: string | null;
   maintenanceOwnerName: string | null;
   isMaintenanceOwner: boolean;
   nextAction: string | null;
@@ -61,7 +62,7 @@ type FilterKey =
   | 'due_recommendation'
   | 'active_project'
   | 'high_potential'
-  | 'pending_rating_review'
+  | 'unrated_potential'
   | 'my_verified_customers'
   | 'rating_action_due';
 
@@ -72,7 +73,7 @@ const FILTERS: Array<{ key: FilterKey; label: string }> = [
   { key: 'due_recommendation', label: '到建议周期' },
   { key: 'active_project', label: '有活跃项目' },
   { key: 'high_potential', label: '高潜力客户' },
-  { key: 'pending_rating_review', label: '评级待审核' },
+  { key: 'unrated_potential', label: '潜力未评级' },
   { key: 'my_verified_customers', label: '我负责的客户' },
   { key: 'rating_action_due', label: '开发动作待检查' },
 ];
@@ -140,7 +141,7 @@ export default function CustomersClient({
     return customers.filter(customer => {
       const rating = ratings.get(customer.id);
       if (filter === 'high_potential' && !['SS', 'S', 'A'].includes(rating?.potentialGrade ?? 'N')) return false;
-      if (filter === 'pending_rating_review' && rating?.potentialStatus !== 'pending_review') return false;
+      if (filter === 'unrated_potential' && (rating?.potentialGrade ?? 'N') !== 'N') return false;
       if (filter === 'my_verified_customers' && rating?.isMaintenanceOwner !== true) return false;
       if (filter === 'rating_action_due' && !(rating?.nextCheckOn && rating.nextCheckOn <= shanghaiToday)) return false;
       if (
@@ -188,7 +189,7 @@ export default function CustomersClient({
   ).length;
   const activeProjectCount = customers.filter(customer => customer.hasActiveProject).length;
   const highPotentialCount = [...ratings.values()].filter(row => ['SS', 'S', 'A'].includes(row.potentialGrade)).length;
-  const pendingRatingCount = [...ratings.values()].filter(row => row.potentialStatus === 'pending_review').length;
+  const unratedPotentialCount = [...ratings.values()].filter(row => row.potentialGrade === 'N').length;
   const actionDueCount = [...ratings.values()].filter(row => row.nextCheckOn && row.nextCheckOn <= shanghaiToday).length;
 
   return (
@@ -215,8 +216,8 @@ export default function CustomersClient({
 
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           {[
-            ['已审核高潜客户', highPotentialCount],
-            ['潜力评级待审核', pendingRatingCount],
+            ['高潜力客户', highPotentialCount],
+            ['潜力尚未评级', unratedPotentialCount],
             ['开发动作到期检查', actionDueCount],
           ].map(([label, value]) => (
             <div key={label} className="rounded-lg border border-gray-200 bg-white p-3">
@@ -312,11 +313,7 @@ export default function CustomersClient({
                         <>
                           <CustomerRatingBadge axis="actual" grade={ratings.get(customer.id)!.actualGrade} />
                           <CustomerRatingBadge axis="potential" grade={ratings.get(customer.id)!.potentialGrade} />
-                          {ratings.get(customer.id)?.potentialStatus === 'pending_review' && (
-                            <span className="rounded-md bg-amber-50 px-2 py-0.5 text-[11px] text-amber-800">
-                              待审核
-                            </span>
-                          )}
+
                         </>
                       )}
                     </div>
@@ -328,6 +325,9 @@ export default function CustomersClient({
                       ) : customer.externalOwnerReference ? (
                         <span>外部归属引用：{customer.externalOwnerReference}（待确认映射）</span>
                       ) : null}
+                      {ratings.get(customer.id)?.lastRaterName && ratings.get(customer.id)?.potentialGrade !== 'N' && (
+                        <span>潜力评分人：{ratings.get(customer.id)?.lastRaterName}</span>
+                      )}
                       <span>更新：{formatBusinessDateTime(customer.updatedAt)}</span>
                     </div>
 

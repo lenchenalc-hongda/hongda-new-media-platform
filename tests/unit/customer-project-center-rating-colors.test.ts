@@ -80,8 +80,9 @@ for (const source of [detail, list]) {
   assert.ok(source.includes('axis="potential"'));
 }
 assert.ok(detail.includes('grade={preview.grade} preview'), 'scoring preview must be visibly provisional');
-assert.ok(detail.includes('grade={data.detail.assessmentGrade} preview'), 'manager review must be provisional');
+assert.ok(detail.includes("data.detail.status !== 'approved'"), 'legacy unapproved draft should be visually provisional');
 assert.ok(detail.includes('grade={summary.potentialGrade}'), 'published grade never replaced by draft');
-assert.ok(list.includes('potentialStatus === \'pending_review\''), 'pending review must remain explicit');
+assert.ok(!list.includes('potentialStatus === \'pending_review\''), 'client must not keep obsolete manager approval queues');
+assert.ok(list.includes('潜力未评级'), 'unclassified potential customers remain easy to find');
 
 console.log('PASS: seven hues, R/P separation, neutral N, preview distinction, shared list/detail/manager badge');
