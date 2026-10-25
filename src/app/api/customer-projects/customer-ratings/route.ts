@@ -25,24 +25,15 @@ const saveSchema = z.object({
   customerReferenceId: uuidSchema,
   scores: scoresSchema,
   evidenceSummary: z.string().max(3000),
-  opportunitySummary: z.string().max(2000),
-  estimatedAnnualOpportunityCnyYuan: z.number().int().nonnegative().max(1_000_000_000).nullable(),
-  nextAction: z.string().max(300),
-  nextCheckOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable(),
   submit: z.boolean(),
   expectedVersion: z.number().int().min(1).nullable(),
 }).strict().superRefine((value, ctx) => {
   if (!value.submit) return;
-  for (const [field, ok] of [
-    ['evidenceSummary', value.evidenceSummary.trim().length >= 20],
-    ['opportunitySummary', value.opportunitySummary.trim().length >= 10],
-    ['nextAction', value.nextAction.trim().length >= 5],
-    ['nextCheckOn', value.nextCheckOn !== null],
-  ] as const) {
-    if (!ok) ctx.addIssue({
+  if (value.evidenceSummary.trim().length < 20) {
+    ctx.addIssue({
       code: z.ZodIssueCode.custom,
-      path: [field],
-      message: '提交审核前请补齐客户事实、项目机会和下一步动作及日期',
+      path: ['evidenceSummary'],
+      message: '提交审核前，请填写至少20字的客户事实依据',
     });
   }
 });
@@ -116,16 +107,21 @@ export async function GET(req: NextRequest) {
     }
 
     const ids = customers.map(row => row.id);
-    const [assessmentResult, ownerResult] = await Promise.all([
+    const [assessmentResult, ownerResult, workspaceResult] = await Promise.all([
       supabase.from('cpc_customer_potential_assessments')
         .select('id,customer_reference_id,assessor_profile_id,scores,assessment_score,evidence_summary,opportunity_summary,estimated_annual_opportunity_cny_yuan,next_action,next_check_on,status,published_grade,published_score,published_at,review_note,reviewed_at,version,updated_at')
         .eq('org_id', profile.orgId)
         .in('customer_reference_id', ids)
         .limit(MAX_RATING_CUSTOMERS),
       supabase.rpc('cpc_customer_maintenance_owners', { p_customer_ids: ids }),
+      supabase.from('cpc_customer_workspaces')
+        .select('customer_reference_id,customer_note,note_version,note_updated_at,opportunity_summary,estimated_annual_opportunity_cny_yuan,next_action,next_check_on,plan_version,plan_updated_at')
+        .eq('org_id', profile.orgId)
+        .in('customer_reference_id', ids)
+        .limit(MAX_RATING_CUSTOMERS),
     ]);
 
-    if (assessmentResult.error || ownerResult.error) {
+    if (assessmentResult.error || ownerResult.error || workspaceResult.error) {
       // No silent N fallback if the migration is missing: it would misstate data.
       return fail('客户评级服务尚未完成数据库初始化，请联系管理员', 503);
     }
@@ -136,10 +132,14 @@ export async function GET(req: NextRequest) {
     const ownerByCustomer = new Map<string, any>(
       (ownerResult.data ?? []).map((row: any) => [row.customer_reference_id, row]),
     );
+    const workspaceByCustomer = new Map<string, any>(
+      (workspaceResult.data ?? []).map((row: any) => [row.customer_reference_id, row]),
+    );
 
     const summaries = customers.map(customer => {
       const rating = ratingByCustomer.get(customer.id) ?? null;
       const owner = ownerByCustomer.get(customer.id) ?? null;
+      const workspace = workspaceByCustomer.get(customer.id) ?? null;
       const actualGrade = 'N' as const;
       const potentialGrade = publishedPotentialGrade({ publishedGrade: rating?.published_grade });
       return {
@@ -155,8 +155,9 @@ export async function GET(req: NextRequest) {
         maintenanceOwnerName: owner?.owner_name ?? null,
         canAssess: owner?.can_assess === true,
         isMaintenanceOwner: owner?.owner_profile_id === profile.id,
-        nextAction: rating?.next_action ?? null,
-        nextCheckOn: rating?.next_check_on ?? null,
+        customerNotePreview: workspace?.customer_note ? String(workspace.customer_note).slice(0, 140) : null,
+        nextAction: workspace?.next_action || null,
+        nextCheckOn: workspace?.next_check_on ?? null,
         strategy: customerSalesStrategy(actualGrade, potentialGrade),
       };
     });
@@ -170,10 +171,6 @@ export async function GET(req: NextRequest) {
         assessmentScore: rating.assessment_score,
         assessmentGrade: calculatePotentialRating(rating.scores as PotentialRatingScores).grade,
         evidenceSummary: rating.evidence_summary,
-        opportunitySummary: rating.opportunity_summary,
-        estimatedAnnualOpportunityCnyYuan: rating.estimated_annual_opportunity_cny_yuan,
-        nextAction: rating.next_action,
-        nextCheckOn: rating.next_check_on,
         status: rating.status,
         publishedGrade: rating.published_grade,
         publishedScore: rating.published_score,
@@ -185,11 +182,27 @@ export async function GET(req: NextRequest) {
       } : null;
     }
 
+    const rawWorkspace = parsedId?.success
+      ? workspaceByCustomer.get(parsedId.data) ?? null
+      : null;
+    const workspace = parsedId?.success ? {
+      customerNote: rawWorkspace?.customer_note ?? '',
+      noteVersion: rawWorkspace?.note_version ?? 0,
+      noteUpdatedAt: rawWorkspace?.note_updated_at ?? null,
+      opportunitySummary: rawWorkspace?.opportunity_summary ?? '',
+      estimatedAnnualOpportunityCnyYuan: rawWorkspace?.estimated_annual_opportunity_cny_yuan ?? null,
+      nextAction: rawWorkspace?.next_action ?? '',
+      nextCheckOn: rawWorkspace?.next_check_on ?? null,
+      planVersion: rawWorkspace?.plan_version ?? 0,
+      planUpdatedAt: rawWorkspace?.plan_updated_at ?? null,
+    } : null;
+
     return NextResponse.json({
       ok: true,
       data: {
         summaries,
         detail,
+        workspace,
         canReview: profile.role === 'admin' || profile.role === 'manager',
       },
     }, { headers: { 'Cache-Control': 'private, no-store' } });
@@ -210,10 +223,11 @@ export async function POST(req: NextRequest) {
     p_customer_reference_id: input.customerReferenceId,
     p_scores: input.scores,
     p_evidence_summary: input.evidenceSummary,
-    p_opportunity_summary: input.opportunitySummary,
-    p_estimated_annual_opportunity_cny_yuan: input.estimatedAnnualOpportunityCnyYuan,
-    p_next_action: input.nextAction,
-    p_next_check_on: input.nextCheckOn,
+    // Compatibility signature: the RPC no longer modifies commercial plan fields.
+    p_opportunity_summary: '',
+    p_estimated_annual_opportunity_cny_yuan: null,
+    p_next_action: '',
+    p_next_check_on: null,
     p_submit: input.submit,
     p_expected_version: input.expectedVersion,
     p_request_id: crypto.randomUUID(),

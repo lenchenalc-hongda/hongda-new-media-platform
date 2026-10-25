@@ -51,6 +51,7 @@ interface CustomerRatingSummary {
   isMaintenanceOwner: boolean;
   nextAction: string | null;
   nextCheckOn: string | null;
+  customerNotePreview: string | null;
 }
 
 type FilterKey =
@@ -337,6 +338,12 @@ export default function CustomersClient({
                         {ratings.get(customer.id)?.nextCheckOn && (
                           <span className="ml-2 text-slate-500">{ratings.get(customer.id)?.nextCheckOn}</span>
                         )}
+                      </div>
+                    )}
+                    {ratings.get(customer.id)?.customerNotePreview && (
+                      <div className="mt-2 line-clamp-2 rounded-lg border border-slate-100 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+                        <span className="font-semibold text-slate-700">客户备注：</span>
+                        {ratings.get(customer.id)?.customerNotePreview}
                       </div>
                     )}
                     {customer.lastInteraction && (
