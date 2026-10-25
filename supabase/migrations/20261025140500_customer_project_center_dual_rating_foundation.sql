@@ -177,7 +177,7 @@ BEGIN
       RETURN public.cpc_rpc_error('INVALID_INPUT','五项评分均需为0到5分');
     END IF;
   END LOOP;
-  IF jsonb_object_length(p_scores) <> 5
+  IF (SELECT COUNT(*) FROM jsonb_object_keys(p_scores)) <> 5
     OR LENGTH(COALESCE(p_evidence_summary,''))>3000
     OR LENGTH(COALESCE(p_opportunity_summary,''))>2000
     OR LENGTH(COALESCE(p_next_action,''))>300
