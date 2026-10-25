@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
+import { CustomerRatingBadge, CustomerRatingLegend } from './CustomerRatingBadge';
+import type { CustomerRatingGrade } from './customer-rating-colors';
 import {
   calculatePotentialRating,
   POTENTIAL_RATING_DIMENSIONS,
@@ -14,7 +16,7 @@ import {
 
 type RatingSummary = {
   customerReferenceId: string;
-  actualGrade: 'N';
+  actualGrade: CustomerRatingGrade;
   actualExplanation: string;
   potentialGrade: PotentialRatingGrade;
   potentialStatus: PotentialRatingStatus | 'ungraded';
@@ -67,14 +69,6 @@ const STATUS_LABEL: Record<PotentialRatingStatus | 'ungraded', string> = {
   approved: '已批准',
   changes_requested: '退回补充',
 };
-
-function GradeBadge({ label, grade }: { label: string; grade: string }) {
-  return (
-    <span className="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-700">
-      {label} <span className={grade === 'N' ? 'text-slate-400' : 'text-cyan-700'}>{grade}</span>
-    </span>
-  );
-}
 
 export default function CustomerRatingPanel({
   customerReferenceId,
@@ -221,9 +215,9 @@ export default function CustomerRatingPanel({
             实际评级依据财务回款；潜力评级由维护人提供事实并经管理者审核。不同于原有A/B/C关系回访分类。
           </p>
         </div>
-        {summary && <div className="flex items-center gap-2">
-          <GradeBadge label="实际 R-" grade={summary.actualGrade} />
-          <GradeBadge label="潜力 P-" grade={summary.potentialGrade} />
+        {summary && <div className="flex flex-wrap items-center gap-2">
+          <CustomerRatingBadge axis="actual" grade={summary.actualGrade} />
+          <CustomerRatingBadge axis="potential" grade={summary.potentialGrade} />
         </div>}
       </div>
 
@@ -236,18 +230,21 @@ export default function CustomerRatingPanel({
 
       {summary && (
         <div className="space-y-4">
+          <CustomerRatingLegend />
           <div className="grid gap-3 lg:grid-cols-3">
             <div className="rounded-lg bg-slate-50 p-3">
               <p className="text-xs text-slate-500">实际评级 R · 过去12个月</p>
-              <p className="mt-1 text-xl font-semibold text-slate-900">R-{summary.actualGrade}</p>
+              <div className="mt-2"><CustomerRatingBadge axis="actual" grade={summary.actualGrade} /></div>
               <p className="mt-1 text-xs leading-5 text-slate-500">{summary.actualExplanation}</p>
             </div>
             <div className="rounded-lg bg-slate-50 p-3">
               <p className="text-xs text-slate-500">潜力评级 P · 已审核等级</p>
-              <p className="mt-1 text-xl font-semibold text-slate-900">
-                P-{summary.potentialGrade}
-                {summary.potentialScore !== null && <span className="ml-2 text-sm font-normal text-slate-500">{summary.potentialScore}分</span>}
-              </p>
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <CustomerRatingBadge axis="potential" grade={summary.potentialGrade} />
+                {summary.potentialScore !== null && (
+                  <span className="text-xs font-medium text-slate-600">{summary.potentialScore}分（已审核）</span>
+                )}
+              </div>
               <p className="mt-1 text-xs text-slate-500">
                 {STATUS_LABEL[summary.potentialStatus]}
                 {data?.detail?.status === 'pending_review'
@@ -288,9 +285,16 @@ export default function CustomerRatingPanel({
             <div className="rounded-lg border border-slate-200 p-4">
               <div className="mb-3 flex items-center justify-between gap-3">
                 <h3 className="text-sm font-semibold text-slate-900">内部潜力评分</h3>
-                <span className="text-xs text-slate-500">
-                  {preview ? '本次试算 ' + preview.score + '分 / P-' + preview.grade : '五项未评完'}
-                </span>
+                <div className="flex flex-wrap items-center gap-2">
+                  {preview ? (
+                    <>
+                      <span className="text-xs text-slate-500">本次试算 {preview.score}分</span>
+                      <CustomerRatingBadge axis="potential" grade={preview.grade} preview />
+                    </>
+                  ) : (
+                    <span className="text-xs text-slate-500">五项未评完</span>
+                  )}
+                </div>
               </div>
               <div className="grid gap-3 lg:grid-cols-2">
                 {POTENTIAL_RATING_DIMENSIONS.map(dim => (
@@ -365,9 +369,10 @@ export default function CustomerRatingPanel({
           {data?.canReview && data.detail?.status === 'pending_review' && (
             <div className="rounded-lg border border-amber-200 bg-amber-50 p-4">
               <h3 className="text-sm font-semibold text-amber-900">管理者审核 · 待审批</h3>
-              <p className="mt-1 text-sm text-amber-900">
-                本次评分 {data.detail.assessmentScore} 分，建议等级 P-{data.detail.assessmentGrade}
-              </p>
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <span className="text-sm text-amber-900">本次待审评分 {data.detail.assessmentScore} 分</span>
+                <CustomerRatingBadge axis="potential" grade={data.detail.assessmentGrade} preview />
+              </div>
               <p className="mt-2 whitespace-pre-wrap text-xs text-amber-900">
                 评估依据：{data.detail.evidenceSummary}
               </p>
