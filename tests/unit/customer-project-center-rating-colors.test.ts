@@ -11,7 +11,7 @@ import {
 console.log('\n=== CPC Customer R/P Dual-Rating Accessible Color Contract ===');
 
 assert.deepEqual(CUSTOMER_RATING_GRADES, ['SS', 'S', 'A', 'B', 'C', 'D', 'N']);
-const expectedHues = ['金色', '紫色', '蓝色', '绿色', '橙色', '红色', '中性灰'];
+const expectedHues = ['亮金色', '红色', '蓝色', '绿色', '紫色', '浅棕色', '中性灰'];
 
 const actualClassNames = new Set<string>();
 const potentialClassNames = new Set<string>();
@@ -37,7 +37,13 @@ for (const [index, grade] of CUSTOMER_RATING_GRADES.entries()) {
     assert.match(getCustomerRatingAccessibilityLabel('actual', grade), /未归类/);
     assert.match(getCustomerRatingAccessibilityLabel('potential', grade), /未归类/);
   } else {
-    assert.match(real, /text-white/, grade + ': R label needs a high-contrast solid color');
+    if (grade === 'SS' || grade === 'D') {
+      // Bright gold and light tan require dark type to remain legible.
+      assert.match(real, /text-\[#(?:3B2800|4B2E1F)\]/, grade + ': light badge must use dark text');
+      assert.doesNotMatch(real, /text-white/, grade + ': avoid white type on pale fills');
+    } else {
+      assert.match(real, /text-white/, grade + ': solid saturated R badge needs high-contrast white text');
+    }
     assert.ok(!real.includes('bg-slate-100'), grade + ': N-only grey must not imply graded customer');
     assert.ok(!potential.includes('bg-slate-100'), grade + ': N-only grey must not imply graded customer');
   }
@@ -45,6 +51,17 @@ for (const [index, grade] of CUSTOMER_RATING_GRADES.entries()) {
   actualClassNames.add(style.actual);
   potentialClassNames.add(style.potential);
 }
+// Explicit business-owner color contract, preventing accidental reversion to the old palette.
+assert.match(CUSTOMER_RATING_COLORS.SS.actual, /bg-\[#F7C948\]/, 'SS uses bright gold, not dark ochre');
+assert.match(CUSTOMER_RATING_COLORS.SS.potential, /bg-\[#FFF8DB\]/, 'SS-P is warm gold tint');
+assert.match(CUSTOMER_RATING_COLORS.S.actual, /bg-red-600/, 'S must be red');
+assert.match(CUSTOMER_RATING_COLORS.S.potential, /bg-red-50/, 'S-P must be red tint');
+assert.match(CUSTOMER_RATING_COLORS.A.actual, /bg-blue-700/, 'A must be blue');
+assert.match(CUSTOMER_RATING_COLORS.B.actual, /bg-emerald-700/, 'B must be green');
+assert.match(CUSTOMER_RATING_COLORS.C.actual, /bg-violet-700/, 'C must be purple');
+assert.match(CUSTOMER_RATING_COLORS.D.actual, /bg-\[#D8B99B\]/, 'D must be light brown');
+assert.match(CUSTOMER_RATING_COLORS.D.potential, /bg-\[#F8F0E8\]/, 'D-P is light brown tint');
+assert.match(CUSTOMER_RATING_COLORS.N.actual, /bg-slate-100/, 'N must stay grey');
 assert.equal(actualClassNames.size, CUSTOMER_RATING_GRADES.length, 'each grade R has distinct treatment');
 assert.equal(potentialClassNames.size, CUSTOMER_RATING_GRADES.length, 'each grade P has distinct treatment');
 
@@ -71,6 +88,7 @@ assert.ok(badgeComponent.includes('data-rating-grade={grade}'));
 assert.ok(badgeComponent.includes('grade === \'N\''), 'N must carry explicit unclassified label');
 assert.ok(badgeComponent.includes('未归类'));
 assert.ok(badgeComponent.includes('CustomerRatingLegend'));
+assert.ok(badgeComponent.includes('SS亮金、S红、A蓝、B绿、C紫、D浅棕；N灰。'), 'legend matches the owner-approved palette');
 assert.ok(badgeComponent.includes('原A/B/C老客户关系回访分类'));
 
 for (const source of [detail, list]) {
@@ -85,4 +103,4 @@ assert.ok(detail.includes('grade={summary.potentialGrade}'), 'published grade ne
 assert.ok(!list.includes('potentialStatus === \'pending_review\''), 'client must not keep obsolete manager approval queues');
 assert.ok(list.includes('潜力未评级'), 'unclassified potential customers remain easy to find');
 
-console.log('PASS: seven hues, R/P separation, neutral N, preview distinction, shared list/detail/manager badge');
+console.log('PASS: bright-gold/red/blue/green/purple/tan/gray tiers, R/P distinction and shared surfaces');
