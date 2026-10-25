@@ -1,5 +1,6 @@
 'use client';
 import { useState } from 'react';
+import DigitalTransferCalculator from '@/components/workspace-home/DigitalTransferCalculator';
 import Link from 'next/link';
 import {
   getVisiblePortalGroups,
@@ -286,6 +287,8 @@ export default function WorkspaceHome() {
       </header>
 
       <main className="max-w-[1440px] mx-auto px-6 lg:px-8 py-7 space-y-8">
+        {['admin', 'manager', 'sales'].includes(currentUserRole || '') && <DigitalTransferCalculator />}
+
         {/* === FIRST SCREEN: Portal Cards === */}
         <section>
           <div className="flex items-center justify-between mb-4">
