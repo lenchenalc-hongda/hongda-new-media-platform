@@ -61,7 +61,7 @@ export function CustomerRatingLegend() {
       </summary>
       <div className="space-y-2 border-t border-slate-100 px-3 py-3">
         <p className="text-xs leading-5 text-slate-500">
-          相同等级使用相同色系：SS金、S紫、A蓝、B绿、C橙、D红；N灰。
+          相同等级使用相同色系：SS亮金、S红、A蓝、B绿、C紫、D浅棕；N灰。
           实际R仅以财务核实数据为准；潜力P由客户或项目负责人保存后立即生效。试算评级标记“未生效”。
         </p>
         <div className="space-y-1.5">
