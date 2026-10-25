@@ -70,8 +70,11 @@ export function customerSalesStrategy(
   actual: 'SS' | 'S' | 'A' | 'B' | 'C' | 'D' | 'N',
   potential: PotentialRatingGrade,
 ): { label: string; action: string } {
+  if (actual === 'N' && ['SS', 'S', 'A'].includes(potential)) {
+    return { label: '高潜机会（实际回款待核实）', action: '由客户维护人制定明确打样/开发计划；财务未核实前不认定实际价值。' };
+  }
   if (actual === 'N' || potential === 'N') {
-    return { label: '待补充评级证据', action: '补齐财务回款或客户潜力资料，暂不推断客户价值。' };
+    return { label: '待补充评级证据', action: '补齐财务回款或客户潜力资料，暂不推断客户综合价值。' };
   }
   const highActual = actual === 'SS' || actual === 'S' || actual === 'A';
   const highPotential = potential === 'SS' || potential === 'S' || potential === 'A';
