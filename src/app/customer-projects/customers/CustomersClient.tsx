@@ -59,7 +59,8 @@ type FilterKey =
   | 'active_project'
   | 'high_potential'
   | 'pending_rating_review'
-  | 'my_verified_customers';
+  | 'my_verified_customers'
+  | 'rating_action_due';
 
 const FILTERS: Array<{ key: FilterKey; label: string }> = [
   { key: 'all', label: '全部可见客户' },
@@ -70,6 +71,7 @@ const FILTERS: Array<{ key: FilterKey; label: string }> = [
   { key: 'high_potential', label: '高潜力客户' },
   { key: 'pending_rating_review', label: '评级待审核' },
   { key: 'my_verified_customers', label: '我负责的客户' },
+  { key: 'rating_action_due', label: '开发动作待检查' },
 ];
 
 function eventLabel(eventType: string): string {
@@ -107,6 +109,7 @@ export default function CustomersClient({
   const [search, setSearch] = useState('');
   const [ratings, setRatings] = useState<Map<string, CustomerRatingSummary>>(new Map());
   const [ratingLoadError, setRatingLoadError] = useState('');
+  const shanghaiToday = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Shanghai' });
 
   useEffect(() => {
     let live = true;
@@ -136,6 +139,7 @@ export default function CustomersClient({
       if (filter === 'high_potential' && !['SS', 'S', 'A'].includes(rating?.potentialGrade ?? 'N')) return false;
       if (filter === 'pending_rating_review' && rating?.potentialStatus !== 'pending_review') return false;
       if (filter === 'my_verified_customers' && rating?.isMaintenanceOwner !== true) return false;
+      if (filter === 'rating_action_due' && !(rating?.nextCheckOn && rating.nextCheckOn <= shanghaiToday)) return false;
       if (
         filter === 'due_follow_up'
         && !(
@@ -169,7 +173,7 @@ export default function CustomersClient({
         rating?.potentialGrade ?? '',
       ].some(value => value.toLowerCase().includes(query));
     });
-  }, [customers, filter, search, ratings]);
+  }, [customers, filter, search, ratings, shanghaiToday]);
 
   const dueCount = customers.filter(customer =>
     customer.nextFollowUp?.isAssignedToMe
@@ -180,6 +184,9 @@ export default function CustomersClient({
     customer => customer.recommendation.state === 'due',
   ).length;
   const activeProjectCount = customers.filter(customer => customer.hasActiveProject).length;
+  const highPotentialCount = [...ratings.values()].filter(row => ['SS', 'S', 'A'].includes(row.potentialGrade)).length;
+  const pendingRatingCount = [...ratings.values()].filter(row => row.potentialStatus === 'pending_review').length;
+  const actionDueCount = [...ratings.values()].filter(row => row.nextCheckOn && row.nextCheckOn <= shanghaiToday).length;
 
   return (
     <AppLayout>
@@ -203,6 +210,18 @@ export default function CustomersClient({
           ))}
         </div>
 
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          {[
+            ['已审核高潜客户', highPotentialCount],
+            ['潜力评级待审核', pendingRatingCount],
+            ['开发动作到期检查', actionDueCount],
+          ].map(([label, value]) => (
+            <div key={label} className="rounded-lg border border-gray-200 bg-white p-3">
+              <p className="text-xs text-gray-500">{label}</p>
+              <p className="mt-1 text-lg font-semibold text-gray-800">{value}</p>
+            </div>
+          ))}
+        </div>
         <div className="rounded-lg border border-gray-200 bg-white p-4">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex flex-wrap gap-2">
