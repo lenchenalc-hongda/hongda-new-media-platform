@@ -286,6 +286,14 @@ export default function CustomerRatingPanel({
       setPlanError('预计可开发金额须为不超过10亿元的非负整数人民币元');
       return;
     }
+    if (opportunitySummary.trim().length > 0 && opportunitySummary.trim().length < 10) {
+      setPlanError('填写开发机会时请至少说明10字。');
+      return;
+    }
+    if (nextAction.trim().length > 0 && nextAction.trim().length < 5) {
+      setPlanError('填写下一步销售行动时请至少说明5字。');
+      return;
+    }
     setSavingPlan(true);
     setPlanError('');
     setPlanMessage('');
@@ -557,7 +565,7 @@ export default function CustomerRatingPanel({
               <div>
                 <h3 className="text-base font-semibold text-slate-900">客户开发机会与销售行动</h3>
                 <p className="mt-1 text-xs text-slate-500">
-                  常驻展开，可随时更新。独立保存，既不会修改评级，也不会自动生成正式回访任务。
+                  常驻展开，可随时更新。独立保存，既不会修改评级，也不会自动创建正式回访任务。
                 </p>
               </div>
               <span className="text-xs text-slate-500">
@@ -572,7 +580,7 @@ export default function CustomerRatingPanel({
 
             <div className="mt-4 grid gap-3 lg:grid-cols-2">
               <label className="block text-xs font-semibold text-slate-700 lg:col-span-2">
-                未来12个月主要开发机会
+                未来12个月主要开发机会（填写后至少10字）
                 <textarea
                   rows={3}
                   maxLength={2000}
@@ -605,7 +613,7 @@ export default function CustomerRatingPanel({
                 />
               </label>
               <label className="block text-xs font-semibold text-slate-700 lg:col-span-2">
-                具体下一步销售行动
+                具体下一步销售行动（填写后至少5字）
                 <input
                   type="text"
                   maxLength={300}
