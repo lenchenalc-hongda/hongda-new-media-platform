@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import AppLayout from '@/components/layout/AppLayout';
 import PageHeader from '@/components/layout/PageHeader';
@@ -39,12 +39,27 @@ interface CustomerListItem {
   updatedAt: string;
 }
 
+interface CustomerRatingSummary {
+  customerReferenceId: string;
+  actualGrade: string;
+  potentialGrade: string;
+  potentialStatus: string;
+  potentialScore: number | null;
+  maintenanceOwnerName: string | null;
+  isMaintenanceOwner: boolean;
+  nextAction: string | null;
+  nextCheckOn: string | null;
+}
+
 type FilterKey =
   | 'all'
   | 'due_follow_up'
   | 'assigned_follow_up'
   | 'due_recommendation'
-  | 'active_project';
+  | 'active_project'
+  | 'high_potential'
+  | 'pending_rating_review'
+  | 'my_verified_customers';
 
 const FILTERS: Array<{ key: FilterKey; label: string }> = [
   { key: 'all', label: '全部可见客户' },
@@ -52,6 +67,9 @@ const FILTERS: Array<{ key: FilterKey; label: string }> = [
   { key: 'assigned_follow_up', label: '已安排给我' },
   { key: 'due_recommendation', label: '到建议周期' },
   { key: 'active_project', label: '有活跃项目' },
+  { key: 'high_potential', label: '高潜力客户' },
+  { key: 'pending_rating_review', label: '评级待审核' },
+  { key: 'my_verified_customers', label: '我负责的客户' },
 ];
 
 function eventLabel(eventType: string): string {
@@ -87,12 +105,37 @@ export default function CustomersClient({
   const error = initialError;
   const [filter, setFilter] = useState<FilterKey>('all');
   const [search, setSearch] = useState('');
+  const [ratings, setRatings] = useState<Map<string, CustomerRatingSummary>>(new Map());
+  const [ratingLoadError, setRatingLoadError] = useState('');
+
+  useEffect(() => {
+    let live = true;
+    void (async () => {
+      try {
+        const response = await fetch('/api/customer-projects/customer-ratings', { cache: 'no-store' });
+        const json = await response.json().catch(() => null);
+        if (!response.ok || !json?.ok) throw new Error(json?.message || '客户评级查询失败');
+        if (!live) return;
+        setRatings(new Map((json.data.summaries as CustomerRatingSummary[])
+          .map(row => [row.customerReferenceId, row])));
+        setRatingLoadError('');
+      } catch (cause) {
+        if (!live) return;
+        setRatingLoadError(cause instanceof Error ? cause.message : '评级服务暂不可用');
+      }
+    })();
+    return () => { live = false; };
+  }, []);
 
 
   const visibleCustomers = useMemo(() => {
     const query = search.trim().toLowerCase();
 
     return customers.filter(customer => {
+      const rating = ratings.get(customer.id);
+      if (filter === 'high_potential' && !['SS', 'S', 'A'].includes(rating?.potentialGrade ?? 'N')) return false;
+      if (filter === 'pending_rating_review' && rating?.potentialStatus !== 'pending_review') return false;
+      if (filter === 'my_verified_customers' && rating?.isMaintenanceOwner !== true) return false;
       if (
         filter === 'due_follow_up'
         && !(
@@ -122,9 +165,11 @@ export default function CustomersClient({
         customer.nextFollowUp?.title ?? '',
         customer.lastInteraction?.summary ?? '',
         customer.recommendation.segmentBasis,
+        rating?.maintenanceOwnerName ?? '',
+        rating?.potentialGrade ?? '',
       ].some(value => value.toLowerCase().includes(query));
     });
-  }, [customers, filter, search]);
+  }, [customers, filter, search, ratings]);
 
   const dueCount = customers.filter(customer =>
     customer.nextFollowUp?.isAssignedToMe
@@ -186,8 +231,13 @@ export default function CustomersClient({
             />
           </div>
           <p className="mt-3 text-xs text-gray-400">
-            这里没有“我的客户”筛选。客户归属继续以外部权威来源为准，CPC 只显示已验证引用。
+            “我负责的客户”来自已验证的外部客户池归属映射；评级无法替代财务回款及客户主数据。
           </p>
+          {ratingLoadError && (
+            <p className="mt-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+              评级服务未就绪：{ratingLoadError}。原有客户与回访功能保持可用。
+            </p>
+          )}
         </div>
 
         {loading ? (
@@ -233,16 +283,42 @@ export default function CustomersClient({
                           活跃项目 {customer.activeProjectCount}
                         </span>
                       )}
+                      {ratings.has(customer.id) && (
+                        <>
+                          <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-700">
+                            实际 R-{ratings.get(customer.id)?.actualGrade}
+                          </span>
+                          <span className="rounded-md bg-cyan-50 px-2 py-0.5 text-[11px] font-medium text-cyan-800">
+                            潜力 P-{ratings.get(customer.id)?.potentialGrade}
+                          </span>
+                          {ratings.get(customer.id)?.potentialStatus === 'pending_review' && (
+                            <span className="rounded-md bg-amber-50 px-2 py-0.5 text-[11px] text-amber-800">
+                              待审核
+                            </span>
+                          )}
+                        </>
+                      )}
                     </div>
 
                     <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500">
                       {customer.sourceLabel && <span>来源：{customer.sourceLabel}</span>}
-                      {customer.externalOwnerReference && (
-                        <span>外部归属引用：{customer.externalOwnerReference}</span>
-                      )}
+                      {ratings.get(customer.id)?.maintenanceOwnerName ? (
+                        <span>维护人：{ratings.get(customer.id)?.maintenanceOwnerName}</span>
+                      ) : customer.externalOwnerReference ? (
+                        <span>外部归属引用：{customer.externalOwnerReference}（待确认映射）</span>
+                      ) : null}
                       <span>更新：{formatBusinessDateTime(customer.updatedAt)}</span>
                     </div>
 
+                    {ratings.get(customer.id)?.nextAction && (
+                      <div className="mt-3 rounded-lg border border-cyan-100 bg-cyan-50 px-3 py-2 text-xs text-slate-700">
+                        <span className="font-medium">下一步开发动作：</span>
+                        {ratings.get(customer.id)?.nextAction}
+                        {ratings.get(customer.id)?.nextCheckOn && (
+                          <span className="ml-2 text-slate-500">{ratings.get(customer.id)?.nextCheckOn}</span>
+                        )}
+                      </div>
+                    )}
                     {customer.lastInteraction && (
                       <div className="mt-3 rounded-lg bg-gray-50 px-3 py-2">
                         <p className="text-[11px] font-medium text-gray-500">
