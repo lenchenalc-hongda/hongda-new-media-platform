@@ -74,14 +74,14 @@ assert.ok(detail.includes('setRatingExpanded(false)'));
 assert.ok(detail.includes("data.detail.status !== 'approved'"), 'saved drafts remain visibly provisional while collapsed');
 assert.ok(detail.includes('setRatingExpanded(true)'));
 assert.ok(detail.includes('aria-expanded={ratingExpanded}'));
-assert.ok(detail.includes('保存评级草稿并收起'));
-assert.ok(detail.includes('提交管理者审核并收起'));
+assert.ok(detail.includes('保存潜力评级并生效'));
+assert.ok(!detail.includes('提交管理者审核并收起'));
 assert.ok(detail.includes('saveCustomerNote()'));
 assert.ok(detail.includes('saveDevelopmentPlan()'));
 assert.ok(detail.includes("section: 'note'"));
 assert.ok(detail.includes("section: 'plan'"));
 assert.ok(detail.includes('保存开发机会与销售计划'));
-assert.ok(detail.includes('已提交管理者审核'));
+assert.ok(detail.includes('评级保存成功，已直接生效'));
 assert.ok(detail.includes('setRatingExpanded(false);'));
 assert.ok(detail.indexOf('客户开发机会与销售行动') > detail.indexOf('{ratingExpanded && ('),
   'sales plan must be outside foldable rating editor');
