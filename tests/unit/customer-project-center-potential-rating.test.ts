@@ -34,6 +34,7 @@ assert.equal(customerSalesStrategy('S', 'S').label, '核心战略客户');
 assert.equal(customerSalesStrategy('C', 'S').label, '重点突破客户');
 assert.equal(customerSalesStrategy('SS', 'D').label, '稳定维护客户');
 assert.equal(customerSalesStrategy('D', 'D').label, '常规经营客户');
-assert.equal(customerSalesStrategy('N', 'SS').label, '待补充评级证据');
+assert.equal(customerSalesStrategy('N', 'SS').label, '高潜机会（实际回款待核实）');
+assert.equal(customerSalesStrategy('N', 'N').label, '待补充评级证据');
 
 console.log('PASS: weighted dimensions, grading, authorization-independent display rules');
