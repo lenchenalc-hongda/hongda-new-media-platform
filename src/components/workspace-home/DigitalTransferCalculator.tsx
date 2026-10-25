@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
-type Result = {ok:true;inputArea:number;billableArea:number;amountCny:number;scheduleVersion:string};
+type Result = {ok:true;inputArea:number;billableArea:number;amountCny:number};
 const money = (n:number) => '¥' + n.toLocaleString('zh-CN');
 export default function DigitalTransferCalculator() {
   const [area, setArea] = useState('');
@@ -49,7 +49,8 @@ export default function DigitalTransferCalculator() {
       <div className="rounded-lg bg-blue-50 p-3 sm:flex-1"><p className="text-xs text-blue-800">对应订单金额</p><p aria-live="polite" className="text-2xl font-bold text-blue-800">{result ? money(result.amountCny) : '—'}</p></div>
       <button type="button" onClick={copy} disabled={!result} className="px-4 py-2 rounded-lg text-sm bg-blue-600 text-white disabled:bg-gray-200 disabled:text-gray-500">复制结果</button>
     </div>
-    <p role="status" aria-live="polite" className="text-xs mt-2 text-gray-500">{loading ? '正在查询价格…' : message || (result ? `实际${result.inputArea} m² → 计价${result.billableArea} m²，版本${result.scheduleVersion}` : '—')}</p>
+    <p className="mt-2 text-xs font-medium leading-5 text-red-600">注意：数码热转印花膜仅按订单数量生产，不额外提供备品；如需备品，请提前计入下单数量。</p>
+    {(loading || message) && <p role="status" aria-live="polite" className="mt-1 text-xs text-gray-500">{loading ? '正在查询价格…' : message}</p>}
     <p className="text-[11px] text-gray-400 mt-1">不含其他附加项目；不生成正式报价单，不保存客户、订单或计算记录。</p>
   </section>;
 }
