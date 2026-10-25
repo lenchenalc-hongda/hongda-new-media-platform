@@ -41,6 +41,15 @@ export async function POST(request: NextRequest) {
   if (!auth.ok) return fail(auth.message, auth.status);
 
   const item = parsed.data;
+  if (item.section === 'plan') {
+    if (item.opportunitySummary.trim().length > 0
+      && item.opportunitySummary.trim().length < 10) {
+      return fail('主要开发机会填写后至少需要10字', 422);
+    }
+    if (item.nextAction.trim().length > 0 && item.nextAction.trim().length < 5) {
+      return fail('下一步销售行动填写后至少需要5字', 422);
+    }
+  }
   const requestId = crypto.randomUUID();
   const result = item.section === 'note'
     ? await supabase.rpc('cpc_save_customer_note', {
