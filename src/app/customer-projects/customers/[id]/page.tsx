@@ -6,6 +6,7 @@ import { useParams } from 'next/navigation';
 import AppLayout from '@/components/layout/AppLayout';
 import PageHeader from '@/components/layout/PageHeader';
 import EmptyState from '@/components/ui/EmptyState';
+import CustomerRatingPanel from '@/components/customer-projects/CustomerRatingPanel';
 import type {
   ProjectLifecycleStatus,
   ProjectPriority,
@@ -471,6 +472,8 @@ export default function CustomerDetailPage() {
             外部归属信息仅作引用展示，CPC 不在这里编辑客户归属。
           </p>
         </section>
+
+        <CustomerRatingPanel customerReferenceId={customer.id} />
 
         <Panel
           title="老客户 proactive建议"
