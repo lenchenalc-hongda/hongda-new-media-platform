@@ -5,6 +5,8 @@ import Link from 'next/link';
 import AppLayout from '@/components/layout/AppLayout';
 import PageHeader from '@/components/layout/PageHeader';
 import EmptyState from '@/components/ui/EmptyState';
+import { CustomerRatingBadge, CustomerRatingLegend } from '@/components/customer-projects/CustomerRatingBadge';
+import type { CustomerRatingGrade } from '@/components/customer-projects/customer-rating-colors';
 import type { WorkItemPriority, WorkItemStatus } from '@/lib/customer-projects/domain';
 import type { OldCustomerRecommendation } from '@/lib/customer-projects/old-customer-proactive';
 import { formatBusinessDateTime } from '@/lib/customer-projects/presentation';
@@ -41,8 +43,8 @@ interface CustomerListItem {
 
 interface CustomerRatingSummary {
   customerReferenceId: string;
-  actualGrade: string;
-  potentialGrade: string;
+  actualGrade: CustomerRatingGrade;
+  potentialGrade: CustomerRatingGrade;
   potentialStatus: string;
   potentialScore: number | null;
   maintenanceOwnerName: string | null;
@@ -257,6 +259,9 @@ export default function CustomersClient({
               评级服务未就绪：{ratingLoadError}。原有客户与回访功能保持可用。
             </p>
           )}
+          <div className="mt-3">
+            <CustomerRatingLegend />
+          </div>
         </div>
 
         {loading ? (
@@ -304,12 +309,8 @@ export default function CustomersClient({
                       )}
                       {ratings.has(customer.id) && (
                         <>
-                          <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-700">
-                            实际 R-{ratings.get(customer.id)?.actualGrade}
-                          </span>
-                          <span className="rounded-md bg-cyan-50 px-2 py-0.5 text-[11px] font-medium text-cyan-800">
-                            潜力 P-{ratings.get(customer.id)?.potentialGrade}
-                          </span>
+                          <CustomerRatingBadge axis="actual" grade={ratings.get(customer.id)!.actualGrade} />
+                          <CustomerRatingBadge axis="potential" grade={ratings.get(customer.id)!.potentialGrade} />
                           {ratings.get(customer.id)?.potentialStatus === 'pending_review' && (
                             <span className="rounded-md bg-amber-50 px-2 py-0.5 text-[11px] text-amber-800">
                               待审核
