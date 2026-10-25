@@ -370,6 +370,9 @@ export default function CustomerRatingPanel({
             <div className="flex flex-wrap items-center gap-2">
               <CustomerRatingBadge axis="actual" grade={summary.actualGrade} />
               <CustomerRatingBadge axis="potential" grade={summary.potentialGrade} />
+              {data?.detail && data.detail.status !== 'approved' && (
+                <CustomerRatingBadge axis="potential" grade={data.detail.assessmentGrade} preview />
+              )}
             </div>
           )}
         </div>
@@ -400,7 +403,10 @@ export default function CustomerRatingPanel({
                   type="button"
                   aria-expanded={ratingExpanded}
                   aria-controls="customer-potential-rating-editor"
-                  onClick={() => ratingExpanded ? cancelRatingEdit() : setRatingExpanded(true)}
+                  onClick={() => {
+                    if (ratingExpanded) cancelRatingEdit();
+                    else { setRatingError(''); setRatingExpanded(true); }
+                  }}
                   className="rounded-lg border border-cyan-300 bg-cyan-50 px-3 py-2 text-xs font-semibold text-cyan-800 hover:bg-cyan-100"
                 >
                   {ratingExpanded ? '收起评级编辑' :
