@@ -71,6 +71,7 @@ assert.ok(detail.includes('客户开发机会与销售行动'));
 assert.ok(detail.includes('潜力评级 · 五项评分与事实依据'));
 assert.ok(detail.includes('ratingExpanded && ('));
 assert.ok(detail.includes('setRatingExpanded(false)'));
+assert.ok(detail.includes("data.detail.status !== 'approved'"), 'saved drafts remain visibly provisional while collapsed');
 assert.ok(detail.includes('setRatingExpanded(true)'));
 assert.ok(detail.includes('aria-expanded={ratingExpanded}'));
 assert.ok(detail.includes('保存评级草稿并收起'));
