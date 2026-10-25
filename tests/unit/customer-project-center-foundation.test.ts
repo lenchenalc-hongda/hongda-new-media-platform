@@ -3,6 +3,7 @@ import './customer-project-center-actual-rating.test';
 import './customer-project-center-potential-rating.test';
 import './customer-project-center-dual-rating-security.test';
 import './customer-project-center-rating-colors.test';
+import './customer-project-center-workspace-separation.test';
 import './customer-project-center-name-integrity.test';
 import './customer-project-center-phase12-qa.test';
 import './customer-project-center-phase11-integration.test';
