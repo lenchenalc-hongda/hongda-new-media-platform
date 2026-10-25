@@ -24,6 +24,8 @@ type RatingSummary = {
   pendingScore: number | null;
   maintenanceOwnerName: string | null;
   canAssess: boolean;
+  canRate: boolean;
+  lastRaterName: string | null;
   nextAction: string | null;
   nextCheckOn: string | null;
   strategy: { label: string; action: string };
@@ -40,6 +42,7 @@ type RatingDetail = {
   publishedAt: string | null;
   reviewNote: string | null;
   reviewedAt: string | null;
+  lastRaterName: string | null;
   version: number;
   updatedAt: string;
 };
@@ -60,7 +63,6 @@ type RatingResponse = {
   summaries: RatingSummary[];
   detail: RatingDetail | null;
   workspace: CustomerWorkspace | null;
-  canReview: boolean;
 };
 
 const emptyScores = (): PotentialRatingScores => ({
@@ -72,11 +74,11 @@ const emptyScores = (): PotentialRatingScores => ({
 });
 
 const STATUS_LABEL: Record<PotentialRatingStatus | 'ungraded', string> = {
-  ungraded: '尚未初评',
-  draft: '草稿',
-  pending_review: '待管理者审核',
-  approved: '已批准',
-  changes_requested: '退回补充',
+  ungraded: '尚未评级',
+  draft: '旧版草稿（重新保存即生效）',
+  pending_review: '旧版待审（重新保存即生效）',
+  approved: '已生效 · 负责人自主评级',
+  changes_requested: '旧版退回（重新保存即生效）',
 };
 
 export default function CustomerRatingPanel({
@@ -93,7 +95,6 @@ export default function CustomerRatingPanel({
   const [estimatedAnnualCny, setEstimatedAnnualCny] = useState('');
   const [nextAction, setNextAction] = useState('');
   const [nextCheckOn, setNextCheckOn] = useState('');
-  const [reviewNote, setReviewNote] = useState('');
   const [ratingExpanded, setRatingExpanded] = useState(false);
   const [customerNote, setCustomerNote] = useState('');
   const [savingRating, setSavingRating] = useState(false);
@@ -123,7 +124,6 @@ export default function CustomerRatingPanel({
         const detail = info.detail;
         setScores(detail?.scores ?? emptyScores());
         setEvidenceSummary(detail?.evidenceSummary ?? '');
-        setReviewNote('');
       }
       if (resetWorkspace) {
         setCustomerNote(info.workspace?.customerNote ?? '');
@@ -154,14 +154,14 @@ export default function CustomerRatingPanel({
     [scores, scoresComplete],
   );
 
-  async function saveRating(submit: boolean) {
-    if (savingRating || !summary?.canAssess) return;
+  async function saveRating() {
+    if (savingRating || !summary?.canRate) return;
     if (!preview) {
       setRatingError('请先完成五项潜力评分（每项0–5分）');
       return;
     }
-    if (submit && evidenceSummary.trim().length < 20) {
-      setRatingError('提交审核需填写至少20字客户事实依据');
+    if (evidenceSummary.trim().length < 20) {
+      setRatingError('保存生效前需填写至少20字客户事实依据');
       return;
     }
     setSavingRating(true);
@@ -175,7 +175,6 @@ export default function CustomerRatingPanel({
           customerReferenceId,
           scores,
           evidenceSummary,
-          submit,
           expectedVersion: data?.detail?.version ?? null,
         }),
       });
@@ -183,45 +182,9 @@ export default function CustomerRatingPanel({
       if (!response.ok || !json?.ok) throw new Error(json?.message || '潜力评分保存失败');
       await load(true, false);
       setRatingExpanded(false);
-      setRatingMessage(submit
-        ? '评分已提交管理者审核，正式等级仍以审核结果为准。'
-        : '潜力评分草稿已保存，编辑区已收起。');
+      setRatingMessage('潜力评级保存成功，已直接生效，无需管理者审核。');
     } catch (cause) {
       setRatingError(cause instanceof Error ? cause.message : '潜力评分保存失败');
-    } finally {
-      setSavingRating(false);
-    }
-  }
-
-  async function review(decision: 'approve' | 'request_changes') {
-    if (savingRating || !data?.canReview || !data.detail) return;
-    if (decision === 'request_changes' && reviewNote.trim().length < 5) {
-      setRatingError('退回需要填写至少5个字的原因');
-      return;
-    }
-    setSavingRating(true);
-    setRatingError('');
-    setRatingMessage('');
-    try {
-      const response = await fetch('/api/customer-projects/customer-ratings', {
-        method: 'PATCH',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          customerReferenceId,
-          expectedVersion: data.detail.version,
-          decision,
-          reviewNote,
-        }),
-      });
-      const json = await response.json().catch(() => null);
-      if (!response.ok || !json?.ok) throw new Error(json?.message || '审核失败');
-      await load(true, false);
-      setRatingExpanded(false);
-      setRatingMessage(decision === 'approve'
-        ? '评级已审核通过，正式等级已更新。'
-        : '已退回补充，评分编辑区已收起。');
-    } catch (cause) {
-      setRatingError(cause instanceof Error ? cause.message : '审核失败');
     } finally {
       setSavingRating(false);
     }
@@ -363,7 +326,7 @@ export default function CustomerRatingPanel({
           <div>
             <h2 className="text-base font-semibold text-slate-900">客户价值评估</h2>
             <p className="mt-1 text-xs text-slate-500">
-              实际评级根据财务确认回款；潜力评级由客户负责人评估、管理者审核。
+              实际评级根据财务确认回款；潜力评级由客户负责人或项目负责人自主评定，保存即生效。
             </p>
           </div>
           {summary && (
@@ -389,16 +352,16 @@ export default function CustomerRatingPanel({
               <div className="space-y-1">
                 <p className="text-xs text-slate-600">
                   潜力状态：<span className="font-medium">{STATUS_LABEL[summary.potentialStatus]}</span>
-                  {summary.potentialScore !== null ? ' · 已审核' + summary.potentialScore + '分' : ''}
-                  {data?.detail?.status === 'pending_review'
-                    ? ' · 待审' + data.detail.assessmentScore + '分' : ''}
+                  {summary.potentialScore !== null ? ' · 当前' + summary.potentialScore + '分' : ''}
+                  {summary.lastRaterName ? ' · 最近评级人：' + summary.lastRaterName : ''}
                 </p>
                 <p className="text-xs text-slate-500">
                   客户维护人：{summary.maintenanceOwnerName || '待完成归属映射'}
                   {summary.actualGrade === 'N' ? ' · 实际回款尚未核实' : ''}
                 </p>
+                <p className="text-xs text-slate-500">关联项目负责人也能修改P评级；系统记录每次修改人及变更历史。</p>
               </div>
-              {(summary.canAssess || data?.canReview) && (
+              {summary.canRate && (
                 <button
                   type="button"
                   aria-expanded={ratingExpanded}
@@ -409,10 +372,7 @@ export default function CustomerRatingPanel({
                   }}
                   className="rounded-lg border border-cyan-300 bg-cyan-50 px-3 py-2 text-xs font-semibold text-cyan-800 hover:bg-cyan-100"
                 >
-                  {ratingExpanded ? '收起评级编辑' :
-                    data?.canReview && data?.detail?.status === 'pending_review'
-                      ? '编辑 / 审核评级'
-                      : '编辑评级'}
+                  {ratingExpanded ? '收起评级编辑' : '编辑评级'}
                 </button>
               )}
             </div>
@@ -431,7 +391,7 @@ export default function CustomerRatingPanel({
                   ) : <span className="text-xs text-slate-500">尚未完成五项评分</span>}
                 </div>
 
-                {summary.canAssess && (
+                {summary.canRate && (
                   <>
                     <div className="grid gap-3 lg:grid-cols-2">
                       {POTENTIAL_RATING_DIMENSIONS.map(dim => (
@@ -456,7 +416,7 @@ export default function CustomerRatingPanel({
                       ))}
                     </div>
                     <label className="mt-3 block text-xs font-semibold text-slate-700">
-                      客户事实与可核实依据（提交审核至少20字）
+                      客户事实与可核实依据（保存生效至少20字）
                       <textarea
                         value={evidenceSummary}
                         onChange={event => setEvidenceSummary(event.target.value)}
@@ -470,15 +430,9 @@ export default function CustomerRatingPanel({
                       <button
                         type="button"
                         disabled={savingRating}
-                        onClick={() => void saveRating(false)}
-                        className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 disabled:opacity-50"
-                      >保存评级草稿并收起</button>
-                      <button
-                        type="button"
-                        disabled={savingRating}
-                        onClick={() => void saveRating(true)}
+                        onClick={() => void saveRating()}
                         className="rounded-lg bg-cyan-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
-                      >提交管理者审核并收起</button>
+                      >{savingRating ? '保存中...' : '保存潜力评级并生效'}</button>
                       <button
                         type="button"
                         disabled={savingRating}
@@ -487,43 +441,11 @@ export default function CustomerRatingPanel({
                       >取消</button>
                     </div>
                     <p className="mt-2 text-xs text-slate-500">
-                      这里只保存评级评分及依据，不会改动下方客户备注或开发计划。
+                      保存后P等级立即生效，不再经过审批；修改历史保留，且不会改动客户备注或开发计划。
                     </p>
                   </>
                 )}
 
-                {data?.canReview && data.detail?.status === 'pending_review' && (
-                  <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-4">
-                    <p className="text-sm font-semibold text-amber-900">经理审核待审批评级</p>
-                    <div className="mt-2 flex flex-wrap items-center gap-2">
-                      <span className="text-xs text-amber-900">本轮评分 {data.detail.assessmentScore}分</span>
-                      <CustomerRatingBadge axis="potential" grade={data.detail.assessmentGrade} preview />
-                    </div>
-                    <p className="mt-2 whitespace-pre-wrap text-xs text-amber-900">
-                      评估依据：{data.detail.evidenceSummary || '暂无依据'}
-                    </p>
-                    <textarea
-                      value={reviewNote}
-                      onChange={event => setReviewNote(event.target.value)}
-                      rows={2}
-                      placeholder="审核意见；退回时至少填写5字原因"
-                      className="mt-3 w-full rounded-lg border border-amber-300 bg-white p-3 text-sm"
-                    />
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      <button type="button" disabled={savingRating} onClick={() => void review('approve')}
-                        className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
-                      >批准并生效</button>
-                      <button type="button" disabled={savingRating} onClick={() => void review('request_changes')}
-                        className="rounded-lg border border-amber-500 px-4 py-2 text-sm text-amber-900 disabled:opacity-50"
-                      >退回补充</button>
-                    </div>
-                  </div>
-                )}
-                {data?.detail?.reviewNote && (
-                  <p className="mt-2 whitespace-pre-wrap rounded-lg bg-slate-50 p-3 text-xs text-slate-600">
-                    最近审核意见：{data.detail.reviewNote}
-                  </p>
-                )}
                 {ratingError && <p role="alert" className="mt-3 rounded-lg bg-rose-50 p-3 text-xs text-rose-700">{ratingError}</p>}
               </div>
             )}
