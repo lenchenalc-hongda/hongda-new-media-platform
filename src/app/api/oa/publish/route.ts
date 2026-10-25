@@ -1,53 +1,42 @@
-// POST /api/oa/publish
-// Publish an article through the adapter layer
+import { NextRequest } from 'next/server';
+import { getAllPublishJobs, getPublishLogs } from '@/lib/oa/publish-queue';
+import { guardOaPrivilegedRequest, oaJson, oaWechatWriteLocked } from '@/lib/oa/oa-api-safety';
 
-import { NextRequest, NextResponse } from 'next/server';
-import { createPublishJob, executePublishJob, checkPublishGate, getPublishLogs, getAllPublishJobs, retryPublishJob } from '@/lib/oa/publish-queue';
+export const dynamic = 'force-dynamic';
 
-export async function POST(req: NextRequest) {
+// The client cannot supply an approval status, risk score or content that authorizes publishing.
+// This route is deliberately read-only until server-side review + HUMAN_GATE are implemented.
+export async function POST(req:NextRequest) {
+  const denied=await guardOaPrivilegedRequest(req);
+  if(denied) return denied;
+  if(req.headers.get('content-type')?.split(';')[0].trim()!=='application/json')
+    return oaJson({ok:false,code:'OA_JSON_REQUIRED'},415);
+  let body:Record<string,unknown>;
   try {
-    const body = await req.json();
-    const { action, articleId, title, bodyHtml, bodyMarkdown, summary, jobId, score, riskLevel } = body;
-
-    switch (action) {
-      case 'publish': {
-        // Check publish gate
-        const gate = checkPublishGate({ publishStatus: 'approved', score, riskLevel });
-        if (!gate.canPublish) {
-          return NextResponse.json({ success: false, error: '审核闸门未通过', reasons: gate.reasons }, { status: 400 });
-        }
-        const job = await createPublishJob(articleId, title, { articleId, title, bodyHtml: bodyHtml || '', bodyMarkdown: bodyMarkdown || '', summary: summary || '' });
-        const result = await executePublishJob(job.id);
-        return NextResponse.json({ success: result.status === 'published', job: result });
-      }
-      case 'save_draft': {
-        const job = await createPublishJob(articleId, title, { articleId, title, bodyHtml: bodyHtml || '', bodyMarkdown: bodyMarkdown || '', summary: summary || '' });
-        job.status = 'draft_saved';
-        return NextResponse.json({ success: true, job, message: '草稿已保存（Mock）' });
-      }
-      case 'retry': {
-        if (!jobId) return NextResponse.json({ error: 'Missing jobId' }, { status: 400 });
-        const job = await retryPublishJob(jobId);
-        return NextResponse.json({ success: job.status === 'published', job });
-      }
-      case 'status': {
-        if (!jobId) return NextResponse.json({ error: 'Missing jobId' }, { status: 400 });
-        const allJobs = getAllPublishJobs();
-        const job = allJobs.find(j => j.id === jobId);
-        return NextResponse.json({ job });
-      }
-      case 'logs': {
-        const logs = getPublishLogs(body.limit || 50);
-        return NextResponse.json({ logs, total: logs.length });
-      }
-      case 'list_jobs': {
-        const jobs = getAllPublishJobs();
-        return NextResponse.json({ jobs, total: jobs.length });
-      }
-      default:
-        return NextResponse.json({ error: 'Unknown action: ' + action }, { status: 400 });
+    const raw=await req.text();
+    if(raw.length>4096) return oaJson({ok:false,code:'OA_REQUEST_TOO_LARGE'},413);
+    const parsed:unknown=JSON.parse(raw);
+    if(!parsed||typeof parsed!=='object'||Array.isArray(parsed)) return oaJson({ok:false,code:'OA_INVALID_REQUEST'},400);
+    body=parsed as Record<string,unknown>;
+  } catch {return oaJson({ok:false,code:'OA_INVALID_JSON'},400);}
+  switch(body.action) {
+    case 'publish':
+    case 'save_draft':
+    case 'retry':
+      return oaWechatWriteLocked();
+    case 'list_jobs': {
+      const jobs=getAllPublishJobs().map(({payload:_payload,...job})=>({...job,simulation:true,durable:false}));
+      return oaJson({jobs,total:jobs.length,simulation:true,durable:false});
     }
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    case 'logs': {
+      const logs=getPublishLogs(50).map(({result,...entry})=>({
+        ...entry,result:{success:result.success,mock:result.mock===true,externalStatus:result.externalStatus},
+      }));
+      return oaJson({logs,total:logs.length,simulation:true,durable:false});
+    }
+    case 'status':
+      return oaJson({job:null,simulation:true,durable:false,code:'OA_NO_DURABLE_PUBLISH_STATUS'});
+    default:
+      return oaJson({ok:false,code:'OA_UNKNOWN_ACTION'},400);
   }
 }
