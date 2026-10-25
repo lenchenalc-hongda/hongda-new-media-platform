@@ -80,6 +80,8 @@ export interface GlhQualificationSignals {
   expressesComplaintOrDissatisfaction?: boolean;
   unresolvedUsefulTurns?: number;
   confidence?: number;
+  languageConfidence?: number;
+  inputConfidence?: number;
   isHighRisk?: boolean;
   isImportantAccount?: boolean;
 }
@@ -214,6 +216,11 @@ function normalizedRequirementType(value: unknown): GlhRequirementType | null {
     : null;
 }
 
+function isUncertainClassificationConfidence(value: number | undefined): boolean {
+  if (value === undefined) return false;
+  return !Number.isFinite(value) || value < 0 || value > 1 || value < 0.6;
+}
+
 export function normalizeGlhQualificationProfile(
   input: GlhQualificationProfileInput,
 ): GlhQualificationProfile {
@@ -324,7 +331,10 @@ export function detectGlhHandoffTriggers(
   add(signals.expressesComplaintOrDissatisfaction, 'COMPLAINT_OR_DISSATISFACTION');
   add((signals.unresolvedUsefulTurns ?? 0) >= 2, 'AI_UNRESOLVED_AFTER_TWO_USEFUL_TURNS');
   add(
-    signals.isHighRisk || (typeof signals.confidence === 'number' && signals.confidence < 0.6),
+    signals.isHighRisk
+      || isUncertainClassificationConfidence(signals.confidence)
+      || isUncertainClassificationConfidence(signals.languageConfidence)
+      || isUncertainClassificationConfidence(signals.inputConfidence),
     'LOW_CONFIDENCE_OR_HIGH_RISK',
   );
   add(signals.isImportantAccount, 'ADMIN_CONFIGURED_IMPORTANT_ACCOUNT');
