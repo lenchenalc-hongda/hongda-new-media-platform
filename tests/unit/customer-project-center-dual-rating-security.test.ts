@@ -50,7 +50,7 @@ assert.ok(api.includes("Cache-Control': 'private, no-store"));
 assert.ok(panel.includes('提交管理者审核'));
 assert.ok(panel.includes('批准并生效'));
 assert.ok(panel.includes('退回补充'));
-assert.ok(panel.includes('不允许'));
+assert.ok(panel.includes('不会自动创建正式回访任务'));
 assert.ok(list.includes('高潜力客户'));
 assert.ok(list.includes('评级待审核'));
 assert.ok(list.includes('开发动作到期检查'));
