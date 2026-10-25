@@ -84,7 +84,7 @@ assert.ok(detail.includes('已提交管理者审核'));
 assert.ok(detail.includes('setRatingExpanded(false);'));
 assert.ok(detail.indexOf('客户开发机会与销售行动') > detail.indexOf('{ratingExpanded && ('),
   'sales plan must be outside foldable rating editor');
-assert.ok(detail.indexOf('客户备注') > detail.indexOf('{ratingExpanded && ('),
+assert.ok(detail.indexOf('>客户备注</h3>') > detail.indexOf('{ratingExpanded && ('),
   'customer notes must be outside foldable rating editor');
 
 console.log('PASS: separate notes, folded scoring, persistent sales plan, independent RPC versions and audit');
