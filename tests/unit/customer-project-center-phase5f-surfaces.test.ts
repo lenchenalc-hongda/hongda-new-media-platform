@@ -116,13 +116,16 @@ assert(
 );
 assert(
   !customersClient.includes("key: 'mine'")
-    && customersClient.includes('这里没有“我的客户”筛选'),
-  'Customer list does not invent CPC customer ownership',
+    && customersClient.includes("key: 'my_verified_customers'")
+    && customersClient.includes('rating?.isMaintenanceOwner'),
+  'Customer list derives My Customers only from verified ownership mapping',
 );
 assert(
-  customersClient.includes('外部归属引用')
-    && customersClient.includes('CPC 只显示已验证引用'),
-  'Customer list treats external owner as a reference, not local truth',
+  customersClient.includes('外部客户池归属映射')
+    && customersClient.includes('rating?.maintenanceOwnerName')
+    && customersClient.includes('外部归属引用')
+    && !customersClient.includes('customer.projectOwnerName'),
+  'Customer list shows authoritative external owner mapping without inventing local owner truth',
 );
 
 assert(
