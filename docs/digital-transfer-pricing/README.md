@@ -14,7 +14,7 @@
 
 ## 非生产验收
 ```bash
-DIGITAL_TRANSFER_PRICE_TIERS_TEST="<Preview专用价格表的完整值>" pnpm exec tsx tests/unit/digital-transfer-pricing.test.ts
+pnpm exec tsx tests/unit/digital-transfer-pricing.test.ts
 pnpm exec tsc --noEmit
 ```
-在受保护的 Preview 用不同角色测试：sales/admin 可计算，viewer/operator 与未登录不能访问金额。检查浏览器 bundle 和网络响应均不包含完整价格表。
+CI 会运行无机密价格数据的合成63档测试；完整真实价格只用于 Preview 服务端验证。配置必须在发起 Preview 部署**之前**存在：Vercel 不会将后加的环境变量自动注入已创建的部署；添加配置后要新建部署。\n\n在受保护的 Preview 用不同角色测试：sales/admin 可计算，viewer/operator 与未登录不能访问金额。检查浏览器 bundle 和网络响应均不包含完整价格表。
