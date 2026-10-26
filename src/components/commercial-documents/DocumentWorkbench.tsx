@@ -111,6 +111,17 @@ export default function DocumentWorkbench({ userName, userRole }: { userName: st
   const [customerError, setCustomerError] = useState('');
   const [customerLoading, setCustomerLoading] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  const [cloudId, setCloudId] = useState('');
+  const [cloudRevision, setCloudRevision] = useState(0);
+  const [cloudStatus, setCloudStatus] = useState('');
+  const [cloudBusy, setCloudBusy] = useState(false);
+  const [cloudListOpen, setCloudListOpen] = useState(false);
+  const [cloudList, setCloudList] = useState<Array<{
+    id: string; revision: number; document_no: string; buyer_name: string;
+    project_name: string; language: string; updated_at: string;
+    owner_profile_id: string;
+  }>>([]);
+  const [cloudSearch, setCloudSearch] = useState('');
   const [paymentMethods, setPaymentMethods] = useState<CommercialPaymentMethod[]>([]);
   const [paymentLoadError, setPaymentLoadError] = useState('');
   const selectedMethod = paymentMethods.find(method => method.id === draft.paymentMethodId) ?? null;
@@ -340,6 +351,85 @@ export default function DocumentWorkbench({ userName, userRole }: { userName: st
     });
   };
 
+  const loadCloudDrafts = async (search = '') => {
+    setCloudBusy(true);
+    try {
+      const r = await fetch('/api/commercial-documents/drafts?search=' + encodeURIComponent(search),
+        { cache: 'no-store' });
+      const v = await r.json();
+      if (!r.ok || !v.ok) throw new Error(v.message || '无法读取草稿');
+      setCloudList(v.drafts ?? []);
+      setCloudStatus('');
+    } catch (e) {
+      setCloudStatus(e instanceof Error ? e.message : '草稿箱读取失败');
+    } finally { setCloudBusy(false); }
+  };
+
+  const saveCloudDraft = async () => {
+    if (draft.kind !== 'quotation') {
+      setCloudStatus('当前云端草稿只支持产品报价单，机器合同请继续使用原有文件保存方式。');
+      return;
+    }
+    setCloudBusy(true);
+    try {
+      const url = cloudId
+        ? '/api/commercial-documents/drafts/' + encodeURIComponent(cloudId)
+        : '/api/commercial-documents/drafts';
+      const r = await fetch(url, {
+        method: cloudId ? 'PATCH' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ draft, revision: cloudRevision }),
+        cache: 'no-store',
+      });
+      const v = await r.json();
+      if (!r.ok || !v.ok) throw new Error(v.message || '草稿保存失败');
+      setCloudId(v.id); setCloudRevision(v.revision);
+      setCloudStatus('已保存云端草稿 · V' + v.revision +
+        ' · ' + new Date(v.updatedAt).toLocaleString('zh-CN'));
+    } catch (e) {
+      setCloudStatus('保存未成功，页面内容已保留：' +
+        (e instanceof Error ? e.message : '网络错误'));
+    } finally { setCloudBusy(false); }
+  };
+  const openCloudDraft = async (draftId: string) => {
+    if (!window.confirm('打开云端草稿将替换当前表单内容。若尚未保存，请先取消并保存。是否继续？')) return;
+    setCloudBusy(true);
+    try {
+      const r = await fetch('/api/commercial-documents/drafts/' + encodeURIComponent(draftId),
+        { cache: 'no-store' });
+      const v = await r.json();
+      if (!r.ok || !v.ok || !isDraftShape(v.draft)) throw new Error(v.message || '草稿格式无效');
+      setDraft(normalizeImportedDraft(v.draft, userName));
+      setCloudId(v.id); setCloudRevision(v.revision);
+      setCloudListOpen(false); setActiveTab('edit');
+      setCloudStatus('已打开云端草稿 V' + v.revision +
+        (v.canEdit ? '' : ' · 仅查看；请复制为自己的草稿后修改'));
+      setErrors([]);
+    } catch (e) {
+      setCloudStatus(e instanceof Error ? e.message : '草稿打开失败');
+    } finally { setCloudBusy(false); }
+  };
+  const copyToNewCloudDraft = () => {
+    setCloudId(''); setCloudRevision(0); setCloudListOpen(false);
+    setCloudStatus('已作为新草稿开始编辑；点击「保存到草稿箱」将创建独立记录。');
+  };
+  const deleteCloudDraft = async (entry: { id: string; revision: number }) => {
+    if (!window.confirm('将这份草稿移入回收状态？本操作不会删除本地正在编辑的内容。')) return;
+    setCloudBusy(true);
+    try {
+      const r = await fetch('/api/commercial-documents/drafts/' + encodeURIComponent(entry.id), {
+        method: 'DELETE', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ revision: entry.revision }),
+      });
+      const v = await r.json();
+      if (!r.ok || !v.ok) throw new Error(v.message || '删除失败');
+      if (cloudId === entry.id) { setCloudId(''); setCloudRevision(0); }
+      await loadCloudDrafts(cloudSearch);
+      setCloudStatus('已将草稿移入回收状态');
+    } catch (e) { setCloudStatus(e instanceof Error ? e.message : '删除失败'); }
+    finally { setCloudBusy(false); }
+  };
+
   const saveJson = () => {
     // Download a local file rather than storing commercial data in localStorage.
     const blob = new Blob([JSON.stringify(draft, null, 2)], { type: 'application/json;charset=utf-8' });
@@ -365,6 +455,8 @@ export default function DocumentWorkbench({ userName, userRole }: { userName: st
       if (!isDraftShape(parsed)) throw new Error('bad draft shape');
       if (!window.confirm('导入将替换当前页面尚未下载的内容，确认继续？')) return;
       setDraft(normalizeImportedDraft(parsed, userName));
+      setCloudId(''); setCloudRevision(0);
+      setCloudStatus('JSON 已导入到表单；如需跨设备保存，请点击「保存到草稿箱」。');
       setCustomerSearchOpen(false);
       setErrors([]);
       setActiveTab('edit');
@@ -424,6 +516,13 @@ export default function DocumentWorkbench({ userName, userRole }: { userName: st
           <p className="text-xs text-gray-500 mt-1">登录用户：{userName} · 所有已登录员工可使用</p>
         </div>
         <div className="flex gap-2 flex-wrap">
+
+          <button type="button" className="btn-primary btn-sm" disabled={cloudBusy || draft.kind !== 'quotation'}
+            onClick={saveCloudDraft}>{cloudBusy ? '处理中…' : '保存到草稿箱 / Save Draft'}</button>
+          <button type="button" className="btn-secondary btn-sm" disabled={cloudBusy}
+            onClick={() => { setCloudListOpen(!cloudListOpen); if (!cloudListOpen) void loadCloudDrafts(); }}>
+            云端草稿箱</button>
+          {cloudId && <button type="button" className="btn-secondary btn-sm" onClick={copyToNewCloudDraft}>复制为新草稿</button>}
           <button type="button" className="btn-secondary btn-sm" onClick={saveJson}>下载草稿 JSON</button>
           <button type="button" className="btn-secondary btn-sm" onClick={() => fileRef.current?.click()}>导入草稿</button>
           <input aria-label="导入报价草稿 JSON" className="hidden" type="file" ref={fileRef} accept=".json,application/json" onChange={importJson} />
@@ -431,12 +530,42 @@ export default function DocumentWorkbench({ userName, userRole }: { userName: st
         </div>
       </div>
 
+
+      {cloudStatus && <p role="status" className="rounded bg-blue-50 border border-blue-200 text-blue-900 text-xs p-3">{cloudStatus}</p>}
+      {cloudListOpen && (
+        <section className="rounded-xl border border-gray-200 bg-white p-4 space-y-3">
+          <div className="flex gap-2 flex-wrap">
+            <input className="flex-1 min-w-0" value={cloudSearch} onChange={e => setCloudSearch(e.target.value)}
+              placeholder="搜索报价编号 / 客户名称" />
+            <button type="button" className="btn-secondary btn-sm" disabled={cloudBusy}
+              onClick={() => void loadCloudDrafts(cloudSearch)}>搜索</button>
+          </div>
+          <div className="space-y-2">
+            {cloudList.length === 0 && <p className="text-xs text-gray-500">暂无草稿记录。</p>}
+            {cloudList.map(entry => (
+              <div key={entry.id} className="flex flex-wrap items-center justify-between gap-2 border-b pb-2 text-xs">
+                <div><strong>{entry.document_no || '未编号'}</strong> · {entry.buyer_name || '未填写客户'} ·
+                  {entry.project_name || '未填写项目'} · {entry.language.toUpperCase()} · V{entry.revision}
+                  <div className="text-gray-500">最近保存：{new Date(entry.updated_at).toLocaleString('zh-CN')}</div>
+                </div>
+                <div className="flex gap-2">
+                  <button type="button" className="btn-secondary btn-sm" onClick={() => void openCloudDraft(entry.id)}>打开</button>
+                  <button type="button" className="btn-secondary btn-sm" disabled={cloudBusy}
+                    onClick={() => void deleteCloudDraft(entry)}>移入回收</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
       <div className="commercial-warning bg-amber-50 text-amber-900 border border-amber-200 rounded-lg p-3 text-xs leading-relaxed">
-        <strong>模板试运行：</strong>本阶段仅支持页面编辑、PDF 打印和 JSON 草稿下载/导入，
-        <strong>尚未接入服务器单据保存及历史版本；收款账户须经财务核准后才能对客户使用</strong>。
+
+        <strong>存档状态：</strong>产品报价支持云端草稿；正式 PDF 归档与不可变历史版本仍在开发，
+        <strong>打印 / 保存为 PDF 不等于已完成云端正式归档</strong>。
         可搜索现有客户项目库（受原权限规则限制）或手动输入新客户。
         编号采用高随机度生成，但数据库唯一性登记尚未上线，手工修改编号暂不能跨员工防重。
-        离开页面前请下载草稿；机器合同模板仍带草稿提示，正式合同请复核条款后签署。
+        尚未保存的页面修改不会自动同步，离开前请点击「保存到草稿箱」；机器合同暂不支持云端草稿。
       </div>
 
       {errors.length > 0 && (
