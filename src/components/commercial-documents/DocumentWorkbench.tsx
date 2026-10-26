@@ -122,6 +122,11 @@ export default function DocumentWorkbench({ userName, userRole }: { userName: st
     owner_profile_id: string;
   }>>([]);
   const [cloudSearch, setCloudSearch] = useState('');
+  const [cloudHistoryDraftId, setCloudHistoryDraftId] = useState('');
+  const [cloudHistory, setCloudHistory] = useState<Array<{
+    revision: number; status: string; snapshot: CommercialDocumentDraft;
+    recorded_at: string; editor_profile_id: string;
+  }>>([]);
   const [paymentMethods, setPaymentMethods] = useState<CommercialPaymentMethod[]>([]);
   const [paymentLoadError, setPaymentLoadError] = useState('');
   const selectedMethod = paymentMethods.find(method => method.id === draft.paymentMethodId) ?? null;
@@ -409,6 +414,41 @@ export default function DocumentWorkbench({ userName, userRole }: { userName: st
       setCloudStatus(e instanceof Error ? e.message : '草稿打开失败');
     } finally { setCloudBusy(false); }
   };
+  const loadCloudHistory = async (draftId: string) => {
+    setCloudBusy(true);
+    try {
+      const r = await fetch('/api/commercial-documents/drafts/' + encodeURIComponent(draftId) + '/revisions',
+        { cache: 'no-store' });
+      const v = await r.json();
+      if (!r.ok || !v.ok) throw new Error(v.message || '无法读取历史版本');
+      setCloudHistory(v.revisions ?? []); setCloudHistoryDraftId(draftId);
+      setCloudStatus('已读取此草稿的历史快照；打开旧版本时不会覆盖原历史。');
+    } catch (e) { setCloudStatus(e instanceof Error ? e.message : '历史读取失败'); }
+    finally { setCloudBusy(false); }
+  };
+  const restoreCloudVersion = async (draftId: string, snapshot: CommercialDocumentDraft, oldRevision: number) => {
+    if (!isDraftShape(snapshot)) {
+      setCloudStatus('历史快照格式无效，已停止恢复');
+      return;
+    }
+    if (!window.confirm('以历史 V' + oldRevision + ' 内容继续编辑？原历史版本保持不变，下一次保存将创建新修订。')) return;
+    setCloudBusy(true);
+    try {
+      const r = await fetch('/api/commercial-documents/drafts/' + encodeURIComponent(draftId),
+        { cache: 'no-store' });
+      const v = await r.json();
+      if (!r.ok || !v.ok) throw new Error(v.message || '无法核对最新修订');
+      setDraft(normalizeImportedDraft(snapshot, userName));
+      setCloudId(v.canEdit ? v.id : '');
+      setCloudRevision(v.canEdit ? v.revision : 0);
+      setCloudListOpen(false); setCloudHistoryDraftId(''); setCloudHistory([]);
+      setActiveTab('edit'); setErrors([]);
+      setCloudStatus(v.canEdit
+        ? '已恢复历史 V' + oldRevision + ' 的内容；保存将形成新修订 V' + (v.revision + 1)
+        : '已复制历史 V' + oldRevision + ' 为新草稿；点击保存创建自己的记录。');
+    } catch (e) { setCloudStatus(e instanceof Error ? e.message : '历史恢复失败'); }
+    finally { setCloudBusy(false); }
+  };
   const copyToNewCloudDraft = () => {
     setCloudId(''); setCloudRevision(0); setCloudListOpen(false);
     setCloudStatus('已作为新草稿开始编辑；点击「保存到草稿箱」将创建独立记录。');
@@ -550,12 +590,30 @@ export default function DocumentWorkbench({ userName, userRole }: { userName: st
                 </div>
                 <div className="flex gap-2">
                   <button type="button" className="btn-secondary btn-sm" onClick={() => void openCloudDraft(entry.id)}>打开</button>
+
+                  <button type="button" className="btn-secondary btn-sm" disabled={cloudBusy}
+                    onClick={() => void loadCloudHistory(entry.id)}>历史修订</button>
                   <button type="button" className="btn-secondary btn-sm" disabled={cloudBusy}
                     onClick={() => void deleteCloudDraft(entry)}>移入回收</button>
                 </div>
               </div>
             ))}
           </div>
+          {cloudHistoryDraftId && (
+            <div className="rounded border border-gray-200 bg-gray-50 p-3 space-y-2">
+              <p className="text-xs font-bold">历史修订记录（只读，最近30次）</p>
+              {cloudHistory.map(version => (
+                <div key={version.revision} className="flex flex-wrap justify-between items-center gap-2 border-b py-1 text-xs">
+                  <span>V{version.revision} · {version.status} ·
+                    {new Date(version.recorded_at).toLocaleString('zh-CN')}</span>
+                  <button type="button" className="btn-secondary btn-sm" disabled={cloudBusy}
+                    onClick={() => void restoreCloudVersion(cloudHistoryDraftId, version.snapshot, version.revision)}>
+                    基于此版本继续修改
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
         </section>
       )}
 
