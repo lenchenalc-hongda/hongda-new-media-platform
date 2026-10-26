@@ -26,10 +26,10 @@ create policy commercial_draft_revisions_read on public.commercial_quotation_dra
      and (p.id=commercial_quotation_draft_revisions.owner_profile_id
        or p.role in ('admin','manager')))
  );
-create schema if not exists private;
-revoke all on schema private from public,anon,authenticated;
+create schema if not exists commercial_audit;
+revoke all on schema commercial_audit from public,anon,authenticated;
 -- Private trigger function can insert append-only revision records.
-create or replace function private.record_commercial_draft_revision()
+create or replace function commercial_audit.record_commercial_draft_revision()
 returns trigger language plpgsql security definer
 set search_path=pg_catalog,public
 as $audit$
@@ -51,7 +51,7 @@ begin
   return new;
 end;
 $audit$;
-revoke all on function private.record_commercial_draft_revision() from public,anon,authenticated;
+revoke all on function commercial_audit.record_commercial_draft_revision() from public,anon,authenticated;
 create trigger record_commercial_draft_revision
  after insert or update on public.commercial_quotation_drafts
- for each row execute function private.record_commercial_draft_revision();
+ for each row execute function commercial_audit.record_commercial_draft_revision();
