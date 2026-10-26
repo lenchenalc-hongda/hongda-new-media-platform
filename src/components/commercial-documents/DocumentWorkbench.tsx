@@ -3,6 +3,7 @@
 
 import { useEffect, useRef, useState, type ChangeEvent, type ReactNode } from 'react';
 import DocumentPreview from './DocumentPreview';
+import QuotationArchiveList from './QuotationArchiveList';
 import {
   methodLabel,
   qrCodeLabel,
@@ -106,6 +107,8 @@ export default function DocumentWorkbench({ userName, userRole }: { userName: st
   const [draft, setDraft] = useState<CommercialDocumentDraft>(() => initialDraft(userName));
   const [errors, setErrors] = useState<string[]>([]);
   const [activeTab, setActiveTab] = useState<'edit' | 'preview'>('edit');
+  const [showArchives, setShowArchives] = useState(false);
+  const [sourceArchiveId, setSourceArchiveId] = useState<string | null>(null);
   const [customerSearchOpen, setCustomerSearchOpen] = useState(false);
   const [customerOptions, setCustomerOptions] = useState<CustomerOption[]>([]);
   const [customerError, setCustomerError] = useState('');
@@ -340,6 +343,15 @@ export default function DocumentWorkbench({ userName, userRole }: { userName: st
     });
   };
 
+  const reuseArchivedQuote = (historical: CommercialDocumentDraft, archiveId: string) => {
+    const normalized = normalizeImportedDraft(historical, userName);
+    setDraft(normalized);
+    setSourceArchiveId(archiveId);
+    setShowArchives(false);
+    setErrors([]);
+    setActiveTab('edit');
+  };
+
   const saveJson = () => {
     // Download a local file rather than storing commercial data in localStorage.
     const blob = new Blob([JSON.stringify(draft, null, 2)], { type: 'application/json;charset=utf-8' });
@@ -365,6 +377,7 @@ export default function DocumentWorkbench({ userName, userRole }: { userName: st
       if (!isDraftShape(parsed)) throw new Error('bad draft shape');
       if (!window.confirm('导入将替换当前页面尚未下载的内容，确认继续？')) return;
       setDraft(normalizeImportedDraft(parsed, userName));
+      setSourceArchiveId(null);
       setCustomerSearchOpen(false);
       setErrors([]);
       setActiveTab('edit');
@@ -424,12 +437,16 @@ export default function DocumentWorkbench({ userName, userRole }: { userName: st
           <p className="text-xs text-gray-500 mt-1">登录用户：{userName} · 所有已登录员工可使用</p>
         </div>
         <div className="flex gap-2 flex-wrap">
+          <button type="button" className="btn-secondary btn-sm" onClick={() => setShowArchives(previous => !previous)}>{showArchives ? '返回报价编辑' : '历史报价'}</button>
           <button type="button" className="btn-secondary btn-sm" onClick={saveJson}>下载草稿 JSON</button>
           <button type="button" className="btn-secondary btn-sm" onClick={() => fileRef.current?.click()}>导入草稿</button>
           <input aria-label="导入报价草稿 JSON" className="hidden" type="file" ref={fileRef} accept=".json,application/json" onChange={importJson} />
           <button type="button" className="btn-primary btn-sm" onClick={printPdf}>打印 / 保存为 PDF</button>
         </div>
       </div>
+
+      {showArchives && <QuotationArchiveList onReuse={reuseArchivedQuote} />}
+      {sourceArchiveId && <p className="commercial-warning text-xs text-blue-700">当前以历史报价为基础编辑，原档案不会被覆盖。来源 ID：{sourceArchiveId}</p>}
 
       <div className="commercial-warning bg-amber-50 text-amber-900 border border-amber-200 rounded-lg p-3 text-xs leading-relaxed">
         <strong>模板试运行：</strong>本阶段仅支持页面编辑、PDF 打印和 JSON 草稿下载/导入，
@@ -823,7 +840,7 @@ export default function DocumentWorkbench({ userName, userRole }: { userName: st
                 const replacement = initialDraft(userName);
                 replacement.date = localDateToday();
                 replacement.documentNo = createDocumentNo(replacement.kind, replacement.date);
-                setDraft(replacement); setCustomerSearchOpen(false); setErrors([]);
+                setDraft(replacement); setSourceArchiveId(null); setCustomerSearchOpen(false); setErrors([]);
               }
             }}>重置模板</button>
             <button type="button" className="btn-primary" onClick={printPdf}>核对并生成 PDF</button>

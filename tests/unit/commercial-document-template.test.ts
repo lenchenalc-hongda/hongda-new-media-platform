@@ -433,3 +433,5 @@ assert(previewCode.includes('data-payment-qr'), 'Preview QR images must particip
 assert(imageApiCode.includes('privateResponse'), 'QR image errors must also use private no-store headers');
 
 console.log('commercial-document-template.test.ts: PASS');
+// Keep quotation archive foundation checks inside the existing CI test job.
+import './commercial-quotation-archive-foundation.test';
