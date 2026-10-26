@@ -37,4 +37,16 @@ assert(db.includes('quotation_drafts_update') && db.includes('p.id=commercial_qu
 assert(ui.includes('保存到草稿箱 / Save Draft') && ui.includes('云端草稿箱'));
 assert(ui.includes('setCloudId') && ui.includes('setCloudRevision'));
 assert(!api.includes('localStorage') && !detail.includes('localStorage'));
+const historyMigration = readFileSync(new URL('../../supabase/migrations/20261027080000_commercial_quotation_draft_revisions.sql', import.meta.url), 'utf8');
+const historyApi = readFileSync(new URL('../../src/app/api/commercial-documents/drafts/[id]/revisions/route.ts', import.meta.url), 'utf8');
+assert(historyMigration.includes('unique(draft_id, revision)'));
+assert(historyMigration.includes('record_commercial_draft_revision'));
+assert(historyMigration.includes('after insert or update'));
+assert(historyMigration.includes('security definer') && historyMigration.includes('commercial_audit'));
+assert(historyMigration.includes('revoke all on function commercial_audit'));
+assert(historyApi.includes('draftContext()'));
+assert(historyApi.includes(".eq('org_id', ctx.profile.org_id)"));
+assert(ui.includes('历史修订') && ui.includes('基于此版本继续修改'));
+assert(ui.includes('setCloudRevision(v.canEdit ? v.revision : 0)'));
+
 console.log('commercial-cloud-drafts.test.ts: PASS');
