@@ -117,7 +117,7 @@ export function validateGlhV2InquiryEvidence(
 
   const sources = new Map<string, GlhV2SourceMessage>();
   for (const message of sourceMessages) {
-    if (!isObject(message) || !bounded(message.id, 128)
+    if (!message || typeof message !== 'object' || !bounded(message.id, 128)
       || (message.direction !== 'INBOUND' && message.direction !== 'OUTBOUND')
       || (message.kind !== 'TEXT' && message.kind !== 'MEDIA')
       || (message.text !== null && typeof message.text !== 'string')
