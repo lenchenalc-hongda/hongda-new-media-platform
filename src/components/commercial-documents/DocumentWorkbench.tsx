@@ -606,8 +606,8 @@ export default function DocumentWorkbench({ userName, userRole }: { userName: st
                               {[...new Set(UNIT_PRESETS.map(unit => unit[draft.language]))].map(unit => <option key={unit} value={unit} />)}
                             </datalist>
                           </label>
-                          <Field required label="单价" value={item.unitPrice}
-                            onChange={value => updateItem(section.id, item.id, { unitPrice: value })} placeholder="0.00" />
+                          <Field required label={draft.language === 'en' ? 'Unit price (up to 3 decimals)' : '单价（最多3位小数）'} value={item.unitPrice}
+                            onChange={value => updateItem(section.id, item.id, { unitPrice: value })} placeholder="0.000" />
                         </div>
                         <Field label="备注" value={item.note} onChange={value => updateItem(section.id, item.id, { note: value })} />
                         <div className="flex justify-between text-xs">
