@@ -275,10 +275,19 @@ export function documentAmount(draft: CommercialDocumentDraft): SectionAmount {
   }, { amountMinor: 0, amountLines: 0, catalogLines: 0, invalidLines: 0 });
 }
 
+/** Format integer thousandths exactly, including very large safe totals.
+ * Keep two fractional digits for older prices; show the third only if nonzero.
+ */
 export function formatMoney(amountMinor: number, currency: string): string {
-  return new Intl.NumberFormat('zh-CN', {
-    style: 'currency', currency, minimumFractionDigits: 2, maximumFractionDigits: 3,
-  }).format(amountMinor / 1000);
+  if (!Number.isSafeInteger(amountMinor)) return '—';
+  const absolute = BigInt(Math.abs(amountMinor));
+  const whole = absolute / BigInt(1000);
+  const remainder = String(absolute % BigInt(1000)).padStart(3, '0');
+  const decimals = remainder.endsWith('0') ? remainder.slice(0, 2) : remainder;
+  const currencyPrefix = new Intl.NumberFormat('zh-CN', {
+    style: 'currency', currency, minimumFractionDigits: 0, maximumFractionDigits: 0,
+  }).format(whole);
+  return (amountMinor < 0 ? '-' : '') + currencyPrefix + '.' + decimals;
 }
 
 export function validateForPrint(draft: CommercialDocumentDraft): string[] {
