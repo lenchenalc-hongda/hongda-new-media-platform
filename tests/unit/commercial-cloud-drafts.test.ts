@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { initialDraft, isDraftShape, type CommercialDocumentDraft } from '../../src/lib/commercial-documents/template';
-import { safeDraft, draftMetadata } from '../../src/lib/commercial-documents/cloud-drafts';
+import { safeDraft, draftMetadata } from '../../src/lib/commercial-documents/cloud-draft-validation';
 
 const blank = initialDraft('Sales');
 assert.equal(blank.buyerName, '');
