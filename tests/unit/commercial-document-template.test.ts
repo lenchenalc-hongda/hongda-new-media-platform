@@ -13,7 +13,7 @@ import {
   type CommercialPaymentMethod,
 } from '../../src/lib/commercial-documents/payment-methods';
 import {
-  initialDraft, blankItem, moneyToMinor, quantityToMilli, itemAmountMinor,
+  initialDraft, blankItem, moneyToMinor, quantityToMilli, itemAmountMinor, formatMoney,
   sectionAmount, documentAmount, validateForPrint, isDraftShape,
   FIXED_SELLER_NAME, PAYMENT_PRESETS, SHIPPING_PRESETS, paymentPresetText, shippingPresetText,
   formatDocumentNumber, isGeneratedDocumentNumber, normalizeImportedDraft,
@@ -22,15 +22,64 @@ import { canRoleAccessPage, getPageSlugFromRoute } from '../../src/lib/auth/role
 import { activeNoticeTypes, documentProductNotices, inferNoticeType, sectionNoticeType, APPROVED_ZH_NOTICES } from '../../src/lib/commercial-documents/product-notices';
 import { getPortalForPath, getVisiblePortalGroups } from '../../src/lib/constants/navigation';
 
-assert.equal(moneyToMinor('3.60'), 360);
+assert.equal(moneyToMinor('3.60'), 3600);
 assert.equal(moneyToMinor('0'), 0);
-assert.equal(moneyToMinor('3.600'), null);
+assert.equal(moneyToMinor('3.600'), 3600);
+assert.equal(moneyToMinor('3.605'), 3605);
+assert.equal(moneyToMinor('0.001'), 1);
+assert.equal(moneyToMinor('0.000'), 0);
+assert.equal(moneyToMinor('3.6000'), null, 'four decimal places are not allowed');
+assert.equal(moneyToMinor('0.0009'), null);
+assert.equal(moneyToMinor('100000000000.000'), null, 'eleven integer digits is the limit');
 assert.equal(moneyToMinor('-1'), null);
 assert.equal(moneyToMinor('1e6'), null);
 assert.equal(moneyToMinor('abc'), null);
 assert.equal(quantityToMilli('1.25'), 1250);
+assert.equal(quantityToMilli('1.234'), 1234);
 assert.equal(quantityToMilli('0'), null);
 assert.equal(quantityToMilli('1.2345'), null);
+
+
+// 0.001-price precision must survive multiplication, subtotal, total and localization.
+const threeDecimal = initialDraft('Precision QA');
+threeDecimal.documentNo = 'HD-Q-DECIMAL-3';
+threeDecimal.buyerName = 'Precision test buyer';
+threeDecimal.sections = [{
+  id: 'precision', title: '3-decimal precision', items: [
+    { ...blankItem('p1'), name: 'Item one', quantity: '2', unitPrice: '3.601' },
+    { ...blankItem('p2'), name: 'Item two', quantity: '1', unitPrice: '0.001' },
+    { ...blankItem('p3'), name: 'Catalog entry', mode: 'catalog', quantity: '', unitPrice: '0.125' },
+  ],
+}];
+assert.equal(itemAmountMinor(threeDecimal.sections[0].items[0]), 7202);
+assert.equal(itemAmountMinor(threeDecimal.sections[0].items[1]), 1);
+assert.equal(sectionAmount(threeDecimal.sections[0]).amountMinor, 7203);
+assert.equal(documentAmount(threeDecimal).amountMinor, 7203);
+assert.equal(documentAmount(threeDecimal).catalogLines, 1);
+assert.equal(formatMoney(7203, 'CNY').includes('7.203'), true);
+assert.equal(formatMoney(7203, 'USD').includes('7.203'), true);
+assert.equal(formatMoney(7203, 'EUR').includes('7.203'), true);
+assert.equal(formatMoney(3600, 'CNY').includes('3.60'), true, 'old 2-decimal amounts must keep their display');
+assert.equal(formatMoney(1, 'USD').includes('0.001'), true);
+assert.equal(formatMoney(0, 'EUR').includes('0.00'), true);
+assert.equal(itemAmountMinor({ ...blankItem('half'), name: 'Half', quantity: '0.5', unitPrice: '1.235' }), 618,
+  'one half-thousandth rounds up at the line level');
+assert.equal(itemAmountMinor({ ...blankItem('third'), name: 'Third', quantity: '1.5', unitPrice: '3.605' }), 5408);
+assert.equal(itemAmountMinor({ ...blankItem('tiny'), name: 'Tiny', quantity: '0.001', unitPrice: '0.001' }), 0,
+  'values below half a thousandth round down');
+for (const language of ['zh', 'en'] as const) {
+  threeDecimal.language = language;
+  assert.deepEqual(validateForPrint(threeDecimal), [], 'three decimal quote in ' + language);
+  assert.equal(isDraftShape(threeDecimal), true);
+  const restored = normalizeImportedDraft(JSON.parse(JSON.stringify(threeDecimal)), 'Precision QA');
+  assert.equal(restored.sections[0].items[0].unitPrice, '3.601', 'JSON must preserve third unit-price digit');
+  assert.equal(documentAmount(restored).amountMinor, 7203, 'JSON round-trip must preserve exact 0.001 sums');
+}
+threeDecimal.taxStatement = 'vat13';
+assert.equal(documentAmount(threeDecimal).amountMinor, 7203, 'Tax label cannot silently change entered prices');
+threeDecimal.sections[0].items[0].unitPrice = '3.6015';
+assert(validateForPrint(threeDecimal).some(error => error.includes('最多3位小数')));
+threeDecimal.sections[0].items[0].unitPrice = '3.601';
 
 const draft = initialDraft('测试业务员');
 assert.equal(draft.sellerName, FIXED_SELLER_NAME);
@@ -58,16 +107,16 @@ draft.sections = [
     ],
   },
 ];
-assert.equal(itemAmountMinor(draft.sections[0].items[0]), 100000);
-assert.equal(sectionAmount(draft.sections[1]).amountMinor, 360000);
+assert.equal(itemAmountMinor(draft.sections[0].items[0]), 1000000);
+assert.equal(sectionAmount(draft.sections[1]).amountMinor, 3600000);
 assert.equal(sectionAmount(draft.sections[1]).catalogLines, 1);
-assert.equal(documentAmount(draft).amountMinor, 2260000);
+assert.equal(documentAmount(draft).amountMinor, 22600000);
 assert.equal(documentAmount(draft).catalogLines, 1);
 draft.machineWarrantyPeriod = '1年';
 assert.deepEqual(validateForPrint(draft), []);
 
 draft.taxStatement = 'vat13';
-assert.equal(documentAmount(draft).amountMinor, 2260000, '13% tax flag must not alter entered prices');
+assert.equal(documentAmount(draft).amountMinor, 22600000, '13% tax flag must not alter entered prices');
 
 draft.kind = 'machine_contract';
 assert(validateForPrint(draft).some(x => x.includes('合同不能包含')));
