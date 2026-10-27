@@ -142,7 +142,7 @@ export function validateGlhV2InquiryEvidence(
       || (message.kind === 'MEDIA' && (!Array.isArray(message.mediaReferences)
         || message.mediaReferences.length === 0
         || message.mediaReferences.length > 30
-        || message.mediaReferences.some(ref => !bounded(ref, 300))))
+        || message.mediaReferences.some((ref: unknown) => !bounded(ref, 300))))
       || sources.has(message.id.trim())) {
       return reject('INVALID_MESSAGES');
     }
