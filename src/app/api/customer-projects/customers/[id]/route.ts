@@ -38,7 +38,7 @@ export async function GET(
   try {
     const customerResult = await supabase
       .from('cpc_customer_references')
-      .select('id,reference_kind,display_name_snapshot,status,external_source,external_customer_id,external_owner_reference,provisional_source_reference,source_synced_at,updated_at')
+      .select('id,reference_kind,display_name_snapshot,status,external_source,external_customer_id,external_owner_reference,provisional_source_reference,provisional_source_label,source_synced_at,updated_at')
       .eq('org_id', profile.orgId)
       .eq('id', parsedId.data)
       .maybeSingle();
@@ -150,7 +150,7 @@ export async function GET(
           status: customer.status,
           sourceLabel: customer.reference_kind === 'canonical'
             ? customer.external_source
-            : customer.provisional_source_reference,
+            : customer.provisional_source_label ?? customer.provisional_source_reference,
           externalCustomerId: customer.reference_kind === 'canonical'
             ? customer.external_customer_id
             : null,
