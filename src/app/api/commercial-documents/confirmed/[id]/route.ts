@@ -19,7 +19,7 @@ export async function GET(request:NextRequest,{params}:{params:{id:string}}) {
  const v=Number(request.nextUrl.searchParams.get('version')||quote.latest_version);
  if(!Number.isSafeInteger(v)||v<1) return NextResponse.json({ok:false},{status:400,headers:privateHeaders});
  const {data:row,error:detailError}=await ctx.db.from('commercial_confirmed_quote_versions')
- .select('version,snapshot,confirmed_at,amount_thousandths')
+ .select('version,snapshot,payment_snapshot,confirmed_at,amount_thousandths')
  .eq('quote_id',quote.id).eq('org_id',ctx.profile.org_id).eq('version',v).maybeSingle();
  if(detailError||!row) return NextResponse.json({ok:false,message:'找不到历史版本'},{status:404,headers:privateHeaders});
  return NextResponse.json({ok:true,quote,versions:versions||[],selected:row,canEdit:quote.owner_profile_id===ctx.profile.id},{headers:privateHeaders});
