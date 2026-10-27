@@ -32,12 +32,20 @@ export const GLH_V2_INQUIRY_FIELDS = [
 
 export type GlhV2InquiryField = (typeof GLH_V2_INQUIRY_FIELDS)[number];
 
+export interface GlhV2TrustedScope {
+  organizationId: string;
+  inquiryId: string;
+}
+
 export interface GlhV2SourceMessage {
   id: string;
+  organizationId: string;
+  inquiryId: string;
   direction: 'INBOUND' | 'OUTBOUND';
   kind: 'TEXT' | 'MEDIA';
   text: string | null;
-  hasMedia?: boolean;
+  /** Trusted canonical attachment IDs, not LLM-generated URLs or guesses. */
+  mediaReferences?: readonly string[];
 }
 
 export interface GlhV2EvidenceClaim {
@@ -52,6 +60,7 @@ export interface GlhV2EvidenceClaim {
 export interface GlhV2EvidenceDraft {
   schemaVersion: typeof GLH_V2_INQUIRY_EVIDENCE_SCHEMA_VERSION;
   inquiryId: string;
+  organizationId: string;
   claims: readonly GlhV2EvidenceClaim[];
   humanReviewRequired: true;
   customerFacingAutoSendAllowed: false;
@@ -65,8 +74,10 @@ export type GlhV2EvidenceResult =
       ok: false;
       errorCode:
         | 'INVALID_SCHEMA'
+        | 'INVALID_TRUSTED_SCOPE'
         | 'INVALID_INQUIRY_ID'
         | 'INVALID_MESSAGES'
+        | 'SOURCE_SCOPE_MISMATCH'
         | 'INVALID_CLAIMS'
         | 'INVALID_FIELD'
         | 'INVALID_CLAIM_VALUE'
@@ -99,18 +110,23 @@ function reject(errorCode: Extract<GlhV2EvidenceResult, { ok: false }>['errorCod
  *   excerpt?: string, confidence: 0..1 }] }
  *
  * TEXT claims MUST quote an exact excerpt of the referenced inbound message.
- * MEDIA claims may only assert an imageReferences field backed by an inbound
- * message that has a media attachment; this does not prove what the image shows.
+ * MEDIA claims may only assert a canonical attachment ID present on the trusted
+ * inbound message. A matching excerpt is NOT semantic validation of the proposed
+ * value: every candidate needs human review regardless of model confidence.
+ * The trusted scope MUST originate from the authenticated server, not the model.
  */
 export function validateGlhV2InquiryEvidence(
   proposal: unknown,
   sourceMessages: readonly GlhV2SourceMessage[],
+  trustedScope: GlhV2TrustedScope,
 ): GlhV2EvidenceResult {
   if (!isObject(proposal) || proposal.schemaVersion !== GLH_V2_INQUIRY_EVIDENCE_SCHEMA_VERSION) {
     return reject('INVALID_SCHEMA');
   }
-  const inquiryId = bounded(proposal.inquiryId, 128);
-  if (!inquiryId) return reject('INVALID_INQUIRY_ID');
+  const inquiryId = bounded(trustedScope?.inquiryId, 128);
+  const organizationId = bounded(trustedScope?.organizationId, 128);
+  if (!inquiryId || !organizationId) return reject('INVALID_TRUSTED_SCOPE');
+  if (bounded(proposal.inquiryId, 128) !== inquiryId) return reject('INVALID_INQUIRY_ID');
   if (!Array.isArray(sourceMessages) || sourceMessages.length > 200) {
     return reject('INVALID_MESSAGES');
   }
@@ -121,8 +137,17 @@ export function validateGlhV2InquiryEvidence(
       || (message.direction !== 'INBOUND' && message.direction !== 'OUTBOUND')
       || (message.kind !== 'TEXT' && message.kind !== 'MEDIA')
       || (message.text !== null && typeof message.text !== 'string')
+      || !bounded(message.inquiryId, 128)
+      || !bounded(message.organizationId, 128)
+      || (message.kind === 'MEDIA' && (!Array.isArray(message.mediaReferences)
+        || message.mediaReferences.length === 0
+        || message.mediaReferences.length > 30
+        || message.mediaReferences.some(ref => !bounded(ref, 300))))
       || sources.has(message.id.trim())) {
       return reject('INVALID_MESSAGES');
+    }
+    if (message.inquiryId.trim() !== inquiryId || message.organizationId.trim() !== organizationId) {
+      return reject('SOURCE_SCOPE_MISMATCH');
     }
     sources.set(message.id.trim(), message);
   }
@@ -149,7 +174,7 @@ export function validateGlhV2InquiryEvidence(
 
     let excerpt: string | null = null;
     if (field === 'imageReferences') {
-      if (source.kind !== 'MEDIA' || source.hasMedia !== true) {
+      if (source.kind !== 'MEDIA' || !source.mediaReferences?.includes(value)) {
         return reject('INVALID_MEDIA_EVIDENCE');
       }
     } else {
@@ -174,7 +199,9 @@ export function validateGlhV2InquiryEvidence(
       sourceMessageId,
       excerpt,
       confidence,
-      needsVerification: confidence < 0.6,
+      // A plausible quote is provenance, not proof of the LLM's interpretation.
+      // Do not let the model self-certify a high-confidence factual claim.
+      needsVerification: true,
     });
   }
 
@@ -183,6 +210,7 @@ export function validateGlhV2InquiryEvidence(
     data: {
       schemaVersion: GLH_V2_INQUIRY_EVIDENCE_SCHEMA_VERSION,
       inquiryId,
+      organizationId,
       claims,
       humanReviewRequired: true,
       customerFacingAutoSendAllowed: false,
