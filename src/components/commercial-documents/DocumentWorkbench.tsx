@@ -116,6 +116,10 @@ export default function DocumentWorkbench({ userName, userRole, initialCloudList
   const [cloudId, setCloudId] = useState('');
   const [cloudRevision, setCloudRevision] = useState(0);
   const [lastSavedSnapshot, setLastSavedSnapshot] = useState('');
+  const [confirmedId,setConfirmedId] = useState('');
+  const [confirmedVersion,setConfirmedVersion] = useState(0);
+  const [readOnlyConfirmed,setReadOnlyConfirmed] = useState(false);
+  const [confirmRequestId,setConfirmRequestId] = useState('');
   const hasUnsavedChanges = !!cloudId && !!lastSavedSnapshot && JSON.stringify(draft) !== lastSavedSnapshot;
   const [cloudStatus, setCloudStatus] = useState('');
   const [cloudBusy, setCloudBusy] = useState(false);
@@ -421,11 +425,60 @@ export default function DocumentWorkbench({ userName, userRole, initialCloudList
     return () => { cancelled = true; };
   }, [userName]);
 
+  // An existing confirmed quotation opens as a working copy, never modifies the archived snapshot.
+  useEffect(()=>{
+    const params=new URLSearchParams(window.location.search);
+    const id=params.get('confirmedId');
+    if(!id || !/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(id)) return;
+    let cancelled=false;
+    void (async()=>{
+      setCloudBusy(true);
+      try {
+        const url='/api/commercial-documents/confirmed/'+encodeURIComponent(id)+
+          (params.get('version')?'?version='+encodeURIComponent(params.get('version')||''):'');
+        const r=await fetch(url,{cache:'no-store'});const data=await r.json();
+        if(!r.ok||!data.ok||!isDraftShape(data.selected?.snapshot)) throw Error(data.message||'已确认报价读取失败');
+        if(cancelled)return;
+        const restored=normalizeImportedDraft(data.selected.snapshot,userName);
+        setDraft(restored);
+        setConfirmedId(data.canEdit ? data.quote.id : '');
+        setConfirmedVersion(data.quote.latest_version);
+        setReadOnlyConfirmed(params.get('readonly')==='1'||!data.canEdit);
+        setCloudId('');setCloudRevision(0);setLastSavedSnapshot('');
+        setCloudStatus('已载入已确认报价 V'+data.selected.version+(data.canEdit?' · 修改需再次确认才会新增正式版本':' · 只读查看'));
+      }catch(e){if(!cancelled)setCloudStatus(e instanceof Error?e.message:'读取失败');}
+      finally{if(!cancelled)setCloudBusy(false);}
+    })();
+    return ()=>{cancelled=true;};
+  },[userName]);
+  const confirmQuote = async () => {
+    if(readOnlyConfirmed){setCloudStatus('只读报价不可确认；请返回已保存报价库');return;}
+    const problems=validateForPrint(draft);
+    if(problems.length){setErrors(problems);setActiveTab('edit');return;}
+    if(!window.confirm('确认并保存报价？系统会新增不可覆盖的正式版本，草稿将从草稿箱移出。'))return;
+    const id=confirmRequestId||crypto.randomUUID();setConfirmRequestId(id);
+    setCloudBusy(true);
+    try{
+      const r=await fetch('/api/commercial-documents/confirmed',{
+        method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({requestId:id,quoteId:confirmedId||null,expectedVersion:confirmedVersion,
+          draftId:cloudId||null,draft}),cache:'no-store',
+      });
+      const v=await r.json();
+      if(!r.ok||!v.ok)throw Error(v.message||'正式保存失败');
+      setConfirmedId(v.quoteId);setConfirmedVersion(v.version);
+      setCloudId('');setCloudRevision(0);setLastSavedSnapshot('');
+      setConfirmRequestId('');
+      setCloudStatus('正式报价已确认并保存 V'+v.version+' · 历史版本不会被覆盖');
+    }catch(e){setCloudStatus('确认未完成，页面内容已保留：'+(e instanceof Error?e.message:'未知错误'));}
+    finally{setCloudBusy(false);}
+  };
   const saveCloudDraft = async () => {
     if (draft.kind !== 'quotation') {
       setCloudStatus('当前云端草稿只支持产品报价单，机器合同请继续使用原有文件保存方式。');
       return;
     }
+    if(readOnlyConfirmed){setCloudStatus('只读模式不可保存草稿');return;}
     setCloudBusy(true);
     try {
       const url = cloudId
@@ -441,6 +494,7 @@ export default function DocumentWorkbench({ userName, userRole, initialCloudList
       if (!r.ok || !v.ok) throw new Error(v.message || '草稿保存失败');
       setCloudId(v.id); setCloudRevision(v.revision);
       setLastSavedSnapshot(JSON.stringify(draft));
+      setConfirmRequestId('');
       setCloudStatus('已保存云端草稿 · V' + v.revision +
         ' · ' + new Date(v.updatedAt).toLocaleString('zh-CN'));
     } catch (e) {
@@ -609,8 +663,10 @@ export default function DocumentWorkbench({ userName, userRole, initialCloudList
         </div>
         <div className="flex gap-2 flex-wrap">
 
-          <button type="button" className="btn-primary btn-sm" disabled={cloudBusy || draft.kind !== 'quotation'}
+          <button type="button" className="btn-primary btn-sm" disabled={cloudBusy || readOnlyConfirmed || draft.kind !== 'quotation'}
             onClick={saveCloudDraft}>{cloudBusy ? '处理中…' : '保存到草稿箱 / Save Draft'}</button>
+          <button type="button" className="btn-primary btn-sm" disabled={cloudBusy || readOnlyConfirmed || draft.kind !== 'quotation'}
+            onClick={confirmQuote}>确认并保存报价</button>
           {cloudId && <button type="button" className="btn-secondary btn-sm" onClick={copyToNewCloudDraft}>复制为新草稿</button>}
           <button type="button" className="btn-secondary btn-sm" onClick={saveJson}>下载草稿 JSON</button>
           <button type="button" className="btn-secondary btn-sm" onClick={() => fileRef.current?.click()}>导入草稿</button>
@@ -620,6 +676,8 @@ export default function DocumentWorkbench({ userName, userRole, initialCloudList
       </div>
 
 
+      {confirmedId && <p className="text-xs text-gray-700">已确认报价 V{confirmedVersion} · 修改需再次确认生成新版本</p>}
+      {readOnlyConfirmed && <p role="status" className="text-xs text-amber-800">正在查看历史已确认报价 · 不可覆盖原版本</p>}
       {cloudId && <p role="status" className="text-xs font-medium text-gray-600">
         {hasUnsavedChanges ? '● 有未保存的修改' : '✓ 已与云端草稿同步'} · 当前 V{cloudRevision}
       </p>}
