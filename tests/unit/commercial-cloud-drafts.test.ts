@@ -58,8 +58,13 @@ assert(navigation.indexOf("path: '/commercial-documents/statement'") <
   'Cloud drafts must appear after monthly statements');
 assert(!ui.includes('            云端草稿箱</button>'),
   'The workbench top bar should not duplicate the sidebar cloud-draft entry');
-assert(draftPage.includes('initialCloudListOpen') && draftPage.includes('getCurrentUserReadOnly'),
-  'Dedicated draft route must auto-open the drawer with an authenticated session');
-assert(ui.includes('if (initialCloudListOpen) void loadCloudDrafts()'),
-  'Sidebar destination must actually fetch drafts immediately');
+const library = readFileSync(new URL('../../src/components/commercial-documents/CloudDraftLibrary.tsx', import.meta.url), 'utf8');
+assert(draftPage.includes('CloudDraftLibrary') && draftPage.includes('getCurrentUserReadOnly'),
+  'Dedicated draft route must use a standalone library and authenticated session');
+assert(library.includes('void load()') && library.includes('云端草稿箱'),
+  'Dedicated inbox must load cloud drafts on entry');
+assert(library.includes("scope === 'team'") && library.includes('currentProfileId'),
+  'Admin team/mine scope must not grant mutation of others drafts');
+assert(ui.includes("params.get('draftId')") && ui.includes('setLastSavedSnapshot'),
+  'Editor must support direct deep-link and visible unsaved changes');
 console.log('commercial-cloud-drafts.test.ts: PASS');
