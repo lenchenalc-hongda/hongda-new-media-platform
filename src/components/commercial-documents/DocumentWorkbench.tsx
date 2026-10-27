@@ -567,9 +567,6 @@ export default function DocumentWorkbench({ userName, userRole, initialCloudList
 
           <button type="button" className="btn-primary btn-sm" disabled={cloudBusy || draft.kind !== 'quotation'}
             onClick={saveCloudDraft}>{cloudBusy ? '处理中…' : '保存到草稿箱 / Save Draft'}</button>
-          <button type="button" className="btn-secondary btn-sm" disabled={cloudBusy}
-            onClick={() => { setCloudListOpen(!cloudListOpen); if (!cloudListOpen) void loadCloudDrafts(); }}>
-            云端草稿箱</button>
           {cloudId && <button type="button" className="btn-secondary btn-sm" onClick={copyToNewCloudDraft}>复制为新草稿</button>}
           <button type="button" className="btn-secondary btn-sm" onClick={saveJson}>下载草稿 JSON</button>
           <button type="button" className="btn-secondary btn-sm" onClick={() => fileRef.current?.click()}>导入草稿</button>
