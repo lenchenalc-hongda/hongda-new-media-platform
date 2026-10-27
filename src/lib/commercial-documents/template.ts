@@ -153,6 +153,9 @@ export interface CommercialDocumentDraft {
   accountDetails: string;
   /** Selected approved catalog UUID; account values never stored in editable JSON. */
   paymentMethodId?: string;
+  /** Links an editable modification draft to its immutable confirmed quote. */
+  sourceConfirmedQuoteId?: string;
+  sourceConfirmedVersion?: number;
   sections: DocumentSection[];
 }
 
