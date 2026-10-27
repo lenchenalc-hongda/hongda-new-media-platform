@@ -13,7 +13,7 @@ begin
  or new.snapshot->>'buyerName'<>new.buyer_name
  or btrim(coalesce(new.snapshot->>'buyerName',''))=''
  or new.snapshot->>'documentNo' is null
- or new.snapshot->>'date' !~ '^\\d{4}-\\d{2}-\\d{2}$'
+ or new.snapshot->>'date' !~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
  or coalesce(jsonb_typeof(new.snapshot->'sections'),'')<>'array'
  or jsonb_array_length(new.snapshot->'sections')=0
  then raise exception 'INVALID_CONFIRMED_QUOTE'; end if;
@@ -33,10 +33,10 @@ begin
    v_price:=coalesce(v_line->>'unitPrice','');
    v_qty:=coalesce(v_line->>'quantity','');
    if v_name='' or v_mode not in ('amount','catalog') or
-     v_price !~ '^\\d{1,11}(\\.\\d{1,3})?$'
+     v_price !~ '^[0-9]{1,11}(\\.[0-9]{1,3})?$'
    then raise exception 'INVALID_LINE';end if;
    if v_mode='amount' then
-    if v_qty !~ '^\\d{1,9}(\\.\\d{1,3})?$' or v_qty::numeric<=0
+    if v_qty !~ '^[0-9]{1,9}(\\.[0-9]{1,3})?$' or v_qty::numeric<=0
     then raise exception 'INVALID_QUANTITY'; end if;
     v_total:=v_total+round(v_price::numeric*v_qty::numeric,3);
    end if;
