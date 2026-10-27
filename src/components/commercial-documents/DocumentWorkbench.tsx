@@ -137,7 +137,28 @@ export default function DocumentWorkbench({ userName, userRole, initialCloudList
   }>>([]);
   const [paymentMethods, setPaymentMethods] = useState<CommercialPaymentMethod[]>([]);
   const [paymentLoadError, setPaymentLoadError] = useState('');
-  const selectedMethod = paymentMethods.find(method => method.id === draft.paymentMethodId) ?? null;
+  const [historicalPaymentSnapshot, setHistoricalPaymentSnapshot] = useState<Record<string, unknown> | null>(null);
+  const currentMethod = paymentMethods.find(method => method.id === draft.paymentMethodId) ?? null;
+  const historicalBank: CommercialPaymentMethod | null = readOnlyConfirmed && historicalPaymentSnapshot?.kind === 'bank'
+    ? {
+        id: draft.paymentMethodId ?? '',
+        methodKey: String(historicalPaymentSnapshot.methodKey ?? ''),
+        kind: 'bank', labelZh: String(historicalPaymentSnapshot.labelZh ?? ''),
+        labelEn: String(historicalPaymentSnapshot.labelEn ?? ''),
+        beneficiary: String(historicalPaymentSnapshot.beneficiary ?? ''),
+        bankName: String(historicalPaymentSnapshot.bankName ?? ''),
+        accountNo: String(historicalPaymentSnapshot.accountNo ?? ''),
+        notes: String(historicalPaymentSnapshot.notes ?? ''),
+        approved: true, sourceCell: '', sourceNumeric: false, qrSha256: null, qrUrl: null,
+      } : null;
+  // Read-only historical bank details must never be replaced by a newly edited catalog account.
+  const selectedMethod = historicalBank ?? currentMethod;
+  const archivedQrChanged = readOnlyConfirmed && historicalPaymentSnapshot?.kind === 'qr_pair'
+    && (!currentMethod || currentMethod.kind !== 'qr_pair'
+      || (historicalPaymentSnapshot.members as Array<{methodKey:string;qrSha256:string}> | undefined)?.some(
+        archived => !currentMethod.qrCodes?.some(current =>
+          current.methodKey === archived.methodKey && current.qrSha256 === archived.qrSha256),
+      ));
 
   async function loadPaymentMethods() {
     try {
@@ -450,6 +471,7 @@ export default function DocumentWorkbench({ userName, userRole, initialCloudList
         restored.sourceConfirmedQuoteId=data.canEdit?data.quote.id:'';
         restored.sourceConfirmedVersion=data.quote.latest_version;
         setDraft(restored);
+        setHistoricalPaymentSnapshot(data.selected.payment_snapshot ?? null);
         setConfirmedId(data.canEdit ? data.quote.id : '');
         setConfirmedVersion(data.quote.latest_version);
         setReadOnlyConfirmed(params.get('readonly')==='1'||!data.canEdit);
@@ -625,6 +647,9 @@ export default function DocumentWorkbench({ userName, userRole, initialCloudList
   };
   const printPdf = async () => {
     const problems = validateForPrint(draft);
+    if (archivedQrChanged) {
+      problems.push('历史二维码已经与当前收款账户不同，无法原样重新生成 PDF，请核对原始记录');
+    }
     if (draft.paymentMethodId && !selectedMethod) {
       problems.push('所选收款方式已失效或账户库未加载，不能输出错误账户');
     }
