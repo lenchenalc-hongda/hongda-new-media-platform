@@ -53,6 +53,11 @@ const navigation = readFileSync(new URL('../../src/lib/constants/navigation.ts',
 const draftPage = readFileSync(new URL('../../src/app/commercial-documents/drafts/page.tsx', import.meta.url), 'utf8');
 assert(navigation.includes("{ label: '云端草稿箱', path: '/commercial-documents/drafts'"),
   'Sidebar must expose cloud drafts as a direct destination');
+assert(navigation.indexOf("path: '/commercial-documents/statement'") <
+  navigation.indexOf("path: '/commercial-documents/drafts'"),
+  'Cloud drafts must appear after monthly statements');
+assert(!ui.includes('            云端草稿箱</button>'),
+  'The workbench top bar should not duplicate the sidebar cloud-draft entry');
 assert(draftPage.includes('initialCloudListOpen') && draftPage.includes('getCurrentUserReadOnly'),
   'Dedicated draft route must auto-open the drawer with an authenticated session');
 assert(ui.includes('if (initialCloudListOpen) void loadCloudDrafts()'),
