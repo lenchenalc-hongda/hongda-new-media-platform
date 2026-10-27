@@ -102,7 +102,9 @@ function Panel({ title, children }: { title: string; children: ReactNode }) {
   );
 }
 
-export default function DocumentWorkbench({ userName, userRole }: { userName: string; userRole: string }) {
+export default function DocumentWorkbench({ userName, userRole, initialCloudListOpen = false }: {
+  userName: string; userRole: string; initialCloudListOpen?: boolean;
+}) {
   const [draft, setDraft] = useState<CommercialDocumentDraft>(() => initialDraft(userName));
   const [errors, setErrors] = useState<string[]>([]);
   const [activeTab, setActiveTab] = useState<'edit' | 'preview'>('edit');
@@ -115,7 +117,7 @@ export default function DocumentWorkbench({ userName, userRole }: { userName: st
   const [cloudRevision, setCloudRevision] = useState(0);
   const [cloudStatus, setCloudStatus] = useState('');
   const [cloudBusy, setCloudBusy] = useState(false);
-  const [cloudListOpen, setCloudListOpen] = useState(false);
+  const [cloudListOpen, setCloudListOpen] = useState(initialCloudListOpen);
   const [cloudList, setCloudList] = useState<Array<{
     id: string; revision: number; document_no: string; buyer_name: string;
     project_name: string; language: string; updated_at: string;
@@ -369,6 +371,12 @@ export default function DocumentWorkbench({ userName, userRole }: { userName: st
       setCloudStatus(e instanceof Error ? e.message : '草稿箱读取失败');
     } finally { setCloudBusy(false); }
   };
+
+  useEffect(() => {
+    if (initialCloudListOpen) void loadCloudDrafts();
+    // Route flag is immutable for the mounted workbench instance.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialCloudListOpen]);
 
   const saveCloudDraft = async () => {
     if (draft.kind !== 'quotation') {
