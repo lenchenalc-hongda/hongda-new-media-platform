@@ -150,6 +150,56 @@ assert(
 );
 assert.equal(overwriteAttempt.history, third.history);
 
+const reusedPreviousPhotoId = appendSamplingAttempt(
+  first.history,
+  attempt({
+    attemptId: 'sampling-attempt-2',
+    attemptNumber: 2,
+    resultImages: [
+      {
+        ...first.history[0].resultImages[0],
+        attemptId: 'sampling-attempt-2',
+      },
+    ],
+  }),
+  request,
+);
+assert.equal(reusedPreviousPhotoId.appended, false);
+assert.equal(reusedPreviousPhotoId.history, first.history);
+assert(
+  reusedPreviousPhotoId.blockers.some(
+    (blocker) => blocker.code === 'RESULT_IMAGE_ID_DUPLICATE',
+  ),
+  'result image IDs cannot be reassigned to a later technical attempt',
+);
+
+const repeatedPhotoInHistoricalAttempt = appendSamplingAttempt(
+  [
+    {
+      ...first.history[0],
+      resultImages: [
+        ...first.history[0].resultImages,
+        {
+          ...first.history[0].resultImages[0],
+          category: 'EDGE',
+        },
+      ],
+    },
+  ],
+  attempt({
+    attemptId: 'sampling-attempt-2',
+    attemptNumber: 2,
+  }),
+  request,
+);
+assert.equal(repeatedPhotoInHistoricalAttempt.appended, false);
+assert(
+  repeatedPhotoInHistoricalAttempt.blockers.some(
+    (blocker) => blocker.code === 'ATTEMPT_HISTORY_INVALID',
+  ),
+  'malformed historical attempts with duplicated image IDs must fail closed',
+);
+
 const missingParameter = appendSamplingAttempt(
   [],
   attempt({

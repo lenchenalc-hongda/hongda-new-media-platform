@@ -118,6 +118,7 @@ export type SamplingExecutionBlockerCode =
   | 'FAILURE_REASON_MISSING'
   | 'RESULT_IMAGE_MISSING'
   | 'RESULT_IMAGE_ATTEMPT_MISMATCH'
+  | 'RESULT_IMAGE_ID_DUPLICATE'
   | 'RESULT_IMAGE_VERSION_MISMATCH'
   | 'RESULT_IMAGE_NOT_READY'
   | 'TECHNICIAN_PROFILE_MISSING'
@@ -233,6 +234,7 @@ const BLOCKER_MESSAGES: Readonly<
   FAILURE_REASON_MISSING: '非 PASS 结果必须填写失败或无法打样原因',
   RESULT_IMAGE_MISSING: '至少需要一张已就绪的本次尝试结果图',
   RESULT_IMAGE_ATTEMPT_MISMATCH: '结果图未绑定到本次技术尝试',
+  RESULT_IMAGE_ID_DUPLICATE: '结果图 ID 已用于其他打样次数或当前次数，不得复用',
   RESULT_IMAGE_VERSION_MISMATCH: '结果图版本与当前申请版本不一致',
   RESULT_IMAGE_NOT_READY: '结果图尚未就绪、已失败或已被替代',
   TECHNICIAN_PROFILE_MISSING: '技术尝试缺少技术员',
@@ -412,20 +414,21 @@ function historyShapeIsValid(
 
     const resultImages =
       attempt.resultImages as readonly SamplingResultImageReference[];
-    if (
-      !Array.isArray(resultImages)
-      || resultImages.length === 0
-      || resultImages.some((image) => (
+    if (!Array.isArray(resultImages) || resultImages.length === 0) {
+      return false;
+    }
+    for (const image of resultImages) {
+      if (
         !resultImageShapeIsValid(image)
         || image.attemptId !== attempt.attemptId
         || image.organizationId !== request.organizationId
         || image.samplingRequestId !== request.id
         || imageIds.has(image.imageId)
-      ))
-    ) {
-      return false;
+      ) {
+        return false;
+      }
+      imageIds.add(image.imageId);
     }
-    for (const image of resultImages) imageIds.add(image.imageId);
   }
 
   return true;
@@ -436,6 +439,7 @@ function validateCurrentAttempt(
   request: WosSamplingRequest,
   expectedAttemptNumber: number,
   existingAttemptIds: ReadonlySet<string>,
+  existingImageIds: ReadonlySet<string>,
   blockers: SamplingExecutionBlocker[],
 ): void {
   if (!isRecord(attempt)) {
@@ -511,8 +515,11 @@ function validateCurrentAttempt(
       addBlocker(blockers, 'INVALID_EXECUTION_INPUT');
       continue;
     }
-    if (resultImageIds.has(image.imageId)) {
-      addBlocker(blockers, 'INVALID_EXECUTION_INPUT');
+    if (
+      resultImageIds.has(image.imageId)
+      || existingImageIds.has(image.imageId)
+    ) {
+      addBlocker(blockers, 'RESULT_IMAGE_ID_DUPLICATE');
     }
     resultImageIds.add(image.imageId);
     if (image.attemptId !== attempt.attemptId) {
@@ -537,7 +544,7 @@ function validateCurrentAttempt(
   }
 
   if (resultImageIds.size !== attempt.resultImages.length) {
-    addBlocker(blockers, 'INVALID_EXECUTION_INPUT');
+    addBlocker(blockers, 'RESULT_IMAGE_ID_DUPLICATE');
   }
 }
 
@@ -587,11 +594,15 @@ export function appendSamplingAttempt(
   const existingAttemptIds = new Set(
     history.map((entry) => entry.attemptId),
   );
+  const existingImageIds = new Set(
+    history.flatMap((entry) => entry.resultImages.map((image) => image.imageId)),
+  );
   validateCurrentAttempt(
     attempt,
     request,
     history.length + 1,
     existingAttemptIds,
+    existingImageIds,
     blockers,
   );
 
