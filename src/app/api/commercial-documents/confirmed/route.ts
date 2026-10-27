@@ -12,10 +12,23 @@ export async function GET(request:NextRequest) {
   .select('id,document_no,latest_version,owner_profile_id,created_at')
   .eq('org_id',ctx.profile.org_id).order('created_at',{ascending:false}).limit(100);
  if(!['admin','manager'].includes(ctx.user.role)) query=query.eq('owner_profile_id',ctx.profile.id);
- if(search) query=query.ilike('document_no','%'+search+'%');
  const {data,error}=await query;
  if(error) return reply({ok:false,message:'已保存报价查询失败'},503);
- return reply({ok:true,quotes:data||[]});
+ const quotes=data||[];
+ if(!quotes.length) return reply({ok:true,quotes:[]});
+ const {data:versions,error:versionError}=await ctx.db.from('commercial_confirmed_quote_versions')
+  .select('quote_id,version,buyer_name,project_name,currency,amount_thousandths,confirmed_at')
+  .eq('org_id',ctx.profile.org_id).in('quote_id',quotes.map(q=>q.id))
+  .order('confirmed_at',{ascending:false}).limit(500);
+ if(versionError) return reply({ok:false,message:'报价摘要读取失败'},503);
+ const latestById=new Map((versions||[]).filter(v=>{
+   const quote=quotes.find(q=>q.id===v.quote_id);
+   return quote && quote.latest_version===v.version;
+ }).map(v=>[v.quote_id,v]));
+ const joined=quotes.map(quote=>({...quote,...latestById.get(quote.id)}));
+ const filtered=search?joined.filter(q=>[q.document_no,q.buyer_name,q.project_name]
+   .some(s=>String(s||'').toLocaleLowerCase().includes(search.toLocaleLowerCase()))):joined;
+ return reply({ok:true,quotes:filtered});
 }
 export async function POST(request:NextRequest) {
  const ctx=await draftContext();
