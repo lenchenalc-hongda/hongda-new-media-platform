@@ -26,6 +26,11 @@ assert(payment.includes('payment_snapshot') && payment.includes('PAYMENT_METHOD_
 assert(api.includes('validateForPrint(draft)') && api.includes("confirm_commercial_quote"));
 assert(api.includes('requestId') && api.includes('expectedVersion'));
 assert(history.includes('confirmed_quote_versions') && history.includes('canEdit'));
+assert(history.includes('payment_snapshot'), 'History must return frozen account data');
+assert(editor.includes('historicalPaymentSnapshot') && editor.includes('archivedQrChanged'),
+  'Archived bank metadata and QR hashes must be respected');
+assert(editor.includes('sourceConfirmedQuoteId') && editor.includes('sourceConfirmedVersion'),
+  'Modification drafts must retain their original confirmed quote link');
 assert(editor.includes('确认并保存报价') && editor.includes("params.get('confirmedId')"));
 assert(editor.includes('setConfirmedVersion') && editor.includes('crypto.randomUUID()'));
 assert(library.includes('已保存报价') && library.includes('编辑修改'));
