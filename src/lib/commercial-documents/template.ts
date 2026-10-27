@@ -153,6 +153,9 @@ export interface CommercialDocumentDraft {
   accountDetails: string;
   /** Selected approved catalog UUID; account values never stored in editable JSON. */
   paymentMethodId?: string;
+  /** Links an editable modification draft to its immutable confirmed quote. */
+  sourceConfirmedQuoteId?: string;
+  sourceConfirmedVersion?: number;
   sections: DocumentSection[];
 }
 
@@ -202,13 +205,16 @@ export function initialDraft(salespersonName = ''): CommercialDocumentDraft {
   };
 }
 
-/** Money is integer minor units. Accept up to two decimal places. */
+/** Historical name: quote money is stored in integer 0.001 units (not cents).
+ * Keep the existing API to avoid changing saved draft shapes and consumers.
+ * Currency and tax are display-only: no implicit conversion or tax calculation.
+ */
 export function moneyToMinor(value: string): number | null {
   const text = value.trim();
-  if (!/^\d{1,11}(?:\.\d{1,2})?$/.test(text)) return null;
+  if (!/^\d{1,11}(?:\.\d{1,3})?$/.test(text)) return null;
   const [whole, fraction = ''] = text.split('.');
-  const cents = Number(whole) * 100 + Number(fraction.padEnd(2, '0'));
-  return Number.isSafeInteger(cents) ? cents : null;
+  const thousandths = Number(whole) * 1000 + Number(fraction.padEnd(3, '0'));
+  return Number.isSafeInteger(thousandths) ? thousandths : null;
 }
 
 /** Quantity is fixed-point 1/1000 unit, not binary float. */
@@ -225,13 +231,15 @@ export function itemAmountMinor(item: DocumentItem): number | null {
   const minor = moneyToMinor(item.unitPrice);
   const milli = quantityToMilli(item.quantity);
   if (minor === null || milli === null) return null;
-  if (!Number.isSafeInteger(minor * milli)) return null;
-  // Round each line to the currency's smallest minor unit.
-  const total = Math.round((minor * milli) / 1000);
-  return Number.isSafeInteger(total) ? total : null;
+  // Both operands are integer thousandths. Multiply exactly, then round each
+  // line to 0.001 (half-up for these nonnegative values). Never round the
+  // entered unit price to cents before multiplication.
+  const total = (BigInt(minor) * BigInt(milli) + BigInt(500)) / BigInt(1000);
+  return total <= BigInt(Number.MAX_SAFE_INTEGER) ? Number(total) : null;
 }
 
 export interface SectionAmount {
+  /** Integer thousandths (0.001) for bilingual quote/contract amounts. */
   amountMinor: number;
   amountLines: number;
   catalogLines: number;
@@ -270,10 +278,19 @@ export function documentAmount(draft: CommercialDocumentDraft): SectionAmount {
   }, { amountMinor: 0, amountLines: 0, catalogLines: 0, invalidLines: 0 });
 }
 
+/** Format integer thousandths exactly, including very large safe totals.
+ * Keep two fractional digits for older prices; show the third only if nonzero.
+ */
 export function formatMoney(amountMinor: number, currency: string): string {
-  return new Intl.NumberFormat('zh-CN', {
-    style: 'currency', currency, minimumFractionDigits: 2, maximumFractionDigits: 2,
-  }).format(amountMinor / 100);
+  if (!Number.isSafeInteger(amountMinor)) return '—';
+  const absolute = BigInt(Math.abs(amountMinor));
+  const whole = absolute / BigInt(1000);
+  const remainder = String(absolute % BigInt(1000)).padStart(3, '0');
+  const decimals = remainder.endsWith('0') ? remainder.slice(0, 2) : remainder;
+  const currencyPrefix = new Intl.NumberFormat('zh-CN', {
+    style: 'currency', currency, minimumFractionDigits: 0, maximumFractionDigits: 0,
+  }).format(whole);
+  return (amountMinor < 0 ? '-' : '') + currencyPrefix + '.' + decimals;
 }
 
 export function validateForPrint(draft: CommercialDocumentDraft): string[] {
@@ -294,7 +311,7 @@ export function validateForPrint(draft: CommercialDocumentDraft): string[] {
     for (const [lineIndex, item] of section.items.entries()) {
       const name = prefix + ' 第 ' + (lineIndex + 1) + ' 行';
       if (!item.name.trim()) errors.push(name + '：缺少产品名称');
-      if (moneyToMinor(item.unitPrice) === null) errors.push(name + '：请输入有效单价（最多2位小数）');
+      if (moneyToMinor(item.unitPrice) === null) errors.push(name + '：请输入有效单价（最多3位小数）');
       if (item.mode === 'amount' && quantityToMilli(item.quantity) === null) {
         errors.push(name + '：请输入有效数量（最多3位小数）');
       }

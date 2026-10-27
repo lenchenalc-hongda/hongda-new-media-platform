@@ -44,6 +44,12 @@ jobs:
       - name: Commercial document template tests
         run: pnpm exec tsx tests/unit/commercial-document-template.test.ts
 
+      - name: Commercial cloud draft foundation tests
+        run: pnpm exec tsx tests/unit/commercial-cloud-drafts.test.ts
+
+      - name: Commercial confirmed quotes data version tests
+        run: pnpm exec tsx tests/unit/commercial-confirmed-quotes.test.ts
+
       - name: Digital transfer pricing tier and fail-closed tests
         run: pnpm exec tsx tests/unit/digital-transfer-pricing.test.ts
 

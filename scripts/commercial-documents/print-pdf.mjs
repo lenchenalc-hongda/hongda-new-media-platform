@@ -1,5 +1,6 @@
 import { createRequire } from 'node:module';
 import { resolve } from 'node:path';
+import { execFileSync } from 'node:child_process';
 import { writeFileSync } from 'node:fs';
 const require = createRequire('/tmp/quotation-browser/package.json');
 const { chromium } = require('playwright');
@@ -7,8 +8,8 @@ const browser = await chromium.launch({ headless: true });
 const results = [];
 try {
   for (const name of [
-    'short', 'medium', 'long', 'all_types', 'qr_pair',
-    'en-short', 'en-medium', 'en-long', 'en-all_types', 'en-qr_pair',
+    'short', 'medium', 'long', 'all_types', 'qr_pair', 'three_decimal',
+    'en-short', 'en-medium', 'en-long', 'en-all_types', 'en-qr_pair', 'en-three_decimal',
   ]) {
     const english = name.startsWith('en-');
     const baseName = name.replace(/^en-/, '');
@@ -19,7 +20,7 @@ try {
     if (image.width !== (english ? 2048 : 2047) || image.height !== (english ? 464 : 515)) throw new Error('Header did not decode');
     await page.screenshot({ path: `output/quotation-qa/${name}-preview.png`, fullPage: true });
     const noticeTitles = await page.locator('.document-product-note strong').allTextContents();
-    const expectedTypes = baseName === 'short' || baseName === 'qr_pair'
+    const expectedTypes = baseName === 'short' || baseName === 'qr_pair' || baseName === 'three_decimal'
       ? 1 : baseName === 'all_types' ? 5 : 3;
     if (noticeTitles.length !== expectedTypes) {
       throw new Error('Unexpected product notice count: ' + JSON.stringify({ name, noticeTitles, expectedTypes }));
@@ -96,7 +97,35 @@ try {
         throw new Error('Invalid QR-pair print layout: ' + JSON.stringify({ name, ...qrLayout }));
       }
     }
-    await page.pdf({ path: `output/quotation-qa/${name}.pdf`, preferCSSPageSize: true, printBackground: true, displayHeaderFooter: false });
+    if (baseName === 'three_decimal') {
+      const decimalDisplay = await page.evaluate(() => {
+        const rows = Array.from(document.querySelectorAll('#commercial-print tbody tr'));
+        return {
+          unitPrices: rows.map(row => row.querySelectorAll('td')[3]?.textContent?.trim() ?? ''),
+          lineAmounts: rows.map(row => row.querySelectorAll('td')[4]?.textContent?.trim() ?? ''),
+          sectionSubtotal: document.querySelector('#commercial-print tfoot tr td:last-child')?.textContent?.trim() ?? '',
+          documentTotal: document.querySelector('#commercial-print .document-total-amount')?.textContent?.trim() ?? '',
+        };
+      });
+      if (!decimalDisplay.unitPrices[0].includes('3.601')
+          || !decimalDisplay.unitPrices[1].includes('0.001')
+          || !decimalDisplay.lineAmounts[0].includes('7.202')
+          || !decimalDisplay.lineAmounts[1].includes('0.001')
+          || !decimalDisplay.sectionSubtotal.includes('7.203')
+          || !decimalDisplay.documentTotal.includes('7.203')) {
+        throw new Error('Bilingual third-decimal preview lost precision: ' + JSON.stringify({ name, ...decimalDisplay }));
+      }
+    }
+    const pdfFile = `output/quotation-qa/${name}.pdf`;
+    await page.pdf({ path: pdfFile, preferCSSPageSize: true, printBackground: true, displayHeaderFooter: false });
+    if (baseName === 'three_decimal') {
+      const pdfText = execFileSync('pdftotext', ['-layout', pdfFile, '-'], { encoding: 'utf8' });
+      for (const exactNumber of ['3.601', '7.202', '0.001', '7.203']) {
+        if (!pdfText.includes(exactNumber)) {
+          throw new Error('Bilingual Chromium PDF text lost third decimal ' + exactNumber + ' in ' + name);
+        }
+      }
+    }
     results.push({ name, image, totalLayout, noticeTitles });
     await page.close();
   }
