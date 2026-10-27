@@ -115,6 +115,8 @@ export default function DocumentWorkbench({ userName, userRole, initialCloudList
   const fileRef = useRef<HTMLInputElement>(null);
   const [cloudId, setCloudId] = useState('');
   const [cloudRevision, setCloudRevision] = useState(0);
+  const [lastSavedSnapshot, setLastSavedSnapshot] = useState('');
+  const hasUnsavedChanges = !!cloudId && !!lastSavedSnapshot && JSON.stringify(draft) !== lastSavedSnapshot;
   const [cloudStatus, setCloudStatus] = useState('');
   const [cloudBusy, setCloudBusy] = useState(false);
   const [cloudListOpen, setCloudListOpen] = useState(initialCloudListOpen);
@@ -378,6 +380,47 @@ export default function DocumentWorkbench({ userName, userRole, initialCloudList
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialCloudListOpen]);
 
+  // Dedicated draft management page routes here with an ID. Load the record
+  // directly instead of prompting to replace a blank newly mounted editor.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const id = params.get('draftId') || '';
+    const historyVersion = Number(params.get('restoreRevision') || 0);
+    if (!/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(id)) return;
+    let cancelled = false;
+    void (async () => {
+      setCloudBusy(true);
+      try {
+        const r = await fetch('/api/commercial-documents/drafts/' + encodeURIComponent(id), { cache: 'no-store' });
+        const v = await r.json();
+        if (!r.ok || !v.ok || !isDraftShape(v.draft)) throw new Error(v.message || '草稿读取失败');
+        let source = v.draft;
+        if (Number.isSafeInteger(historyVersion) && historyVersion > 0) {
+          const h = await fetch('/api/commercial-documents/drafts/' + encodeURIComponent(id) + '/revisions',
+            { cache: 'no-store' });
+          const j = await h.json();
+          if (!h.ok || !j.ok) throw new Error(j.message || '历史版本读取失败');
+          const revision = (j.revisions ?? []).find((item: { revision: number }) => item.revision === historyVersion);
+          if (!revision || !isDraftShape(revision.snapshot)) throw new Error('所选历史版本不存在或不可恢复');
+          source = revision.snapshot;
+        }
+        if (cancelled) return;
+        const restored = normalizeImportedDraft(source, userName);
+        setDraft(restored);
+        setCloudId(v.canEdit ? v.id : '');
+        setCloudRevision(v.canEdit ? v.revision : 0);
+        setLastSavedSnapshot(historyVersion || !v.canEdit ? '' : JSON.stringify(restored));
+        setCloudStatus(historyVersion
+          ? '已载入历史 V' + historyVersion + ' · 下一次保存会新增修订，不覆盖旧记录'
+          : v.canEdit ? '已载入草稿 V' + v.revision : '只读查看他人草稿；可另存为自己的新草稿');
+        setActiveTab('edit');
+      } catch (e) {
+        if (!cancelled) setCloudStatus('读取草稿失败：' + (e instanceof Error ? e.message : '网络异常'));
+      } finally { if (!cancelled) setCloudBusy(false); }
+    })();
+    return () => { cancelled = true; };
+  }, [userName]);
+
   const saveCloudDraft = async () => {
     if (draft.kind !== 'quotation') {
       setCloudStatus('当前云端草稿只支持产品报价单，机器合同请继续使用原有文件保存方式。');
@@ -397,6 +440,7 @@ export default function DocumentWorkbench({ userName, userRole, initialCloudList
       const v = await r.json();
       if (!r.ok || !v.ok) throw new Error(v.message || '草稿保存失败');
       setCloudId(v.id); setCloudRevision(v.revision);
+      setLastSavedSnapshot(JSON.stringify(draft));
       setCloudStatus('已保存云端草稿 · V' + v.revision +
         ' · ' + new Date(v.updatedAt).toLocaleString('zh-CN'));
     } catch (e) {
@@ -458,7 +502,7 @@ export default function DocumentWorkbench({ userName, userRole, initialCloudList
     finally { setCloudBusy(false); }
   };
   const copyToNewCloudDraft = () => {
-    setCloudId(''); setCloudRevision(0); setCloudListOpen(false);
+    setCloudId(''); setCloudRevision(0); setLastSavedSnapshot(''); setCloudListOpen(false);
     setCloudStatus('已作为新草稿开始编辑；点击「保存到草稿箱」将创建独立记录。');
   };
   const deleteCloudDraft = async (entry: { id: string; revision: number }) => {
@@ -503,7 +547,7 @@ export default function DocumentWorkbench({ userName, userRole, initialCloudList
       if (!isDraftShape(parsed)) throw new Error('bad draft shape');
       if (!window.confirm('导入将替换当前页面尚未下载的内容，确认继续？')) return;
       setDraft(normalizeImportedDraft(parsed, userName));
-      setCloudId(''); setCloudRevision(0);
+      setCloudId(''); setCloudRevision(0); setLastSavedSnapshot('');
       setCloudStatus('JSON 已导入到表单；如需跨设备保存，请点击「保存到草稿箱」。');
       setCustomerSearchOpen(false);
       setErrors([]);
@@ -560,7 +604,7 @@ export default function DocumentWorkbench({ userName, userRole, initialCloudList
       <div className="commercial-top-bar flex flex-wrap items-start justify-between gap-3">
         <div>
           <p className="text-xs text-gray-500 mb-1">HongdaOS / 商务单据中心</p>
-          <h1 className="text-xl font-bold text-gray-900">报价单、机器合同与对账单</h1>
+          <h1 className="text-xl font-bold text-gray-900">报价 / 合同编辑器</h1>
           <p className="text-xs text-gray-500 mt-1">登录用户：{userName} · 所有已登录员工可使用</p>
         </div>
         <div className="flex gap-2 flex-wrap">
@@ -576,6 +620,9 @@ export default function DocumentWorkbench({ userName, userRole, initialCloudList
       </div>
 
 
+      {cloudId && <p role="status" className="text-xs font-medium text-gray-600">
+        {hasUnsavedChanges ? '● 有未保存的修改' : '✓ 已与云端草稿同步'} · 当前 V{cloudRevision}
+      </p>}
       {cloudStatus && <p role="status" className="rounded bg-blue-50 border border-blue-200 text-blue-900 text-xs p-3">{cloudStatus}</p>}
       {cloudListOpen && (
         <section className="rounded-xl border border-gray-200 bg-white p-4 space-y-3">

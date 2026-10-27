@@ -14,8 +14,12 @@ export async function GET(request: NextRequest) {
     .eq('org_id', ctx.profile.org_id).eq('status', 'active')
     .order('updated_at', { ascending: false }).limit(80);
   if (!['admin','manager'].includes(ctx.user.role)) query = query.eq('owner_profile_id', ctx.profile.id);
-  if (search) query = query.or('document_no.ilike.%' + search.replace(/[%_,().]/g, '') +
-    '%,buyer_name.ilike.%' + search.replace(/[%_,().]/g, '') + '%');
+  if (search) {
+    const safe = search.replace(/[%_,().\\]/g, '');
+    if (safe) query = query.or(
+      'document_no.ilike.%' + safe + '%,buyer_name.ilike.%' + safe + '%,project_name.ilike.%' + safe + '%',
+    );
+  }
   const { data, error } = await query;
   if (error) return response({ ok: false, message: '云端草稿库暂不可用' }, 503);
   return response({ ok: true, drafts: data ?? [] });
