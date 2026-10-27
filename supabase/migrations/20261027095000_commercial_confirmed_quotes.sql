@@ -70,8 +70,15 @@ begin
  select * into v_existing from public.commercial_confirmed_quote_versions
  where org_id=v_profile.org_id and request_id=p_request_id;
  if found then
+  if not exists(select 1 from public.commercial_confirmed_quotes prior
+    where prior.id=v_existing.quote_id and prior.org_id=v_profile.org_id
+      and prior.owner_profile_id=v_profile.id)
+  then raise exception 'REQUEST_FORBIDDEN' using errcode='42501'; end if;
   if p_quote_id is distinct from v_existing.quote_id and p_quote_id is not null
   then raise exception 'REQUEST_CONFLICT'; end if;
+  if p_snapshot is distinct from v_existing.snapshot or
+     p_amount_thousandths is distinct from v_existing.amount_thousandths
+  then raise exception 'REQUEST_PAYLOAD_CONFLICT'; end if;
   return query select v_existing.quote_id,v_existing.version,v_existing.id,v_existing.confirmed_at; return;
  end if;
  if p_draft_id is not null and not exists(
