@@ -176,6 +176,7 @@ export const PORTAL_GROUPS: PortalGroup[] = [
     color: 'red',
     items: [
       { label: '报价 / 合同模板', path: '/commercial-documents', icon: '📄', matchExact: true },
+      { label: '云端草稿箱', path: '/commercial-documents/drafts', icon: '📁' },
       { label: '月度对账单', path: '/commercial-documents/statement', icon: '🧾' },
     ],
   },
