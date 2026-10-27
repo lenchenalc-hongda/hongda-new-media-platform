@@ -707,7 +707,7 @@ export default function DocumentWorkbench({ userName, userRole, initialCloudList
             onClick={confirmQuote}>确认并保存报价</button>
           {cloudId && <button type="button" className="btn-secondary btn-sm" onClick={copyToNewCloudDraft}>复制为新草稿</button>}
           <button type="button" className="btn-secondary btn-sm" onClick={saveJson}>下载草稿 JSON</button>
-          <button type="button" className="btn-secondary btn-sm" onClick={() => fileRef.current?.click()}>导入草稿</button>
+          <button type="button" className="btn-secondary btn-sm" disabled={readOnlyConfirmed} onClick={() => fileRef.current?.click()}>导入草稿</button>
           <input aria-label="导入报价草稿 JSON" className="hidden" type="file" ref={fileRef} accept=".json,application/json" onChange={importJson} />
           <button type="button" className="btn-primary btn-sm" onClick={printPdf}>打印 / 保存为 PDF</button>
         </div>
@@ -790,7 +790,7 @@ export default function DocumentWorkbench({ userName, userRole, initialCloudList
       </div>
 
       <div className="commercial-workspace grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)] gap-4 items-start">
-        <div className={(activeTab === 'preview' ? 'hidden lg:block' : '') + ' commercial-editor space-y-4'}>
+        <fieldset disabled={readOnlyConfirmed} className={(activeTab === 'preview' ? 'hidden lg:block' : '') + ' commercial-editor min-w-0 space-y-4'}>
 
           <Panel title="01 · 单据基础信息">
             <div className="grid grid-cols-2 gap-3">
@@ -1163,7 +1163,7 @@ export default function DocumentWorkbench({ userName, userRole, initialCloudList
             }}>重置模板</button>
             <button type="button" className="btn-primary" onClick={printPdf}>核对并生成 PDF</button>
           </div>
-        </div>
+        </fieldset>
         <div className={(activeTab === 'edit' ? 'hidden lg:block' : '') + ' commercial-preview-shell'}>
           <div className="commercial-preview-inner lg:sticky lg:top-4 space-y-2">
             <div className="commercial-preview-controls flex justify-between items-center">
