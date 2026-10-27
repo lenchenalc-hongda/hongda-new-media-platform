@@ -49,4 +49,12 @@ assert(historyApi.includes(".eq('org_id', ctx.profile.org_id)"));
 assert(ui.includes('历史修订') && ui.includes('基于此版本继续修改'));
 assert(ui.includes('setCloudRevision(v.canEdit ? v.revision : 0)'));
 
+const navigation = readFileSync(new URL('../../src/lib/constants/navigation.ts', import.meta.url), 'utf8');
+const draftPage = readFileSync(new URL('../../src/app/commercial-documents/drafts/page.tsx', import.meta.url), 'utf8');
+assert(navigation.includes("{ label: '云端草稿箱', path: '/commercial-documents/drafts'"),
+  'Sidebar must expose cloud drafts as a direct destination');
+assert(draftPage.includes('initialCloudListOpen') && draftPage.includes('getCurrentUserReadOnly'),
+  'Dedicated draft route must auto-open the drawer with an authenticated session');
+assert(ui.includes('if (initialCloudListOpen) void loadCloudDrafts()'),
+  'Sidebar destination must actually fetch drafts immediately');
 console.log('commercial-cloud-drafts.test.ts: PASS');
