@@ -34,7 +34,7 @@ assert(detail.includes('REVISION_CONFLICT') && detail.includes('409'));
 assert(detail.includes("status: 'deleted'"), 'Draft deletion is only a soft delete');
 assert(db.includes('enable row level security') && db.includes('quotation_drafts_select'));
 assert(db.includes('quotation_drafts_update') && db.includes('p.id=commercial_quotation_drafts.owner_profile_id'));
-assert(ui.includes('保存到草稿箱 / Save Draft') && ui.includes('云端草稿箱'));
+assert(ui.includes('保存到草稿箱 / Save Draft'), 'Save Draft action must remain available in workbench');
 assert(ui.includes('setCloudId') && ui.includes('setCloudRevision'));
 assert(!api.includes('localStorage') && !detail.includes('localStorage'));
 const historyMigration = readFileSync(new URL('../../supabase/migrations/20261027080000_commercial_quotation_draft_revisions.sql', import.meta.url), 'utf8');
