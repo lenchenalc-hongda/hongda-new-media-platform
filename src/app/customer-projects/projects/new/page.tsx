@@ -182,7 +182,7 @@ export default function NewCustomerProjectPage() {
     const source = provisionalSource.trim();
 
     if (!name || !source) {
-      setCustomerError('新增客户必须填写客户名称和来源说明。');
+      setCustomerError('新增客户必须填写客户名称和获客渠道。');
       setCustomerNotice('');
       return;
     }
@@ -197,6 +197,7 @@ export default function NewCustomerProjectPage() {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
           displayNameSnapshot: name,
+          // The API retains this legacy field name, but the value is a repeatable channel.
           provisionalSourceReference: source,
         }),
       });
@@ -424,15 +425,18 @@ export default function NewCustomerProjectPage() {
                   />
                 </div>
                 <div>
-                  <FieldLabel required>来源说明</FieldLabel>
+                  <FieldLabel required>获客渠道 / 来源</FieldLabel>
                   <input
                     value={provisionalSource}
                     onChange={event => setProvisionalSource(event.target.value)}
                     className="w-full rounded-lg border border-amber-300 bg-white px-3 py-2 text-sm"
-                    placeholder="例如：展会名片 / WhatsApp / 老客户转介绍"
+                    placeholder="例如：新媒体 / 展会 / 转介绍 / WhatsApp"
                   />
                 </div>
               </div>
+              <p className="mt-2 text-xs text-amber-700">
+                获客渠道可以重复，例如多位客户都来自“新媒体”；系统会自动生成唯一的客户引用编号。
+              </p>
               <button
                 type="button"
                 onClick={() => void createProvisionalCustomer()}
