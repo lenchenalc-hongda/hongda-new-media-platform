@@ -413,6 +413,13 @@ export default function DocumentWorkbench({ userName, userRole, initialCloudList
         setDraft(restored);
         setCloudId(v.canEdit ? v.id : '');
         setCloudRevision(v.canEdit ? v.revision : 0);
+        // A modification draft keeps its original confirmed-quote parent across logout.
+        if (v.canEdit && typeof restored.sourceConfirmedQuoteId === 'string'
+          && /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(restored.sourceConfirmedQuoteId)
+          && Number.isSafeInteger(restored.sourceConfirmedVersion)) {
+          setConfirmedId(restored.sourceConfirmedQuoteId);
+          setConfirmedVersion(restored.sourceConfirmedVersion || 0);
+        }
         setLastSavedSnapshot(historyVersion || !v.canEdit ? '' : JSON.stringify(restored));
         setCloudStatus(historyVersion
           ? '已载入历史 V' + historyVersion + ' · 下一次保存会新增修订，不覆盖旧记录'
@@ -440,6 +447,8 @@ export default function DocumentWorkbench({ userName, userRole, initialCloudList
         if(!r.ok||!data.ok||!isDraftShape(data.selected?.snapshot)) throw Error(data.message||'已确认报价读取失败');
         if(cancelled)return;
         const restored=normalizeImportedDraft(data.selected.snapshot,userName);
+        restored.sourceConfirmedQuoteId=data.canEdit?data.quote.id:'';
+        restored.sourceConfirmedVersion=data.quote.latest_version;
         setDraft(restored);
         setConfirmedId(data.canEdit ? data.quote.id : '');
         setConfirmedVersion(data.quote.latest_version);
@@ -467,6 +476,7 @@ export default function DocumentWorkbench({ userName, userRole, initialCloudList
       const v=await r.json();
       if(!r.ok||!v.ok)throw Error(v.message||'正式保存失败');
       setConfirmedId(v.quoteId);setConfirmedVersion(v.version);
+      setDraft(prev=>({...prev,sourceConfirmedQuoteId:v.quoteId,sourceConfirmedVersion:v.version}));
       setCloudId('');setCloudRevision(0);setLastSavedSnapshot('');
       setConfirmRequestId('');
       setCloudStatus('正式报价已确认并保存 V'+v.version+' · 历史版本不会被覆盖');
@@ -557,6 +567,9 @@ export default function DocumentWorkbench({ userName, userRole, initialCloudList
   };
   const copyToNewCloudDraft = () => {
     setCloudId(''); setCloudRevision(0); setLastSavedSnapshot(''); setCloudListOpen(false);
+    setConfirmedId('');setConfirmedVersion(0);
+    setDraft(previous=>({...previous,sourceConfirmedQuoteId:'',sourceConfirmedVersion:0,
+      documentNo:createDocumentNo(previous.kind,previous.date)}));
     setCloudStatus('已作为新草稿开始编辑；点击「保存到草稿箱」将创建独立记录。');
   };
   const deleteCloudDraft = async (entry: { id: string; revision: number }) => {
