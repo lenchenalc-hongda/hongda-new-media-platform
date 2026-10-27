@@ -14,21 +14,23 @@ PROVIDER_CALLS_ENABLED = false
 
 ## 数据接口
 
-输入 A：调用方已经通过授权渠道持久保存且确认可访问的原始消息清单，包含 message id、方向 INBOUND/OUTBOUND、TEXT/MEDIA、原始 text、附件存在标记。此处不负责鉴权、数据库读写或 webhook 验签；实际集成者必须使用 GLH 的可信 server/access/RLS 边界获取。
+输入 A：调用方已经通过授权渠道持久保存且确认可访问的原始消息清单，每条必须有 message id、organizationId、inquiryId、方向 INBOUND/OUTBOUND、TEXT/MEDIA、原始 text；媒体消息还必须含有真实附件 canonical mediaReferences ID 列表。调用方必须**单独**传入服务端可信 trustedScope（organizationId + inquiryId），不得从模型输出获得该 Scope。这里不负责鉴权、数据库读写或 Webhook 验签，实际集成者必须先经过 GLH 的可信 server/access/RLS 边界获取并做组织权限检查。
 
-输入 B：完全不可信的模型草案，schemaVersion 必须等于 GLH-V2-INQUIRY-EVIDENCE-001；inquiryId 与 claims，每项 claim 为 field、value、sourceMessageId、文本 excerpt（仅 text）、confidence 0..1。只支持 GLH 原有业务资料字段名称；额外字段如 approved price 一律拒绝。
+输入 B：完全不可信的模型草案，schemaVersion 必须等于 GLH-V2-INQUIRY-EVIDENCE-001；inquiryId 必须等于可信 trustedScope 的 inquiryId；claims 每项含 field、value、sourceMessageId、文本 excerpt（仅 text）、confidence 0..1。只支持 GLH 原有业务资料字段名称；额外字段如 approved price 一律拒绝。
 
 接受条件：
-- 只能引用输入 A 真实存在的 INBOUND message ID；不能使用客服 OUTBOUND、未知 id、重复的消息 id；
-- text 证据必须精确包含于该条原文；可给出规范化 value，但每项都需附来源摘录；
-- imageReferences 必须对应真实 MEDIA 附件消息，但仅证明“客户发了附件”，不证明图片确实是什么产品；
-- confidence 必须 0..1 有限数，小于 0.6 会在草案上提示需复核（不是生产评分阈值）；
+- 只能引用输入 A 真实存在的 INBOUND message ID；所有 source messages 的 organizationId / inquiryId 均必须等于服务端 trustedScope；禁止跨组织或跨询盘引用；不能使用客服 OUTBOUND、未知 id、重复消息 ID；
+- text 证据必须精确包含于该条原文；可给出规范化 value，但每项都需附来源摘录。**原文匹配不等于语义正确**：即使模型 confidence=1.0，value 仍可能与 excerpt 不符，所有 claims 必须 human review，不能把模型自报的分数当作正式事实；
+- imageReferences 的 value 必须与 MEDIA 消息已验证的 canonical mediaReferences ID **完全一致**，不能仅凭有附件就允许模型编造任何链接/标识；这仅证明“客户发了该附件”，不证明图片内容是什么产品；
+- confidence 必须是 0..1 的有限数；高分和低分均是模型的未核实置信度，**所有草案字段 needsVerification=true**（不是生产评分阈值，也没有越过人工审核）；
 - 不接受超长、空白、非法字段、重复的同一 claim、超数量草案；
 - 无有效 claim 仍可以返回空草案，但不能据此自动将客户评为 D 或直接拒绝。
 
 ## 固定输出安全标记
 
 humanReviewRequired = true
+all claims needsVerification = true
+organizationId/inquiryId = verified server-side trustedScope
 customerFacingAutoSendAllowed = false
 authoritativeWriteAllowed = false
 legacyGradeUntouched = true
@@ -37,7 +39,7 @@ legacyGradeUntouched = true
 
 ## 回归样本和边界
 
-单元测试包含英文 PP 和数量/国家、阿语机器、中文 ABS、合成图片、源消息被捏造/挟持、机器人把客服的 OUTBOUND 当客户证据、摘录不一致、无效字段、坏置信度、重复 claim、空草案、客户消息内 prompt-injection。
+单元测试包含英文 PP 和数量/国家、阿语机器、中文 ABS、合成图片、源消息被捏造/挟持、机器人把客服的 OUTBOUND 当客户证据、跨组织/跨询盘消息、媒体标识被编造、模型高分但解释与摘录不符、摘录不存在、无效字段、坏置信度、重复 claim、空草案、客户消息内 prompt-injection。
 
 这只证明类型/证据验证器，**不是**模型语言识别准确率、图片视觉识别、真实 Meta 接入、真实 Supabase 事务或 Webhook 幂等性。
 
