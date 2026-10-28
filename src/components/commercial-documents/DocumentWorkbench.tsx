@@ -875,62 +875,105 @@ export default function DocumentWorkbench({ userName, userRole, initialCloudList
             <Field label="项目 / 产品用途" value={draft.projectName} onChange={value => patch('projectName', value)} />
           </Panel>
 
-          <Panel title="03 · 报价大项及产品明细">
-            <p className="text-xs text-gray-500">可自由增加、删除、重命名和排序大项。每个大项独立计算小计，底部自动计算已确定金额合计。</p>
+          <Panel title={draft.language === 'en' ? '03 · Quotation Sections & Item Details' : '03 · 报价大项及产品明细'}>
+            {draft.sections.length > 0 && (
+              <p className="text-xs text-gray-500">
+                {draft.language === 'en'
+                  ? 'Add, rename, remove or reorder sections. Each section has its own subtotal.'
+                  : '可增加、重命名、删除和排序大项，每个大项独立计算小计。'}
+              </p>
+            )}
+            <label className="block space-y-1">
+              <span className="block text-xs font-medium text-gray-700">
+                {draft.language === 'en' ? 'Select a quotation section' : '选择报价大项'}
+              </span>
+              <select
+                className="w-full"
+                aria-label={draft.language === 'en' ? 'Select a quotation section to add' : '选择要添加的报价大项'}
+                value=""
+                disabled={draft.sections.length >= 50}
+                onChange={event => {
+                  const value = event.target.value;
+                  if (value === '__custom__') addSection('');
+                  else if (SECTION_PRESETS.some(preset => preset.zh === value)) addSection(value);
+                }}>
+                <option value="" disabled>
+                  {draft.language === 'en' ? 'Choose a section to add…' : '请选择需要添加的大项…'}
+                </option>
+                {SECTION_PRESETS.map(preset => (
+                  <option key={preset.zh} value={preset.zh}>{preset[draft.language]}</option>
+                ))}
+                <option value="__custom__">
+                  {draft.language === 'en' ? 'Custom section (enter a name)' : '自定义大项（添加后填写名称）'}
+                </option>
+              </select>
+            </label>
             {draft.sections.map((section, sectionIndex) => {
               const subtotal = sectionAmount(section);
               return (
                 <section key={section.id} className="border border-gray-200 rounded-lg overflow-hidden">
                   <div className="bg-gray-100 p-3 flex items-center gap-2">
                     <span className="font-bold text-sm text-gray-600">{sectionIndex + 1}.</span>
-                    <input aria-label="报价大项名称" value={section.title}
+                    <input aria-label={draft.language === 'en' ? 'Section name' : '报价大项名称'} value={section.title}
+                      placeholder={draft.language === 'en' ? 'Enter section name' : '输入大项名称'}
                       onChange={e => updateSection(section.id, old => ({ ...old, title: e.target.value }))}
                       className="flex-1 min-w-0 bg-white font-semibold text-sm" />
-                    <button type="button" title="大项上移" disabled={sectionIndex === 0} className="btn-secondary btn-sm disabled:opacity-30" onClick={() => moveSection(sectionIndex, -1)}>↑</button>
-                    <button type="button" title="大项下移" disabled={sectionIndex === draft.sections.length - 1} className="btn-secondary btn-sm disabled:opacity-30" onClick={() => moveSection(sectionIndex, 1)}>↓</button>
-                    <button type="button" title="删除大项" className="text-red-700 hover:text-red-800 text-xs" onClick={() => removeSection(section)}>删除</button>
+                    <button type="button" title={draft.language === 'en' ? 'Move section up' : '大项上移'} disabled={sectionIndex === 0} className="btn-secondary btn-sm disabled:opacity-30" onClick={() => moveSection(sectionIndex, -1)}>↑</button>
+                    <button type="button" title={draft.language === 'en' ? 'Move section down' : '大项下移'} disabled={sectionIndex === draft.sections.length - 1} className="btn-secondary btn-sm disabled:opacity-30" onClick={() => moveSection(sectionIndex, 1)}>↓</button>
+                    <button type="button" title={draft.language === 'en' ? 'Remove section' : '删除大项'} className="text-red-700 hover:text-red-800 text-xs" onClick={() => removeSection(section)}>{draft.language === 'en' ? 'Remove' : '删除'}</button>
                   </div>
                   <div className="p-3 space-y-3">
                     <div className="flex items-center gap-2">
-                      <label htmlFor={`notice-${section.id}`} className="text-xs text-gray-600 whitespace-nowrap">对应说明</label>
+                      <label htmlFor={`notice-${section.id}`} className="text-xs text-gray-600 whitespace-nowrap">{draft.language === 'en' ? 'Technical notes' : '对应说明'}</label>
                       <select id={`notice-${section.id}`} className="flex-1 min-w-0 text-xs"
                         value={section.noticeType ?? 'auto'}
                         onChange={event => updateSection(section.id, group => ({
                           ...group, noticeType: event.target.value as NoticeSelection,
                         }))}>
-                        {NOTICE_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+                        {NOTICE_OPTIONS.map(option => (
+                            <option key={option.value} value={option.value}>
+                              {draft.language === 'zh' ? option.label
+                                : option.value === 'auto' ? 'Detect from section name (recommended)'
+                                : option.value === 'none' ? 'Do not attach technical notes'
+                                : NOTICE_TITLES[option.value].en}
+                            </option>
+                          ))}
                       </select>
                     </div>
                     {(section.noticeType === undefined || section.noticeType === 'auto') && (
                       <p className="text-[11px] text-gray-500">
                         {sectionNoticeType(section)
-                          ? '已识别：' + NOTICE_TITLES[sectionNoticeType(section)!].zh + '（PDF 会自动附上说明）'
-                          : '大项名称无法识别时，请手动选择对应说明类型；不需要说明请选择“不附加”。'}
+                          ? (draft.language === 'en'
+                            ? 'Detected: ' + NOTICE_TITLES[sectionNoticeType(section)!].en + ' (included in PDF)'
+                            : '已识别：' + NOTICE_TITLES[sectionNoticeType(section)!].zh + '（PDF 会自动附上说明）')
+                          : (draft.language === 'en'
+                            ? 'If the section cannot be identified, choose its note type or select no notes.'
+                            : '大项名称无法识别时，请手动选择对应说明类型；不需要说明请选择“不附加”。')}
                       </p>
                     )}
                     {section.items.map((item, itemIndex) => (
                       <div key={item.id} className="border-b border-gray-100 pb-3 last:border-b-0 space-y-2">
                         <div className="flex items-center justify-between">
-                          <p className="text-xs font-semibold text-gray-600">产品明细 {itemIndex + 1}</p>
+                          <p className="text-xs font-semibold text-gray-600">{draft.language === 'en' ? 'Item' : '产品明细'} {itemIndex + 1}</p>
                           <div className="flex gap-2 items-center">
-                            <button type="button" title="明细上移" disabled={itemIndex === 0} onClick={() => moveItem(section.id, itemIndex, -1)} className="text-gray-500 disabled:opacity-30 text-sm">↑</button>
-                            <button type="button" title="明细下移" disabled={itemIndex === section.items.length - 1} onClick={() => moveItem(section.id, itemIndex, 1)} className="text-gray-500 disabled:opacity-30 text-sm">↓</button>
-                            <button type="button" className="text-red-700 text-xs" onClick={() => removeItem(section, item)}>删除</button>
+                            <button type="button" title={draft.language === 'en' ? 'Move item up' : '明细上移'} disabled={itemIndex === 0} onClick={() => moveItem(section.id, itemIndex, -1)} className="text-gray-500 disabled:opacity-30 text-sm">↑</button>
+                            <button type="button" title={draft.language === 'en' ? 'Move item down' : '明细下移'} disabled={itemIndex === section.items.length - 1} onClick={() => moveItem(section.id, itemIndex, 1)} className="text-gray-500 disabled:opacity-30 text-sm">↓</button>
+                            <button type="button" className="text-red-700 text-xs" onClick={() => removeItem(section, item)}>{draft.language === 'en' ? 'Remove' : '删除'}</button>
                           </div>
                         </div>
-                        <Field required label="产品 / 费用名称" value={item.name} onChange={value => updateItem(section.id, item.id, { name: value })} placeholder="如 电雕版 / 常规花膜 / 全自动热转印机" />
-                        <Field label="规格 / 技术参数" value={item.specification} onChange={value => updateItem(section.id, item.id, { specification: value })} placeholder="膜宽、材质、机型、配置等" />
+                        <Field required label={draft.language === 'en' ? 'Product / Fee Name' : '产品 / 费用名称'} value={item.name} onChange={value => updateItem(section.id, item.id, { name: value })} placeholder={draft.language === 'en' ? 'e.g. Gravure plate / Transfer film / Transfer printing machine' : '如 电雕版 / 常规花膜 / 全自动热转印机'} />
+                        <Field label={draft.language === 'en' ? 'Specifications / Technical Parameters' : '规格 / 技术参数'} value={item.specification} onChange={value => updateItem(section.id, item.id, { specification: value })} placeholder={draft.language === 'en' ? 'Film width, material, model, configuration, etc.' : '膜宽、材质、机型、配置等'} />
                         <label className="block text-xs text-gray-600">
-                          <span className="block mb-1 font-medium">明细模式</span>
+                          <span className="block mb-1 font-medium">{draft.language === 'en' ? 'Item Pricing Mode' : '明细模式'}</span>
                           <select className="w-full" value={item.mode} onChange={e => updateItem(section.id, item.id, { mode: e.target.value as DocumentItem['mode'] })}>
-                            <option value="amount">按数量计算金额</option>
-                            {draft.kind === 'quotation' && <option value="catalog">仅单价目录（不计入总金额）</option>}
+                            <option value="amount">{draft.language === 'en' ? 'Quantity × Unit Price' : '按数量计算金额'}</option>
+                            {draft.kind === 'quotation' && <option value="catalog">{draft.language === 'en' ? 'Unit Price Only (excluded from total)' : '仅单价目录（不计入总金额）'}</option>}
                           </select>
                         </label>
                         <div className="grid grid-cols-3 gap-2">
                           {item.mode === 'catalog'
-                            ? <div><span className="block text-xs text-gray-600 mb-1">数量</span><div className="text-xs text-gray-500 bg-gray-100 rounded-lg p-2">目录不适用</div></div>
-                            : <Field label="数量" value={item.quantity} onChange={value => updateItem(section.id, item.id, { quantity: value })} placeholder="1" />}
+                            ? <div><span className="block text-xs text-gray-600 mb-1">{draft.language === 'en' ? 'Quantity' : '数量'}</span><div className="text-xs text-gray-500 bg-gray-100 rounded-lg p-2">{draft.language === 'en' ? 'Not applicable to catalog items' : '目录不适用'}</div></div>
+                            : <Field label={draft.language === 'en' ? 'Quantity' : '数量'} value={item.quantity} onChange={value => updateItem(section.id, item.id, { quantity: value })} placeholder="1" />}
                           <label className="block min-w-0">
                             <span className="block text-xs font-medium text-gray-600 mb-1">{draft.language === 'en' ? 'Unit' : '单位'}</span>
                             <input className="w-full" type="text" list={`unit-options-${item.id}`}
@@ -944,32 +987,36 @@ export default function DocumentWorkbench({ userName, userRole, initialCloudList
                           <Field required label={draft.language === 'en' ? 'Unit price (up to 3 decimals)' : '单价（最多3位小数）'} value={item.unitPrice}
                             onChange={value => updateItem(section.id, item.id, { unitPrice: value })} placeholder="0.000" />
                         </div>
-                        <Field label="备注" value={item.note} onChange={value => updateItem(section.id, item.id, { note: value })} />
+                        <Field label={draft.language === 'en' ? 'Notes' : '备注'} value={item.note} onChange={value => updateItem(section.id, item.id, { note: value })} />
                         <div className="flex justify-between text-xs">
-                          <span className="text-gray-500">{item.mode === 'catalog' ? '价格目录不计入小计' : '当前明细金额'}</span>
+                          <span className="text-gray-500">{draft.language === 'en'
+                              ? (item.mode === 'catalog' ? 'Unit-price-only item (excluded)' : 'Item Amount')
+                              : (item.mode === 'catalog' ? '价格目录不计入小计' : '当前明细金额')}</span>
                           <strong className="text-gray-800">{itemAmountMinor(item) === null ? '—' : formatMoney(itemAmountMinor(item)!, draft.currency)}</strong>
                         </div>
                       </div>
                     ))}
                     <button type="button" onClick={() => updateSection(section.id, group => ({
                       ...group, items: [...group.items, { ...blankItem(id('item')), unit: localizeUnit('项', 'zh', draft.language) }],
-                    }))} className="btn-secondary btn-sm w-full">+ 新增产品明细</button>
+                    }))} className="btn-secondary btn-sm w-full">{draft.language === 'en' ? '+ Add Item' : '+ 新增产品明细'}</button>
                     <div className="flex justify-between items-center bg-gray-100 p-3 rounded-md text-sm font-semibold">
-                      <span>本大项已确定金额小计</span>
+                      <span>{draft.language === 'en' ? 'Section Subtotal' : '本大项已确定金额小计'}</span>
                       <span>{subtotal.amountLines ? formatMoney(subtotal.amountMinor, draft.currency) : '—'}</span>
                     </div>
                   </div>
                 </section>
               );
             })}
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-              {SECTION_PRESETS.map(preset => <button key={preset.zh} type="button" className="btn-secondary btn-sm" onClick={() => addSection(preset.zh)}>+ {preset[draft.language]}</button>)}
-              <button type="button" className="btn-primary btn-sm" onClick={() => addSection(draft.language === 'en' ? 'New Section' : '新增大项')}>+ {draft.language === 'en' ? 'Custom Section' : '自定义大项'}</button>
-            </div>
-            <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 flex justify-between items-center gap-3">
-              <span className="text-sm font-bold text-red-800">{total.catalogLines ? '已确定金额合计（单价目录除外）' : '整张单据总金额'}</span>
-              <strong className="text-lg text-red-800 whitespace-nowrap">{total.amountLines ? formatMoney(total.amountMinor, draft.currency) : '—'}</strong>
-            </div>
+            {draft.sections.length > 0 && (
+              <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 flex justify-between items-center gap-3">
+                <span className="text-sm font-bold text-red-800">
+                  {draft.language === 'en'
+                    ? (total.catalogLines ? 'Confirmed Total (excluding unit-price-only items)' : 'Quotation Total')
+                    : (total.catalogLines ? '已确定金额合计（单价目录除外）' : '整张单据总金额')}
+                </span>
+                <strong className="text-lg text-red-800 whitespace-nowrap">{total.amountLines ? formatMoney(total.amountMinor, draft.currency) : '—'}</strong>
+              </div>
+            )}
           </Panel>
 
           <Panel title="04 · 随大项自动生成的工艺说明">

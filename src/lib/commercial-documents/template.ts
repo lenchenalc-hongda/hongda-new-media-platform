@@ -199,9 +199,9 @@ export function initialDraft(salespersonName = ''): CommercialDocumentDraft {
     accountLabel: '',
     accountDetails: '',
     paymentMethodId: '',
-    sections: [
-      { id: 'section-initial', title: '版费', items: [blankItem('item-initial')] },
-    ],
+    // A new quote starts without any pricing sections. Sales selects the first
+    // category explicitly; previously saved drafts keep their existing sections.
+    sections: [],
   };
 }
 

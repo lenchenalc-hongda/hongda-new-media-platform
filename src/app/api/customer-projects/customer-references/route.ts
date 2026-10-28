@@ -25,7 +25,7 @@ export async function GET(req: NextRequest) {
   try {
     let query = supabase
       .from('cpc_customer_references')
-      .select('id,reference_kind,display_name_snapshot,status,external_source,provisional_source_reference,updated_at')
+      .select('id,reference_kind,display_name_snapshot,status,external_source,provisional_source_reference,provisional_source_label,updated_at')
       .eq('org_id', profile.orgId)
       .in('status', ['active', 'pending_review'])
       .order('updated_at', { ascending: false })
@@ -45,7 +45,7 @@ export async function GET(req: NextRequest) {
       status: row.status,
       sourceLabel: row.reference_kind === 'canonical'
         ? row.external_source
-        : row.provisional_source_reference,
+        : row.provisional_source_label ?? row.provisional_source_reference,
     }));
 
     return NextResponse.json({

@@ -81,6 +81,18 @@ threeDecimal.sections[0].items[0].unitPrice = '3.6015';
 assert(validateForPrint(threeDecimal).some(error => error.includes('最多3位小数')));
 threeDecimal.sections[0].items[0].unitPrice = '3.601';
 
+const blankQuotation = initialDraft('业务员');
+assert.deepEqual(blankQuotation.sections, [], 'Section 03 must start with no preselected plate fee');
+assert.equal(documentAmount(blankQuotation).amountMinor, 0, 'Unselected sections cannot add phantom pricing');
+assert(isDraftShape(blankQuotation), 'An empty-section quote must be a valid unfinished draft');
+assert(validateForPrint(blankQuotation).some(message => message.includes('至少添加一个报价大项')),
+  'Printing or confirming an unconfigured quote must remain blocked');
+for (const language of ['zh', 'en'] as const) {
+  const empty = { ...blankQuotation, language };
+  assert.equal(isDraftShape(empty), true, 'Empty section shape must work in ' + language);
+  assert.deepEqual(normalizeImportedDraft(empty, 'Sales').sections, [],
+    'Bilingual draft import must preserve an unselected Section 03');
+}
 const draft = initialDraft('测试业务员');
 assert.equal(draft.sellerName, FIXED_SELLER_NAME);
 assert.equal(draft.salespersonName, '测试业务员');
@@ -410,6 +422,14 @@ assert.equal(isDraftShape({ ...selector, paymentMethodId: 'wechat_qr' }), false,
   'Low-level QR row keys cannot be persisted as a selection');
 
 const editorCode = readFileSync(new URL('../../src/components/commercial-documents/DocumentWorkbench.tsx', import.meta.url), 'utf8');
+assert(editorCode.includes('Select a quotation section to add') && editorCode.includes('选择要添加的报价大项'),
+  'Section 03 selector must be available in both languages');
+assert(editorCode.includes('SECTION_PRESETS.map(preset => (') && editorCode.includes('addSection(value)'),
+  'Selecting a category must create its first details block on demand');
+assert(editorCode.includes('value="__custom__"') && editorCode.includes("addSection('')"),
+  'Custom category must remain available without a prefilled name');
+assert(editorCode.includes('draft.sections.length > 0 && ('),
+  'Totals should only be visible after a pricing category is chosen');
 const apiCode = readFileSync(new URL('../../src/app/api/commercial-documents/payment-methods/route.ts', import.meta.url), 'utf8');
 const previewCode = readFileSync(new URL('../../src/components/commercial-documents/DocumentPreview.tsx', import.meta.url), 'utf8');
 const imageApiCode = readFileSync(new URL('../../src/app/api/commercial-documents/payment-methods/[id]/image/route.ts', import.meta.url), 'utf8');

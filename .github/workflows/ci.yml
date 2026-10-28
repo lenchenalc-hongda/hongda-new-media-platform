@@ -227,6 +227,14 @@ jobs:
           else
             echo 'GLH_V2_INQUIRY_EVIDENCE_CI=NOT_PRESENT_IN_THIS_HEAD (not a V2 evidence PASS)'
           fi
+          # V2-B model-extraction contract is offline only. Missing focused tests are
+          # NOT a successful GLH V2-B acceptance, even when the CI job is green.
+          if test -f tests/unit/global-lead-hub-v2-llm-extraction-eval.test.ts; then
+            pnpm exec tsx tests/unit/global-lead-hub-v2-llm-extraction-eval.test.ts
+            echo 'GLH_V2_B_LLM_EVAL_CI=EXECUTED'
+          else
+            echo 'GLH_V2_B_LLM_EVAL_CI=NOT_PRESENT_IN_THIS_HEAD (not a V2-B acceptance PASS)'
+          fi
 
       - name: Check server-only imports
         run: bash scripts/check-server-imports.sh
