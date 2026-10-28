@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import { initialDraft, documentAmount, validateForPrint, type CommercialDocumentDraft } from '../../src/lib/commercial-documents/template';
+import { initialDraft, blankItem, documentAmount, validateForPrint, type CommercialDocumentDraft } from '../../src/lib/commercial-documents/template';
 const migration=readFileSync(new URL('../../supabase/migrations/20261027095000_commercial_confirmed_quotes.sql',import.meta.url),'utf8');
 const guard=readFileSync(new URL('../../supabase/migrations/20261027100000_commercial_confirmed_guard.sql',import.meta.url),'utf8');
 const payment=readFileSync(new URL('../../supabase/migrations/20261027101000_commercial_confirmed_payment_snapshot.sql',import.meta.url),'utf8');
@@ -10,8 +10,8 @@ const editor=readFileSync(new URL('../../src/components/commercial-documents/Doc
 const library=readFileSync(new URL('../../src/components/commercial-documents/ConfirmedQuoteLibrary.tsx',import.meta.url),'utf8');
 const menu=readFileSync(new URL('../../src/lib/constants/navigation.ts',import.meta.url),'utf8');
 const e:CommercialDocumentDraft=initialDraft('Sales');
-e.buyerName='Test buyer';e.documentNo='QA-001';e.sections[0].title='Heat transfer film';
-e.sections[0].items[0].name='Film';e.sections[0].items[0].unitPrice='3.605';e.sections[0].items[0].quantity='2';
+e.buyerName='Test buyer';e.documentNo='QA-001';
+e.sections=[{id:'film',title:'Heat transfer film',items:[{...blankItem('line'),name:'Film',unitPrice:'3.605',quantity:'2'}]}];
 assert.deepEqual(validateForPrint(e),[]);
 assert.equal(documentAmount(e).amountMinor,7210);
 e.sections[0].items[0].unitPrice='3.550';
