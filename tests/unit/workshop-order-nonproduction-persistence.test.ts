@@ -6,6 +6,7 @@ import {
   buildWorkshopInbox,
   persistOfficeSubmission,
   projectCurrentImageVersions,
+  WOS_IMAGE_VERSION_CATEGORIES,
   WOS_PRIVATE_IMAGE_BUCKET,
   type WosImageVersionCategory,
   type WosImageVersionMetadata,
@@ -606,12 +607,23 @@ assert(
   ),
 );
 
-for (const category of [
-  'PRODUCT',
-  'FILM_PATTERN',
-  'CUSTOMER_APPROVED_SAMPLE',
-  'SIGNED_SAMPLE',
-] as const) {
+assert.deepEqual(
+  [...WOS_IMAGE_VERSION_CATEGORIES],
+  [
+    'PRODUCT',
+    'FILM_PATTERN',
+    'CUSTOMER_APPROVED_SAMPLE',
+    'SIGNED_SAMPLE',
+    'SAMPLING_RESULT',
+    'PACKAGING_LABEL',
+    'DEFECT_RISK',
+    'OTHER',
+  ],
+  'all canonical workshop image categories must remain available',
+);
+
+for (const category of WOS_IMAGE_VERSION_CATEGORIES) {
+  if (category === 'SAMPLING_RESULT') continue;
   const candidate = imageFor({
     imageId: `category-${category.toLowerCase().replaceAll('_', '-')}`,
     category,
@@ -628,10 +640,75 @@ for (const category of [
   assert.equal(appended.appended, true, `${category} object key must be valid`);
   assert(
     candidate.storagePath.startsWith(
-      `organizations/${ids.organizationA}/wos/production-order/${ids.productionOrder}/`,
+      `organizations/${ids.organizationA}/wos/production-order/${ids.productionOrder}/${category.toLowerCase().replaceAll('_', '-')}/v1/no-attempt/`,
     ),
+    `${category} object key segment must match its canonical category`,
   );
 }
+
+const invalidCategory = appendImageVersion({
+  images: [],
+  supersessions: [],
+  candidate: {
+    ...productV1,
+    imageId: '00000000-0000-4000-8000-000000000211',
+    category: 'UNKNOWN' as WosImageVersionCategory,
+  },
+  source: productionSource,
+  uploaderProfile: projectOwner,
+  technicalAttempt: null,
+});
+assert.equal(invalidCategory.appended, false);
+assert(
+  invalidCategory.blockers.some(
+    (blocker) => blocker.code === 'INVALID_INPUT',
+  ),
+  'unknown image categories fail closed',
+);
+
+const categoryWithAttempt = appendImageVersion({
+  images: [],
+  supersessions: [],
+  candidate: {
+    ...imageFor({
+      imageId: '00000000-0000-4000-8000-000000000212',
+      category: 'OTHER',
+      fileName: 'other-reference.jpg',
+    }),
+    technicalAttemptId: ids.technicalAttempt,
+  },
+  source: productionSource,
+  uploaderProfile: projectOwner,
+  technicalAttempt: attempt,
+});
+assert.equal(categoryWithAttempt.appended, false);
+assert(
+  categoryWithAttempt.blockers.some(
+    (blocker) => blocker.code === 'TECHNICAL_ATTEMPT_NOT_ALLOWED',
+  ),
+  'only sampling-result images may bind a technical attempt',
+);
+
+const resultOnProduction = appendImageVersion({
+  images: [],
+  supersessions: [],
+  candidate: imageFor({
+    imageId: '00000000-0000-4000-8000-000000000213',
+    category: 'SAMPLING_RESULT',
+    technicalAttemptId: ids.technicalAttempt,
+    fileName: 'wrong-scope-result.jpg',
+  }),
+  source: productionSource,
+  uploaderProfile: projectOwner,
+  technicalAttempt: attempt,
+});
+assert.equal(resultOnProduction.appended, false);
+assert(
+  resultOnProduction.blockers.some(
+    (blocker) => blocker.code === 'IMAGE_CATEGORY_ENTITY_MISMATCH',
+  ),
+  'sampling-result images cannot bind to a production order',
+);
 
 const samplingInProgressSource: WosSourceSnapshot = {
   ...samplingSource,
@@ -682,6 +759,58 @@ assert(
   ),
 );
 
+const wrongAttemptOrganization = appendImageVersion({
+  images: [],
+  supersessions: [],
+  candidate: imageFor({
+    imageId: '00000000-0000-4000-8000-000000000214',
+    category: 'SAMPLING_RESULT',
+    entityType: 'SAMPLING_REQUEST',
+    sourceId: ids.samplingRequest,
+    technicalAttemptId: ids.technicalAttempt,
+    fileName: 'foreign-attempt.jpg',
+  }),
+  source: samplingInProgressSource,
+  uploaderProfile: projectOwner,
+  technicalAttempt: {
+    ...attempt,
+    organizationId: ids.organizationB,
+  },
+});
+assert.equal(wrongAttemptOrganization.appended, false);
+assert(
+  wrongAttemptOrganization.blockers.some(
+    (blocker) => blocker.code === 'TECHNICAL_ATTEMPT_MISMATCH',
+  ),
+  'technical attempts cannot cross organization boundaries',
+);
+
+const wrongAttemptRequest = appendImageVersion({
+  images: [],
+  supersessions: [],
+  candidate: imageFor({
+    imageId: '00000000-0000-4000-8000-000000000215',
+    category: 'SAMPLING_RESULT',
+    entityType: 'SAMPLING_REQUEST',
+    sourceId: ids.samplingRequest,
+    technicalAttemptId: ids.technicalAttempt,
+    fileName: 'wrong-request.jpg',
+  }),
+  source: samplingInProgressSource,
+  uploaderProfile: projectOwner,
+  technicalAttempt: {
+    ...attempt,
+    samplingRequestId: ids.productionOrder,
+  },
+});
+assert.equal(wrongAttemptRequest.appended, false);
+assert(
+  wrongAttemptRequest.blockers.some(
+    (blocker) => blocker.code === 'TECHNICAL_ATTEMPT_MISMATCH',
+  ),
+  'technical attempts must bind to the exact sampling request',
+);
+
 const missingAttempt = appendImageVersion({
   images: [],
   supersessions: [],
@@ -716,66 +845,25 @@ const repeatedInbox = buildWorkshopInbox({
 });
 assert.equal(JSON.stringify(repeatedInbox), JSON.stringify(initialInbox));
 
-const migration = fs.readFileSync(
-  'supabase/migrations/20261027073000_workshop_order_system_nonproduction_persistence.sql',
-  'utf8',
+const duplicateDraftMigration = new URL(
+  '../../supabase/migrations/20261027073000_workshop_order_system_nonproduction_persistence.sql',
+  import.meta.url,
 );
-for (const requiredFragment of [
-  'REPOSITORY DRAFT ONLY',
-  'wos_production_order_submissions',
-  'wos_sampling_request_submissions',
-  'wos_office_readiness_evidence',
-  'wos_reference_image_supersessions',
-  'wos_persistence_audit_events',
-  'create unique index if not exists wos_production_orders_id_organization_key',
-  'create unique index if not exists wos_sampling_requests_id_organization_key',
-  'unique (organization_id, submission_key)',
-  'source_version_number',
-  'technical_attempt_id',
-  'wos_workshop_inbox',
-  'with (security_invoker = true)',
-  'wos_current_reference_image_versions',
-  'WOS_IMMUTABLE_FACT',
-  'WOS_SOURCE_NOT_SUBMITTED',
-  'WOS_RESULT_IMAGE_ATTEMPT_MISMATCH',
-  'WOS_PUBLIC_OR_FOREIGN_IMAGE_KEY',
-]) {
-  assert(
-    migration.includes(requiredFragment),
-    `migration must contain ${requiredFragment}`,
-  );
-}
-for (const table of [
-  'wos_office_readiness_evidence',
-  'wos_production_order_submissions',
-  'wos_sampling_request_submissions',
-  'wos_reference_image_supersessions',
-  'wos_persistence_audit_events',
-]) {
-  assert(
-    migration.includes(
-      `alter table public.${table} enable row level security`,
-    ),
-    `RLS draft must cover ${table}`,
-  );
-}
-for (const forbiddenFragment of [
-  'grant insert',
-  'grant update',
-  'grant delete',
-  'storage.buckets',
-  'service_role',
-  'p.organization_id',
-  'owner.organization_id',
-  'delete from',
-  'truncate ',
-  'drop table',
-]) {
-  assert(
-    !migration.toLowerCase().includes(forbiddenFragment),
-    `repository-only migration must not contain ${forbiddenFragment}`,
-  );
-}
+assert.equal(
+  fs.existsSync(duplicateDraftMigration),
+  false,
+  'the colliding draft SQL migration must be absent from this PR',
+);
+const migrationNames = fs.readdirSync(
+  new URL('../../supabase/migrations/', import.meta.url),
+);
+assert.equal(
+  migrationNames.some((name) =>
+    name.endsWith('_workshop_order_system_nonproduction_persistence.sql'),
+  ),
+  false,
+  'no renamed or replacement workshop persistence migration may be added',
+);
 
 const contractSource = fs.readFileSync(
   'src/lib/workshop-orders/nonproduction-persistence.ts',
@@ -801,14 +889,20 @@ const designDocument = fs.readFileSync(
   'docs/workshop-order-system/09_NONPRODUCTION_PERSISTENCE_AND_IMAGE_UPLOAD.md',
   'utf8',
 );
-assert(
-  designDocument.includes('这些测试是 contract evidence，不是部署后的 permission assurance'),
-  'contract tests must not be described as deployed permission assurance',
-);
-assert(
-  designDocument.includes('repository draft')
-  && designDocument.includes('Human Gate'),
-  'the design must retain the non-Production repository-draft boundary',
-);
+for (const requiredBoundary of [
+  'Phase 5B 离线契约',
+  '不是数据库持久化',
+  '不是已应用的 migration',
+  '不是经测试的 RLS 保证',
+  '不是实时图片上传',
+  'UNIQUE-VERSION migration',
+  'inherited INSERT/GRANT/policy',
+  '强制 Production gate',
+]) {
+  assert(
+    designDocument.includes(requiredBoundary),
+    `offline contract documentation must state: ${requiredBoundary}`,
+  );
+}
 
 console.log('workshop-order-nonproduction-persistence.test.ts: PASS');

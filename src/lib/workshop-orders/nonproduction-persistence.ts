@@ -1,4 +1,5 @@
 import type { WosEntityType } from './domain';
+import type { ReferenceImageCategory } from './spec';
 
 export const WOS_PRIVATE_IMAGE_BUCKET = 'wos-private' as const;
 
@@ -8,10 +9,12 @@ export const WOS_IMAGE_VERSION_CATEGORIES = [
   'CUSTOMER_APPROVED_SAMPLE',
   'SIGNED_SAMPLE',
   'SAMPLING_RESULT',
-] as const;
+  'PACKAGING_LABEL',
+  'DEFECT_RISK',
+  'OTHER',
+] as const satisfies readonly ReferenceImageCategory[];
 
-export type WosImageVersionCategory =
-  (typeof WOS_IMAGE_VERSION_CATEGORIES)[number];
+export type WosImageVersionCategory = ReferenceImageCategory;
 
 export type WosImageVersionStatus =
   | 'UPLOADING'
@@ -240,6 +243,9 @@ const CATEGORY_SEGMENTS: Readonly<Record<WosImageVersionCategory, string>> = {
   CUSTOMER_APPROVED_SAMPLE: 'customer-approved-sample',
   SIGNED_SAMPLE: 'signed-sample',
   SAMPLING_RESULT: 'sampling-result',
+  PACKAGING_LABEL: 'packaging-label',
+  DEFECT_RISK: 'defect-risk',
+  OTHER: 'other',
 };
 
 const IMAGE_CATEGORY_SET = new Set<string>(WOS_IMAGE_VERSION_CATEGORIES);
@@ -786,8 +792,15 @@ export function buildImageVersionObjectKey(input: {
   readonly fileName: string;
   readonly technicalAttemptId: string | null;
 }): string {
+  const entitySegment =
+    input.entityType === 'PRODUCTION_ORDER'
+      ? ENTITY_SEGMENTS.PRODUCTION_ORDER
+      : input.entityType === 'SAMPLING_REQUEST'
+        ? ENTITY_SEGMENTS.SAMPLING_REQUEST
+        : null;
   if (
-    !pathSegmentIsSafe(input.organizationId)
+    entitySegment === null
+    || !pathSegmentIsSafe(input.organizationId)
     || !pathSegmentIsSafe(input.sourceId)
     || !pathSegmentIsSafe(input.imageId)
     || !isPositiveInteger(input.sourceRevision)
@@ -809,7 +822,7 @@ export function buildImageVersionObjectKey(input: {
     'organizations',
     input.organizationId,
     'wos',
-    ENTITY_SEGMENTS[input.entityType],
+    entitySegment,
     input.sourceId,
     CATEGORY_SEGMENTS[input.category],
     `v${input.sourceRevision}`,
