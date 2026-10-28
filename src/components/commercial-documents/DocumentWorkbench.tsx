@@ -875,15 +875,47 @@ export default function DocumentWorkbench({ userName, userRole, initialCloudList
             <Field label="项目 / 产品用途" value={draft.projectName} onChange={value => patch('projectName', value)} />
           </Panel>
 
-          <Panel title="03 · 报价大项及产品明细">
-            <p className="text-xs text-gray-500">可自由增加、删除、重命名和排序大项。每个大项独立计算小计，底部自动计算已确定金额合计。</p>
+          <Panel title={draft.language === 'en' ? '03 · Quotation Sections & Item Details' : '03 · 报价大项及产品明细'}>
+            {draft.sections.length > 0 && (
+              <p className="text-xs text-gray-500">
+                {draft.language === 'en'
+                  ? 'Add, rename, remove or reorder sections. Each section has its own subtotal.'
+                  : '可增加、重命名、删除和排序大项，每个大项独立计算小计。'}
+              </p>
+            )}
+            <label className="block space-y-1">
+              <span className="block text-xs font-medium text-gray-700">
+                {draft.language === 'en' ? 'Select a quotation section' : '选择报价大项'}
+              </span>
+              <select
+                className="w-full"
+                aria-label={draft.language === 'en' ? 'Select a quotation section to add' : '选择要添加的报价大项'}
+                value=""
+                disabled={draft.sections.length >= 50}
+                onChange={event => {
+                  const value = event.target.value;
+                  if (value === '__custom__') addSection('');
+                  else if (SECTION_PRESETS.some(preset => preset.zh === value)) addSection(value);
+                }}>
+                <option value="" disabled>
+                  {draft.language === 'en' ? 'Choose a section to add…' : '请选择需要添加的大项…'}
+                </option>
+                {SECTION_PRESETS.map(preset => (
+                  <option key={preset.zh} value={preset.zh}>{preset[draft.language]}</option>
+                ))}
+                <option value="__custom__">
+                  {draft.language === 'en' ? 'Custom section (enter a name)' : '自定义大项（添加后填写名称）'}
+                </option>
+              </select>
+            </label>
             {draft.sections.map((section, sectionIndex) => {
               const subtotal = sectionAmount(section);
               return (
                 <section key={section.id} className="border border-gray-200 rounded-lg overflow-hidden">
                   <div className="bg-gray-100 p-3 flex items-center gap-2">
                     <span className="font-bold text-sm text-gray-600">{sectionIndex + 1}.</span>
-                    <input aria-label="报价大项名称" value={section.title}
+                    <input aria-label={draft.language === 'en' ? 'Section name' : '报价大项名称'} value={section.title}
+                      placeholder={draft.language === 'en' ? 'Enter section name' : '输入大项名称'}
                       onChange={e => updateSection(section.id, old => ({ ...old, title: e.target.value }))}
                       className="flex-1 min-w-0 bg-white font-semibold text-sm" />
                     <button type="button" title="大项上移" disabled={sectionIndex === 0} className="btn-secondary btn-sm disabled:opacity-30" onClick={() => moveSection(sectionIndex, -1)}>↑</button>
@@ -962,14 +994,16 @@ export default function DocumentWorkbench({ userName, userRole, initialCloudList
                 </section>
               );
             })}
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-              {SECTION_PRESETS.map(preset => <button key={preset.zh} type="button" className="btn-secondary btn-sm" onClick={() => addSection(preset.zh)}>+ {preset[draft.language]}</button>)}
-              <button type="button" className="btn-primary btn-sm" onClick={() => addSection(draft.language === 'en' ? 'New Section' : '新增大项')}>+ {draft.language === 'en' ? 'Custom Section' : '自定义大项'}</button>
-            </div>
-            <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 flex justify-between items-center gap-3">
-              <span className="text-sm font-bold text-red-800">{total.catalogLines ? '已确定金额合计（单价目录除外）' : '整张单据总金额'}</span>
-              <strong className="text-lg text-red-800 whitespace-nowrap">{total.amountLines ? formatMoney(total.amountMinor, draft.currency) : '—'}</strong>
-            </div>
+            {draft.sections.length > 0 && (
+              <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 flex justify-between items-center gap-3">
+                <span className="text-sm font-bold text-red-800">
+                  {draft.language === 'en'
+                    ? (total.catalogLines ? 'Confirmed Total (excluding unit-price-only items)' : 'Quotation Total')
+                    : (total.catalogLines ? '已确定金额合计（单价目录除外）' : '整张单据总金额')}
+                </span>
+                <strong className="text-lg text-red-800 whitespace-nowrap">{total.amountLines ? formatMoney(total.amountMinor, draft.currency) : '—'}</strong>
+              </div>
+            )}
           </Panel>
 
           <Panel title="04 · 随大项自动生成的工艺说明">
