@@ -164,6 +164,26 @@ assert(
   provisionalItem.sourceLabel === 'WhatsApp-2026-10-02',
   'provisional source is shown without pretending to be external canonical identity',
 );
+// A newly created provisional customer uses a unique internal reference.
+  // The repeatable human-facing acquisition channel takes precedence in display.
+const channelBased: CustomerReferenceRow = {
+  ...provisional,
+  id: 'customer-3',
+  provisional_source_reference: 'CPC-PROV-f3a46d2e-9090-4f52-84ea-a2f671a11839',
+  provisional_source_label: '新媒体',
+};
+const [channelBasedItem] = buildCustomerList({
+  now: new Date('2026-10-02T02:00:00.000Z'),
+  actorProfileId,
+  customers: [channelBased],
+  projects: [],
+  followUps: [],
+  events: [],
+});
+assert(
+  channelBasedItem.sourceLabel === '新媒体',
+  'repeatable new media channel displays without leaking internal provisional identity',
+);
 assert(provisionalItem.externalOwnerReference === null, 'provisional customer has no fake owner');
 assert(provisionalItem.nextFollowUp === null, 'no follow-up cadence is invented');
 assert(provisionalItem.activeProjectCount === 0, 'no Project is invented');

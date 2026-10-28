@@ -5,12 +5,12 @@ import { safeDraft, draftMetadata } from '../../src/lib/commercial-documents/clo
 
 const blank = initialDraft('Sales');
 assert.equal(blank.buyerName, '');
-assert.equal(blank.sections[0].items[0].unitPrice, '');
+assert.deepEqual(blank.sections, [], 'New quotations start without a preselected pricing category');
 assert(isDraftShape(blank), 'Blank, incomplete quote is still a valid draft shape');
 const saved = safeDraft(blank, 'Sales');
 assert(saved, 'Cloud saves must accept incomplete quotation drafts');
 assert.equal(saved.buyerName, '');
-assert.equal(saved.sections[0].items[0].unitPrice, '');
+assert.deepEqual(saved.sections, [], 'An incomplete zero-section cloud draft must remain savable');
 assert.deepEqual(draftMetadata(saved), {
   document_no: blank.documentNo, buyer_name: '',
   project_name: '', language: 'zh',

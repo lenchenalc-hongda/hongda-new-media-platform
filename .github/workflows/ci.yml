@@ -211,6 +211,30 @@ jobs:
           else
             echo 'GLH_PHASE3_WHATSAPP_SIMULATION_CI=NOT_PRESENT_IN_THIS_HEAD (not a Phase 3 PASS)'
           fi
+          # Existing Phase 4 policy suite is always present in master.
+          pnpm exec tsx tests/unit/global-lead-hub-phase4-ai-qualification.test.ts
+          # Only certify the new Phase 4 acceptance file when it is in the checked-out tree.
+          if test -f tests/unit/global-lead-hub-ai-qualification-phase4.test.ts; then
+            pnpm exec tsx tests/unit/global-lead-hub-ai-qualification-phase4.test.ts
+            echo 'GLH_PHASE4_AI_QUALIFICATION_CI=EXECUTED'
+          else
+            echo 'GLH_PHASE4_AI_QUALIFICATION_CI=NOT_PRESENT_IN_THIS_HEAD (not a Phase 4 acceptance PASS)'
+          fi
+          # GLH V2 evidence test is introduced on a separate draft PR; do not fake coverage.
+          if test -f tests/unit/global-lead-hub-v2-inquiry-evidence.test.ts; then
+            pnpm exec tsx tests/unit/global-lead-hub-v2-inquiry-evidence.test.ts
+            echo 'GLH_V2_INQUIRY_EVIDENCE_CI=EXECUTED'
+          else
+            echo 'GLH_V2_INQUIRY_EVIDENCE_CI=NOT_PRESENT_IN_THIS_HEAD (not a V2 evidence PASS)'
+          fi
+          # V2-B model-extraction contract is offline only. Missing focused tests are
+          # NOT a successful GLH V2-B acceptance, even when the CI job is green.
+          if test -f tests/unit/global-lead-hub-v2-llm-extraction-eval.test.ts; then
+            pnpm exec tsx tests/unit/global-lead-hub-v2-llm-extraction-eval.test.ts
+            echo 'GLH_V2_B_LLM_EVAL_CI=EXECUTED'
+          else
+            echo 'GLH_V2_B_LLM_EVAL_CI=NOT_PRESENT_IN_THIS_HEAD (not a V2-B acceptance PASS)'
+          fi
 
       - name: Check server-only imports
         run: bash scripts/check-server-imports.sh
