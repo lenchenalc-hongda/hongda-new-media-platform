@@ -1,4 +1,7 @@
 import assert from 'node:assert/strict';
+import React from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import DocumentWorkbench from '../../src/components/commercial-documents/DocumentWorkbench';
 import { readFileSync } from 'node:fs';
 import {
   ALIPAY_QR_METHOD_KEY,
@@ -461,4 +464,21 @@ assert(previewCode.includes('document-payment-qr-grid'), 'PDF preview must provi
 assert(previewCode.includes('data-payment-qr'), 'Preview QR images must participate in print readiness');
 assert(imageApiCode.includes('privateResponse'), 'QR image errors must also use private no-store headers');
 
+// Render the real new-quote editor on the server to verify the user-visible default.
+Object.assign(globalThis, { React });
+const initialSectionMarkup = renderToStaticMarkup(
+  React.createElement(DocumentWorkbench, { userName: 'Quotation QA', userRole: 'sales' }),
+);
+assert(initialSectionMarkup.includes('data-testid="quotation-section-picker"'),
+  'The first view must show the category-card chooser');
+assert(initialSectionMarkup.includes('aria-label="报价大项分类"'),
+  'The choice grid must expose its purpose to screen readers');
+for (const sectionName of ['版费', '热转印花膜', '数码花膜', '机器设备',
+  '夹具与配件', '加工费用', '其他费用', '自定义大项']) {
+  assert(initialSectionMarkup.includes(sectionName), 'Missing category card: ' + sectionName);
+}
+assert(!initialSectionMarkup.includes('aria-label="报价大项名称"'),
+  'No section details should render before a category is chosen');
+assert(!initialSectionMarkup.includes('aria-label="选择要添加的报价大项"'),
+  'The old dropdown must be absent from the rendered markup');
 console.log('commercial-document-template.test.ts: PASS');
