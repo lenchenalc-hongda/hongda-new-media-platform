@@ -1,4 +1,7 @@
 import assert from 'node:assert/strict';
+import React from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import DocumentWorkbench from '../../src/components/commercial-documents/DocumentWorkbench';
 import { readFileSync } from 'node:fs';
 import {
   ALIPAY_QR_METHOD_KEY,
@@ -422,12 +425,21 @@ assert.equal(isDraftShape({ ...selector, paymentMethodId: 'wechat_qr' }), false,
   'Low-level QR row keys cannot be persisted as a selection');
 
 const editorCode = readFileSync(new URL('../../src/components/commercial-documents/DocumentWorkbench.tsx', import.meta.url), 'utf8');
-assert(editorCode.includes('Select a quotation section to add') && editorCode.includes('选择要添加的报价大项'),
-  'Section 03 selector must be available in both languages');
-assert(editorCode.includes('SECTION_PRESETS.map(preset => (') && editorCode.includes('addSection(value)'),
-  'Selecting a category must create its first details block on demand');
-assert(editorCode.includes('value="__custom__"') && editorCode.includes("addSection('')"),
-  'Custom category must remain available without a prefilled name');
+assert(editorCode.includes('data-testid="quotation-section-picker"'),
+  'Section 03 needs a visible card chooser, not a native dropdown');
+assert(!editorCode.includes('Select a quotation section to add') && !editorCode.includes('选择要添加的报价大项'),
+  'The old Section 03 dropdown must be removed');
+assert(editorCode.includes('Quotation section categories') && editorCode.includes('报价大项分类'),
+  'Category choice must have accessible labels in both languages');
+assert(editorCode.includes('SECTION_PRESETS.map(preset => (') && editorCode.includes('onClick={() => addSection(preset.zh)}'),
+  'Each preset must be its own click-to-add category card');
+assert(editorCode.includes("onClick={() => addSection('')}") && editorCode.includes('Custom Section') && editorCode.includes('自定义大项'),
+  'Custom category card must keep its name editable and work in both languages');
+assert(editorCode.indexOf('{draft.sections.map((section, sectionIndex) => {')
+  < editorCode.indexOf('data-testid="quotation-section-picker"'),
+  'Editing details must appear ABOVE the card chooser, which stays below the selected sections');
+assert(editorCode.includes("document.getElementById('quotation-section-' + lastAddedSectionId)"),
+  'Clicking a category should scroll to the new form above the chooser');
 assert(editorCode.includes('draft.sections.length > 0 && ('),
   'Totals should only be visible after a pricing category is chosen');
 const apiCode = readFileSync(new URL('../../src/app/api/commercial-documents/payment-methods/route.ts', import.meta.url), 'utf8');
@@ -452,4 +464,21 @@ assert(previewCode.includes('document-payment-qr-grid'), 'PDF preview must provi
 assert(previewCode.includes('data-payment-qr'), 'Preview QR images must participate in print readiness');
 assert(imageApiCode.includes('privateResponse'), 'QR image errors must also use private no-store headers');
 
+// Render the real new-quote editor on the server to verify the user-visible default.
+Object.assign(globalThis, { React });
+const initialSectionMarkup = renderToStaticMarkup(
+  React.createElement(DocumentWorkbench, { userName: 'Quotation QA', userRole: 'sales' }),
+);
+assert(initialSectionMarkup.includes('data-testid="quotation-section-picker"'),
+  'The first view must show the category-card chooser');
+assert(initialSectionMarkup.includes('aria-label="报价大项分类"'),
+  'The choice grid must expose its purpose to screen readers');
+for (const sectionName of ['版费', '热转印花膜', '数码花膜', '机器设备',
+  '夹具与配件', '加工费用', '其他费用', '自定义大项']) {
+  assert(initialSectionMarkup.includes(sectionName), 'Missing category card: ' + sectionName);
+}
+assert(!initialSectionMarkup.includes('aria-label="报价大项名称"'),
+  'No section details should render before a category is chosen');
+assert(!initialSectionMarkup.includes('aria-label="选择要添加的报价大项"'),
+  'The old dropdown must be absent from the rendered markup');
 console.log('commercial-document-template.test.ts: PASS');
