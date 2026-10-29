@@ -1,4 +1,8 @@
-import type { WosEntityType } from './domain';
+import {
+  WOS_REFERENCE_IMAGE_STATUSES,
+  type WosEntityType,
+  type WosReferenceImageStatus,
+} from './domain';
 import type { ReferenceImageCategory } from './spec';
 
 export const WOS_PRIVATE_IMAGE_BUCKET = 'wos-private' as const;
@@ -16,12 +20,7 @@ export const WOS_IMAGE_VERSION_CATEGORIES = [
 
 export type WosImageVersionCategory = ReferenceImageCategory;
 
-export type WosImageVersionStatus =
-  | 'UPLOADING'
-  | 'READY'
-  | 'FAILED'
-  | 'QUARANTINED'
-  | 'ARCHIVED';
+export type WosImageVersionStatus = WosReferenceImageStatus;
 
 export type WosPersistenceBlockerCode =
   | 'INVALID_INPUT'
@@ -215,7 +214,7 @@ const BLOCKER_MESSAGES: Readonly<
   PROFILE_ROLE_NOT_ALLOWED: '办公室提交仅允许管理、经理或销售档案',
   READINESS_EVIDENCE_MISSING: '缺少不可变的办公室齐套证据',
   READINESS_EVIDENCE_VERSION_MISMATCH: '齐套证据与当前源记录版本不一致',
-  READINESS_EVIDENCE_DUPLICATE: '齐套证据 ID 已绑定其他源记录版本',
+  READINESS_EVIDENCE_DUPLICATE: '齐套证据 ID 在多个提交事实中重复使用',
   READINESS_EVIDENCE_PROFILE_MISMATCH: '齐套证据确认人与组织内有效档案不一致',
   DUPLICATE_INBOX_SOURCE: '同一源记录产生了多个当前车间任务',
   DUPLICATE_IMAGE_ID: '图片 ID 已存在，图片版本只能追加',
@@ -249,6 +248,7 @@ const CATEGORY_SEGMENTS: Readonly<Record<WosImageVersionCategory, string>> = {
 };
 
 const IMAGE_CATEGORY_SET = new Set<string>(WOS_IMAGE_VERSION_CATEGORIES);
+const IMAGE_STATUS_SET = new Set<string>(WOS_REFERENCE_IMAGE_STATUSES);
 const OFFICE_PROFILE_ROLES = new Set(['admin', 'manager', 'sales']);
 const APPROVED_IMAGE_MIME_TYPES = new Set([
   'image/jpeg',
@@ -692,6 +692,27 @@ export function buildWorkshopInbox(input: {
     blockers,
   );
   const candidates: WosOfficeSubmissionRecord[] = [];
+  const evidenceIdCounts = new Map<string, number>();
+
+  for (const submission of input.submissions) {
+    const evidence = isRecord(submission)
+      ? submission.readinessEvidence
+      : null;
+    if (isRecord(evidence) && isNonEmptyString(evidence.evidenceId)) {
+      evidenceIdCounts.set(
+        evidence.evidenceId,
+        (evidenceIdCounts.get(evidence.evidenceId) ?? 0) + 1,
+      );
+    }
+  }
+  const duplicateEvidenceIds = new Set(
+    [...evidenceIdCounts]
+      .filter(([, count]) => count > 1)
+      .map(([evidenceId]) => evidenceId),
+  );
+  if (duplicateEvidenceIds.size > 0) {
+    addBlocker(blockers, 'READINESS_EVIDENCE_DUPLICATE');
+  }
 
   for (const submission of input.submissions) {
     if (!isRecord(submission) || submission.immutable !== true) {
@@ -705,6 +726,11 @@ export function buildWorkshopInbox(input: {
       addBlocker(blockers, 'SOURCE_IDENTITY_MISMATCH');
       continue;
     }
+    const evidenceId =
+      isRecord(submission.readinessEvidence)
+      && isNonEmptyString(submission.readinessEvidence.evidenceId)
+        ? submission.readinessEvidence.evidenceId
+        : '';
     const evidenceConfirmerId =
       isRecord(submission.readinessEvidence)
       && isNonEmptyString(submission.readinessEvidence.confirmedByProfileId)
@@ -717,6 +743,7 @@ export function buildWorkshopInbox(input: {
       || blockedProfileIds.has(submission.projectOwnerProfileId)
       || blockedProfileIds.has(submission.submittedByProfileId)
       || blockedProfileIds.has(evidenceConfirmerId)
+      || duplicateEvidenceIds.has(evidenceId)
     ) {
       continue;
     }
@@ -848,6 +875,7 @@ function imageShapeIsValid(image: WosImageVersionMetadata): boolean {
     && isNonEmptyString(image.uploadedByProfileId)
     && isNonEmptyString(image.uploadedAt)
     && IMAGE_CATEGORY_SET.has(image.category)
+    && IMAGE_STATUS_SET.has(image.imageStatus)
     && (
       image.entityType === 'PRODUCTION_ORDER'
       || image.entityType === 'SAMPLING_REQUEST'
@@ -1081,9 +1109,19 @@ export function projectCurrentImageVersions(input: {
 }): WosCurrentImageProjection {
   const blockers: WosPersistenceBlocker[] = [];
   const imageById = new Map<string, WosImageVersionMetadata>();
+  const seenImageIds = new Set<string>();
   for (const image of input.images) {
-    if (!imageShapeIsValid(image) || imageById.has(image.imageId)) {
+    if (!isRecord(image) || !imageShapeIsValid(image)) {
+      addBlocker(blockers, 'INVALID_INPUT');
+      continue;
+    }
+    if (seenImageIds.has(image.imageId)) {
       addBlocker(blockers, 'DUPLICATE_IMAGE_ID');
+      continue;
+    }
+    seenImageIds.add(image.imageId);
+    if (image.imageStatus !== 'READY') {
+      addBlocker(blockers, 'IMAGE_NOT_READY');
       continue;
     }
     imageById.set(image.imageId, image);
@@ -1091,16 +1129,24 @@ export function projectCurrentImageVersions(input: {
 
   const previousIds = new Set<string>();
   const nextIds = new Set<string>();
+  const factIds = new Set<string>();
+  const nextByPrevious = new Map<string, string>();
+  const factByNext = new Map<string, WosImageSupersessionFact>();
   const supersededImageIds: string[] = [];
   for (const fact of input.supersessions) {
+    if (!supersessionShapeIsValid(fact)) {
+      addBlocker(blockers, 'INVALID_INPUT');
+      continue;
+    }
     if (
-      !supersessionShapeIsValid(fact)
+      factIds.has(fact.supersessionId)
       || previousIds.has(fact.previousImageId)
       || nextIds.has(fact.nextImageId)
     ) {
       addBlocker(blockers, 'SUPERSEDE_TARGET_ALREADY_USED');
       continue;
     }
+    factIds.add(fact.supersessionId);
     const previous = imageById.get(fact.previousImageId);
     const next = imageById.get(fact.nextImageId);
     if (!previous || !next) {
@@ -1118,13 +1164,42 @@ export function projectCurrentImageVersions(input: {
       || next.supersedesImageId !== previous.imageId
       || previous.sourceRevision !== fact.previousSourceRevision
       || next.sourceRevision !== fact.nextSourceRevision
+      || previous.sourceRevision >= next.sourceRevision
+      || previous.sourceVersionLabel === next.sourceVersionLabel
+      || fact.supersededByProfileId !== next.uploadedByProfileId
+      || fact.supersededAt !== next.uploadedAt
     ) {
       addBlocker(blockers, 'SUPERSEDE_TARGET_MISMATCH');
       continue;
     }
     previousIds.add(previous.imageId);
     nextIds.add(next.imageId);
+    nextByPrevious.set(previous.imageId, next.imageId);
+    factByNext.set(next.imageId, fact);
     supersededImageIds.push(previous.imageId);
+  }
+
+  for (const image of imageById.values()) {
+    if (image.supersedesImageId === null) continue;
+    const fact = factByNext.get(image.imageId);
+    if (!fact) {
+      addBlocker(blockers, 'SUPERSEDE_TARGET_MISSING');
+    } else if (fact.previousImageId !== image.supersedesImageId) {
+      addBlocker(blockers, 'SUPERSEDE_TARGET_MISMATCH');
+    }
+  }
+
+  const visited = new Set<string>();
+  for (const previousId of previousIds) {
+    if (nextIds.has(previousId)) continue;
+    let currentId: string | undefined = previousId;
+    while (currentId !== undefined && !visited.has(currentId)) {
+      visited.add(currentId);
+      currentId = nextByPrevious.get(currentId);
+    }
+  }
+  if ([...previousIds].some((previousId) => !visited.has(previousId))) {
+    addBlocker(blockers, 'SUPERSEDE_TARGET_ALREADY_USED');
   }
 
   if (blockers.length > 0) {
