@@ -71,6 +71,23 @@ export function isWosNonproductionApiEnabled(input: {
     || (input.vercelEnv === undefined && input.nodeEnv === 'development');
 }
 
+// Pin the nonproduction Preview to the vetted hongda-review-dev database.
+// Preview can otherwise inherit Production Supabase URL variables.
+export const WOS_P5C_SANDBOX_REF = 'xulmpqaknlwqqculbsek' as const;
+export function isApprovedWosSandboxUrl(value: unknown): boolean {
+  if (typeof value !== 'string') return false;
+  try {
+    const url = new URL(value);
+    return url.protocol === 'https:'
+      && url.hostname === WOS_P5C_SANDBOX_REF + '.supabase.co'
+      && !url.username && !url.password
+      && (url.pathname === '/' || url.pathname === '')
+      && !url.search && !url.hash;
+  } catch {
+    return false;
+  }
+}
+
 export function resolveWosApiActor(
   verifiedUserId: unknown,
   profile: unknown,

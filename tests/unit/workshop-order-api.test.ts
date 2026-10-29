@@ -7,6 +7,7 @@ import {
   buildWosLiveInbox,
   canSubmitWosOfficeRequest,
   isWosNonproductionApiEnabled,
+  isApprovedWosSandboxUrl,
   resolveWosApiActor,
   validateWosPostEnvelope,
 } from '../../src/lib/workshop-orders/api-contract';
@@ -40,6 +41,12 @@ assert.equal(canSubmitWosOfficeRequest('sales'), true);
 assert.equal(canSubmitWosOfficeRequest('workshop'), false);
 assert.equal(canSubmitWosOfficeRequest('unknown'), false);
 
+assert.equal(isApprovedWosSandboxUrl('https://xulmpqaknlwqqculbsek.supabase.co'), true);
+assert.equal(isApprovedWosSandboxUrl('https://amqpvxrurenevniilhtl.supabase.co'), false);
+assert.equal(isApprovedWosSandboxUrl('https://xulmpqaknlwqqculbsek.supabase.co.evil.test'), false);
+assert.equal(isApprovedWosSandboxUrl('http://xulmpqaknlwqqculbsek.supabase.co'), false);
+assert.equal(isApprovedWosSandboxUrl('https://xulmpqaknlwqqculbsek.supabase.co/?query=1'), false);
+assert.equal(isApprovedWosSandboxUrl(undefined), false);
 assert.equal(isWosNonproductionApiEnabled({ vercelEnv: 'production', enabled: 'true' }), false);
 assert.equal(isWosNonproductionApiEnabled({ vercelEnv: 'preview', enabled: 'true' }), true);
 assert.equal(isWosNonproductionApiEnabled({ vercelEnv: 'preview' }), false);

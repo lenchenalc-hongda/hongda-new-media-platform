@@ -9,6 +9,8 @@
 - `POST /api/workshop-orders/sampling`：独立打样入口；同样返回 409，不写入数据库。
 
 ## 默认关闭与生产隔离
+额外强制绑定官方测试 Supabase 项目 hongda-review-dev（项目 ref: xulmpqaknlwqqculbsek）。即使 Preview 显式开启，如果 NEXT_PUBLIC_SUPABASE_URL 指向正式项目 hongda-new-media、未知主机、HTTP 或带路径/查询参数的地址，仍返回 503，不能读取正式数据。
+
 `WOS_P5C_NONPROD_API_ENABLED` 默认未设置。只有设置成 `true` **并且**运行环境为 Vercel Preview 或本地 development 时 API 才允许读取。即使变量意外设为 true，`VERCEL_ENV=production` 必须拒绝所有三个入口。此次 PR 不修改任何环境变量。对于生产用户这些路由均返回 `NONPRODUCTION_ONLY_DISABLED / 503`。
 
 不启用真实设备，不上传图片，不读取真实客户消息，不修改 CPC 客户/项目主数据、不触碰财务数据。

@@ -11,6 +11,7 @@ import {
   buildWosLiveInbox,
   canSubmitWosOfficeRequest,
   isWosNonproductionApiEnabled,
+  isApprovedWosSandboxUrl,
   resolveWosApiActor,
   validateWosPostEnvelope,
   type WosApiActor,
@@ -28,7 +29,7 @@ function enabled(): boolean {
     vercelEnv: process.env.VERCEL_ENV,
     nodeEnv: process.env.NODE_ENV,
     enabled: process.env.WOS_P5C_NONPROD_API_ENABLED,
-  });
+  }) && isApprovedWosSandboxUrl(process.env.NEXT_PUBLIC_SUPABASE_URL);
 }
 
 async function authenticatedWosClient(): Promise<
