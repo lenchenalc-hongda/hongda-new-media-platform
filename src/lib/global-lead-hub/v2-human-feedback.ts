@@ -80,7 +80,7 @@ function validTime(value: unknown): value is string {
   return typeof value === 'string' && value.length <= 40
     && /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d{1,3})?Z$/.test(value)
     && Number.isFinite(Date.parse(value))
-    && new Date(value).toISOString() === new Date(Date.parse(value)).toISOString().replace('.000Z', 'Z');
+    && new Date(Date.parse(value)).toISOString().slice(0, 10) === value.slice(0, 10);
 }
 
 function reject(code: GlhV2CRejectCode, history: readonly GlhV2CHumanFact[]): GlhV2CReviewResult {
