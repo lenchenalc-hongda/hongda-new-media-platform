@@ -1,0 +1,30 @@
+name: OA P0 safety
+on:
+  pull_request:
+    branches: [master]
+    paths:
+      - 'src/app/api/oa/**'
+      - 'src/lib/oa/oa-api-safety.ts'
+      - 'src/lib/oa/oa-access-policy.ts'
+      - 'src/app/oa/publish-queue/page.tsx'
+      - 'tests/unit/oa-api-safety.test.ts'
+      - '.github/workflows/oa-safety.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  oa-safety:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - run: pnpm install --frozen-lockfile
+      - name: OA API safety regression
+        run: pnpm exec tsx tests/unit/oa-api-safety.test.ts
+      - name: TypeScript check
+        run: pnpm exec tsc --noEmit
