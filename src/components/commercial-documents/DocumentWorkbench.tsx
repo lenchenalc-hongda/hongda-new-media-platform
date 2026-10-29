@@ -108,6 +108,15 @@ export default function DocumentWorkbench({ userName, userRole, initialCloudList
   const [draft, setDraft] = useState<CommercialDocumentDraft>(() => initialDraft(userName));
   const [errors, setErrors] = useState<string[]>([]);
   const [activeTab, setActiveTab] = useState<'edit' | 'preview'>('edit');
+  const [lastAddedSectionId, setLastAddedSectionId] = useState<string | null>(null);
+
+  // Newly selected sections are inserted ABOVE the category cards.
+  // Scroll to the new details so the action is immediately visible.
+  useEffect(() => {
+    if (!lastAddedSectionId) return;
+    document.getElementById('quotation-section-' + lastAddedSectionId)
+      ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, [lastAddedSectionId]);
   const [customerSearchOpen, setCustomerSearchOpen] = useState(false);
   const [customerOptions, setCustomerOptions] = useState<CustomerOption[]>([]);
   const [customerError, setCustomerError] = useState('');
@@ -349,12 +358,14 @@ export default function DocumentWorkbench({ userName, userRole, initialCloudList
   };
 
   const addSection = (title: string) => {
-    setDraft(previous => ({
+    const sectionId = id('section');
+    setDraft(previous => previous.sections.length >= 50 ? previous : ({
       ...previous, sections: [
         ...previous.sections,
-        { id: id('section'), title: localizeSectionTitle(title, previous.language), items: [{ ...blankItem(id('item')), unit: localizeUnit('项', 'zh', previous.language) }] },
+        { id: sectionId, title: localizeSectionTitle(title, previous.language), items: [{ ...blankItem(id('item')), unit: localizeUnit('项', 'zh', previous.language) }] },
       ],
     }));
+    setLastAddedSectionId(sectionId);
     setErrors([]);
   };
   const moveSection = (index: number, offset: number) => {
@@ -883,35 +894,11 @@ export default function DocumentWorkbench({ userName, userRole, initialCloudList
                   : '可增加、重命名、删除和排序大项，每个大项独立计算小计。'}
               </p>
             )}
-            <label className="block space-y-1">
-              <span className="block text-xs font-medium text-gray-700">
-                {draft.language === 'en' ? 'Select a quotation section' : '选择报价大项'}
-              </span>
-              <select
-                className="w-full"
-                aria-label={draft.language === 'en' ? 'Select a quotation section to add' : '选择要添加的报价大项'}
-                value=""
-                disabled={draft.sections.length >= 50}
-                onChange={event => {
-                  const value = event.target.value;
-                  if (value === '__custom__') addSection('');
-                  else if (SECTION_PRESETS.some(preset => preset.zh === value)) addSection(value);
-                }}>
-                <option value="" disabled>
-                  {draft.language === 'en' ? 'Choose a section to add…' : '请选择需要添加的大项…'}
-                </option>
-                {SECTION_PRESETS.map(preset => (
-                  <option key={preset.zh} value={preset.zh}>{preset[draft.language]}</option>
-                ))}
-                <option value="__custom__">
-                  {draft.language === 'en' ? 'Custom section (enter a name)' : '自定义大项（添加后填写名称）'}
-                </option>
-              </select>
-            </label>
             {draft.sections.map((section, sectionIndex) => {
               const subtotal = sectionAmount(section);
               return (
-                <section key={section.id} className="border border-gray-200 rounded-lg overflow-hidden">
+                <section id={'quotation-section-' + section.id} key={section.id}
+                  className="border border-gray-200 rounded-lg overflow-hidden scroll-mt-4">
                   <div className="bg-gray-100 p-3 flex items-center gap-2">
                     <span className="font-bold text-sm text-gray-600">{sectionIndex + 1}.</span>
                     <input aria-label={draft.language === 'en' ? 'Section name' : '报价大项名称'} value={section.title}
@@ -1007,6 +994,42 @@ export default function DocumentWorkbench({ userName, userRole, initialCloudList
                 </section>
               );
             })}
+            <div data-testid="quotation-section-picker"
+              className="rounded-lg border border-gray-200 bg-gray-50 p-3 space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-xs font-semibold text-gray-800">
+                  {draft.language === 'en' ? 'Choose a quotation section to add' : '选择报价大项（点击添加）'}
+                </p>
+                {draft.sections.length > 0 && (
+                  <p className="text-xs text-gray-500">
+                    {draft.language === 'en'
+                      ? 'Add another category below the current sections'
+                      : '点击下方卡片继续增加大项'}
+                  </p>
+                )}
+              </div>
+              <div role="group"
+                aria-label={draft.language === 'en' ? 'Quotation section categories' : '报价大项分类'}
+                className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                {SECTION_PRESETS.map(preset => (
+                  <button type="button" key={preset.zh}
+                    disabled={draft.sections.length >= 50}
+                    onClick={() => addSection(preset.zh)}
+                    className="flex min-h-[58px] items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-3 text-left text-sm font-medium text-gray-800 shadow-sm transition-colors hover:border-blue-400 hover:bg-blue-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 disabled:cursor-not-allowed disabled:opacity-40">
+                    <span aria-hidden="true" className="text-lg font-normal text-blue-600">＋</span>
+                    <span className="min-w-0 break-words">{preset[draft.language]}</span>
+                  </button>
+                ))}
+                <button type="button" disabled={draft.sections.length >= 50}
+                  onClick={() => addSection('')}
+                  className="flex min-h-[58px] items-center gap-2 rounded-lg border border-dashed border-gray-400 bg-white px-3 py-3 text-left text-sm font-medium text-gray-800 transition-colors hover:border-blue-500 hover:bg-blue-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 disabled:cursor-not-allowed disabled:opacity-40">
+                  <span aria-hidden="true" className="text-lg font-normal text-blue-600">＋</span>
+                  <span className="min-w-0 break-words">
+                    {draft.language === 'en' ? 'Custom Section' : '自定义大项'}
+                  </span>
+                </button>
+              </div>
+            </div>
             {draft.sections.length > 0 && (
               <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 flex justify-between items-center gap-3">
                 <span className="text-sm font-bold text-red-800">
