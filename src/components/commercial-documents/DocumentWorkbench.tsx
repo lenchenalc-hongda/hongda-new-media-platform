@@ -95,7 +95,7 @@ function Field({
 
 function Panel({ title, children, className = '' }: { title: string; children: ReactNode; className?: string }) {
   return (
-    <section className={'border border-gray-200 rounded-xl bg-white p-4 space-y-3 ' + className}>
+    <section className={'border border-gray-200 rounded-xl bg-white ' + (className || 'p-4 space-y-3')}>
       <h2 className="text-sm font-bold text-gray-800">{title}</h2>
       {children}
     </section>
