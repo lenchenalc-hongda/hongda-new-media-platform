@@ -93,9 +93,9 @@ function Field({
   );
 }
 
-function Panel({ title, children }: { title: string; children: ReactNode }) {
+function Panel({ title, children, className = '' }: { title: string; children: ReactNode; className?: string }) {
   return (
-    <section className="border border-gray-200 rounded-xl bg-white p-4 space-y-3">
+    <section className={'border border-gray-200 rounded-xl bg-white p-4 space-y-3 ' + className}>
       <h2 className="text-sm font-bold text-gray-800">{title}</h2>
       {children}
     </section>
@@ -886,7 +886,7 @@ export default function DocumentWorkbench({ userName, userRole, initialCloudList
             <Field label="项目 / 产品用途" value={draft.projectName} onChange={value => patch('projectName', value)} />
           </Panel>
 
-          <Panel title={draft.language === 'en' ? '03 · Quotation Sections & Item Details' : '03 · 报价大项及产品明细'}>
+          <Panel className="p-3 space-y-2" title={draft.language === 'en' ? '03 · Quotation Sections & Item Details' : '03 · 报价大项及产品明细'}>
             {draft.sections.length > 0 && (
               <p className="text-xs text-gray-500">
                 {draft.language === 'en'
@@ -995,7 +995,7 @@ export default function DocumentWorkbench({ userName, userRole, initialCloudList
               );
             })}
             <div data-testid="quotation-section-picker"
-              className="rounded-lg border border-gray-200 bg-gray-50 p-3 space-y-3">
+              className="rounded-lg border border-gray-200 bg-gray-50 p-2 space-y-2">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <p className="text-xs font-semibold text-gray-800">
                   {draft.language === 'en' ? 'Choose a quotation section to add' : '选择报价大项（点击添加）'}
@@ -1015,14 +1015,14 @@ export default function DocumentWorkbench({ userName, userRole, initialCloudList
                   <button type="button" key={preset.zh}
                     disabled={draft.sections.length >= 50}
                     onClick={() => addSection(preset.zh)}
-                    className="flex min-h-[58px] items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-3 text-left text-sm font-medium text-gray-800 shadow-sm transition-colors hover:border-blue-400 hover:bg-blue-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 disabled:cursor-not-allowed disabled:opacity-40">
+                    className="flex min-h-[46px] items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-left text-sm font-medium text-gray-800 shadow-sm transition-colors hover:border-blue-400 hover:bg-blue-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 disabled:cursor-not-allowed disabled:opacity-40">
                     <span aria-hidden="true" className="text-lg font-normal text-blue-600">＋</span>
                     <span className="min-w-0 break-words">{preset[draft.language]}</span>
                   </button>
                 ))}
                 <button type="button" disabled={draft.sections.length >= 50}
                   onClick={() => addSection('')}
-                  className="flex min-h-[58px] items-center gap-2 rounded-lg border border-dashed border-gray-400 bg-white px-3 py-3 text-left text-sm font-medium text-gray-800 transition-colors hover:border-blue-500 hover:bg-blue-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 disabled:cursor-not-allowed disabled:opacity-40">
+                  className="flex min-h-[46px] items-center gap-2 rounded-lg border border-dashed border-gray-400 bg-white px-3 py-2 text-left text-sm font-medium text-gray-800 transition-colors hover:border-blue-500 hover:bg-blue-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 disabled:cursor-not-allowed disabled:opacity-40">
                   <span aria-hidden="true" className="text-lg font-normal text-blue-600">＋</span>
                   <span className="min-w-0 break-words">
                     {draft.language === 'en' ? 'Custom Section' : '自定义大项'}
@@ -1031,7 +1031,7 @@ export default function DocumentWorkbench({ userName, userRole, initialCloudList
               </div>
             </div>
             {draft.sections.length > 0 && (
-              <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 flex justify-between items-center gap-3">
+              <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-2 flex justify-between items-center gap-3">
                 <span className="text-sm font-bold text-red-800">
                   {draft.language === 'en'
                     ? (total.catalogLines ? 'Confirmed Total (excluding unit-price-only items)' : 'Quotation Total')
