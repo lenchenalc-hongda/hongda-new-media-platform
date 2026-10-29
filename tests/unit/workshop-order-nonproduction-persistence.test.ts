@@ -10,6 +10,7 @@ import {
   WOS_PRIVATE_IMAGE_BUCKET,
   type WosImageVersionCategory,
   type WosImageVersionMetadata,
+  type WosImageSupersessionFact,
   type WosOfficeSubmissionCommand,
   type WosOfficeSubmissionRecord,
   type WosProfileSnapshot,
@@ -310,6 +311,66 @@ for (const task of initialInbox.tasks) {
   assert.equal(task.versionLabel, 'V1');
 }
 
+const productionEvidenceId =
+  firstProduction.submission?.readinessEvidence.evidenceId;
+assert(productionEvidenceId);
+
+const duplicateEvidenceAcrossEntry = buildWorkshopInbox({
+  submissions: [
+    ...firstProduction.submissions,
+    {
+      ...firstSampling.submissions[0],
+      readinessEvidence: {
+        ...firstSampling.submissions[0].readinessEvidence,
+        evidenceId: productionEvidenceId,
+      },
+    },
+  ],
+  sources: [productionSource, samplingSource],
+  profiles: [projectOwner, submitter],
+});
+assert.equal(duplicateEvidenceAcrossEntry.tasks.length, 0);
+assert(
+  duplicateEvidenceAcrossEntry.blockers.some(
+    (blocker) => blocker.code === 'READINESS_EVIDENCE_DUPLICATE',
+  ),
+  'evidence reuse across source IDs and entry types must fail closed',
+);
+
+const organizationBProductionSource: WosSourceSnapshot = {
+  ...productionSource,
+  organizationId: ids.organizationB,
+  sourceId: ids.samplingRequest,
+  projectOwnerProfileId: ids.foreignOwner,
+};
+const duplicateEvidenceAcrossOrganization = buildWorkshopInbox({
+  submissions: [
+    ...firstProduction.submissions,
+    {
+      ...firstProduction.submissions[0],
+      submissionId: '00000000-0000-4000-8000-000000000145',
+      submissionKey: 'organization-b-duplicate-evidence',
+      organizationId: ids.organizationB,
+      sourceId: ids.samplingRequest,
+      projectOwnerProfileId: ids.foreignOwner,
+      submittedByProfileId: ids.foreignOwner,
+      readinessEvidence: {
+        ...evidenceFor(organizationBProductionSource),
+        evidenceId: productionEvidenceId,
+      },
+    },
+  ],
+  sources: [productionSource, organizationBProductionSource],
+  profiles: [projectOwner, submitter, foreignOwner],
+});
+assert.equal(duplicateEvidenceAcrossOrganization.tasks.length, 0);
+assert(
+  duplicateEvidenceAcrossOrganization.blockers.some(
+    (blocker) => blocker.code === 'READINESS_EVIDENCE_DUPLICATE',
+  ),
+  'evidence reuse across organizations must fail closed',
+);
+
 const productionV2Source: WosSourceSnapshot = {
   ...productionSource,
   revision: 2,
@@ -354,6 +415,10 @@ const duplicateInboxSubmission: WosOfficeSubmissionRecord = {
   ...secondProduction.submissions[1],
   submissionId: '00000000-0000-4000-8000-000000000144',
   submissionKey: 'production-submit-v2-duplicate',
+  readinessEvidence: {
+    ...secondProduction.submissions[1].readinessEvidence,
+    evidenceId: '00000000-0000-4000-8000-000000000146',
+  },
 };
 const duplicateInbox = buildWorkshopInbox({
   submissions: [
@@ -479,6 +544,276 @@ assert.deepEqual(
   [productV2.imageId],
 );
 assert.deepEqual(currentImages.supersededImageIds, [productV1.imageId]);
+
+const invalidStatusImage = imageFor({
+  imageId: '00000000-0000-4000-8000-000000000216',
+  category: 'PRODUCT',
+  fileName: 'invalid-status.jpg',
+  imageStatus:
+    'UNKNOWN' as unknown as WosImageVersionMetadata['imageStatus'],
+});
+const invalidStatusProjection = projectCurrentImageVersions({
+  images: [invalidStatusImage],
+  supersessions: [],
+});
+assert.equal(invalidStatusProjection.currentImages.length, 0);
+assert(
+  invalidStatusProjection.blockers.some(
+    (blocker) => blocker.code === 'INVALID_INPUT',
+  ),
+  'unknown runtime image statuses fail closed',
+);
+
+const nonReadyProjection = projectCurrentImageVersions({
+  images: [
+    productV1,
+    imageFor({
+      imageId: '00000000-0000-4000-8000-000000000217',
+      category: 'PRODUCT',
+      fileName: 'archived-product.jpg',
+      imageStatus: 'ARCHIVED',
+    }),
+  ],
+  supersessions: [],
+});
+assert.equal(nonReadyProjection.currentImages.length, 0);
+assert(
+  nonReadyProjection.blockers.some(
+    (blocker) => blocker.code === 'IMAGE_NOT_READY',
+  ),
+  'valid non-READY image statuses never project as current',
+);
+
+const baseSupersession = replacedImage.supersession;
+assert(baseSupersession);
+
+const equalRevisionProjection = projectCurrentImageVersions({
+  images: [
+    productV1,
+    {
+      ...productV2,
+      sourceRevision: productV1.sourceRevision,
+    },
+  ],
+  supersessions: [{
+    ...baseSupersession,
+    previousSourceRevision: productV1.sourceRevision,
+    nextSourceRevision: productV1.sourceRevision,
+  }],
+});
+assert.equal(equalRevisionProjection.currentImages.length, 0);
+assert(
+  equalRevisionProjection.blockers.some(
+    (blocker) => blocker.code === 'SUPERSEDE_TARGET_MISMATCH',
+  ),
+  'equal source revisions cannot form a supersession',
+);
+
+const backwardRevisionProjection = projectCurrentImageVersions({
+  images: [
+    { ...productV1, sourceRevision: 2 },
+    { ...productV2, sourceRevision: 1 },
+  ],
+  supersessions: [{
+    ...baseSupersession,
+    previousSourceRevision: 2,
+    nextSourceRevision: 1,
+  }],
+});
+assert.equal(backwardRevisionProjection.currentImages.length, 0);
+assert(
+  backwardRevisionProjection.blockers.some(
+    (blocker) => blocker.code === 'SUPERSEDE_TARGET_MISMATCH',
+  ),
+  'backward source revisions cannot form a supersession',
+);
+
+const mismatchedAuditProjection = projectCurrentImageVersions({
+  images: replacedImage.images,
+  supersessions: [{
+    ...baseSupersession,
+    supersededAt: '2026-10-27T10:01:00+08:00',
+  }],
+});
+assert.equal(mismatchedAuditProjection.currentImages.length, 0);
+assert(
+  mismatchedAuditProjection.blockers.some(
+    (blocker) => blocker.code === 'SUPERSEDE_TARGET_MISMATCH',
+  ),
+  'supersession audit timestamps must match the next image',
+);
+
+const mismatchedAuditProfileProjection = projectCurrentImageVersions({
+  images: replacedImage.images,
+  supersessions: [{
+    ...baseSupersession,
+    supersededByProfileId: ids.submitter,
+  }],
+});
+assert.equal(mismatchedAuditProfileProjection.currentImages.length, 0);
+assert(
+  mismatchedAuditProfileProjection.blockers.some(
+    (blocker) => blocker.code === 'SUPERSEDE_TARGET_MISMATCH',
+  ),
+  'supersession audit profiles must match the next image uploader',
+);
+
+const equalVersionLabelProjection = projectCurrentImageVersions({
+  images: [
+    productV1,
+    { ...productV2, sourceVersionLabel: productV1.sourceVersionLabel },
+  ],
+  supersessions: [baseSupersession],
+});
+assert.equal(equalVersionLabelProjection.currentImages.length, 0);
+assert(
+  equalVersionLabelProjection.blockers.some(
+    (blocker) => blocker.code === 'SUPERSEDE_TARGET_MISMATCH',
+  ),
+  'supersession version labels must be distinct',
+);
+
+const mismatchedFactRevisionProjection = projectCurrentImageVersions({
+  images: replacedImage.images,
+  supersessions: [{
+    ...baseSupersession,
+    previousSourceRevision: 99,
+  }],
+});
+assert.equal(mismatchedFactRevisionProjection.currentImages.length, 0);
+assert(
+  mismatchedFactRevisionProjection.blockers.some(
+    (blocker) => blocker.code === 'SUPERSEDE_TARGET_MISMATCH',
+  ),
+  'supersession revisions must match both image records',
+);
+
+const incompleteSupersessionProjection = projectCurrentImageVersions({
+  images: replacedImage.images,
+  supersessions: [],
+});
+assert.equal(incompleteSupersessionProjection.currentImages.length, 0);
+assert(
+  incompleteSupersessionProjection.blockers.some(
+    (blocker) => blocker.code === 'SUPERSEDE_TARGET_MISSING',
+  ),
+  'an image supersession declaration requires its append-only fact',
+);
+
+const duplicateSupersessionProjection = projectCurrentImageVersions({
+  images: replacedImage.images,
+  supersessions: [
+    baseSupersession,
+    {
+      ...baseSupersession,
+      supersessionId: 'image-supersedes:duplicate-link',
+    },
+  ],
+});
+assert.equal(duplicateSupersessionProjection.currentImages.length, 0);
+assert(
+  duplicateSupersessionProjection.blockers.some(
+    (blocker) => blocker.code === 'SUPERSEDE_TARGET_ALREADY_USED',
+  ),
+  'duplicate supersession links fail closed',
+);
+
+const productV3 = imageFor({
+  imageId: '00000000-0000-4000-8000-000000000218',
+  category: 'PRODUCT',
+  sourceRevision: 3,
+  sourceVersionLabel: 'V3',
+  fileName: 'product-v3.jpg',
+  supersedesImageId: productV2.imageId,
+  uploadedAt: '2026-10-27T11:00:00+08:00',
+});
+const productionV3Source: WosSourceSnapshot = {
+  ...productionSource,
+  revision: 3,
+  versionLabel: 'V3',
+};
+const monotonicChain = appendImageVersion({
+  images: replacedImage.images,
+  supersessions: replacedImage.supersessions,
+  candidate: productV3,
+  source: productionV3Source,
+  uploaderProfile: projectOwner,
+  technicalAttempt: null,
+});
+assert.equal(monotonicChain.appended, true);
+const monotonicProjection = projectCurrentImageVersions({
+  images: monotonicChain.images,
+  supersessions: monotonicChain.supersessions,
+});
+assert.deepEqual(monotonicProjection.blockers, []);
+assert.deepEqual(
+  monotonicProjection.currentImages.map((image) => image.imageId),
+  [productV3.imageId],
+);
+assert.deepEqual(
+  monotonicProjection.supersededImageIds,
+  [productV1.imageId, productV2.imageId],
+);
+
+const productV2Fork = imageFor({
+  imageId: '00000000-0000-4000-8000-000000000219',
+  category: 'PRODUCT',
+  sourceRevision: 2,
+  sourceVersionLabel: 'V2-B',
+  fileName: 'product-v2-fork.jpg',
+  supersedesImageId: productV1.imageId,
+  uploadedAt: '2026-10-27T10:30:00+08:00',
+});
+const forkFact: WosImageSupersessionFact = {
+  ...baseSupersession,
+  supersessionId: 'image-supersedes:product-v1:product-v2-fork',
+  nextImageId: productV2Fork.imageId,
+  nextSourceRevision: productV2Fork.sourceRevision,
+  supersededByProfileId: productV2Fork.uploadedByProfileId,
+  supersededAt: productV2Fork.uploadedAt,
+};
+const forkedProjection = projectCurrentImageVersions({
+  images: [productV1, productV2, productV2Fork],
+  supersessions: [baseSupersession, forkFact],
+});
+assert.equal(forkedProjection.currentImages.length, 0);
+assert(
+  forkedProjection.blockers.some(
+    (blocker) => blocker.code === 'SUPERSEDE_TARGET_ALREADY_USED',
+  ),
+  'forked supersession links fail closed',
+);
+
+const cyclicPrevious = {
+  ...productV1,
+  supersedesImageId: productV2.imageId,
+};
+const cyclicNext = {
+  ...productV2,
+  supersedesImageId: productV1.imageId,
+};
+const cyclicProjection = projectCurrentImageVersions({
+  images: [cyclicPrevious, cyclicNext],
+  supersessions: [
+    baseSupersession,
+    {
+      ...baseSupersession,
+      supersessionId: 'image-supersedes:cyclic-backward',
+      previousImageId: productV2.imageId,
+      nextImageId: productV1.imageId,
+      previousSourceRevision: 2,
+      nextSourceRevision: 1,
+      supersededAt: '2026-10-27T09:00:00+08:00',
+    },
+  ],
+});
+assert.equal(cyclicProjection.currentImages.length, 0);
+assert(
+  cyclicProjection.blockers.some(
+    (blocker) => blocker.code === 'SUPERSEDE_TARGET_MISMATCH',
+  ),
+  'cyclic supersession links fail closed',
+);
 
 const duplicateImage = appendImageVersion({
   images: replacedImage.images,

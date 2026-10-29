@@ -52,6 +52,11 @@ projection 不把数据库约束当作已验证前提。任何缺失、重复、
 版本不一致或非 `SUBMITTED` source 都会返回 blocker，并阻止不安全事实进入当前
 task 集合。
 
+同一 readiness `evidenceId` 在传入的全部 submission facts 中出现多次时，即使
+source ID、入口类型或组织不同，projection 也必须返回
+`READINESS_EVIDENCE_DUPLICATE`。所有复用该证据 ID 的 submission 都不得生成 task；
+其他证据未被污染且自身校验通过的 source 仍可独立投影。
+
 ## 5. 图片版本类别
 
 离线契约保留全部正式参考图片类别：
@@ -103,10 +108,20 @@ organizations/<organization_id>/wos/<entity>/<source_id>/<category>/v<revision>/
 
 图片 metadata 只追加，不覆盖旧记录。替代行为产生独立的 supersession fact，并要求：
 
-- 被替代图片存在，且组织、入口、source 和类别一致；
-- 旧 revision 小于新 revision，版本标签不同；
-- 同一旧图片不能被两个新图片重复替代；
-- projection 对缺失、错 scope 或重复链接整体失败关闭，不任意选择“当前图片”。
+- 图片 runtime `imageStatus` 必须属于声明的领域枚举；只有 `READY` 图片可成为 current
+  image，未知状态返回 `INVALID_INPUT`，已知但非 `READY` 状态返回
+  `IMAGE_NOT_READY`；
+- supersession fact 必须与被替代图片和新图片双向链接，且 previous、next 和 fact
+  的组织、入口、source、类别及 revision 完全一致；
+- previous source revision 必须严格小于 next source revision，version labels 必须
+  不同；
+- fact 的 `supersededByProfileId` 和 `supersededAt` 必须分别等于 next image 的
+  uploader 和 upload time；
+- 同一 fact、previous 或 next 不能被重复链接；缺失 fact、重复链接、fork、cycle、
+  backward 或其他歧义链均整体失败关闭。
+
+projection 对上述任一错误返回 blocker 和空 current/superseded 集合，不任意选择
+“当前图片”。
 
 这些规则目前只由纯函数和 tests 证明，不代表数据库 transaction、并发唯一性或
 append-only trigger 已部署。
@@ -117,6 +132,10 @@ append-only trigger 已部署。
 组织与 `profiles.id` 隔离、不可变历史、全部八个图片类别、对象键隔离、错误上传人、
 stale version、打样技术尝试精确绑定和 supersession。该测试由现有
 `tests/unit/workshop-order-suite.test.ts` 聚合器执行。
+
+Focused tests 还覆盖跨 source、入口类型和组织的重复 readiness evidence，图片 runtime
+状态的 enum/READY 门禁，backward/equal revision、错配 fact revision、版本标签、
+audit profile/timestamp、缺失/重复/fork/cycle supersession，以及有效的单调替代链。
 
 Focused test 还明确断言冲突的
 `20261027073000_workshop_order_system_nonproduction_persistence.sql` 不在 PR 中，
