@@ -39,7 +39,7 @@ type ServerReadResult<T> =
   | { ok: true; data: T }
   | { ok: false; status: number; message: string };
 
-export type ProjectListPageItem = ProjectListItem & {
+export type ProjectListPageItem = Omit<ProjectListItem, 'ownerProfileId'> & {
   isOwnedByMe: boolean;
 };
 
@@ -222,9 +222,10 @@ export async function readProjectList(): Promise<ServerReadResult<ProjectListPag
     ]);
 
     timing.mark('relations', relationsStartedAt);
-    const list = buildProjectList({ projects, workItems, customers, owners }).map(project => ({
+    // Keep ownerProfileId server-side: the browser only needs the name and "mine" flag.
+    const list = buildProjectList({ projects, workItems, customers, owners }).map(({ ownerProfileId, ...project }) => ({
       ...project,
-      isOwnedByMe: project.ownerProfileId === profile.id,
+      isOwnedByMe: ownerProfileId === profile.id,
     }));
 
     timing.finish('ok', {
