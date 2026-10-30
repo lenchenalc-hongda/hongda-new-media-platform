@@ -482,9 +482,14 @@ assert(
     && projectsRouteSource.includes("runCpcMutation(req, {}, 'CREATE_PROJECT')"),
   'Projects POST continues to delegate mutation to shared command layer',
 );
+const projectRouteRpcNames = Array.from(
+  projectsRouteSource.matchAll(/\.rpc\(\s*['"]([^'"]+)['"]/g),
+  match => match[1],
+);
 assert(
-  !projectsRouteSource.includes('.rpc('),
-  'Projects route does not duplicate RPC mutation mapping even after read GET was added',
+  projectRouteRpcNames.length === 1
+    && projectRouteRpcNames[0] === 'cpc_project_owner_names',
+  'Projects GET may read scoped project owner names; POST must not duplicate mutation RPC mapping',
 );
 
 const workbenchSource = fs.readFileSync(

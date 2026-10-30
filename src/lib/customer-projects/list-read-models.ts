@@ -44,6 +44,11 @@ export interface ListCustomerRow {
   display_name_snapshot: string;
 }
 
+export interface ListProjectOwnerRow {
+  project_id: string;
+  owner_name: string | null;
+}
+
 export interface ProjectListItem {
   id: string;
   customerReferenceId: string;
@@ -57,6 +62,7 @@ export interface ProjectListItem {
   riskLevel: RiskLevel | null;
   priority: ProjectPriority;
   ownerProfileId: string;
+  ownerName: string | null;
   version: number;
   updatedAt: string;
   nextAction: {
@@ -104,8 +110,12 @@ export function buildProjectList(input: {
   projects: ListProjectRow[];
   workItems: ListWorkItemRow[];
   customers: ListCustomerRow[];
+  owners?: ListProjectOwnerRow[];
 }): ProjectListItem[] {
   const names = new Map(input.customers.map(row => [row.id, row.display_name_snapshot]));
+  const ownerNames = new Map(
+    (input.owners ?? []).map(row => [row.project_id, row.owner_name?.trim() || null]),
+  );
 
   const workByProject = new Map<string, ListWorkItemRow[]>();
   for (const item of input.workItems) {
@@ -139,6 +149,7 @@ export function buildProjectList(input: {
       riskLevel: project.risk_level,
       priority: project.priority,
       ownerProfileId: project.owner_profile_id,
+      ownerName: ownerNames.get(project.id) ?? null,
       version: project.version,
       updatedAt: project.updated_at,
       nextAction: nextAction ? {
