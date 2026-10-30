@@ -10,7 +10,7 @@
 每次追加只允许绑定一个已验证的 V2 extraction candidate claim。调用方必须提供：
 - 已认证服务端生成的 `actor`、`scope` 和真实原始会话 `sourceMessages`；
 - 一个 `GlhV2ExtractionCandidate`、目标 claim 的索引/字段/候选值/ message ID；
-- `candidateVersion`、`baselineVersion`、`modelId`、`modelVersion`、`promptVersion`、`knowledgeVersion`；
+- candidate 信封自带唯一的版本快照 `versions`（`candidateVersion`、`baselineVersion`、`modelId`、`modelVersion`、`promptVersion`、`knowledgeVersion`），这是唯一的版本事实来源；命令中的 `candidateClaim.candidateVersion` 必须与信封快照逐字一致，任何重贴标签或命令/输入不一致都会失败关闭；
 - 明确 `actorConfirmed=true`、服务端可信 `trustedReviewedAt`、原因和幂等键。
 
 模块会使用共享 evidence validator 重新核验 candidate evidence 与原始消息。claim 必须引用同组织、同询盘的真实 INBOUND message，并保留精确原文摘录；MEDIA claim 只能引用该消息已有的 canonical media reference。伪造来源、出站消息、跨组织/询盘证据、错误的 claim 索引/字段/值、版本不一致和 malformed candidate 全部失败关闭。
@@ -34,6 +34,8 @@
 
 已有历史必须是从首条开始、引用有效原始 INBOUND 证据且通过 `supersedesFactId` 串联的不可变记录。重复事实 ID、重复幂等键、坏 scope/classification、缺失确认/时间/版本或伪造历史全部拒绝。任何幂等键复用都失败关闭，即使 payload 完全相同；调用方不能把重复提交伪装成安全重放。
 
+每条 supersession 链必须保持同一个候选 claim 身份（`candidateClaimId`、字段、来源消息）和同一份不可变版本快照；跨字段/来源/候选版本或跨版本快照的“混合历史”都会被拒绝，避免另一个字段/来源/候选的合法事实伪装成对首条事实的更正。
+
 人工接受或修正只产出可审阅草案，不把模型候选提升为权威业务事实，不创建客户/项目，不改 GLH V1 A/B/C/D、CPC SS-N、负责人、价格或客户状态，也不自动淘汰、移交或发送消息。
 
 ## 三个参考维度
@@ -47,6 +49,8 @@
 `tests/unit/global-lead-hub-v2-human-feedback.test.ts` 覆盖：
 - Sales A/B 隔离、同组织 manager 复核、停用/跨组织/角色伪造拒绝；
 - 候选 claim 与版本/candidate/原始 INBOUND 证据精确绑定；
+- 初始追加的任意版本重贴标签、candidate 信封版本快照与命令不一致拒绝；
+- 混合 claim 身份历史与混合版本快照历史拒绝；
 - 伪造、出站、跨组织/询盘、重复消息和错误摘录拒绝；
 - `ACCEPTED/CORRECTED/REJECTED/NEEDS_FOLLOW_UP` 的值语义；
 - 相同 payload 的幂等键复用、重复 fact ID、旧更正、历史污染和坏历史链拒绝；

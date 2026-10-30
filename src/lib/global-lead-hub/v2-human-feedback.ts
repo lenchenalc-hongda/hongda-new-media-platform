@@ -60,6 +60,16 @@ export interface GlhV2CCandidateVersions {
 }
 
 /**
+ * The validated V2 extraction candidate envelope plus its immutable version
+ * snapshot. The version snapshot lives on the candidate itself so there is
+ * exactly one source of truth; the review layer never accepts a side-channel
+ * version input that could relabel a candidate after it was validated.
+ */
+export interface GlhV2CReviewedCandidate extends GlhV2ExtractionCandidate {
+  readonly versions: GlhV2CCandidateVersions;
+}
+
+/**
  * The reference is deliberately redundant with the candidate. A review fails
  * closed unless every field below exactly identifies one claim in the validated
  * candidate evidence.
@@ -168,9 +178,8 @@ export interface GlhV2CReviewInput {
   /** Trusted, server-sourced original conversation messages. */
   readonly sourceMessages: readonly GlhV2SourceMessage[];
   readonly existingHistory: readonly GlhV2CHumanFact[];
-  /** Exactly one validated candidate containing the referenced claim. */
-  readonly candidate: GlhV2ExtractionCandidate;
-  readonly candidateVersions: GlhV2CCandidateVersions;
+  /** Exactly one validated candidate carrying the referenced claim and version snapshot. */
+  readonly candidate: GlhV2CReviewedCandidate;
   readonly command: GlhV2CFeedbackCommand;
   readonly trustedReviewedAt: string;
 }
@@ -282,12 +291,11 @@ function candidateIsValid(
   value: unknown,
   messages: readonly GlhV2SourceMessage[],
   scope: GlhV2CScope,
-): value is GlhV2ExtractionCandidate & {
-  readonly evidence: GlhV2EvidenceDraft;
-} {
+): value is GlhV2CReviewedCandidate {
   if (!isRecord(value)
     || value.schemaVersion !== GLH_V2_LLM_EXTRACTION_CANDIDATE_SCHEMA_VERSION
     || value.reviewOnly !== true
+    || !validVersions(value.versions)
     || !isRecord(value.evidence)) return false;
   const evidence = value.evidence;
   if (evidence.schemaVersion !== GLH_V2_INQUIRY_EVIDENCE_SCHEMA_VERSION
@@ -379,6 +387,27 @@ function historyEvidence(
   };
 }
 
+/**
+ * Every supersession chain is one candidate claim with one immutable version
+ * snapshot. A later fact must not drift to another field, source message, claim
+ * identity, or version snapshot, otherwise a valid fact for another
+ * field/source/candidate could masquerade as a correction of the first one.
+ */
+function sameClaimSnapshot(
+  previous: GlhV2CHumanFact,
+  fact: GlhV2CHumanFact,
+): boolean {
+  return fact.candidateClaimId === previous.candidateClaimId
+    && fact.field === previous.field
+    && fact.sourceMessageId === previous.sourceMessageId
+    && fact.candidateVersion === previous.candidateVersion
+    && fact.baselineVersion === previous.baselineVersion
+    && fact.modelId === previous.modelId
+    && fact.modelVersion === previous.modelVersion
+    && fact.promptVersion === previous.promptVersion
+    && fact.knowledgeVersion === previous.knowledgeVersion;
+}
+
 function safeHistory(
   history: unknown,
   messages: readonly GlhV2SourceMessage[],
@@ -430,6 +459,12 @@ function safeHistory(
       || (index === 0
         ? fact.supersedesFactId !== null
         : fact.supersedesFactId !== history[index - 1].factId)) return false;
+
+    if (index > 0
+      && !sameClaimSnapshot(
+        history[index - 1] as unknown as GlhV2CHumanFact,
+        fact,
+      )) return false;
 
     if (!validateGlhV2InquiryEvidence(
       historyEvidence(fact),
@@ -525,19 +560,18 @@ export function reviewGlhV2CQuality(
   if (!validTime(input.trustedReviewedAt)) {
     return reject('INVALID_COMMAND', existingHistory);
   }
-  if (!validVersions(input.candidateVersions)) {
-    return reject('INVALID_CANDIDATE', existingHistory);
-  }
   if (!candidateIsValid(input.candidate, input.sourceMessages, input.scope)) {
     return reject('INVALID_CANDIDATE', existingHistory);
   }
 
+  const candidate = input.candidate;
+  const candidateVersions = candidate.versions;
   const command = input.command;
   if (command.candidateClaim.candidateVersion
-    !== input.candidateVersions.candidateVersion) {
+    !== candidateVersions.candidateVersion) {
     return reject('CANDIDATE_VERSION_MISMATCH', existingHistory);
   }
-  const candidateClaims = input.candidate.evidence.claims;
+  const candidateClaims = candidate.evidence.claims;
   const candidateClaim = candidateClaims[command.candidateClaim.claimIndex];
   if (!candidateClaim
     || command.candidateClaim.field !== candidateClaim.field
@@ -556,6 +590,8 @@ export function reviewGlhV2CQuality(
   }
 
   const latest = existingHistory.at(-1);
+  const candidateClaimId =
+    `${candidateVersions.candidateVersion}:${command.candidateClaim.claimIndex}`;
   if ((latest
     ? command.supersedesFactId !== latest.factId
     : command.supersedesFactId !== null)) {
@@ -566,18 +602,19 @@ export function reviewGlhV2CQuality(
     return reject('CANDIDATE_MISMATCH', existingHistory);
   }
   if (latest && (
-    latest.candidateVersion !== input.candidateVersions.candidateVersion
-    || latest.baselineVersion !== input.candidateVersions.baselineVersion
-    || latest.modelId !== input.candidateVersions.modelId
-    || latest.modelVersion !== input.candidateVersions.modelVersion
-    || latest.promptVersion !== input.candidateVersions.promptVersion
-    || latest.knowledgeVersion !== input.candidateVersions.knowledgeVersion
+    latest.candidateVersion !== candidateVersions.candidateVersion
+    || latest.baselineVersion !== candidateVersions.baselineVersion
+    || latest.modelId !== candidateVersions.modelId
+    || latest.modelVersion !== candidateVersions.modelVersion
+    || latest.promptVersion !== candidateVersions.promptVersion
+    || latest.knowledgeVersion !== candidateVersions.knowledgeVersion
   )) {
     return reject('CANDIDATE_VERSION_MISMATCH', existingHistory);
   }
+  if (latest && latest.candidateClaimId !== candidateClaimId) {
+    return reject('CANDIDATE_MISMATCH', existingHistory);
+  }
 
-  const candidateClaimId =
-    `${input.candidateVersions.candidateVersion}:${command.candidateClaim.claimIndex}`;
   const fact: GlhV2CHumanFact = Object.freeze({
     schemaVersion: GLH_V2_C_FEEDBACK_SCHEMA,
     immutableAuditMarker: GLH_V2_C_IMMUTABLE_AUDIT_MARKER,
@@ -600,12 +637,12 @@ export function reviewGlhV2CQuality(
     reviewedByProfileId: input.actor.profileId,
     reviewedByRole: input.actor.role,
     reviewedAt: input.trustedReviewedAt,
-    candidateVersion: input.candidateVersions.candidateVersion,
-    baselineVersion: input.candidateVersions.baselineVersion,
-    modelId: input.candidateVersions.modelId,
-    modelVersion: input.candidateVersions.modelVersion,
-    promptVersion: input.candidateVersions.promptVersion,
-    knowledgeVersion: input.candidateVersions.knowledgeVersion,
+    candidateVersion: candidateVersions.candidateVersion,
+    baselineVersion: candidateVersions.baselineVersion,
+    modelId: candidateVersions.modelId,
+    modelVersion: candidateVersions.modelVersion,
+    promptVersion: candidateVersions.promptVersion,
+    knowledgeVersion: candidateVersions.knowledgeVersion,
     actorConfirmed: true,
     humanConfirmed: true,
     reviewOnly: true,

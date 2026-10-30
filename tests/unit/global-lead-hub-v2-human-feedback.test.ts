@@ -8,6 +8,8 @@ import {
   type GlhV2CActor,
   type GlhV2CCandidateVersions,
   type GlhV2CFeedbackCommand,
+  type GlhV2CHumanFact,
+  type GlhV2CReviewedCandidate,
   type GlhV2CReviewInput,
   type GlhV2CScope,
 } from '../../src/lib/global-lead-hub/v2-human-feedback';
@@ -17,7 +19,6 @@ import {
 } from '../../src/lib/global-lead-hub/v2-inquiry-evidence';
 import {
   GLH_V2_LLM_EXTRACTION_CANDIDATE_SCHEMA_VERSION,
-  type GlhV2ExtractionCandidate,
 } from '../../src/lib/global-lead-hub/v2-llm-extraction-eval';
 
 const org = '11111111-1111-4111-8111-111111111111';
@@ -89,8 +90,9 @@ const candidateVersions: GlhV2CCandidateVersions = {
   knowledgeVersion: 'synthetic-knowledge-v1',
 };
 
-const candidate: GlhV2ExtractionCandidate = {
+const candidate: GlhV2CReviewedCandidate = {
   schemaVersion: GLH_V2_LLM_EXTRACTION_CANDIDATE_SCHEMA_VERSION,
+  versions: candidateVersions,
   evidence: {
     schemaVersion: GLH_V2_INQUIRY_EVIDENCE_SCHEMA_VERSION,
     inquiryId: inquiry,
@@ -153,7 +155,6 @@ function review(
     sourceMessages,
     existingHistory: [],
     candidate,
-    candidateVersions,
     command: acceptedCommand,
     trustedReviewedAt: reviewTime,
     ...overrides,
@@ -361,6 +362,8 @@ rejectCode(
   }),
   'CANDIDATE_MISMATCH',
 );
+// Initial arbitrary version relabeling: the command may not relabel the
+// candidate version away from the candidate envelope's immutable snapshot.
 rejectCode(
   review({
     command: {
@@ -373,9 +376,26 @@ rejectCode(
   }),
   'CANDIDATE_VERSION_MISMATCH',
 );
+// Candidate-envelope mismatch: the envelope's version snapshot must agree with
+// the command reference; a disagreement in either direction fails closed.
 rejectCode(
   review({
-    candidateVersions: { ...candidateVersions, modelVersion: '' },
+    candidate: {
+      ...candidate,
+      versions: {
+        ...candidateVersions,
+        candidateVersion: 'candidate-other-v1',
+      },
+    },
+  }),
+  'CANDIDATE_VERSION_MISMATCH',
+);
+rejectCode(
+  review({
+    candidate: {
+      ...candidate,
+      versions: { ...candidateVersions, modelVersion: '' },
+    },
   }),
   'INVALID_CANDIDATE',
 );
@@ -383,12 +403,84 @@ rejectCode(
   review({
     existingHistory: first.history,
     command: correctionCommand,
-    candidateVersions: {
-      ...candidateVersions,
-      baselineVersion: 'different-baseline-v1',
+    candidate: {
+      ...candidate,
+      versions: {
+        ...candidateVersions,
+        baselineVersion: 'different-baseline-v1',
+      },
     },
   }),
   'CANDIDATE_VERSION_MISMATCH',
+);
+
+// A supersession chain must stay on one claim identity and one version
+// snapshot. A valid fact for another field/source/candidate cannot masquerade
+// as a correction of the first fact.
+const mixedClaimHistory: GlhV2CHumanFact = {
+  schemaVersion: GLH_V2_C_FEEDBACK_SCHEMA,
+  immutableAuditMarker: GLH_V2_C_IMMUTABLE_AUDIT_MARKER,
+  organizationId: org,
+  inquiryId: inquiry,
+  assignedSalesProfileId: salesA,
+  factId: fact2,
+  idempotencyKey: key2,
+  candidateClaimId: 'candidate-2026-10-30.1:1',
+  candidateClaimIndex: 1,
+  field: 'country',
+  sourceMessageId: 'inbound-b',
+  sourceExcerpt: 'Germany',
+  sourceConfidence: 0.9,
+  beforeValue: 'Germany',
+  afterValue: 'Germany',
+  classification: 'ACCEPTED',
+  reason: 'Sales confirmed the destination country.',
+  supersedesFactId: fact1,
+  reviewedByProfileId: managerId,
+  reviewedByRole: 'manager',
+  reviewedAt: '2026-10-29T09:30:00Z',
+  candidateVersion: candidateVersions.candidateVersion,
+  baselineVersion: candidateVersions.baselineVersion,
+  modelId: candidateVersions.modelId,
+  modelVersion: candidateVersions.modelVersion,
+  promptVersion: candidateVersions.promptVersion,
+  knowledgeVersion: candidateVersions.knowledgeVersion,
+  actorConfirmed: true,
+  humanConfirmed: true,
+  reviewOnly: true,
+  authoritativeBusinessFact: false,
+};
+rejectCode(
+  review({
+    existingHistory: [first.fact, mixedClaimHistory],
+    command: correctionCommand,
+  }),
+  'UNTRUSTED_HISTORY',
+);
+
+const mixedVersionHistory: GlhV2CHumanFact = {
+  ...mixedClaimHistory,
+  factId: fact2,
+  idempotencyKey: key2,
+  candidateClaimId: 'candidate-2026-10-30.2:0',
+  candidateClaimIndex: 0,
+  field: 'material',
+  sourceMessageId: 'inbound-a',
+  sourceExcerpt: 'PP',
+  sourceConfidence: 0.95,
+  beforeValue: 'PP',
+  afterValue: 'PP',
+  classification: 'ACCEPTED',
+  reason: 'Sales reconfirmed the material under a newer version snapshot.',
+  candidateVersion: 'candidate-2026-10-30.2',
+  modelVersion: 'synthetic-model-version-2',
+};
+rejectCode(
+  review({
+    existingHistory: [first.fact, mixedVersionHistory],
+    command: correctionCommand,
+  }),
+  'UNTRUSTED_HISTORY',
 );
 
 // Malformed commands and old TRUE/FALSE/UNKNOWN review enums fail closed.
