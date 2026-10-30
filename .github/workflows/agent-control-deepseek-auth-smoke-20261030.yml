@@ -54,6 +54,22 @@ jobs:
           fi
           echo "RUNNER_DEEPSEEK_AUTH=PASS"
 
+          # Probe the actual Responses API independently of Codex; no response body or credential is logged.
+          response_code="$(
+            printf 'header = "Authorization: Bearer %s"\n' "$key" |
+            /usr/bin/curl --config - --silent --show-error --output /dev/null \
+              --write-out '%{http_code}' --connect-timeout 10 --max-time 90 \
+              --header 'Content-Type: application/json' \
+              --data '{"model":"deepseek-flash","input":"Reply exactly OK","stream":false,"max_output_tokens":64}' \
+              https://api.deepseek.com/responses
+          )"
+          echo "RUNNER_RESPONSES_HTTP=$response_code"
+          if [ "$response_code" != "200" ]; then
+            echo "RUNNER_RESPONSES_API=FAIL"
+            exit 1
+          fi
+          echo "RUNNER_RESPONSES_API=PASS"
+
           codex_binary="$HOME/.codex/plugins/.plugin-appserver/codex-cli/bin/codex"
           if [ ! -x "$codex_binary" ]; then
             codex_binary="/Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex"
@@ -71,7 +87,7 @@ jobs:
           trap 'rm -rf "$probe_home"' EXIT
           mkdir -p "$probe_home/.codex"
           cat > "$probe_home/.codex/config.toml" <<'EOF'
-          model = "deepseek-v4-flash"
+          model = "deepseek-flash"
           model_provider = "deepseek_auth_smoke"
           model_reasoning_effort = "high"
           [model_providers.deepseek_auth_smoke]
@@ -92,7 +108,7 @@ jobs:
             DEEPSEEK_API_KEY="$key" \
             TMPDIR="$RUNNER_TEMP" \
             "$codex_binary" --no-daemon exec \
-            -m deepseek-v4-flash \
+            -m deepseek-flash \
             -c 'model_reasoning_effort="high"' \
             -C "$probe_home" \
             -s read-only \
@@ -103,12 +119,28 @@ jobs:
           codex_exit=$?
           set -e
           if [ "$codex_exit" -ne 0 ]; then
+            echo "CODEX_EXIT_CODE=$codex_exit"
+            echo "CODEX_STDERR_BYTES=$(wc -c < "$probe_home/errors.txt" | tr -d ' ')"
             if grep -Eqi '401|unauthorized|invalid (api )?key' "$probe_home/errors.txt"; then
               echo "RUNNER_CODEX_RESULT=PROVIDER_401"
-            elif grep -Eqi '429|rate.?limit' "$probe_home/errors.txt"; then
-              echo "RUNNER_CODEX_RESULT=RATE_LIMIT"
+            elif grep -Eqi '429|rate.?limit|quota' "$probe_home/errors.txt"; then
+              echo "RUNNER_CODEX_RESULT=RATE_LIMIT_OR_QUOTA"
+            elif grep -Eqi 'invalid.*model|unknown.*model|model.*not found|unsupported model' "$probe_home/errors.txt"; then
+              echo "RUNNER_CODEX_RESULT=MODEL_CONFIG"
+            elif grep -Eqi '400|bad request' "$probe_home/errors.txt"; then
+              echo "RUNNER_CODEX_RESULT=HTTP_400"
+            elif grep -Eqi '404|not found' "$probe_home/errors.txt"; then
+              echo "RUNNER_CODEX_RESULT=HTTP_404"
+            elif grep -Eqi 'config.toml|parse.*config|invalid configuration|missing.*provider|unknown variant' "$probe_home/errors.txt"; then
+              echo "RUNNER_CODEX_RESULT=LOCAL_CONFIG"
+            elif grep -Eqi 'error: unexpected argument|unrecognized option|unrecognized subcommand|unexpected option' "$probe_home/errors.txt"; then
+              echo "RUNNER_CODEX_RESULT=CLI_FLAGS"
+            elif grep -Eqi 'permission denied|operation not permitted|sandbox|read-only filesystem' "$probe_home/errors.txt"; then
+              echo "RUNNER_CODEX_RESULT=SANDBOX"
+            elif grep -Eqi 'timeout|timed out|connection refused|network|ssl|tls' "$probe_home/errors.txt"; then
+              echo "RUNNER_CODEX_RESULT=NETWORK"
             else
-              echo "RUNNER_CODEX_RESULT=FAIL_NON_401"
+              echo "RUNNER_CODEX_RESULT=OTHER_NON_401"
             fi
             exit 1
           fi
