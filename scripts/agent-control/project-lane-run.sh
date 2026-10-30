@@ -44,6 +44,21 @@ classify_codex_failure() {
   fi
 }
 
+# Single execution-path classifier, including stderr/exit-status conflicts.
+# Real provider 401 wins over incidental keychain context and even an
+# unexpected CLI zero-exit with a clear provider rejection diagnostic.
+classify_codex_attempt() {
+  local exit_status="$1" logfile="$2" detected
+  detected="$(classify_codex_failure "$logfile")"
+  if [ "$detected" = "PROVIDER_401" ] || [ "$detected" = "KEYCHAIN_FAILURE" ]; then
+    printf '%s' "$detected"
+  elif [ "$exit_status" -eq 0 ]; then
+    printf 'NONE'
+  else
+    printf '%s' "$detected"
+  fi
+}
+
 retry_delay() {
   case "$1" in
     1) printf '2' ;;
@@ -382,14 +397,13 @@ for attempt in 1 2 3; do
   codex_status=$?
   set -e
 
-  # One authoritative classifier: an explicit provider 401 wins even if the
-  # same stderr also contains legacy keychain/external-auth context.
-  if [ "$codex_status" -eq 0 ] && ! /usr/bin/grep -Eqi '/usr/bin/security|Failed to resolve external auth|keychain' "$error_log"; then
-    failure_class="NONE"
+  # Exercise the same single classifier in tests and live Codex execution.
+  failure_class="$(classify_codex_attempt "$codex_status" "$error_log")"
+  if [ "$failure_class" = "NONE" ]; then
     break
   fi
-  failure_class="$(classify_codex_failure "$error_log")"
   if [ "$failure_class" = "KEYCHAIN_FAILURE" ]; then codex_status=72; fi
+  if [ "$codex_status" -eq 0 ]; then codex_status=73; fi
 
   printf 'CODEX_LOCAL_ATTEMPT=%s/3 FAILURE_CLASS=%s\n' "$attempt" "$failure_class"
   printf 'CODEX_STDERR_BEGIN\n'
