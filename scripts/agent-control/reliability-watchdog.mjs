@@ -187,6 +187,15 @@ async function inspectProject(project, config) {
     return;
   }
 
+  // A live GitHub merge is authoritative even when an old owner gate remains
+  // on the Issue. Reconcile an already-merged PR before waiting for approval.
+  if (['APPROVED_FOR_MERGE', 'READY_FOR_PM_REVIEW', 'WAITING_REVIEW'].includes(state.status) && state.active_pr) {
+    if (await reconcileMergedPr(project, issue, state)) {
+      console.log(`WATCHDOG_PROJECT=${project} RESULT=RECONCILED_MERGED_PR`);
+      return;
+    }
+  }
+
   if (['HUMAN_GATE', 'NEEDS_DECISION'].includes(state.status) || state.owner_action_required === true) {
     const derived = displayStatus({
       stateStatus: state.status,
@@ -198,13 +207,6 @@ async function inspectProject(project, config) {
     }
     console.log(`WATCHDOG_PROJECT=${project} RESULT=${derived}`);
     return;
-  }
-
-  if (['APPROVED_FOR_MERGE', 'READY_FOR_PM_REVIEW', 'WAITING_REVIEW'].includes(state.status) && state.active_pr) {
-    if (await reconcileMergedPr(project, issue, state)) {
-      console.log(`WATCHDOG_PROJECT=${project} RESULT=RECONCILED_MERGED_PR`);
-      return;
-    }
   }
 
   if (['PASS', 'COMPLETE', 'MERGED', 'BLOCKED'].includes(state.status)) {
