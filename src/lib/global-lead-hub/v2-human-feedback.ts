@@ -1,11 +1,39 @@
-import type { GlhV2EvidenceDraft, GlhV2SourceMessage } from './v2-inquiry-evidence';
+import {
+  GLH_V2_INQUIRY_EVIDENCE_SCHEMA_VERSION,
+  GLH_V2_INQUIRY_FIELDS,
+  validateGlhV2InquiryEvidence,
+  type GlhV2EvidenceDraft,
+  type GlhV2InquiryField,
+  type GlhV2SourceMessage,
+} from './v2-inquiry-evidence';
+import {
+  GLH_V2_LLM_EXTRACTION_CANDIDATE_SCHEMA_VERSION,
+  type GlhV2ExtractionCandidate,
+} from './v2-llm-extraction-eval';
 
-// Offline, review-only candidate facts. Never make authoritative GLH/CPC
-// mutations or change existing A/B/C/D or CPC SS-N ratings.
+/**
+ * Offline, append-only review of one V2 extraction candidate claim.
+ *
+ * A human classification is an auditable review result, not an authoritative
+ * business fact. This module never writes GLH/CPC data, changes V1 grades, sends
+ * messages, calls a model provider, or persists the returned history.
+ */
 export const GLH_V2_C_FEEDBACK_SCHEMA = 'GLH-V2-C-HUMAN-FEEDBACK-001' as const;
-export const GLH_V2_C_DECISIONS = ['TRUE', 'FALSE', 'UNKNOWN'] as const;
-export type GlhV2CHumanDecision = (typeof GLH_V2_C_DECISIONS)[number];
+export const GLH_V2_C_CLASSIFICATIONS = [
+  'ACCEPTED',
+  'CORRECTED',
+  'REJECTED',
+  'NEEDS_FOLLOW_UP',
+] as const;
+export type GlhV2CReviewClassification =
+  (typeof GLH_V2_C_CLASSIFICATIONS)[number];
+export type GlhV2CHumanDecision = GlhV2CReviewClassification;
 export type GlhV2CActorRole = 'admin' | 'manager' | 'sales';
+
+export const GLH_V2_C_IMMUTABLE_AUDIT_MARKER =
+  'APPEND_ONLY_IMMUTABLE' as const;
+export const GLH_V2_C_PROVIDER_CALLS = 0 as const;
+export const GLH_V2_C_REAL_MODEL_ACCURACY = 'NOT_MEASURED' as const;
 
 export interface GlhV2CActor {
   readonly profileId: string;
@@ -13,211 +41,589 @@ export interface GlhV2CActor {
   readonly role: GlhV2CActorRole;
   readonly isActive: boolean;
 }
+
 export interface GlhV2CScope {
   readonly organizationId: string;
   readonly inquiryId: string;
   readonly assignedSalesProfileId: string;
 }
+
+export interface GlhV2CCandidateVersions {
+  /** Identity of this extraction candidate, independent of model/prompt versions. */
+  readonly candidateVersion: string;
+  /** Business baseline against which the human review was performed. */
+  readonly baselineVersion: string;
+  readonly modelId: string;
+  readonly modelVersion: string;
+  readonly promptVersion: string;
+  readonly knowledgeVersion: string;
+}
+
+/**
+ * The reference is deliberately redundant with the candidate. A review fails
+ * closed unless every field below exactly identifies one claim in the validated
+ * candidate evidence.
+ */
+export interface GlhV2CCandidateClaimReference {
+  readonly candidateVersion: string;
+  readonly claimIndex: number;
+  readonly field: GlhV2InquiryField;
+  readonly sourceMessageId: string;
+  readonly candidateValue: string;
+}
+
 export interface GlhV2CFeedbackCommand {
   readonly factId: string;
   readonly idempotencyKey: string;
-  readonly decision: GlhV2CHumanDecision;
+  readonly candidateClaim: GlhV2CCandidateClaimReference;
+  readonly classification: GlhV2CReviewClassification;
+  /** Required only for CORRECTED; must differ from candidateValue. */
+  readonly correctedValue: string | null;
   readonly reason: string;
-  readonly sourceMessageId: string;
   readonly supersedesFactId: string | null;
+  readonly actorConfirmed: true;
 }
-export interface GlhV2CHumanFact {
+
+export interface GlhV2CHumanFact extends GlhV2CCandidateVersions {
   readonly schemaVersion: typeof GLH_V2_C_FEEDBACK_SCHEMA;
+  readonly immutableAuditMarker: typeof GLH_V2_C_IMMUTABLE_AUDIT_MARKER;
   readonly organizationId: string;
   readonly inquiryId: string;
+  readonly assignedSalesProfileId: string;
   readonly factId: string;
   readonly idempotencyKey: string;
-  readonly decision: GlhV2CHumanDecision;
-  readonly reason: string;
+  readonly candidateClaimId: string;
+  readonly candidateClaimIndex: number;
+  readonly field: GlhV2InquiryField;
   readonly sourceMessageId: string;
+  readonly sourceExcerpt: string | null;
+  readonly sourceConfidence: number;
+  readonly beforeValue: string;
+  readonly afterValue: string | null;
+  readonly classification: GlhV2CReviewClassification;
+  readonly reason: string;
   readonly supersedesFactId: string | null;
   readonly reviewedByProfileId: string;
+  readonly reviewedByRole: GlhV2CActorRole;
   readonly reviewedAt: string;
+  readonly actorConfirmed: true;
   readonly humanConfirmed: true;
+  /** The accepted/corrected value remains a draft and is not business truth. */
   readonly reviewOnly: true;
+  readonly authoritativeBusinessFact: false;
 }
+
 export type GlhV2CRejectCode =
-  | 'UNTRUSTED_SCOPE' | 'UNAUTHORIZED_REVIEWER' | 'INVALID_COMMAND'
-  | 'INVALID_SOURCE' | 'UNTRUSTED_HISTORY' | 'IDEMPOTENCY_CONFLICT'
-  | 'STALE_CORRECTION';
+  | 'UNTRUSTED_SCOPE'
+  | 'UNAUTHORIZED_REVIEWER'
+  | 'INVALID_COMMAND'
+  | 'INVALID_CANDIDATE'
+  | 'INVALID_SOURCE'
+  | 'UNTRUSTED_HISTORY'
+  | 'IDEMPOTENCY_CONFLICT'
+  | 'STALE_CORRECTION'
+  | 'CANDIDATE_MISMATCH'
+  | 'CANDIDATE_VERSION_MISMATCH';
+
 export type GlhV2CReviewResult =
   | {
     readonly ok: true;
-    readonly action: 'APPENDED' | 'REPLAYED';
+    readonly action: 'APPENDED';
     readonly fact: GlhV2CHumanFact;
     readonly history: readonly GlhV2CHumanFact[];
     readonly current: GlhV2CHumanFact;
     readonly legacyGradeUntouched: true;
     readonly cpcWriteAllowed: false;
+    readonly authoritativeWriteAllowed: false;
     readonly autoDiscardAllowed: false;
     readonly customerFacingAutoSendAllowed: false;
+    readonly providerCalls: 0;
+    readonly realModelAccuracy: 'NOT_MEASURED';
   }
-  | { readonly ok: false; readonly code: GlhV2CRejectCode; readonly history: readonly GlhV2CHumanFact[] };
+  | {
+    readonly ok: false;
+    readonly code: GlhV2CRejectCode;
+    readonly history: readonly GlhV2CHumanFact[];
+  };
 
 export interface GlhV2CQualityDimensions {
-  readonly completeness: { readonly knownFields: number; readonly targetFields: number; readonly needsVerification: true };
+  readonly completeness: {
+    readonly knownFields: number;
+    readonly targetFields: number;
+    readonly needsVerification: true;
+  };
   readonly fit: 'REVIEW_REQUIRED';
   readonly intent: 'REVIEW_REQUIRED';
   readonly useForGrade: false;
   readonly automaticallyRejectLead: false;
   readonly humanReviewRequired: true;
+  readonly authoritativeWriteAllowed: false;
+  readonly providerCalls: 0;
+  readonly realModelAccuracy: 'NOT_MEASURED';
 }
 
-const REQUIRED_FIELDS = ['product', 'material', 'quantity', 'country', 'requirementType', 'purchaseTimeline'] as const;
+export interface GlhV2CReviewInput {
+  readonly actor: GlhV2CActor;
+  readonly scope: GlhV2CScope;
+  /** Trusted, server-sourced original conversation messages. */
+  readonly sourceMessages: readonly GlhV2SourceMessage[];
+  readonly existingHistory: readonly GlhV2CHumanFact[];
+  /** Exactly one validated candidate containing the referenced claim. */
+  readonly candidate: GlhV2ExtractionCandidate;
+  readonly candidateVersions: GlhV2CCandidateVersions;
+  readonly command: GlhV2CFeedbackCommand;
+  readonly trustedReviewedAt: string;
+}
+
+const REQUIRED_FIELDS = [
+  'product',
+  'material',
+  'quantity',
+  'country',
+  'requirementType',
+  'purchaseTimeline',
+] as const;
 const ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const DECISIONS = new Set<string>(GLH_V2_C_DECISIONS);
+const VERSION = /^[A-Za-z0-9._:-]{1,128}$/;
+const CLASSIFICATIONS = new Set<string>(GLH_V2_C_CLASSIFICATIONS);
 const ROLES = new Set<string>(['admin', 'manager', 'sales']);
-function id(x: unknown): x is string { return typeof x === 'string' && ID.test(x); }
-function txt(x: unknown, max: number): x is string {
-  return typeof x === 'string' && x.trim().length > 0 && x.length <= max;
-}
-function validTime(value: unknown): value is string {
-  return typeof value === 'string' && value.length <= 40
-    && /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d{1,3})?Z$/.test(value)
-    && Number.isFinite(Date.parse(value))
-    && new Date(Date.parse(value)).toISOString().slice(0, 10) === value.slice(0, 10);
+const FIELDS = new Set<string>(GLH_V2_INQUIRY_FIELDS);
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-function reject(code: GlhV2CRejectCode, history: readonly GlhV2CHumanFact[]): GlhV2CReviewResult {
+function id(value: unknown): value is string {
+  return typeof value === 'string' && ID.test(value);
+}
+
+function txt(value: unknown, max: number): value is string {
+  return typeof value === 'string'
+    && value.trim().length > 0
+    && value.length <= max;
+}
+
+function version(value: unknown): value is string {
+  return typeof value === 'string' && VERSION.test(value);
+}
+
+function validClassifier(value: unknown): value is GlhV2CReviewClassification {
+  return typeof value === 'string' && CLASSIFICATIONS.has(value);
+}
+
+function validTime(value: unknown): value is string {
+  if (typeof value !== 'string'
+    || value.length > 40
+    || !/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d{3})?Z$/.test(value)) {
+    return false;
+  }
+  const parsed = Date.parse(value);
+  if (!Number.isFinite(parsed)) return false;
+  const canonical = new Date(parsed).toISOString();
+  return canonical === value || canonical.replace('.000Z', 'Z') === value;
+}
+
+function validConfidence(value: unknown): value is number {
+  return typeof value === 'number'
+    && Number.isFinite(value)
+    && value >= 0
+    && value <= 1;
+}
+
+function validVersions(value: unknown): value is GlhV2CCandidateVersions {
+  return isRecord(value)
+    && version(value.candidateVersion)
+    && version(value.baselineVersion)
+    && version(value.modelId)
+    && version(value.modelVersion)
+    && version(value.promptVersion)
+    && version(value.knowledgeVersion);
+}
+
+function reject(
+  code: GlhV2CRejectCode,
+  history: readonly GlhV2CHumanFact[],
+): GlhV2CReviewResult {
   return { ok: false, code, history };
 }
 
-export function proposeGlhV2CQualityDimensions(
-  evidence: GlhV2EvidenceDraft | null,
+function scopeIsWellFormed(scope: unknown): scope is GlhV2CScope {
+  return isRecord(scope)
+    && id(scope.organizationId)
+    && id(scope.inquiryId)
+    && id(scope.assignedSalesProfileId);
+}
+
+function authorized(actor: unknown, scope: GlhV2CScope): actor is GlhV2CActor {
+  return isRecord(actor)
+    && id(actor.profileId)
+    && id(actor.organizationId)
+    && actor.organizationId === scope.organizationId
+    && actor.isActive === true
+    && typeof actor.role === 'string'
+    && ROLES.has(actor.role)
+    && (actor.role !== 'sales'
+      || actor.profileId === scope.assignedSalesProfileId);
+}
+
+function trustedCorpusIsValid(
+  messages: unknown,
   scope: GlhV2CScope,
-): GlhV2CQualityDimensions | null {
-  if (!evidence || evidence.inquiryId !== scope.inquiryId
+): boolean {
+  if (!Array.isArray(messages) || messages.length > 200) return false;
+  return validateGlhV2InquiryEvidence({
+    schemaVersion: GLH_V2_INQUIRY_EVIDENCE_SCHEMA_VERSION,
+    inquiryId: scope.inquiryId,
+    claims: [],
+  }, messages, scope).ok;
+}
+
+function candidateIsValid(
+  value: unknown,
+  messages: readonly GlhV2SourceMessage[],
+  scope: GlhV2CScope,
+): value is GlhV2ExtractionCandidate & {
+  readonly evidence: GlhV2EvidenceDraft;
+} {
+  if (!isRecord(value)
+    || value.schemaVersion !== GLH_V2_LLM_EXTRACTION_CANDIDATE_SCHEMA_VERSION
+    || value.reviewOnly !== true
+    || !isRecord(value.evidence)) return false;
+  const evidence = value.evidence;
+  if (evidence.schemaVersion !== GLH_V2_INQUIRY_EVIDENCE_SCHEMA_VERSION
+    || evidence.inquiryId !== scope.inquiryId
     || evidence.organizationId !== scope.organizationId
-    || !Array.isArray(evidence.claims)) return null;
-  const observed = new Set<string>();
-  for (const claim of evidence.claims) {
-    // Field existence is NOT proof that the model interpreted the original
-    // message correctly. Only expose the number of suggested fields.
-    if (claim.needsVerification !== true || !txt(claim.sourceMessageId, 128)) return null;
-    if ((REQUIRED_FIELDS as readonly string[]).includes(claim.field)
-      && txt(claim.value, 300)) observed.add(claim.field);
+    || evidence.humanReviewRequired !== true
+    || evidence.customerFacingAutoSendAllowed !== false
+    || evidence.authoritativeWriteAllowed !== false
+    || evidence.legacyGradeUntouched !== true) return false;
+  return validateGlhV2InquiryEvidence(evidence, messages, scope).ok;
+}
+
+function validClaimReference(
+  value: unknown,
+): value is GlhV2CCandidateClaimReference {
+  return isRecord(value)
+    && version(value.candidateVersion)
+    && typeof value.claimIndex === 'number'
+    && Number.isInteger(value.claimIndex)
+    && value.claimIndex >= 0
+    && value.claimIndex <= 49
+    && typeof value.field === 'string'
+    && FIELDS.has(value.field)
+    && txt(value.sourceMessageId, 128)
+    && txt(value.candidateValue, 300);
+}
+
+function validCommand(
+  value: unknown,
+): value is GlhV2CFeedbackCommand {
+  if (!isRecord(value)
+    || !id(value.factId)
+    || !id(value.idempotencyKey)
+    || !validClaimReference(value.candidateClaim)
+    || !validClassifier(value.classification)
+    || !txt(value.reason, 2000)
+    || (value.supersedesFactId !== null && !id(value.supersedesFactId))
+    || value.actorConfirmed !== true) return false;
+
+  if (value.classification === 'CORRECTED') {
+    return txt(value.correctedValue, 300)
+      && value.correctedValue.trim() !== value.candidateClaim.candidateValue;
   }
+  return value.correctedValue === null || value.correctedValue === undefined;
+}
+
+function reviewedAfterValue(
+  command: GlhV2CFeedbackCommand,
+): string | null {
+  if (command.classification === 'ACCEPTED') {
+    return command.candidateClaim.candidateValue;
+  }
+  if (command.classification === 'CORRECTED') {
+    return command.correctedValue!.trim();
+  }
+  return null;
+}
+
+function classificationValueIsValid(fact: GlhV2CHumanFact): boolean {
+  if (fact.classification === 'ACCEPTED') {
+    return fact.afterValue === fact.beforeValue;
+  }
+  if (fact.classification === 'CORRECTED') {
+    return txt(fact.afterValue, 300)
+      && fact.afterValue !== fact.beforeValue;
+  }
+  return fact.afterValue === null;
+}
+
+function historyEvidence(
+  fact: GlhV2CHumanFact,
+): GlhV2EvidenceDraft {
   return {
-    completeness: { knownFields: observed.size, targetFields: REQUIRED_FIELDS.length, needsVerification: true },
-    fit: 'REVIEW_REQUIRED', intent: 'REVIEW_REQUIRED', useForGrade: false,
-    automaticallyRejectLead: false, humanReviewRequired: true,
+    schemaVersion: GLH_V2_INQUIRY_EVIDENCE_SCHEMA_VERSION,
+    inquiryId: fact.inquiryId,
+    organizationId: fact.organizationId,
+    claims: [{
+      field: fact.field,
+      value: fact.beforeValue,
+      sourceMessageId: fact.sourceMessageId,
+      excerpt: fact.sourceExcerpt,
+      confidence: fact.sourceConfidence,
+      needsVerification: true,
+    }],
+    humanReviewRequired: true,
+    customerFacingAutoSendAllowed: false,
+    authoritativeWriteAllowed: false,
+    legacyGradeUntouched: true,
   };
 }
 
-function authorized(actor: GlhV2CActor, scope: GlhV2CScope): boolean {
-  return id(actor.profileId) && id(actor.organizationId)
-    && id(scope.organizationId) && id(scope.inquiryId) && id(scope.assignedSalesProfileId)
-    && actor.organizationId === scope.organizationId && actor.isActive === true
-    && ROLES.has(actor.role)
-    && (actor.role !== 'sales' || actor.profileId === scope.assignedSalesProfileId);
-}
-
-function verifiedSource(
+function safeHistory(
+  history: unknown,
   messages: readonly GlhV2SourceMessage[],
   scope: GlhV2CScope,
-  requiredId: string,
-): boolean {
-  if (!Array.isArray(messages) || messages.length === 0 || messages.length > 200) return false;
-  const seen = new Set<string>();
-  let found = false;
-  for (const msg of messages) {
-    if (!msg || !txt(msg.id, 128) || seen.has(msg.id)
-      || msg.organizationId !== scope.organizationId || msg.inquiryId !== scope.inquiryId
-      || (msg.direction !== 'INBOUND' && msg.direction !== 'OUTBOUND')
-      || (msg.kind !== 'TEXT' && msg.kind !== 'MEDIA')) return false;
-    seen.add(msg.id);
-    if (msg.id === requiredId && msg.direction === 'INBOUND') found = true;
-  }
-  return found;
-}
-
-function safeHistory(history: readonly GlhV2CHumanFact[], scope: GlhV2CScope): boolean {
+): history is readonly GlhV2CHumanFact[] {
   if (!Array.isArray(history) || history.length > 500) return false;
-  const seenFacts = new Set<string>(), seenKeys = new Set<string>();
-  for (let i = 0; i < history.length; i++) {
-    const f = history[i];
-    if (!f || f.schemaVersion !== GLH_V2_C_FEEDBACK_SCHEMA
-      || f.organizationId !== scope.organizationId || f.inquiryId !== scope.inquiryId
-      || !id(f.factId) || !id(f.idempotencyKey) || !id(f.reviewedByProfileId)
-      || !txt(f.sourceMessageId, 128) || !txt(f.reason, 2000)
-      || !DECISIONS.has(f.decision) || !validTime(f.reviewedAt)
-      || f.humanConfirmed !== true || f.reviewOnly !== true
-      || seenFacts.has(f.factId) || seenKeys.has(f.idempotencyKey)
-      || (i === 0 ? f.supersedesFactId !== null : f.supersedesFactId !== history[i - 1].factId)) return false;
-    seenFacts.add(f.factId); seenKeys.add(f.idempotencyKey);
+  const seenFacts = new Set<string>();
+  const seenKeys = new Set<string>();
+
+  for (let index = 0; index < history.length; index++) {
+    const value = history[index];
+    if (!isRecord(value)) return false;
+    const fact = value as unknown as GlhV2CHumanFact;
+    if (fact.schemaVersion !== GLH_V2_C_FEEDBACK_SCHEMA
+      || fact.immutableAuditMarker !== GLH_V2_C_IMMUTABLE_AUDIT_MARKER
+      || fact.organizationId !== scope.organizationId
+      || fact.inquiryId !== scope.inquiryId
+      || fact.assignedSalesProfileId !== scope.assignedSalesProfileId
+      || !id(fact.factId)
+      || !id(fact.idempotencyKey)
+      || !txt(fact.candidateClaimId, 300)
+      || !Number.isInteger(fact.candidateClaimIndex)
+      || fact.candidateClaimIndex < 0
+      || fact.candidateClaimIndex > 49
+      || typeof fact.field !== 'string'
+      || !FIELDS.has(fact.field)
+      || !txt(fact.sourceMessageId, 128)
+      || (fact.sourceExcerpt !== null && !txt(fact.sourceExcerpt, 400))
+      || !validConfidence(fact.sourceConfidence)
+      || !txt(fact.beforeValue, 300)
+      || !validClassifier(fact.classification)
+      || !classificationValueIsValid(fact)
+      || !txt(fact.reason, 2000)
+      || !id(fact.reviewedByProfileId)
+      || typeof fact.reviewedByRole !== 'string'
+      || !ROLES.has(fact.reviewedByRole)
+      || (fact.reviewedByRole === 'sales'
+        && fact.reviewedByProfileId !== scope.assignedSalesProfileId)
+      || !validTime(fact.reviewedAt)
+      || fact.actorConfirmed !== true
+      || fact.humanConfirmed !== true
+      || fact.reviewOnly !== true
+      || fact.authoritativeBusinessFact !== false
+      || !validVersions(fact)
+      || fact.candidateClaimId
+        !== `${fact.candidateVersion}:${fact.candidateClaimIndex}`
+      || seenFacts.has(fact.factId)
+      || seenKeys.has(fact.idempotencyKey)
+      || (index === 0
+        ? fact.supersedesFactId !== null
+        : fact.supersedesFactId !== history[index - 1].factId)) return false;
+
+    if (!validateGlhV2InquiryEvidence(
+      historyEvidence(fact),
+      messages,
+      scope,
+    ).ok) return false;
+
+    seenFacts.add(fact.factId);
+    seenKeys.add(fact.idempotencyKey);
   }
   return true;
 }
 
-/** Pure append-only human action. Trusted server must supply actor/scope/time. */
-export function reviewGlhV2CQuality(input: {
-  readonly actor: GlhV2CActor;
-  readonly scope: GlhV2CScope;
-  readonly sourceMessages: readonly GlhV2SourceMessage[];
-  readonly existingHistory: readonly GlhV2CHumanFact[];
-  readonly command: GlhV2CFeedbackCommand;
-  readonly trustedReviewedAt: string;
-}): GlhV2CReviewResult {
-  const { actor, scope, existingHistory, command, sourceMessages, trustedReviewedAt } = input;
-  if (!scope || !actor || !id(scope.organizationId) || !id(scope.inquiryId)) {
-    return reject('UNTRUSTED_SCOPE', existingHistory ?? []);
+/**
+ * Validate the trusted source corpus and candidate evidence before calculating
+ * an advisory completeness count. A field count is never evidence that the
+ * model interpreted the message correctly.
+ */
+export function proposeGlhV2CQualityDimensions(
+  evidence: GlhV2EvidenceDraft | null,
+  sourceMessages: readonly GlhV2SourceMessage[],
+  scope: GlhV2CScope,
+): GlhV2CQualityDimensions | null {
+  if (!scopeIsWellFormed(scope)
+    || !trustedCorpusIsValid(sourceMessages, scope)
+    || !isRecord(evidence)
+    || evidence.schemaVersion !== GLH_V2_INQUIRY_EVIDENCE_SCHEMA_VERSION
+    || evidence.humanReviewRequired !== true
+    || evidence.customerFacingAutoSendAllowed !== false
+    || evidence.authoritativeWriteAllowed !== false
+    || evidence.legacyGradeUntouched !== true) return null;
+
+  const validated = validateGlhV2InquiryEvidence(
+    evidence,
+    sourceMessages,
+    scope,
+  );
+  if (!validated.ok) return null;
+
+  const observed = new Set<string>();
+  for (const claim of validated.data.claims) {
+    if ((REQUIRED_FIELDS as readonly string[]).includes(claim.field)) {
+      observed.add(claim.field);
+    }
   }
-  if (!authorized(actor, scope)) return reject('UNAUTHORIZED_REVIEWER', existingHistory);
-  if (!safeHistory(existingHistory, scope)) return reject('UNTRUSTED_HISTORY', existingHistory);
-  if (!command || !id(command.factId) || !id(command.idempotencyKey)
-    || !DECISIONS.has(command.decision) || !txt(command.reason, 2000)
-    || !txt(command.sourceMessageId, 128)
-    || (command.supersedesFactId !== null && !id(command.supersedesFactId))
-    || !validTime(trustedReviewedAt)) return reject('INVALID_COMMAND', existingHistory);
-  if (!verifiedSource(sourceMessages, scope, command.sourceMessageId)) {
+  return {
+    completeness: {
+      knownFields: observed.size,
+      targetFields: REQUIRED_FIELDS.length,
+      needsVerification: true,
+    },
+    fit: 'REVIEW_REQUIRED',
+    intent: 'REVIEW_REQUIRED',
+    useForGrade: false,
+    automaticallyRejectLead: false,
+    humanReviewRequired: true,
+    authoritativeWriteAllowed: false,
+    providerCalls: 0,
+    realModelAccuracy: 'NOT_MEASURED',
+  };
+}
+
+/**
+ * Append one human review draft. Reusing an idempotency key is always rejected,
+ * including when the payload is identical, so callers cannot confuse a retry
+ * with a new append-only audit event.
+ */
+export function reviewGlhV2CQuality(
+  input: GlhV2CReviewInput,
+): GlhV2CReviewResult {
+  if (!input || typeof input !== 'object') {
+    return reject('INVALID_COMMAND', []);
+  }
+  if (!Array.isArray(input.existingHistory)) {
+    return reject('UNTRUSTED_HISTORY', []);
+  }
+  const existingHistory = input.existingHistory;
+  if (!scopeIsWellFormed(input.scope)) {
+    return reject('UNTRUSTED_SCOPE', existingHistory);
+  }
+  if (!authorized(input.actor, input.scope)) {
+    return reject('UNAUTHORIZED_REVIEWER', existingHistory);
+  }
+  if (!trustedCorpusIsValid(input.sourceMessages, input.scope)) {
     return reject('INVALID_SOURCE', existingHistory);
   }
-  const priorKey = existingHistory.find(f => f.idempotencyKey === command.idempotencyKey);
-  if (priorKey) {
-    if (priorKey.factId !== command.factId || priorKey.decision !== command.decision
-      || priorKey.reason !== command.reason || priorKey.sourceMessageId !== command.sourceMessageId
-      || priorKey.supersedesFactId !== command.supersedesFactId
-      || priorKey.reviewedByProfileId !== actor.profileId) {
-      return reject('IDEMPOTENCY_CONFLICT', existingHistory);
-    }
-    return {
-      ok: true, action: 'REPLAYED', fact: priorKey, history: existingHistory,
-      current: existingHistory[existingHistory.length - 1],
-      legacyGradeUntouched: true, cpcWriteAllowed: false,
-      autoDiscardAllowed: false, customerFacingAutoSendAllowed: false,
-    };
+  if (!safeHistory(existingHistory, input.sourceMessages, input.scope)) {
+    return reject('UNTRUSTED_HISTORY', existingHistory);
   }
-  if (existingHistory.some(f => f.factId === command.factId)) {
+  if (!validCommand(input.command)) {
+    return reject('INVALID_COMMAND', existingHistory);
+  }
+  if (!validTime(input.trustedReviewedAt)) {
+    return reject('INVALID_COMMAND', existingHistory);
+  }
+  if (!validVersions(input.candidateVersions)) {
+    return reject('INVALID_CANDIDATE', existingHistory);
+  }
+  if (!candidateIsValid(input.candidate, input.sourceMessages, input.scope)) {
+    return reject('INVALID_CANDIDATE', existingHistory);
+  }
+
+  const command = input.command;
+  if (command.candidateClaim.candidateVersion
+    !== input.candidateVersions.candidateVersion) {
+    return reject('CANDIDATE_VERSION_MISMATCH', existingHistory);
+  }
+  const candidateClaims = input.candidate.evidence.claims;
+  const candidateClaim = candidateClaims[command.candidateClaim.claimIndex];
+  if (!candidateClaim
+    || command.candidateClaim.field !== candidateClaim.field
+    || command.candidateClaim.sourceMessageId !== candidateClaim.sourceMessageId
+    || command.candidateClaim.candidateValue !== candidateClaim.value) {
+    return reject('CANDIDATE_MISMATCH', existingHistory);
+  }
+
+  if (existingHistory.some(fact =>
+    fact.idempotencyKey === command.idempotencyKey
+  )) {
     return reject('IDEMPOTENCY_CONFLICT', existingHistory);
   }
+  if (existingHistory.some(fact => fact.factId === command.factId)) {
+    return reject('IDEMPOTENCY_CONFLICT', existingHistory);
+  }
+
   const latest = existingHistory.at(-1);
-  if (latest ? command.supersedesFactId !== latest.factId : command.supersedesFactId !== null) {
+  if ((latest
+    ? command.supersedesFactId !== latest.factId
+    : command.supersedesFactId !== null)) {
     return reject('STALE_CORRECTION', existingHistory);
   }
+  if (latest && (latest.field !== candidateClaim.field
+    || latest.sourceMessageId !== candidateClaim.sourceMessageId)) {
+    return reject('CANDIDATE_MISMATCH', existingHistory);
+  }
+  if (latest && (
+    latest.candidateVersion !== input.candidateVersions.candidateVersion
+    || latest.baselineVersion !== input.candidateVersions.baselineVersion
+    || latest.modelId !== input.candidateVersions.modelId
+    || latest.modelVersion !== input.candidateVersions.modelVersion
+    || latest.promptVersion !== input.candidateVersions.promptVersion
+    || latest.knowledgeVersion !== input.candidateVersions.knowledgeVersion
+  )) {
+    return reject('CANDIDATE_VERSION_MISMATCH', existingHistory);
+  }
+
+  const candidateClaimId =
+    `${input.candidateVersions.candidateVersion}:${command.candidateClaim.claimIndex}`;
   const fact: GlhV2CHumanFact = Object.freeze({
     schemaVersion: GLH_V2_C_FEEDBACK_SCHEMA,
-    organizationId: scope.organizationId,
-    inquiryId: scope.inquiryId,
+    immutableAuditMarker: GLH_V2_C_IMMUTABLE_AUDIT_MARKER,
+    organizationId: input.scope.organizationId,
+    inquiryId: input.scope.inquiryId,
+    assignedSalesProfileId: input.scope.assignedSalesProfileId,
     factId: command.factId,
     idempotencyKey: command.idempotencyKey,
-    decision: command.decision,
+    candidateClaimId,
+    candidateClaimIndex: command.candidateClaim.claimIndex,
+    field: candidateClaim.field,
+    sourceMessageId: candidateClaim.sourceMessageId,
+    sourceExcerpt: candidateClaim.excerpt,
+    sourceConfidence: candidateClaim.confidence,
+    beforeValue: candidateClaim.value,
+    afterValue: reviewedAfterValue(command),
+    classification: command.classification,
     reason: command.reason,
-    sourceMessageId: command.sourceMessageId,
     supersedesFactId: command.supersedesFactId,
-    reviewedByProfileId: actor.profileId,
-    reviewedAt: trustedReviewedAt,
+    reviewedByProfileId: input.actor.profileId,
+    reviewedByRole: input.actor.role,
+    reviewedAt: input.trustedReviewedAt,
+    candidateVersion: input.candidateVersions.candidateVersion,
+    baselineVersion: input.candidateVersions.baselineVersion,
+    modelId: input.candidateVersions.modelId,
+    modelVersion: input.candidateVersions.modelVersion,
+    promptVersion: input.candidateVersions.promptVersion,
+    knowledgeVersion: input.candidateVersions.knowledgeVersion,
+    actorConfirmed: true,
     humanConfirmed: true,
     reviewOnly: true,
+    authoritativeBusinessFact: false,
   });
+  const history = Object.freeze([...existingHistory, fact]);
   return {
-    ok: true, action: 'APPENDED', fact,
-    history: Object.freeze([...existingHistory, fact]),
-    current: fact, legacyGradeUntouched: true, cpcWriteAllowed: false,
-    autoDiscardAllowed: false, customerFacingAutoSendAllowed: false,
+    ok: true,
+    action: 'APPENDED',
+    fact,
+    history,
+    current: fact,
+    legacyGradeUntouched: true,
+    cpcWriteAllowed: false,
+    authoritativeWriteAllowed: false,
+    autoDiscardAllowed: false,
+    customerFacingAutoSendAllowed: false,
+    providerCalls: 0,
+    realModelAccuracy: 'NOT_MEASURED',
   };
 }
