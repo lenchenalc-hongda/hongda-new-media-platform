@@ -71,13 +71,22 @@ export function displayStatus({ stateStatus, ownerActionRequired = false, hasAct
  * forbids dispatch; it never grants permission to merge or mutate Production.
  * @param {{
  *   stateStatus: string,
+ *   expectedRepository?: string,
+ *   stateRepository?: string,
+ *   stateProject?: string,
+ *   expectedProject?: string,
+ *   currentTaskId?: string,
+ *   taskPrefix?: string,
+ *   branchPrefix?: string,
  *   activePr?: number | null,
  *   activeBranch?: string | null,
  *   masterSha?: string,
  *   verifiedHead?: string,
  *   liveMasterSha?: string,
  *   matchingTaskPr?: boolean,
- *   fixPr?: {state?: string, merged?: boolean, base?: {ref?: string}, head?: {ref?: string, sha?: string}} | null,
+ *   fixPr?: {number?: number, state?: string, merged?: boolean, body?: string,
+ *     base?: {ref?: string, repo?: {full_name?: string}},
+ *     head?: {ref?: string, sha?: string, repo?: {full_name?: string}}} | null,
  *   infraRetryCount?: number,
  *   maxInfraRetries?: number,
  *   lastFailureClass?: string | null
@@ -85,6 +94,13 @@ export function displayStatus({ stateStatus, ownerActionRequired = false, hasAct
  */
 export function watchdogTaskBlocker({
   stateStatus,
+  expectedRepository,
+  stateRepository,
+  stateProject,
+  expectedProject,
+  currentTaskId,
+  taskPrefix,
+  branchPrefix,
   activePr = null,
   activeBranch = null,
   masterSha,
@@ -97,6 +113,16 @@ export function watchdogTaskBlocker({
   lastFailureClass = null,
 }) {
   if (!['READY_FOR_CODEX', 'FIX_REQUIRED'].includes(stateStatus)) return null;
+  // All identifiers are read from trusted registry/Issue and checked before
+  // starting a costly or potentially duplicated self-hosted Codex run.
+  if (expectedRepository !== 'lenchenalc-hongda/hongda-new-media-platform'
+      || (stateRepository && stateRepository !== expectedRepository)
+      || !expectedProject || stateProject !== expectedProject
+      || !taskPrefix || !branchPrefix
+      || !currentTaskId?.startsWith(taskPrefix)) return 'PROJECT_TASK_BINDING_MISMATCH';
+  const taskSuffix = currentTaskId.slice(taskPrefix.length)
+    .toLowerCase().replace(/[^a-z0-9._-]+/g, '-');
+  if (!taskSuffix) return 'PROJECT_TASK_BINDING_MISMATCH';
   if (stateStatus === 'READY_FOR_CODEX') {
     if (activePr !== null || activeBranch !== null) return 'READY_HAS_ACTIVE_PR_OR_BRANCH';
     if (matchingTaskPr) return 'EXISTING_TASK_PR_NOT_RECONCILED';
@@ -104,9 +130,20 @@ export function watchdogTaskBlocker({
   }
   if (stateStatus === 'FIX_REQUIRED') {
     if (!Number.isSafeInteger(activePr) || activePr <= 0 || !activeBranch) return 'FIX_MISSING_ACTIVE_PR';
-    if (!fixPr || fixPr.state !== 'open' || fixPr.merged === true ||
+    if (!activeBranch.startsWith(branchPrefix + taskSuffix + '-'))
+      return 'FIX_WRONG_PROJECT_BRANCH';
+    if (!fixPr || fixPr.number !== activePr
+        || fixPr.state !== 'open' || fixPr.merged === true ||
         fixPr.base?.ref !== 'master' || fixPr.head?.ref !== activeBranch ||
-        fixPr.head?.sha !== verifiedHead) return 'FIX_PR_HEAD_MISMATCH';
+        fixPr.head?.sha !== verifiedHead
+        || fixPr.head?.repo?.full_name !== expectedRepository
+        || fixPr.base?.repo?.full_name !== expectedRepository)
+      return 'FIX_PR_HEAD_MISMATCH';
+    const prBody = typeof fixPr.body === 'string' ? fixPr.body.split(/\r?\n/) : [];
+    if (!prBody.includes('PROJECT = ' + expectedProject)
+        || !prBody.includes('TASK_ID = ' + currentTaskId)
+        || !prBody.includes('BASE_MASTER_SHA = ' + masterSha))
+      return 'FIX_PR_TASK_BINDING_MISMATCH';
   }
   if (INFRA_FAILURES.has(lastFailureClass) &&
       Number.isInteger(infraRetryCount) && infraRetryCount >= maxInfraRetries) {
