@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import {
   classifyFailureText,
@@ -155,11 +157,20 @@ assert(shellClassifiers.includes('classify_codex_attempt() {'), 'real execution 
 assert(shellSource.includes('failure_class="$(classify_codex_attempt "$codex_status" "$error_log")"'),
   'actual Codex execution branch must call centralized classifier');
 function classifyActualShellExecution(exitStatus: number, stderr: string) {
-  return execFileSync('bash', ['-c',
-    shellClassifiers + '\nclassify_codex_attempt ' + exitStatus + ' <(printf "%s" "$SYNTHETIC_STDERR")',
-  ], {
-    env: { ...process.env, SYNTHETIC_STDERR: stderr }, encoding: 'utf8',
-  }).trim();
+  const dir = mkdtempSync(join(tmpdir(), 'hongda-ac-reliability-'));
+  const filename = join(dir, 'synthetic-cli-stderr.log');
+  try {
+    // Use a seekable regular file: the real runner greps one stderr file
+    // multiple times. A process-substitution FIFO is consumed on first grep.
+    writeFileSync(filename, stderr, { encoding: 'utf8', mode: 0o600 });
+    return execFileSync('bash', ['-c',
+      shellClassifiers + '\nclassify_codex_attempt ' + exitStatus + ' "$SYNTHETIC_LOG_PATH"',
+    ], {
+      env: { ...process.env, SYNTHETIC_LOG_PATH: filename }, encoding: 'utf8',
+    }).trim();
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 }
 assert.equal(classifyActualShellExecution(1,
   'WARNING: legacy /usr/bin/security keychain context\nERROR: unexpected status 401 unauthorized invalid api key'),
