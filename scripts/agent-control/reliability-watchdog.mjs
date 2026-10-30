@@ -1,5 +1,5 @@
 import fs from 'node:fs';
-import { displayStatus, shouldRedispatch } from './reliability-core.mjs';
+import { displayStatus, shouldRedispatch, watchdogTaskBlocker } from './reliability-core.mjs';
 const REPOSITORY = process.env.GITHUB_REPOSITORY || 'lenchenalc-hongda/hongda-new-media-platform';
 const TOKEN = process.env.GITHUB_TOKEN || '';
 const REGISTRY_PATH = process.env.AGENT_CONTROL_REGISTRY || '.github/agent-control/project-registry.json';
@@ -69,9 +69,46 @@ function ageMinutes(timestamp) {
   return Number.isFinite(ms) ? ms / 60000 : Number.POSITIVE_INFINITY;
 }
 
+async function blockWatchdog(project, issue, state, reason, runtimeStatus = 'CONTROL_RECONCILIATION_REQUIRED') {
+  const changed = state.runtime_status !== runtimeStatus || state.watchdog_block_reason !== reason;
+  if (changed) {
+    state.runtime_status = runtimeStatus;
+    state.watchdog_block_reason = reason;
+    await updateState(issue, state);
+    await comment(issue.number, [
+      'AGENT_CONTROL_WATCHDOG_CONTROL_BLOCK_V2',
+      'PROJECT = ' + project,
+      'TASK_ID = ' + state.current_task_id,
+      'RESULT = ' + runtimeStatus,
+      'REASON = ' + reason,
+      'AUTO_MERGE = false',
+      'PRODUCTION_CHANGED = NO',
+    ].join('\n'));
+  }
+  console.log('WATCHDOG_PROJECT=' + project + ' RESULT=' + runtimeStatus + ' REASON=' + reason);
+}
+
+async function findExistingTaskPr(config, state) {
+  if (!String(state.current_task_id || '').startsWith(config.task_prefix)
+      || !/^[0-9a-f]{40}$/.test(String(state.master_sha || ''))) return true;
+  const suffix = state.current_task_id.slice(config.task_prefix.length).toLowerCase().replace(/[^a-z0-9._-]+/g, '-');
+  const branch = config.branch_prefix + suffix + '-' + state.master_sha.slice(0, 12);
+  const owner = REPOSITORY.split('/')[0];
+  const pulls = await api('/repos/' + REPOSITORY + '/pulls?state=open&head=' + encodeURIComponent(owner + ':' + branch));
+  if (!Array.isArray(pulls)) throw new Error('WATCHDOG_EXISTING_PRS_UNAVAILABLE');
+  return pulls.some(pr => pr.state === 'open' && pr.head?.ref === branch);
+}
+
 async function dispatch(project, issue, state, config, reason) {
   const expectedHead = state.status === 'FIX_REQUIRED' ? state.verified_head : state.master_sha;
-  await api(`/repos/${REPOSITORY}/actions/workflows/${encodeURIComponent(config.workflow_file)}/dispatches`, {
+  const master = await api('/repos/' + REPOSITORY + '/branches/master');
+  const dispatchRefSha = master?.commit?.sha;
+  if (!/^[0-9a-f]{40}$/.test(String(dispatchRefSha || ''))) throw new Error('WATCHDOG_MASTER_SHA_UNAVAILABLE');
+  // workflow_dispatch uses ref: master even for FIX tasks anchored to a PR HEAD.
+  // Compare the emitted run with the DISPATCH REF, never with the FIX task HEAD.
+  if (state.status === 'READY_FOR_CODEX' && expectedHead !== dispatchRefSha) throw new Error('WATCHDOG_READY_MASTER_CHANGED');
+  const dispatchedAt = Date.now();
+  await api('/repos/' + REPOSITORY + '/actions/workflows/' + encodeURIComponent(config.workflow_file) + '/dispatches', {
     method: 'POST',
     body: JSON.stringify({
       ref: 'master',
@@ -84,17 +121,30 @@ async function dispatch(project, issue, state, config, reason) {
     }),
     headers: { 'Content-Type': 'application/json' },
   });
-  await comment(
-    issue.number,
-    [
-      'AGENT_CONTROL_WATCHDOG_V2',
-      `PROJECT = ${project}`,
-      `TASK_ID = ${state.current_task_id}`,
-      `ACTION = DISPATCH`,
-      `REASON = ${reason}`,
-      'PRODUCTION_CHANGED = NO',
-    ].join('\n'),
-  );
+  let confirmed = null;
+  for (let attempt = 0; attempt < 12; attempt++) {
+    await new Promise(resolve => setTimeout(resolve, 5000));
+    const runs = await workflowRuns(config.workflow_file);
+    const matches = runs.filter(run => {
+      const created = Date.parse(run.created_at || '');
+      return run.event === 'workflow_dispatch' && run.head_sha === dispatchRefSha
+        && Number.isFinite(created) && created >= dispatchedAt - 2000;
+    });
+    if (matches.length > 1) throw new Error('WATCHDOG_DISPATCH_AMBIGUOUS_RUN');
+    if (matches.length === 1) { confirmed = matches[0]; break; }
+  }
+  if (!confirmed) throw new Error('WATCHDOG_DISPATCH_UNCONFIRMED_NO_RUN_ID');
+  await comment(issue.number, [
+    'AGENT_CONTROL_WATCHDOG_V2',
+    'PROJECT = ' + project,
+    'TASK_ID = ' + state.current_task_id,
+    'ACTION = DISPATCH_CONFIRMED',
+    'REASON = ' + reason,
+    'RUN_ID = ' + confirmed.id,
+    'RUN_URL = ' + confirmed.html_url,
+    'PRODUCTION_CHANGED = NO',
+  ].join('\n'));
+  return confirmed;
 }
 
 async function reconcileMergedPr(project, issue, state) {
@@ -167,6 +217,36 @@ async function inspectProject(project, config) {
     return;
   }
 
+  // Never re-execute a stale READY snapshot or an already-open task PR.
+  // For FIX, demand live PR identity and exact HEAD; the CLI validator also
+  // checks provenance and bounded task instructions before actual execution.
+  const liveMaster = await api('/repos/' + REPOSITORY + '/branches/master');
+  const liveMasterSha = liveMaster?.commit?.sha;
+  let matchingTaskPr = false;
+  let fixPr = null;
+  if (state.status === 'READY_FOR_CODEX' && state.active_pr == null && state.active_branch == null) {
+    matchingTaskPr = await findExistingTaskPr(config, state);
+  }
+  if (state.status === 'FIX_REQUIRED' && Number.isSafeInteger(state.active_pr) && state.active_pr > 0) {
+    fixPr = await api('/repos/' + REPOSITORY + '/pulls/' + state.active_pr);
+  }
+  const blocker = watchdogTaskBlocker({
+    stateStatus: state.status,
+    activePr: state.active_pr,
+    activeBranch: state.active_branch,
+    masterSha: state.master_sha,
+    verifiedHead: state.verified_head,
+    liveMasterSha,
+    matchingTaskPr,
+    fixPr,
+    infraRetryCount: state.infra_retry_count,
+    lastFailureClass: state.last_failure_class,
+  });
+  if (blocker) {
+    await blockWatchdog(project, issue, state, blocker);
+    return;
+  }
+
   const runs = await workflowRuns(config.workflow_file);
   const active = runs.find(run => ['queued', 'in_progress', 'waiting', 'pending'].includes(run.status));
   if (active) {
@@ -185,6 +265,20 @@ async function inspectProject(project, config) {
   }
 
   const latest = runs.find(run => run.conclusion !== 'skipped') || null;
+  // A failed VALIDATE job is a deterministic control-plane rejection. It is
+  // not a lost trigger or recoverable Mac transport issue: repeated dispatch
+  // of the same unchanged state will only fail again.
+  if (latest?.conclusion === 'failure') {
+    const jobs = await api('/repos/' + REPOSITORY + '/actions/runs/' + latest.id + '/jobs?per_page=100');
+    if ((jobs?.jobs || []).some(job => job.name === 'validate' && job.conclusion === 'failure')) {
+      await blockWatchdog(project, issue, state, 'VALIDATION_JOB_FAILED_RUN_' + latest.id, 'CONTROL_VALIDATION_BLOCKED');
+      return;
+    }
+  }
+  if (latest?.conclusion === 'success') {
+    await blockWatchdog(project, issue, state, 'COMPLETED_RUN_WITHOUT_CONTROL_HANDOFF_' + latest.id);
+    return;
+  }
   const terminalAge = latest ? ageMinutes(latest.updated_at || latest.created_at) : Number.POSITIVE_INFINITY;
   const redispatch = shouldRedispatch({
     stateStatus: state.status,
@@ -200,8 +294,8 @@ async function inspectProject(project, config) {
 
   state.runtime_status = 'DISPATCHING';
   await updateState(issue, state);
-  await dispatch(project, issue, state, config, latest?.conclusion === 'failure' ? 'FAILED_RUN_WITHOUT_ACTIVE_RECOVERY' : 'LOST_TRIGGER');
-  console.log(`WATCHDOG_PROJECT=${project} RESULT=DISPATCHED`);
+  const confirmed = await dispatch(project, issue, state, config, latest?.conclusion === 'failure' ? 'FAILED_RUN_WITHOUT_ACTIVE_RECOVERY' : 'LOST_TRIGGER');
+  console.log('WATCHDOG_PROJECT=' + project + ' RESULT=DISPATCHED RUN_ID=' + confirmed.id);
 }
 
 async function main() {
