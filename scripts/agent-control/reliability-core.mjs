@@ -12,8 +12,9 @@ export const INFRA_FAILURES = new Set([
 
 export function classifyFailureText(text) {
   const value = String(text || '');
-  if (/\/usr\/bin\/security|Failed to resolve external auth|keychain/i.test(value)) return 'KEYCHAIN_FAILURE';
+  // Explicit provider rejection wins over incidental keychain text in combined logs.
   if (/(^|[^0-9])401([^0-9]|$)|unauthori[sz]ed|invalid (api )?key|authentication failed/i.test(value)) return 'PROVIDER_401';
+  if (/\/usr\/bin\/security|Failed to resolve external auth|keychain/i.test(value)) return 'KEYCHAIN_FAILURE';
   if (/429|Too Many Requests|Could not resolve host|connection reset|network is unreachable|timed? out|TLS|SSL/i.test(value)) return 'NETWORK_FAILURE';
   if (/checkout|git fetch|ls-remote/i.test(value) && /fail|error|fatal/i.test(value)) return 'CHECKOUT_FAILURE';
   if (/pnpm install|npm install|dependency/i.test(value) && /fail|error/i.test(value)) return 'DEPENDENCY_FAILURE';
