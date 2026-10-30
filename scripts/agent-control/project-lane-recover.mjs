@@ -147,6 +147,7 @@ async function main() {
     maxRetries: MAX_INFRA_RETRIES,
   });
   if (decision.action === 'BLOCK') {
+    const terminalCredential = failureClass === 'PROVIDER_401';
     state.status = 'BLOCKED';
     state.runtime_status = 'BLOCKED';
     state.last_failure_class = failureClass;
@@ -169,10 +170,12 @@ async function main() {
         `LAST_RUN_ID = ${CURRENT_RUN_ID || 'unknown'}`,
         'OWNER_ACTION_REQUIRED = YES',
         'PRODUCTION_CHANGED = NO',
-        'MESSAGE = Automatic infrastructure recovery was exhausted. PM/owner must inspect the remaining credential, runner, or provider blocker before execution can continue.',
+        terminalCredential
+          ? 'MESSAGE = Provider rejected the configured credential (401). Stop identical-key retries; rotate/verify the key in the self-hosted runner and start a fresh bounded nonproduction proof.'
+          : 'MESSAGE = Automatic infrastructure recovery was exhausted. PM/owner must inspect the remaining credential, runner, or provider blocker before execution can continue.',
       ].join('\n'),
     );
-    console.log('INFRA_RECOVERY=EXHAUSTED');
+    console.log(terminalCredential ? 'INFRA_RECOVERY=BLOCKED_NON_RETRYABLE_PROVIDER_401' : 'INFRA_RECOVERY=EXHAUSTED');
     return;
   }
 
