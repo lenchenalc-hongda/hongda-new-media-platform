@@ -4,7 +4,7 @@ import {
   qrCodeLabel,
   type CommercialPaymentMethod,
 } from '@/lib/commercial-documents/payment-methods';
-import { documentAmount, formatMoney, itemAmountMinor, sectionAmount, fixedSellerName } from '@/lib/commercial-documents/template';
+import { documentAmount, formatMoney, itemAmountMinor, sectionAmount, fixedSellerName, moneyToMinor } from '@/lib/commercial-documents/template';
 import { documentProductNotices } from '@/lib/commercial-documents/product-notices';
 
 function safeDisplay(value: string, fallback = '—'): string {
@@ -176,7 +176,7 @@ export default function DocumentPreview({ draft, selectedMethod }: { draft: Comm
                           {item.note && <p className="text-[11px] text-gray-500 whitespace-pre-wrap">{item.note}</p>}
                         </td>
                         <td className="p-2 text-right">{item.mode === 'catalog' ? '—' : (item.quantity + ' ' + item.unit)}</td>
-                        <td className="p-2 text-right">{item.unitPrice && /^\d+(?:\.\d+)?$/.test(item.unitPrice) ? item.unitPrice + ' / ' + item.unit : '—'}</td>
+                        <td className="p-2 text-right">{moneyToMinor(item.unitPrice) !== null ? item.unitPrice + ' / ' + item.unit : '—'}</td>
                         <td className="p-2 text-right">{amount === null ? '—' : amountText(amount)}</td>
                       </tr>
                     );

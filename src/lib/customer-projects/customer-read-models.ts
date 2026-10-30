@@ -23,6 +23,7 @@ export interface CustomerReferenceRow {
   external_customer_id: string | null;
   external_owner_reference: string | null;
   provisional_source_reference: string | null;
+  provisional_source_label?: string | null;
   updated_at: string;
 }
 
@@ -181,7 +182,7 @@ export function buildCustomerList(input: {
       status: customer.status,
       sourceLabel: customer.reference_kind === 'canonical'
         ? customer.external_source
-        : customer.provisional_source_reference,
+        : customer.provisional_source_label ?? customer.provisional_source_reference,
       externalOwnerReference: customer.reference_kind === 'canonical'
         ? customer.external_owner_reference
         : null,

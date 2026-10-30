@@ -1,4 +1,7 @@
 import assert from 'node:assert/strict';
+import React from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import DocumentWorkbench from '../../src/components/commercial-documents/DocumentWorkbench';
 import { readFileSync } from 'node:fs';
 import {
   ALIPAY_QR_METHOD_KEY,
@@ -13,7 +16,7 @@ import {
   type CommercialPaymentMethod,
 } from '../../src/lib/commercial-documents/payment-methods';
 import {
-  initialDraft, blankItem, moneyToMinor, quantityToMilli, itemAmountMinor,
+  initialDraft, blankItem, moneyToMinor, quantityToMilli, itemAmountMinor, formatMoney,
   sectionAmount, documentAmount, validateForPrint, isDraftShape,
   FIXED_SELLER_NAME, PAYMENT_PRESETS, SHIPPING_PRESETS, paymentPresetText, shippingPresetText,
   formatDocumentNumber, isGeneratedDocumentNumber, normalizeImportedDraft,
@@ -22,16 +25,77 @@ import { canRoleAccessPage, getPageSlugFromRoute } from '../../src/lib/auth/role
 import { activeNoticeTypes, documentProductNotices, inferNoticeType, sectionNoticeType, APPROVED_ZH_NOTICES } from '../../src/lib/commercial-documents/product-notices';
 import { getPortalForPath, getVisiblePortalGroups } from '../../src/lib/constants/navigation';
 
-assert.equal(moneyToMinor('3.60'), 360);
+assert.equal(moneyToMinor('3.60'), 3600);
 assert.equal(moneyToMinor('0'), 0);
-assert.equal(moneyToMinor('3.600'), null);
+assert.equal(moneyToMinor('3.600'), 3600);
+assert.equal(moneyToMinor('3.605'), 3605);
+assert.equal(moneyToMinor('0.001'), 1);
+assert.equal(moneyToMinor('0.000'), 0);
+assert.equal(moneyToMinor('3.6000'), null, 'four decimal places are not allowed');
+assert.equal(moneyToMinor('0.0009'), null);
+assert.equal(moneyToMinor('100000000000.000'), null, 'eleven integer digits is the limit');
 assert.equal(moneyToMinor('-1'), null);
 assert.equal(moneyToMinor('1e6'), null);
 assert.equal(moneyToMinor('abc'), null);
 assert.equal(quantityToMilli('1.25'), 1250);
+assert.equal(quantityToMilli('1.234'), 1234);
 assert.equal(quantityToMilli('0'), null);
 assert.equal(quantityToMilli('1.2345'), null);
 
+
+// 0.001-price precision must survive multiplication, subtotal, total and localization.
+const threeDecimal = initialDraft('Precision QA');
+threeDecimal.documentNo = 'HD-Q-DECIMAL-3';
+threeDecimal.buyerName = 'Precision test buyer';
+threeDecimal.sections = [{
+  id: 'precision', title: '3-decimal precision', items: [
+    { ...blankItem('p1'), name: 'Item one', quantity: '2', unitPrice: '3.601' },
+    { ...blankItem('p2'), name: 'Item two', quantity: '1', unitPrice: '0.001' },
+    { ...blankItem('p3'), name: 'Catalog entry', mode: 'catalog', quantity: '', unitPrice: '0.125' },
+  ],
+}];
+assert.equal(itemAmountMinor(threeDecimal.sections[0].items[0]), 7202);
+assert.equal(itemAmountMinor(threeDecimal.sections[0].items[1]), 1);
+assert.equal(sectionAmount(threeDecimal.sections[0]).amountMinor, 7203);
+assert.equal(documentAmount(threeDecimal).amountMinor, 7203);
+assert.equal(documentAmount(threeDecimal).catalogLines, 1);
+assert.equal(formatMoney(7203, 'CNY').includes('7.203'), true);
+assert.equal(formatMoney(7203, 'USD').includes('7.203'), true);
+assert.equal(formatMoney(7203, 'EUR').includes('7.203'), true);
+assert.equal(formatMoney(3600, 'CNY').includes('3.60'), true, 'old 2-decimal amounts must keep their display');
+assert.equal(formatMoney(1, 'USD').includes('0.001'), true);
+assert.equal(formatMoney(0, 'EUR').includes('0.00'), true);
+assert.equal(itemAmountMinor({ ...blankItem('half'), name: 'Half', quantity: '0.5', unitPrice: '1.235' }), 618,
+  'one half-thousandth rounds up at the line level');
+assert.equal(itemAmountMinor({ ...blankItem('third'), name: 'Third', quantity: '1.5', unitPrice: '3.605' }), 5408);
+assert.equal(itemAmountMinor({ ...blankItem('tiny'), name: 'Tiny', quantity: '0.001', unitPrice: '0.001' }), 0,
+  'values below half a thousandth round down');
+for (const language of ['zh', 'en'] as const) {
+  threeDecimal.language = language;
+  assert.deepEqual(validateForPrint(threeDecimal), [], 'three decimal quote in ' + language);
+  assert.equal(isDraftShape(threeDecimal), true);
+  const restored = normalizeImportedDraft(JSON.parse(JSON.stringify(threeDecimal)), 'Precision QA');
+  assert.equal(restored.sections[0].items[0].unitPrice, '3.601', 'JSON must preserve third unit-price digit');
+  assert.equal(documentAmount(restored).amountMinor, 7203, 'JSON round-trip must preserve exact 0.001 sums');
+}
+threeDecimal.taxStatement = 'vat13';
+assert.equal(documentAmount(threeDecimal).amountMinor, 7203, 'Tax label cannot silently change entered prices');
+threeDecimal.sections[0].items[0].unitPrice = '3.6015';
+assert(validateForPrint(threeDecimal).some(error => error.includes('最多3位小数')));
+threeDecimal.sections[0].items[0].unitPrice = '3.601';
+
+const blankQuotation = initialDraft('业务员');
+assert.deepEqual(blankQuotation.sections, [], 'Section 03 must start with no preselected plate fee');
+assert.equal(documentAmount(blankQuotation).amountMinor, 0, 'Unselected sections cannot add phantom pricing');
+assert(isDraftShape(blankQuotation), 'An empty-section quote must be a valid unfinished draft');
+assert(validateForPrint(blankQuotation).some(message => message.includes('至少添加一个报价大项')),
+  'Printing or confirming an unconfigured quote must remain blocked');
+for (const language of ['zh', 'en'] as const) {
+  const empty = { ...blankQuotation, language };
+  assert.equal(isDraftShape(empty), true, 'Empty section shape must work in ' + language);
+  assert.deepEqual(normalizeImportedDraft(empty, 'Sales').sections, [],
+    'Bilingual draft import must preserve an unselected Section 03');
+}
 const draft = initialDraft('测试业务员');
 assert.equal(draft.sellerName, FIXED_SELLER_NAME);
 assert.equal(draft.salespersonName, '测试业务员');
@@ -58,16 +122,16 @@ draft.sections = [
     ],
   },
 ];
-assert.equal(itemAmountMinor(draft.sections[0].items[0]), 100000);
-assert.equal(sectionAmount(draft.sections[1]).amountMinor, 360000);
+assert.equal(itemAmountMinor(draft.sections[0].items[0]), 1000000);
+assert.equal(sectionAmount(draft.sections[1]).amountMinor, 3600000);
 assert.equal(sectionAmount(draft.sections[1]).catalogLines, 1);
-assert.equal(documentAmount(draft).amountMinor, 2260000);
+assert.equal(documentAmount(draft).amountMinor, 22600000);
 assert.equal(documentAmount(draft).catalogLines, 1);
 draft.machineWarrantyPeriod = '1年';
 assert.deepEqual(validateForPrint(draft), []);
 
 draft.taxStatement = 'vat13';
-assert.equal(documentAmount(draft).amountMinor, 2260000, '13% tax flag must not alter entered prices');
+assert.equal(documentAmount(draft).amountMinor, 22600000, '13% tax flag must not alter entered prices');
 
 draft.kind = 'machine_contract';
 assert(validateForPrint(draft).some(x => x.includes('合同不能包含')));
@@ -361,6 +425,23 @@ assert.equal(isDraftShape({ ...selector, paymentMethodId: 'wechat_qr' }), false,
   'Low-level QR row keys cannot be persisted as a selection');
 
 const editorCode = readFileSync(new URL('../../src/components/commercial-documents/DocumentWorkbench.tsx', import.meta.url), 'utf8');
+assert(editorCode.includes('data-testid="quotation-section-picker"'),
+  'Section 03 needs a visible card chooser, not a native dropdown');
+assert(!editorCode.includes('Select a quotation section to add') && !editorCode.includes('选择要添加的报价大项'),
+  'The old Section 03 dropdown must be removed');
+assert(editorCode.includes('Quotation section categories') && editorCode.includes('报价大项分类'),
+  'Category choice must have accessible labels in both languages');
+assert(editorCode.includes('SECTION_PRESETS.map(preset => (') && editorCode.includes('onClick={() => addSection(preset.zh)}'),
+  'Each preset must be its own click-to-add category card');
+assert(editorCode.includes("onClick={() => addSection('')}") && editorCode.includes('Custom Section') && editorCode.includes('自定义大项'),
+  'Custom category card must keep its name editable and work in both languages');
+assert(editorCode.indexOf('{draft.sections.map((section, sectionIndex) => {')
+  < editorCode.indexOf('data-testid="quotation-section-picker"'),
+  'Editing details must appear ABOVE the card chooser, which stays below the selected sections');
+assert(editorCode.includes("document.getElementById('quotation-section-' + lastAddedSectionId)"),
+  'Clicking a category should scroll to the new form above the chooser');
+assert(editorCode.includes('draft.sections.length > 0 && ('),
+  'Totals should only be visible after a pricing category is chosen');
 const apiCode = readFileSync(new URL('../../src/app/api/commercial-documents/payment-methods/route.ts', import.meta.url), 'utf8');
 const previewCode = readFileSync(new URL('../../src/components/commercial-documents/DocumentPreview.tsx', import.meta.url), 'utf8');
 const imageApiCode = readFileSync(new URL('../../src/app/api/commercial-documents/payment-methods/[id]/image/route.ts', import.meta.url), 'utf8');
@@ -383,4 +464,21 @@ assert(previewCode.includes('document-payment-qr-grid'), 'PDF preview must provi
 assert(previewCode.includes('data-payment-qr'), 'Preview QR images must participate in print readiness');
 assert(imageApiCode.includes('privateResponse'), 'QR image errors must also use private no-store headers');
 
+// Render the real new-quote editor on the server to verify the user-visible default.
+Object.assign(globalThis, { React });
+const initialSectionMarkup = renderToStaticMarkup(
+  React.createElement(DocumentWorkbench, { userName: 'Quotation QA', userRole: 'sales' }),
+);
+assert(initialSectionMarkup.includes('data-testid="quotation-section-picker"'),
+  'The first view must show the category-card chooser');
+assert(initialSectionMarkup.includes('aria-label="报价大项分类"'),
+  'The choice grid must expose its purpose to screen readers');
+for (const sectionName of ['版费', '热转印花膜', '数码花膜', '机器设备',
+  '夹具与配件', '加工费用', '其他费用', '自定义大项']) {
+  assert(initialSectionMarkup.includes(sectionName), 'Missing category card: ' + sectionName);
+}
+assert(!initialSectionMarkup.includes('aria-label="报价大项名称"'),
+  'No section details should render before a category is chosen');
+assert(!initialSectionMarkup.includes('aria-label="选择要添加的报价大项"'),
+  'The old dropdown must be absent from the rendered markup');
 console.log('commercial-document-template.test.ts: PASS');

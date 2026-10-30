@@ -251,7 +251,7 @@ const LOCAL_MESSAGES: Record<string, string> = {
   REASON_REQUIRED: '该操作必须填写原因',
   NEXT_CHECK_REQUIRED: '该状态必须设置下一次检查时间',
   INVALID_CUSTOMER_REFERENCE: '客户引用当前不可用于此操作',
-  DUPLICATE_REFERENCE: '该临时客户来源已存在',
+  DUPLICATE_REFERENCE: '系统生成的临时客户编号发生冲突，请重试。来源渠道允许重复。',
   DUPLICATE_FOLLOW_UP: '当前客户已有未完成的回访任务，请先处理或明确替换',
   CANONICAL_CUSTOMER_REQUIRED: '项目成交前必须先映射到正式客户',
   ORDER_CONFIRMATION_REQUIRED: '项目成交前必须先确认订单证据',
@@ -610,6 +610,7 @@ export async function runCpcMutation(
     } else if (command === 'CREATE_PROVISIONAL_CUSTOMER') {
       result = await supabase.rpc('cpc_create_provisional_customer_reference', {
         p_display_name_snapshot: body.displayNameSnapshot,
+        // Backward-compatible argument name; DB treats this as the repeatable channel.
         p_provisional_source_reference: body.provisionalSourceReference,
         p_request_id: requestId,
       });

@@ -252,7 +252,7 @@ export async function readCustomerList(): Promise<ServerReadResult<CustomerListI
     const primaryStartedAt = Date.now();
     const customersResult = await supabase
       .from('cpc_customer_references')
-      .select('id,reference_kind,display_name_snapshot,status,external_source,external_customer_id,external_owner_reference,provisional_source_reference,updated_at')
+      .select('id,reference_kind,display_name_snapshot,status,external_source,external_customer_id,external_owner_reference,provisional_source_reference,provisional_source_label,updated_at')
       .eq('org_id', profile.orgId)
       .in('status', ['active', 'pending_review'])
       .order('updated_at', { ascending: false })
