@@ -165,7 +165,7 @@ export function parseProjectValidationProof(logText) {
   ]);
   for (const line of logText.split(/\r?\n/)) {
     const plain = line.replace(/^\d{4}-\d\d-\d\dT[^\s]+Z\s+/, '').trim();
-    const m = /^([a-z_]+)=([A-Za-z0-9._/-]+)$/.exec(plain);
+    const m = /^([a-z_]+)=([A-Za-z0-9._/ -]{0,256})$/.exec(plain);
     if (!m || !required.has(m[1])) continue;
     // Multiple (even identical) validator proof markers are ambiguous.
     if (values.has(m[1])) return null;
