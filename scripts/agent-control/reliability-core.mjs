@@ -68,6 +68,19 @@ export function displayStatus({ stateStatus, ownerActionRequired = false, hasAct
 /**
  * Pure fail-closed guard for the unattended watchdog. Returning a reason
  * forbids dispatch; it never grants permission to merge or mutate Production.
+ * @param {{
+ *   stateStatus: string,
+ *   activePr?: number | null,
+ *   activeBranch?: string | null,
+ *   masterSha?: string,
+ *   verifiedHead?: string,
+ *   liveMasterSha?: string,
+ *   matchingTaskPr?: boolean,
+ *   fixPr?: {state?: string, merged?: boolean, base?: {ref?: string}, head?: {ref?: string, sha?: string}} | null,
+ *   infraRetryCount?: number,
+ *   maxInfraRetries?: number,
+ *   lastFailureClass?: string | null
+ * }} input
  */
 export function watchdogTaskBlocker({
   stateStatus,
