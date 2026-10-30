@@ -395,6 +395,13 @@ for attempt in 1 2 3; do
   printf 'CODEX_STDERR_BEGIN\n'
   redacted_tail "$error_log"
   printf 'CODEX_STDERR_END\n'
+  # Static auth failures cannot self-heal by calling the provider with the
+  # same credential. Escalate after one failed request instead of 3x locally
+  # plus 3x external workflow attempts.
+  if [ "$failure_class" = "PROVIDER_401" ] || [ "$failure_class" = "KEYCHAIN_FAILURE" ]; then
+    printf 'CODEX_LOCAL_RETRY=SKIPPED_NON_RETRYABLE_AUTH\n'
+    break
+  fi
   if [ "$attempt" -lt 3 ]; then
     sleep "$(retry_delay "$attempt")"
   fi
