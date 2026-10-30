@@ -113,7 +113,7 @@ jobs:
             -C "$probe_home" \
             -s read-only \
             -c 'approval_policy="never"' \
-            --ephemeral --ignore-rules \
+            --ephemeral --ignore-rules --skip-git-repo-check \
             --output-last-message "$probe_home/result.txt" \
             - < "$probe_home/prompt.txt" > "$probe_home/events.txt" 2> "$probe_home/errors.txt"
           codex_exit=$?
