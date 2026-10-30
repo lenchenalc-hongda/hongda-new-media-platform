@@ -382,15 +382,14 @@ for attempt in 1 2 3; do
   codex_status=$?
   set -e
 
-  if /usr/bin/grep -Eqi '/usr/bin/security|Failed to resolve external auth|keychain' "$error_log"; then
-    codex_status=72
-    failure_class="KEYCHAIN_FAILURE"
-  elif [ "$codex_status" -eq 0 ]; then
+  # One authoritative classifier: an explicit provider 401 wins even if the
+  # same stderr also contains legacy keychain/external-auth context.
+  if [ "$codex_status" -eq 0 ] && ! /usr/bin/grep -Eqi '/usr/bin/security|Failed to resolve external auth|keychain' "$error_log"; then
     failure_class="NONE"
     break
-  else
-    failure_class="$(classify_codex_failure "$error_log")"
   fi
+  failure_class="$(classify_codex_failure "$error_log")"
+  if [ "$failure_class" = "KEYCHAIN_FAILURE" ]; then codex_status=72; fi
 
   printf 'CODEX_LOCAL_ATTEMPT=%s/3 FAILURE_CLASS=%s\n' "$attempt" "$failure_class"
   printf 'CODEX_STDERR_BEGIN\n'
