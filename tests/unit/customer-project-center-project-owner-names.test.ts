@@ -43,6 +43,8 @@ for (const [name,source] of [['server-first list',server],['projects GET API',ap
   assert.ok(source.includes('p_project_ids: projectIds'), name + ': passes only visible project IDs');
   assert.ok(source.includes('buildProjectList({ projects, workItems, customers, owners })'), name + ': joins names by project ID');
   assert.ok(!source.includes("'service_role'"), name + ': user session only, never service role');
+  assert.ok(source.includes('project owner name lookup unavailable'), name + ': keeps core project list available when enrichment fails');
+  assert.ok(source.includes('return [];'), name + ': missing owner names degrade to an explicit unverified label');
 }
 assert.ok(api.includes('ownerName: project.ownerName'), 'projects API emits the owner name');
 assert.ok(!api.includes('ownerProfileId: project.ownerProfileId'), 'API does not expose private employee profile IDs');
