@@ -151,3 +151,97 @@ export function watchdogTaskBlocker({
   }
   return null;
 }
+
+/**
+ * Parse only exact, validator-emitted key/value lines from a GitHub Actions
+ * validate JOB log. An untrusted workflow run name or PR title is not proof.
+ */
+export function parseProjectValidationProof(logText) {
+  if (typeof logText !== 'string' || logText.length > 1024 * 1024) return null;
+  const values = new Map();
+  const required = new Set([
+    'result', 'reason', 'project', 'task_id', 'expected_head',
+    'status', 'active_pr', 'active_branch',
+  ]);
+  for (const line of logText.split(/\r?\n/)) {
+    const plain = line.replace(/^\d{4}-\d\d-\d\dT[^\s]+Z\s+/, '').trim();
+    const m = /^([a-z_]+)=([A-Za-z0-9._/-]+)$/.exec(plain);
+    if (!m || !required.has(m[1])) continue;
+    // Multiple (even identical) validator proof markers are ambiguous.
+    if (values.has(m[1])) return null;
+    values.set(m[1], m[2]);
+  }
+  if ([...required].some(key => !values.has(key))) return null;
+  return Object.fromEntries(values);
+}
+
+/**
+ * Select a dispatch run only after its real GitHub validator job has
+ * independently attested this exact project/task/PR/head. A race or missing
+ * attestation returns PENDING/AMBIGUOUS, never an invented run ID.
+ *
+ * No claim of request-unique nonce is made: existing workflows do not echo
+ * recovery_reason. We therefore also reject all competing candidate runs
+ * rather than guessing which accepted dispatch created which ID.
+ *
+ * @param {{
+ * runs: Array<{id?: number, event?: string, created_at?: string, head_sha?: string,
+ *   repository?: {full_name?: string}}>,
+ * evidenceByRunId: Record<string, string>,
+ * dispatchedAtMs: number,
+ * checkedAtMs: number,
+ * dispatchRefSha: string,
+ * expectedRepository: string,
+ * expectedProject: string,
+ * expectedTaskId: string,
+ * expectedHead: string,
+ * expectedStateStatus: string,
+ * expectedActivePr?: number | null,
+ * expectedActiveBranch?: string | null
+ * }} input
+ */
+export function selectCorrelatedDispatchRun({
+  runs,
+  evidenceByRunId,
+  dispatchedAtMs,
+  checkedAtMs,
+  dispatchRefSha,
+  expectedRepository,
+  expectedProject,
+  expectedTaskId,
+  expectedHead,
+  expectedStateStatus,
+  expectedActivePr = null,
+  expectedActiveBranch = null,
+}) {
+  const pending = { status: 'PENDING', run: null };
+  if (!Array.isArray(runs) || !evidenceByRunId ||
+      !Number.isFinite(dispatchedAtMs) || !Number.isFinite(checkedAtMs) ||
+      !/^[0-9a-f]{40}$/.test(String(dispatchRefSha)) ||
+      !/^[0-9a-f]{40}$/.test(String(expectedHead))) return pending;
+  const candidates = runs.filter(run => {
+    const createdAt = Date.parse(run.created_at || '');
+    return Number.isSafeInteger(run.id) && run.id > 0 &&
+      run.event === 'workflow_dispatch' &&
+      run.head_sha === dispatchRefSha &&
+      (!run.repository?.full_name || run.repository.full_name === expectedRepository) &&
+      Number.isFinite(createdAt) &&
+      createdAt >= dispatchedAtMs - 2000 && createdAt <= checkedAtMs + 2000;
+  });
+  if (candidates.length > 1) return { status: 'AMBIGUOUS', run: null };
+  if (candidates.length === 0) return pending;
+  const run = candidates[0];
+  const proof = parseProjectValidationProof(evidenceByRunId[String(run.id)]);
+  if (!proof) return pending;
+  if (proof.result !== 'READY' || proof.reason !== 'project task validated' ||
+      proof.project !== expectedProject ||
+      proof.task_id !== expectedTaskId ||
+      proof.expected_head !== expectedHead ||
+      proof.status !== expectedStateStatus ||
+      proof.active_pr !== String(expectedActivePr ?? 'null') ||
+      proof.active_branch !== String(expectedActiveBranch ?? '')) return pending;
+  // A single early matching run is not sufficient. Allow the other dispatch
+  // time to become visible before attesting against the complete candidate set.
+  if (checkedAtMs - dispatchedAtMs < 15000) return pending;
+  return { status: 'CONFIRMED', run };
+}
