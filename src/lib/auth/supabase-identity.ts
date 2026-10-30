@@ -1,8 +1,7 @@
 // ===== Verified Supabase JWT identity =====
-// Prefer getClaims() to verify JWTs, but a transient JWKS/claims failure must
-// not silently turn a valid password session into an anonymous user. Fall back
-// to getUser(), which contacts Supabase Auth for fresh verification. A failed
-// getUser() still denies access. Never trust user_metadata or raw getSession().
+// Prefer getClaims() so asymmetric JWTs can be verified locally/cached through
+// Supabase JWKS. Fall back to getUser() only for older/test clients that do not
+// expose getClaims(). Never trust unverified session/user metadata.
 
 export interface VerifiedSupabaseIdentity {
   id: string;
@@ -43,15 +42,16 @@ export async function resolveVerifiedSupabaseIdentity(
     try {
       const { data, error } = await client.auth.getClaims();
       const claims = data?.claims;
-      if (!error && claims && typeof claims.sub === 'string' && claims.sub.length > 0) {
-        return {
-          id: claims.sub,
-          email: typeof claims.email === 'string' ? claims.email : null,
-        };
+      if (error || !claims || typeof claims.sub !== 'string' || claims.sub.length === 0) {
+        return null;
       }
-      // Continue to verified getUser() on invalid/unavailable claims.
+
+      return {
+        id: claims.sub,
+        email: typeof claims.email === 'string' ? claims.email : null,
+      };
     } catch {
-      // Continue to verified getUser() if JWKS/claims lookup throws.
+      return null;
     }
   }
 
