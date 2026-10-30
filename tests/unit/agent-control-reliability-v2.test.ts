@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import {
   classifyFailureText,
   displayStatus,
@@ -146,6 +147,29 @@ assert.equal(recoveryDecision({ failureClass:'PROVIDER_401',retryCount:0,maxRetr
 assert.equal(classifyFailureText('Failed to resolve external auth via /usr/bin/security; unexpected 401 invalid api key'),
   'PROVIDER_401', 'explicit 401 must outrank incidental keychain context');
 const shellSource = readFileSync('scripts/agent-control/project-lane-run.sh', 'utf8');
+const shellClassifiers = shellSource.slice(
+  shellSource.indexOf('classify_codex_failure() {'),
+  shellSource.indexOf('retry_delay() {'),
+);
+assert(shellClassifiers.includes('classify_codex_attempt() {'), 'real execution helper must be present');
+assert(shellSource.includes('failure_class="$(classify_codex_attempt "$codex_status" "$error_log")"'),
+  'actual Codex execution branch must call centralized classifier');
+function classifyActualShellExecution(exitStatus: number, stderr: string) {
+  return execFileSync('bash', ['-c',
+    shellClassifiers + '\nclassify_codex_attempt ' + exitStatus + ' <(printf "%s" "$SYNTHETIC_STDERR")',
+  ], {
+    env: { ...process.env, SYNTHETIC_STDERR: stderr }, encoding: 'utf8',
+  }).trim();
+}
+assert.equal(classifyActualShellExecution(1,
+  'WARNING: legacy /usr/bin/security keychain context\nERROR: unexpected status 401 unauthorized invalid api key'),
+  'PROVIDER_401', 'real post-exec mixed 401 must be terminal provider failure');
+assert.equal(classifyActualShellExecution(0, 'HTTP 401 invalid api key'),
+  'PROVIDER_401', 'CLI exit zero cannot hide an explicit provider auth rejection');
+assert.equal(classifyActualShellExecution(1, '/usr/bin/security keychain failed with status 36'),
+  'KEYCHAIN_FAILURE', 'a genuine keychain-only error remains distinct');
+assert.equal(classifyActualShellExecution(0, ''), 'NONE', 'clean CLI execution still passes');
+
 const classifier = shellSource.split('classify_codex_failure() {')[1].split('retry_delay() {')[0];
 assert(classifier.indexOf("printf 'PROVIDER_401'") < classifier.indexOf("printf 'KEYCHAIN_FAILURE'"),
   'shell 401 classifier must precede keychain classifier');
