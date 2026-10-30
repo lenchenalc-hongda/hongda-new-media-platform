@@ -7,6 +7,8 @@ import {
   recoveryDecision,
   shouldRedispatch,
   watchdogTaskBlocker,
+  selectCorrelatedDispatchRun,
+  parseProjectValidationProof,
 } from '../../scripts/agent-control/reliability-core.mjs';
 
 // TEST 1 — Keychain unavailable.
@@ -97,8 +99,17 @@ assert.equal(displayStatus({ stateStatus: 'PASS' }), 'COMPLETE');
 const shaA = 'a'.repeat(40);
 const shaB = 'b'.repeat(40);
 const branch = 'codex/glh-unit-test-' + shaA.slice(0, 12);
+const expectedRepo = 'lenchenalc-hongda/hongda-new-media-platform';
+const taskId = 'GLH-UNIT-TEST';
 const readyState = {
   stateStatus: 'READY_FOR_CODEX',
+  expectedRepository: expectedRepo,
+  stateRepository: expectedRepo,
+  stateProject: 'global-lead-hub',
+  expectedProject: 'global-lead-hub',
+  currentTaskId: taskId,
+  taskPrefix: 'GLH-',
+  branchPrefix: 'codex/glh-',
   activePr: null,
   activeBranch: null,
   masterSha: shaA,
@@ -112,8 +123,10 @@ assert.equal(watchdogTaskBlocker({...readyState,matchingTaskPr:true}), 'EXISTING
 assert.equal(watchdogTaskBlocker({...readyState,liveMasterSha:shaB}), 'STALE_READY_MASTER');
 assert.equal(watchdogTaskBlocker({...readyState,verifiedHead:shaB}), 'STALE_READY_MASTER');
 const fixPr = {
-  state:'open',merged:false,base:{ref:'master'},
-  head:{ref:branch,sha:shaB},
+  number:190,state:'open',merged:false,
+  body:['PROJECT = global-lead-hub','TASK_ID = '+taskId,'BASE_MASTER_SHA = '+shaA].join('\n'),
+  base:{ref:'master',repo:{full_name:expectedRepo}},
+  head:{ref:branch,sha:shaB,repo:{full_name:expectedRepo}},
 };
 const fixState = {
   ...readyState,
@@ -129,6 +142,61 @@ assert.equal(watchdogTaskBlocker({...fixState,fixPr:{...fixPr,head:{ref:branch,s
 assert.equal(watchdogTaskBlocker({...fixState,fixPr:{...fixPr,state:'closed'}}), 'FIX_PR_HEAD_MISMATCH');
 assert.equal(watchdogTaskBlocker({...fixState,infraRetryCount:3,lastFailureClass:'CODEX_CRASH'}), 'INFRA_RETRY_BUDGET_EXHAUSTED');
 assert.equal(recoveryDecision({ failureClass:'PROVIDER_401',retryCount:0,maxRetries:3 }).action, 'BLOCK');
+
+assert.equal(classifyFailureText('Failed to resolve external auth via /usr/bin/security; unexpected 401 invalid api key'),
+  'PROVIDER_401', 'explicit 401 must outrank incidental keychain context');
+const shellSource = readFileSync('scripts/agent-control/project-lane-run.sh', 'utf8');
+const classifier = shellSource.split('classify_codex_failure() {')[1].split('retry_delay() {')[0];
+assert(classifier.indexOf("printf 'PROVIDER_401'") < classifier.indexOf("printf 'KEYCHAIN_FAILURE'"),
+  'shell 401 classifier must precede keychain classifier');
+assert.equal(watchdogTaskBlocker({...readyState,expectedProject:'workshop-order-system'}), 'PROJECT_TASK_BINDING_MISMATCH');
+assert.equal(watchdogTaskBlocker({...readyState,stateRepository:'evil/other'}), 'PROJECT_TASK_BINDING_MISMATCH');
+assert.equal(watchdogTaskBlocker({...readyState,currentTaskId:'WOS-UNIT-TEST'}), 'PROJECT_TASK_BINDING_MISMATCH');
+assert.equal(watchdogTaskBlocker({...fixState,activeBranch:'codex/wos-wrong-'+shaA.slice(0,12)}), 'FIX_WRONG_PROJECT_BRANCH');
+assert.equal(watchdogTaskBlocker({...fixState,fixPr:{...fixPr,head:{...fixPr.head,repo:{full_name:'evil/other'}}}}), 'FIX_PR_HEAD_MISMATCH');
+assert.equal(watchdogTaskBlocker({...fixState,fixPr:{...fixPr,number:777}}), 'FIX_PR_HEAD_MISMATCH');
+assert.equal(watchdogTaskBlocker({...fixState,fixPr:{...fixPr,body:fixPr.body.replace(taskId,'WOS-OTHER')}}),
+  'FIX_PR_TASK_BINDING_MISMATCH');
+
+const startedAtMs = Date.parse('2026-10-30T01:00:00.000Z');
+const proof = [
+  'result=READY',
+  'reason=project task validated',
+  'project=global-lead-hub',
+  'task_id='+taskId,
+  'expected_head='+shaB,
+  'status=FIX_REQUIRED',
+  'active_pr=190',
+  'active_branch='+branch,
+].map((line,i) => new Date(startedAtMs + i * 100).toISOString() + ' ' + line).join('\n');
+assert.equal(parseProjectValidationProof(proof)?.task_id,taskId);
+assert.equal(parseProjectValidationProof(proof+'\nresult=READY'),null,'duplicated validator markers are rejected');
+const runGood = {
+  id:123456,event:'workflow_dispatch',created_at:new Date(startedAtMs+1000).toISOString(),
+  head_sha:shaA,repository:{full_name:expectedRepo},html_url:'https://github.com/actions/123456',
+};
+const dispatchInput = {
+  runs:[runGood],
+  evidenceByRunId:{'123456':proof},
+  dispatchedAtMs:startedAtMs,
+  checkedAtMs:startedAtMs+20000,
+  dispatchRefSha:shaA,
+  expectedRepository:expectedRepo,
+  expectedProject:'global-lead-hub',
+  expectedTaskId:taskId,
+  expectedHead:shaB,
+  expectedStateStatus:'FIX_REQUIRED',
+  expectedActivePr:190,
+  expectedActiveBranch:branch,
+};
+assert.equal(selectCorrelatedDispatchRun(dispatchInput).status,'CONFIRMED','actual matching run validator proof');
+assert.equal(selectCorrelatedDispatchRun({...dispatchInput,runs:[]}).status,'PENDING','no run is not a confirmation');
+assert.equal(selectCorrelatedDispatchRun({...dispatchInput,evidenceByRunId:{}}).status,'PENDING','no validator log is not proof');
+assert.equal(selectCorrelatedDispatchRun({...dispatchInput,checkedAtMs:startedAtMs+3000}).status,'PENDING','early match must settle');
+assert.equal(selectCorrelatedDispatchRun({...dispatchInput,evidenceByRunId:{'123456':proof.replace('task_id='+taskId,'task_id=GLH-WRONG')}}).status,'PENDING','unrelated run not accepted');
+assert.equal(selectCorrelatedDispatchRun({...dispatchInput,runs:[{...runGood,id:123455},runGood]}).status,'AMBIGUOUS','competing dispatches fail closed');
+assert.equal(selectCorrelatedDispatchRun({...dispatchInput,runs:[{...runGood,head_sha:shaB}]}).status,'PENDING','run at wrong master ref cannot pass');
+
 
 // A prior owner-action flag must not hide a PR already merged by GitHub.
 // This is a guard on control-flow ordering, not permission to merge a PR.
