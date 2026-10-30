@@ -29,6 +29,7 @@ interface ProjectListItem {
   id: string;
   customerReferenceId: string;
   customerDisplayName: string | null;
+  ownerName: string | null;
   title: string;
   projectType: ProjectType;
   status: ProjectLifecycleStatus;
@@ -92,6 +93,7 @@ export default function ProjectsClient({
       return [
         project.title,
         project.customerDisplayName ?? '',
+        project.ownerName ?? '',
         PROJECT_TYPE_LABELS[project.projectType],
         projectStageLabel(project.projectType, project.stage),
       ].some(value => value.toLowerCase().includes(query));
@@ -133,7 +135,7 @@ export default function ProjectsClient({
             <input
               value={search}
               onChange={event => setSearch(event.target.value)}
-              placeholder="搜索项目、客户、业务类型或阶段"
+              placeholder="搜索项目、客户、负责人、业务类型或阶段"
               className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm lg:w-80"
             />
           </div>
@@ -177,11 +179,15 @@ export default function ProjectsClient({
                           {RISK_LEVEL_LABELS[project.riskLevel]}
                         </span>
                       )}
-                      {!project.isOwnedByMe && (
-                        <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[11px] text-gray-500">
-                          非我负责
-                        </span>
-                      )}
+                      <span className={
+                        'rounded-md border px-2 py-0.5 text-xs font-medium '
+                        + (project.isOwnedByMe
+                          ? 'border-cyan-200 bg-cyan-50 text-cyan-800'
+                          : 'border-slate-200 bg-slate-50 text-slate-700')
+                      }>
+                        业务负责人：<span className="font-semibold">{project.ownerName || '待确认'}</span>
+                        {project.isOwnedByMe ? '（我）' : ''}
+                      </span>
                     </div>
 
                     <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500">
