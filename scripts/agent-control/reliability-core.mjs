@@ -25,6 +25,11 @@ export function recoveryDecision({ failureClass, retryCount = 0, maxRetries = 3 
   if (!INFRA_FAILURES.has(failureClass)) {
     return { action: 'NO_INFRA_RETRY', nextRetryCount: retryCount };
   }
+  // A provider-declared invalid credential is not transient. Retrying the
+  // same launchctl key only burns runner time and can flood the watchdog.
+  if (failureClass === 'PROVIDER_401') {
+    return { action: 'BLOCK', nextRetryCount: retryCount };
+  }
   if (retryCount >= maxRetries) {
     return { action: 'BLOCK', nextRetryCount: retryCount };
   }
@@ -58,4 +63,40 @@ export function displayStatus({ stateStatus, ownerActionRequired = false, hasAct
   if (hasActiveRun || ['READY_FOR_CODEX', 'FIX_REQUIRED', 'READY_FOR_PM_REVIEW', 'WAITING_REVIEW', 'APPROVED_FOR_MERGE'].includes(stateStatus)) return 'RUNNING';
   if (['PASS', 'COMPLETE', 'MERGED'].includes(stateStatus)) return 'COMPLETE';
   return 'RUNNING';
+}
+
+/**
+ * Pure fail-closed guard for the unattended watchdog. Returning a reason
+ * forbids dispatch; it never grants permission to merge or mutate Production.
+ */
+export function watchdogTaskBlocker({
+  stateStatus,
+  activePr = null,
+  activeBranch = null,
+  masterSha,
+  verifiedHead,
+  liveMasterSha,
+  matchingTaskPr = false,
+  fixPr = null,
+  infraRetryCount = 0,
+  maxInfraRetries = 3,
+  lastFailureClass = null,
+}) {
+  if (!['READY_FOR_CODEX', 'FIX_REQUIRED'].includes(stateStatus)) return null;
+  if (stateStatus === 'READY_FOR_CODEX') {
+    if (activePr !== null || activeBranch !== null) return 'READY_HAS_ACTIVE_PR_OR_BRANCH';
+    if (matchingTaskPr) return 'EXISTING_TASK_PR_NOT_RECONCILED';
+    if (masterSha !== liveMasterSha || verifiedHead !== liveMasterSha) return 'STALE_READY_MASTER';
+  }
+  if (stateStatus === 'FIX_REQUIRED') {
+    if (!Number.isSafeInteger(activePr) || activePr <= 0 || !activeBranch) return 'FIX_MISSING_ACTIVE_PR';
+    if (!fixPr || fixPr.state !== 'open' || fixPr.merged === true ||
+        fixPr.base?.ref !== 'master' || fixPr.head?.ref !== activeBranch ||
+        fixPr.head?.sha !== verifiedHead) return 'FIX_PR_HEAD_MISMATCH';
+  }
+  if (INFRA_FAILURES.has(lastFailureClass) &&
+      Number.isInteger(infraRetryCount) && infraRetryCount >= maxInfraRetries) {
+    return 'INFRA_RETRY_BUDGET_EXHAUSTED';
+  }
+  return null;
 }
