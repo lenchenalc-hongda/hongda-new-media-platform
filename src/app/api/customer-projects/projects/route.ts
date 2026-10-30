@@ -79,7 +79,13 @@ export async function GET(_req: NextRequest) {
         const ownersResult = await supabase.rpc('cpc_project_owner_names', {
           p_project_ids: projectIds,
         });
-        if (ownersResult.error) throw new Error('project owner name read failed');
+        if (ownersResult.error) {
+          // Noncritical display enrichment must not block project access.
+          console.warn('[cpc] project owner name lookup unavailable', {
+            code: ownersResult.error.code,
+          });
+          return [];
+        }
         return (ownersResult.data ?? []) as ListProjectOwnerRow[];
       })(),
     ]);
