@@ -183,7 +183,7 @@ assert.equal(safePostLoginRedirect('/%2fexample.com'), '/workspace-home');
 assert.equal(safePostLoginRedirect('https://attacker.test'), '/workspace-home');
 
 const ui = readFileSync('src/app/login/LoginForm.tsx', 'utf8');
-assert.match(ui, /window\\.location\\.assign\(/);
+assert.match(ui, /window\.location\.assign\(/);
 assert.match(ui, /credentials: 'same-origin'/);
 assert.equal(ui.includes('router.refresh()'), false, 'no router.refresh race');
 console.log('Post-login profile gate / same-origin navigation regression tests PASS');
