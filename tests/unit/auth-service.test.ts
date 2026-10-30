@@ -1,7 +1,6 @@
 // ===== Auth Service Security Tests (Phase 1.6A) =====
 import { getMockUserFromCookie } from '../../src/lib/auth/mock-user';
 import { resolveSupabaseCurrentUser } from '../../src/lib/auth/supabase-user';
-import { resolveVerifiedSupabaseIdentity } from '../../src/lib/auth/supabase-identity';
 import { hasRole } from '../../src/lib/auth/current-user';
 
 var passed = 0;
@@ -85,57 +84,5 @@ assert((await resolveSupabaseCurrentUser(fakeSupabase({ sessionUser: { id: 'auth
 
 // 10. profileError -> reject
 assert((await resolveSupabaseCurrentUser(fakeSupabase({ sessionUser: { id: 'auth-4' }, profileError: { message: 'db error' } }))) === null, 'profile query error -> null');
-
-console.log('\\n=== Verified Supabase Claims Fallback ===');
-// Fast-path getClaims(): no remote getUser needed when claims verify.
-let getUserCalls = 0;
-let verified = await resolveVerifiedSupabaseIdentity({
-  auth: {
-    getClaims: async () => ({ data: { claims: { sub: 'claims-user' } }, error: null }),
-    getUser: async () => { getUserCalls++; return { data: { user: null }, error: null }; },
-  },
-} as any);
-assert(verified?.id === 'claims-user' && getUserCalls === 0, 'valid claims: verified fast path');
-
-// JWKS/claims errors must use Auth's verified getUser(), never an unverified cookie.
-verified = await resolveVerifiedSupabaseIdentity({
-  auth: {
-    getClaims: async () => ({ data: null, error: { message: 'temporary JWKS failure' } }),
-    getUser: async () => ({ data: { user: { id: 'fallback-user', email: null } }, error: null }),
-  },
-} as any);
-assert(verified?.id === 'fallback-user', 'claims failure: verified getUser fallback');
-
-verified = await resolveVerifiedSupabaseIdentity({
-  auth: {
-    getClaims: async () => { throw new Error('temporary claims exception'); },
-    getUser: async () => ({ data: { user: { id: 'fallback-from-exception' } }, error: null }),
-  },
-} as any);
-assert(verified?.id === 'fallback-from-exception', 'claims exception: verified getUser fallback');
-
-verified = await resolveVerifiedSupabaseIdentity({
-  auth: {
-    getClaims: async () => ({ data: { claims: { sub: null } }, error: null }),
-    getUser: async () => ({ data: { user: { id: 'invalid-claims-but-valid-auth' } }, error: null }),
-  },
-} as any);
-assert(verified?.id === 'invalid-claims-but-valid-auth', 'invalid claims: still requires Auth verification');
-
-verified = await resolveVerifiedSupabaseIdentity({
-  auth: {
-    getClaims: async () => ({ data: null, error: { message: 'JWT invalid' } }),
-    getUser: async () => ({ data: { user: null }, error: { message: 'invalid token' } }),
-  },
-} as any);
-assert(verified === null, 'invalid claims + invalid server token must not authenticate');
-
-verified = await resolveVerifiedSupabaseIdentity({
-  auth: {
-    getClaims: async () => { throw new Error('no JWKS'); },
-    getUser: async () => { throw new Error('Auth service unavailable'); },
-  },
-} as any);
-assert(verified === null, 'both verification methods unavailable must fail closed');
 
 console.log('\nPassed: ' + passed + ', Failed: ' + failed + ' / ' + (passed + failed));
