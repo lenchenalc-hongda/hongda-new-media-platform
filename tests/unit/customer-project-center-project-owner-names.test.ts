@@ -46,7 +46,9 @@ for (const [name,source] of [['server-first list',server],['projects GET API',ap
 }
 assert.ok(api.includes('ownerName: project.ownerName'), 'projects API emits the owner name');
 assert.ok(!api.includes('ownerProfileId: project.ownerProfileId'), 'API does not expose private employee profile IDs');
-assert.ok(server.includes('isOwnedByMe: project.ownerProfileId === profile.id'), 'owner-based mine filtering preserved');
+assert.ok(server.includes("Omit<ProjectListItem, 'ownerProfileId'>"), 'server DTO excludes internal employee IDs');
+assert.ok(server.includes('({ ownerProfileId, ...project })'), 'server destructures internal owner ID before serializing');
+assert.ok(server.includes('isOwnedByMe: ownerProfileId === profile.id'), 'owner-based mine filtering preserved');
 
 assert.ok(client.includes('业务负责人：'), 'owner name prominently visible on every project card');
 assert.ok(client.includes("project.ownerName || '待确认'"), 'missing owner is clearly marked as unknown');
