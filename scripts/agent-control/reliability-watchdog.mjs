@@ -234,6 +234,13 @@ async function inspectProject(project, config) {
   }
   const blocker = watchdogTaskBlocker({
     stateStatus: state.status,
+    expectedRepository: REPOSITORY,
+    stateRepository: REPOSITORY,
+    stateProject: state.project,
+    expectedProject: project,
+    currentTaskId: state.current_task_id,
+    taskPrefix: config.task_prefix,
+    branchPrefix: config.branch_prefix,
     activePr: state.active_pr,
     activeBranch: state.active_branch,
     masterSha: state.master_sha,
