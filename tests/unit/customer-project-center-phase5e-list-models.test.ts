@@ -3,6 +3,7 @@ import {
   buildTaskList,
   type ListCustomerRow,
   type ListProjectRow,
+  type ListProjectOwnerRow,
   type ListWorkItemRow,
 } from '../../src/lib/customer-projects/list-read-models';
 
@@ -115,10 +116,17 @@ const workItems: ListWorkItemRow[] = [
   },
 ];
 
+const owners: ListProjectOwnerRow[] = [
+  { project_id: 'project-active', owner_name: '叶展龙' },
+  { project_id: 'project-waiting', owner_name: ' 叶展龙 ' },
+  { project_id: 'project-missing', owner_name: '刘士玮' },
+];
+
 const projectList = buildProjectList({
   projects,
   workItems,
   customers: [customer],
+  owners,
 });
 
 const active = projectList.find(project => project.id === 'project-active');
@@ -126,6 +134,11 @@ const waiting = projectList.find(project => project.id === 'project-waiting');
 const missing = projectList.find(project => project.id === 'project-missing');
 
 assert(active?.customerDisplayName === '测试客户', 'Project list hydrates customer name');
+assert(active?.ownerName === '叶展龙', 'Project list resolves the actual assigned owner name');
+assert(waiting?.ownerName === '叶展龙', 'Project list trims owner name');
+assert(missing?.ownerName === '刘士玮', 'Non-self project resolves another owner instead of displaying only 非我负责');
+const unknownOwner = buildProjectList({ projects, workItems, customers: [customer], owners: [] })[0];
+assert(unknownOwner?.ownerName === null, 'Unknown owner names remain unknown; do not invent owner from creator or customer');
 assert(active?.nextAction?.id === 'next-1', 'Project list resolves open NEXT_ACTION');
 assert(active?.blocked === true, 'Project list surfaces project blocker');
 assert(active?.needsAction === false, 'Project with NEXT_ACTION is not missing next step');

@@ -7,6 +7,8 @@ import './customer-project-center-workspace-separation.test';
 import './customer-project-center-potential-self-rating.test';
 import './customer-project-center-name-integrity.test';
 import './customer-project-center-provisional-source-channels.test';
+import './customer-project-center-project-owner-names.test';
+import './customer-project-center-project-archive.test';
 import './customer-project-center-phase12-qa.test';
 import './customer-project-center-phase11-integration.test';
 import './customer-project-center-phase9-team-board.test';

@@ -1,4 +1,4 @@
-import { INFRA_FAILURES, classifyFailureText, recoveryDecision } from './reliability-core.mjs';
+import { INFRA_FAILURES, classifyFailureText, recoveryDecision, selectCorrelatedDispatchRun } from './reliability-core.mjs';
 const REPOSITORY = process.env.GITHUB_REPOSITORY || 'lenchenalc-hongda/hongda-new-media-platform';
 const PROJECT = process.env.PROJECT_SLUG || '';
 const CONTROL_ISSUE = Number(process.env.CONTROL_ISSUE || '0');
@@ -93,17 +93,39 @@ function retryDelaySeconds(attempt) {
   return 600;
 }
 
-async function confirmDispatch(startedAtMs) {
+
+async function confirmDispatch(startedAtMs, dispatchRefSha, state, expectedHead) {
   for (let poll = 0; poll < 12; poll++) {
     await new Promise(resolve => setTimeout(resolve, 5000));
+    const now = Date.now();
     const runs = await api(
-      `/repos/${REPOSITORY}/actions/workflows/${encodeURIComponent(WORKFLOW_FILE)}/runs?event=workflow_dispatch&per_page=20`,
+      '/repos/' + REPOSITORY + '/actions/workflows/' +
+      encodeURIComponent(WORKFLOW_FILE) + '/runs?event=workflow_dispatch&per_page=30',
     );
-    const match = (runs?.workflow_runs || []).find(run => {
-      const created = Date.parse(run.created_at || '');
-      return Number.isFinite(created) && created >= startedAtMs - 2000;
+    const entries = runs?.workflow_runs || [];
+    const possible = entries.filter(run =>
+      run.head_sha === dispatchRefSha &&
+      Number.isFinite(Date.parse(run.created_at || '')) &&
+      Date.parse(run.created_at) >= startedAtMs - 2000);
+    const evidenceByRunId = {};
+    for (const run of possible.slice(0, 4)) {
+      const jobs = await api('/repos/' + REPOSITORY + '/actions/runs/' + run.id + '/jobs?per_page=100');
+      const validators = (jobs?.jobs || []).filter(job => job.name === 'validate' && job.conclusion === 'success');
+      if (validators.length === 1) evidenceByRunId[String(run.id)] = await jobLog(validators[0].id);
+    }
+    const result = selectCorrelatedDispatchRun({
+      runs: entries, evidenceByRunId,
+      dispatchedAtMs: startedAtMs, checkedAtMs: now, dispatchRefSha,
+      expectedRepository: REPOSITORY, expectedProject: PROJECT,
+      expectedTaskId: state.current_task_id, expectedHead,
+      expectedStateStatus: state.status,
+      expectedActivePr: state.active_pr,
+      expectedActiveBranch: state.active_branch,
     });
-    if (match) return match;
+    if (result.status === 'AMBIGUOUS') {
+      throw new Error('INFRA_RECOVERY_DISPATCH_AMBIGUOUS_RUN');
+    }
+    if (result.status === 'CONFIRMED') return result.run;
   }
   return null;
 }
@@ -147,6 +169,7 @@ async function main() {
     maxRetries: MAX_INFRA_RETRIES,
   });
   if (decision.action === 'BLOCK') {
+    const terminalCredential = failureClass === 'PROVIDER_401';
     state.status = 'BLOCKED';
     state.runtime_status = 'BLOCKED';
     state.last_failure_class = failureClass;
@@ -169,10 +192,12 @@ async function main() {
         `LAST_RUN_ID = ${CURRENT_RUN_ID || 'unknown'}`,
         'OWNER_ACTION_REQUIRED = YES',
         'PRODUCTION_CHANGED = NO',
-        'MESSAGE = Automatic infrastructure recovery was exhausted. PM/owner must inspect the remaining credential, runner, or provider blocker before execution can continue.',
+        terminalCredential
+          ? 'MESSAGE = Provider rejected the configured credential (401). Stop identical-key retries; rotate/verify the key in the self-hosted runner and start a fresh bounded nonproduction proof.'
+          : 'MESSAGE = Automatic infrastructure recovery was exhausted. PM/owner must inspect the remaining credential, runner, or provider blocker before execution can continue.',
       ].join('\n'),
     );
-    console.log('INFRA_RECOVERY=EXHAUSTED');
+    console.log(terminalCredential ? 'INFRA_RECOVERY=BLOCKED_NON_RETRYABLE_PROVIDER_401' : 'INFRA_RECOVERY=EXHAUSTED');
     return;
   }
 
@@ -204,7 +229,24 @@ async function main() {
   const expectedHead = freshState.status === 'FIX_REQUIRED'
     ? freshState.verified_head
     : freshState.master_sha;
+  if (freshState.status !== state.status ||
+      freshState.active_pr !== state.active_pr ||
+      freshState.active_branch !== state.active_branch ||
+      freshState.verified_head !== state.verified_head ||
+      freshState.infra_retry_count !== nextRetry) {
+    console.log('INFRA_RECOVERY=STALE_CONTROL_STATE_BEFORE_DISPATCH');
+    return;
+  }
 
+  const master = await api('/repos/' + REPOSITORY + '/branches/master');
+  const dispatchRefSha = master?.commit?.sha;
+  if (!/^[0-9a-f]{40}$/.test(String(dispatchRefSha))) {
+    throw new Error('INFRA_RECOVERY_LIVE_MASTER_UNAVAILABLE');
+  }
+  if (freshState.status === 'READY_FOR_CODEX' && expectedHead !== dispatchRefSha) {
+    console.log('INFRA_RECOVERY=STALE_READY_MASTER_BEFORE_DISPATCH');
+    return;
+  }
   const startedAt = Date.now();
   await api(`/repos/${REPOSITORY}/actions/workflows/${encodeURIComponent(WORKFLOW_FILE)}/dispatches`, {
     method: 'POST',
@@ -220,7 +262,7 @@ async function main() {
     headers: { 'Content-Type': 'application/json' },
   });
 
-  const dispatched = await confirmDispatch(startedAt);
+  const dispatched = await confirmDispatch(startedAt, dispatchRefSha, freshState, expectedHead);
   if (!dispatched) {
     await commentIssue(
       [
@@ -246,6 +288,7 @@ async function main() {
       `FAILURE_CLASS = ${failureClass}`,
       `INFRA_RETRY_COUNT = ${nextRetry} / ${MAX_INFRA_RETRIES}`,
       'RECOVERY_STATUS = RECOVERY_DISPATCHED',
+      'CONFIRMATION = EXACT_TASK_HEAD_VALIDATOR_LOG_AND_NO_COMPETING_RUNS',
       `RUN_ID = ${dispatched.id}`,
       `RUN_URL = ${dispatched.html_url}`,
       'PRODUCTION_CHANGED = NO',
