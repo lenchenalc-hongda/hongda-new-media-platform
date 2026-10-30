@@ -1,5 +1,5 @@
 import fs from 'node:fs';
-import { displayStatus, shouldRedispatch, watchdogTaskBlocker } from './reliability-core.mjs';
+import { displayStatus, shouldRedispatch, watchdogTaskBlocker, selectCorrelatedDispatchRun } from './reliability-core.mjs';
 const REPOSITORY = process.env.GITHUB_REPOSITORY || 'lenchenalc-hongda/hongda-new-media-platform';
 const TOKEN = process.env.GITHUB_TOKEN || '';
 const REGISTRY_PATH = process.env.AGENT_CONTROL_REGISTRY || '.github/agent-control/project-registry.json';
@@ -99,14 +99,36 @@ async function findExistingTaskPr(config, state) {
   return pulls.some(pr => pr.state === 'open' && pr.head?.ref === branch);
 }
 
+
+async function validatedDispatchJobLog(runId) {
+  // Only GitHub's trusted 'validate' job can attest the task/branch/head.
+  const result = await api('/repos/' + REPOSITORY + '/actions/runs/' + runId + '/jobs?per_page=100');
+  const validators = (result?.jobs || []).filter(j => j.name === 'validate' && j.conclusion === 'success');
+  if (validators.length !== 1 || !Number.isSafeInteger(validators[0].id)) return '';
+  const response = await fetch(
+    'https://api.github.com/repos/' + REPOSITORY + '/actions/jobs/' + validators[0].id + '/logs',
+    { headers: {
+        Accept: 'application/vnd.github+json',
+        Authorization: 'Bearer ' + TOKEN,
+        'X-GitHub-Api-Version': '2022-11-28',
+        'User-Agent': 'hongda-agent-control-watchdog-v2',
+      }, redirect: 'follow' },
+  );
+  if (!response.ok) return '';
+  const payload = await response.text();
+  return payload.length <= 1024 * 1024 ? payload : '';
+}
+
 async function dispatch(project, issue, state, config, reason) {
   const expectedHead = state.status === 'FIX_REQUIRED' ? state.verified_head : state.master_sha;
   const master = await api('/repos/' + REPOSITORY + '/branches/master');
   const dispatchRefSha = master?.commit?.sha;
   if (!/^[0-9a-f]{40}$/.test(String(dispatchRefSha || ''))) throw new Error('WATCHDOG_MASTER_SHA_UNAVAILABLE');
-  // workflow_dispatch uses ref: master even for FIX tasks anchored to a PR HEAD.
-  // Compare the emitted run with the DISPATCH REF, never with the FIX task HEAD.
-  if (state.status === 'READY_FOR_CODEX' && expectedHead !== dispatchRefSha) throw new Error('WATCHDOG_READY_MASTER_CHANGED');
+  // A FIX runs using workflow_dispatch ref master, even though its worktree
+  // comes from the exact active PR HEAD. These SHAs must not be conflated.
+  if (state.status === 'READY_FOR_CODEX' && expectedHead !== dispatchRefSha)
+    throw new Error('WATCHDOG_READY_MASTER_CHANGED');
+
   const dispatchedAt = Date.now();
   await api('/repos/' + REPOSITORY + '/actions/workflows/' + encodeURIComponent(config.workflow_file) + '/dispatches', {
     method: 'POST',
@@ -121,19 +143,34 @@ async function dispatch(project, issue, state, config, reason) {
     }),
     headers: { 'Content-Type': 'application/json' },
   });
+
   let confirmed = null;
   for (let attempt = 0; attempt < 12; attempt++) {
     await new Promise(resolve => setTimeout(resolve, 5000));
+    const now = Date.now();
     const runs = await workflowRuns(config.workflow_file);
-    const matches = runs.filter(run => {
-      const created = Date.parse(run.created_at || '');
-      return run.event === 'workflow_dispatch' && run.head_sha === dispatchRefSha
-        && Number.isFinite(created) && created >= dispatchedAt - 2000;
+    const possible = runs.filter(run => run.event === 'workflow_dispatch' &&
+      run.head_sha === dispatchRefSha &&
+      Number.isFinite(Date.parse(run.created_at || '')) &&
+      Date.parse(run.created_at) >= dispatchedAt - 2000);
+    const evidenceByRunId = {};
+    for (const run of possible.slice(0, 4)) {
+      if (Number.isSafeInteger(run.id) && run.id > 0) {
+        evidenceByRunId[String(run.id)] = await validatedDispatchJobLog(run.id);
+      }
+    }
+    const result = selectCorrelatedDispatchRun({
+      runs, evidenceByRunId,
+      dispatchedAtMs: dispatchedAt, checkedAtMs: now,
+      dispatchRefSha, expectedRepository: REPOSITORY,
+      expectedProject: project, expectedTaskId: state.current_task_id,
+      expectedHead, expectedStateStatus: state.status,
+      expectedActivePr: state.active_pr, expectedActiveBranch: state.active_branch,
     });
-    if (matches.length > 1) throw new Error('WATCHDOG_DISPATCH_AMBIGUOUS_RUN');
-    if (matches.length === 1) { confirmed = matches[0]; break; }
+    if (result.status === 'AMBIGUOUS') throw new Error('WATCHDOG_DISPATCH_AMBIGUOUS_RUN');
+    if (result.status === 'CONFIRMED') { confirmed = result.run; break; }
   }
-  if (!confirmed) throw new Error('WATCHDOG_DISPATCH_UNCONFIRMED_NO_RUN_ID');
+  if (!confirmed) throw new Error('WATCHDOG_DISPATCH_UNCONFIRMED_WITHOUT_VALIDATOR_PROOF');
   await comment(issue.number, [
     'AGENT_CONTROL_WATCHDOG_V2',
     'PROJECT = ' + project,
@@ -142,6 +179,7 @@ async function dispatch(project, issue, state, config, reason) {
     'REASON = ' + reason,
     'RUN_ID = ' + confirmed.id,
     'RUN_URL = ' + confirmed.html_url,
+    'CONFIRMATION = EXACT_TASK_HEAD_VALIDATOR_LOG_AND_NO_COMPETING_RUNS',
     'PRODUCTION_CHANGED = NO',
   ].join('\n'));
   return confirmed;
