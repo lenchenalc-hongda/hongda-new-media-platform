@@ -1,0 +1,119 @@
+name: Agent Control DeepSeek Auth Smoke - Nonproduction
+
+# One-off diagnostic. Runs only on this isolated diagnostic branch.
+# Does not check out repository code, print credentials, or write to GitHub/Production.
+on:
+  push:
+    branches:
+      - infra/agent-control-deepseek-auth-smoke-20261030
+
+permissions:
+  contents: read
+
+concurrency:
+  group: agent-control-deepseek-auth-smoke-20261030
+  cancel-in-progress: false
+
+jobs:
+  mac-credential-and-codex-smoke:
+    if: github.repository == 'lenchenalc-hongda/hongda-new-media-platform' && github.ref == 'refs/heads/infra/agent-control-deepseek-auth-smoke-20261030'
+    strategy:
+      fail-fast: false
+      matrix:
+        slot: [1, 2]
+    runs-on: [self-hosted, macOS, X64, hongda-agent-control]
+    timeout-minutes: 7
+    steps:
+      - name: Verify Runner launchctl credential and isolated Codex response
+        shell: bash
+        run: |
+          set -euo pipefail
+          set +x
+          echo "RUNNER_NAME=$RUNNER_NAME"
+          echo "RUNNER_OS=$RUNNER_OS"
+          echo "PRODUCTION_CHANGED=NO"
+
+          key="$(/bin/launchctl getenv DEEPSEEK_API_KEY 2>/dev/null || true)"
+          if [[ ! "$key" =~ ^sk-[A-Za-z0-9_-]{12,}$ ]]; then
+            echo "RUNNER_KEY=NOT_AVAILABLE_OR_INVALID_FORMAT"
+            exit 1
+          fi
+          echo "RUNNER_KEY=AVAILABLE_NONEMPTY"
+
+          # Feed the secret via curl stdin configuration, never an echoed log or CLI argument.
+          code="$(
+            printf 'header = "Authorization: Bearer %s"\n' "$key" |
+            /usr/bin/curl --config - --silent --show-error --output /dev/null \
+              --write-out '%{http_code}' --connect-timeout 10 --max-time 30 \
+              https://api.deepseek.com/models
+          )"
+          echo "RUNNER_DEEPSEEK_HTTP=$code"
+          if [ "$code" != "200" ]; then
+            echo "RUNNER_DEEPSEEK_AUTH=FAIL"
+            exit 1
+          fi
+          echo "RUNNER_DEEPSEEK_AUTH=PASS"
+
+          codex_binary="$HOME/.codex/plugins/.plugin-appserver/codex-cli/bin/codex"
+          if [ ! -x "$codex_binary" ]; then
+            codex_binary="/Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex"
+          fi
+          if [ ! -x "$codex_binary" ]; then
+            codex_binary="/Applications/ChatGPT.app/Contents/Resources/codex"
+          fi
+          if [ ! -x "$codex_binary" ]; then
+            echo "CODEX_CLI=NOT_INSTALLED"
+            exit 1
+          fi
+
+          probe_home="$(mktemp -d "$RUNNER_TEMP/agent-control-auth-smoke.XXXXXX")"
+          chmod 700 "$probe_home"
+          trap 'rm -rf "$probe_home"' EXIT
+          mkdir -p "$probe_home/.codex"
+          cat > "$probe_home/.codex/config.toml" <<'EOF'
+          model = "deepseek-v4-flash"
+          model_provider = "deepseek_auth_smoke"
+          model_reasoning_effort = "high"
+          [model_providers.deepseek_auth_smoke]
+          name = "DeepSeek Auth Smoke"
+          base_url = "https://api.deepseek.com"
+          wire_api = "responses"
+          env_key = "DEEPSEEK_API_KEY"
+          requires_openai_auth = false
+          EOF
+          chmod 600 "$probe_home/.codex/config.toml"
+          printf 'Reply with exactly this one token and nothing else: RUNNER_CODEX_AUTH_PASS\n' > "$probe_home/prompt.txt"
+
+          set +e
+          env -i \
+            HOME="$probe_home" \
+            CODEX_HOME="$probe_home/.codex" \
+            PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin" \
+            DEEPSEEK_API_KEY="$key" \
+            TMPDIR="$RUNNER_TEMP" \
+            "$codex_binary" --no-daemon exec \
+            -m deepseek-v4-flash \
+            -c 'model_reasoning_effort="high"' \
+            -C "$probe_home" \
+            -s read-only \
+            -c 'approval_policy="never"' \
+            --ephemeral --ignore-rules \
+            --output-last-message "$probe_home/result.txt" \
+            - < "$probe_home/prompt.txt" > "$probe_home/events.txt" 2> "$probe_home/errors.txt"
+          codex_exit=$?
+          set -e
+          if [ "$codex_exit" -ne 0 ]; then
+            if grep -Eqi '401|unauthorized|invalid (api )?key' "$probe_home/errors.txt"; then
+              echo "RUNNER_CODEX_RESULT=PROVIDER_401"
+            elif grep -Eqi '429|rate.?limit' "$probe_home/errors.txt"; then
+              echo "RUNNER_CODEX_RESULT=RATE_LIMIT"
+            else
+              echo "RUNNER_CODEX_RESULT=FAIL_NON_401"
+            fi
+            exit 1
+          fi
+          if ! grep -Fq 'RUNNER_CODEX_AUTH_PASS' "$probe_home/result.txt"; then
+            echo "RUNNER_CODEX_RESULT=UNEXPECTED_OUTPUT"
+            exit 1
+          fi
+          echo "RUNNER_CODEX_AUTH=PASS"
