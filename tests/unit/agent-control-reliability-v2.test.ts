@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import {
   classifyFailureText,
   displayStatus,
@@ -128,5 +129,13 @@ assert.equal(watchdogTaskBlocker({...fixState,fixPr:{...fixPr,head:{ref:branch,s
 assert.equal(watchdogTaskBlocker({...fixState,fixPr:{...fixPr,state:'closed'}}), 'FIX_PR_HEAD_MISMATCH');
 assert.equal(watchdogTaskBlocker({...fixState,infraRetryCount:3,lastFailureClass:'CODEX_CRASH'}), 'INFRA_RETRY_BUDGET_EXHAUSTED');
 assert.equal(recoveryDecision({ failureClass:'PROVIDER_401',retryCount:0,maxRetries:3 }).action, 'BLOCK');
+
+// A prior owner-action flag must not hide a PR already merged by GitHub.
+// This is a guard on control-flow ordering, not permission to merge a PR.
+const watchdogSource = readFileSync('scripts/agent-control/reliability-watchdog.mjs', 'utf8');
+const mergedReconciliationGate = watchdogSource.indexOf("if (['APPROVED_FOR_MERGE', 'READY_FOR_PM_REVIEW', 'WAITING_REVIEW'].includes(state.status)");
+const ownerGate = watchdogSource.indexOf("if (['HUMAN_GATE', 'NEEDS_DECISION'].includes(state.status)");
+assert(mergedReconciliationGate !== -1 && ownerGate !== -1 && mergedReconciliationGate < ownerGate,
+  'merged PR must be reconciled before stale owner-action gate');
 
 console.log('agent-control-reliability-v2.test.ts: 8/8 PASS');
