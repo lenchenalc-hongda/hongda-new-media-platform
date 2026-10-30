@@ -30,10 +30,11 @@ redacted_tail() {
 
 classify_codex_failure() {
   local file="$1"
-  if /usr/bin/grep -Eqi '/usr/bin/security|Failed to resolve external auth|keychain' "$file"; then
-    printf 'KEYCHAIN_FAILURE'
-  elif /usr/bin/grep -Eqi '(^|[^0-9])401([^0-9]|$)|unauthori[sz]ed|invalid (api )?key|authentication failed' "$file"; then
+  # A real API 401 is terminal even if stderr also mentions keychain context.
+  if /usr/bin/grep -Eqi '(^|[^0-9])401([^0-9]|$)|unauthori[sz]ed|invalid (api )?key|authentication failed' "$file"; then
     printf 'PROVIDER_401'
+  elif /usr/bin/grep -Eqi '/usr/bin/security|Failed to resolve external auth|keychain' "$file"; then
+    printf 'KEYCHAIN_FAILURE'
   elif /usr/bin/grep -Eqi '429|Too Many Requests|Could not resolve host|connection reset|network is unreachable|timed? out|TLS|SSL' "$file"; then
     printf 'NETWORK_FAILURE'
   elif /usr/bin/grep -Eqi 'auth|credential|login' "$file"; then
