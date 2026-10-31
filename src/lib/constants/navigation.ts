@@ -218,6 +218,14 @@ export function getVisiblePortalGroups({
     }
     return true;
   }).map(group => {
+    // The supplier orders are code-integrated before Production schema approval;
+    // do not expose an action that cannot save safely in the live system.
+    if (group.id === 'commercial') {
+      return { ...group, items: group.items.filter(item =>
+        item.path !== '/commercial-documents/production-orders'
+        || process.env.NEXT_PUBLIC_FEATURE_SUPPLIER_ORDERS === 'true'
+      ) };
+    }
     if (group.id !== 'sales') return group;
 
     return {
