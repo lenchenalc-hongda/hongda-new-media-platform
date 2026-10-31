@@ -115,9 +115,9 @@ export default function SupplierProductionOrderWorkbench({ userName }: { userNam
   };
   const [number] = useState(() => 'HD-BP-' + new Date().toISOString().slice(2,7).replace('-','') + '-' + Math.random().toString(36).slice(2,10).toUpperCase());
   const total = useMemo(() => lines.reduce((sum, line) => sum + money(line), 0), [lines]);
-  const update = (field: keyof Order, value: string) => setOrder(prev => ({ ...prev, [field]: value }));
-  const add = (category: string) => { setLines(prev => [...prev, { id: nextId, category, name: category === '自定义大项' ? '' : category, spec: '', unit: '项', quantity: '1', price: '', note: '' }]); setNextId(n => n + 1); };
-  const updateLine = (id: number, field: keyof Line, value: string) => setLines(prev => prev.map(line => line.id === id ? { ...line, [field]: value } : line));
+  const update = (field: keyof Order, value: string) => {setConfirmRequestId(null);setOrder(prev => ({ ...prev, [field]: value }));};
+  const add = (category: string) => { setConfirmRequestId(null);setLines(prev => [...prev, { id: nextId, category, name: category === '自定义大项' ? '' : category, spec: '', unit: '项', quantity: '1', price: '', note: '' }]); setNextId(n => n + 1); };
+  const updateLine = (id: number, field: keyof Line, value: string) => {setConfirmRequestId(null);setLines(prev => prev.map(line => line.id === id ? { ...line, [field]: value } : line));};
   const print = () => {
     if (!order.supplier.trim() || !order.deliveryDate || !lines.length || lines.some(l => !l.name.trim() || !l.quantity || !l.price || Number(l.quantity) <= 0 || Number(l.price) < 0 || !Number.isFinite(Number(l.quantity)) || !Number.isFinite(Number(l.price)))) {
       setPrintError('打印前请填写供应商、交期，以及至少一项完整的生产明细（名称、正数数量、非负单价）。'); return;
@@ -157,7 +157,7 @@ export default function SupplierProductionOrderWorkbench({ userName }: { userNam
         <Input label="供应商地址" value={order.address} onChange={v=>update('address',v)} />
       </div></section>
       <section className="rounded-xl border bg-white p-4 shadow-sm"><h2 className="mb-3 font-bold">03 · 布产内容</h2>
-        {lines.map((line, index) => <div key={line.id} className="mb-3 rounded-lg border bg-gray-50 p-3"><div className="mb-2 flex justify-between"><strong className="text-sm">{index+1}. {line.category}</strong><button type="button" className="text-xs text-red-600" onClick={()=>setLines(prev=>prev.filter(x=>x.id!==line.id))}>删除</button></div>
+        {lines.map((line, index) => <div key={line.id} className="mb-3 rounded-lg border bg-gray-50 p-3"><div className="mb-2 flex justify-between"><strong className="text-sm">{index+1}. {line.category}</strong><button type="button" className="text-xs text-red-600" onClick={()=>{setConfirmRequestId(null);setLines(prev=>prev.filter(x=>x.id!==line.id));}}>删除</button></div>
           <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
             <Input label="品名 / 工序 *" value={line.name} onChange={v=>updateLine(line.id,'name',v)} />
             <Input label="规格 / 型号" value={line.spec} onChange={v=>updateLine(line.id,'spec',v)} />
