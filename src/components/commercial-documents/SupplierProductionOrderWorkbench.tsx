@@ -1,16 +1,17 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import { lineAmountThousandths, validateSupplierOrder } from '@/lib/commercial-supplier-orders/validation';
 
 type Line = { id: number; category: string; name: string; spec: string; unit: string; quantity: string; price: string; note: string };
 type Order = { supplier: string; contact: string; phone: string; address: string; orderDate: string; deliveryDate: string; project: string; receiver: string; deliveryAddress: string; quality: string; technical: string; payment: string; shipping: string; tax: string; remarks: string };
 const CATEGORIES = ['机器设备','夹具与配件','热转印花膜','数码花膜','版费 / 制版','加工费用','其他费用','自定义大项'];
 const today = () => new Date().toLocaleDateString('en-CA');
 const emptyOrder = (): Order => ({ supplier: '', contact: '', phone: '', address: '', orderDate: today(), deliveryDate: '', project: '', receiver: '', deliveryAddress: '', quality: '', technical: '', payment: '', shipping: '', tax: '未约定', remarks: '' });
-const format = (value: number) => value.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const format = (value: number) => value.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 3 });
 function money(line: Line): number {
-  const qty = Number(line.quantity), price = Number(line.price);
-  return Number.isFinite(qty) && Number.isFinite(price) && qty >= 0 && price >= 0 ? qty * price : 0;
+  const amount = lineAmountThousandths(line.quantity, line.price);
+  return amount === null ? 0 : Number(amount) / 1000;
 }
 function Input({ label, value, onChange, type = 'text', area = false }: { label: string; value: string; onChange: (v: string) => void; type?: string; area?: boolean }) {
   return <label className="block min-w-0"><span className="block text-xs font-medium text-gray-600 mb-1">{label}</span>{area
@@ -36,6 +37,13 @@ export default function SupplierProductionOrderWorkbench({ userName }: { userNam
   const [historyOpen,setHistoryOpen] = useState(false);
   const [confirming,setConfirming] = useState(false);
   const [confirmRequestId,setConfirmRequestId] = useState<string|null>(null);
+  const newOrder = () => {
+    if (!window.confirm('新建布产单会清空当前页面中未保存的内容，确定继续吗？')) return;
+    setOrder(emptyOrder()); setLines([]); setNextId(1);
+    setDraftId(null); setRevision(0); setReadOnly(false);
+    setConfirmedId(null); setConfirmedVersion(0); setConfirmedNo('');
+    setConfirmRequestId(null); setSaveMessage('已开始新建布产单'); setPrintError('');
+  };
   const loadConfirmedList = async () => {
     try {
       const res=await fetch('/api/commercial-documents/production-orders/confirmed',{cache:'no-store'});
@@ -94,6 +102,7 @@ export default function SupplierProductionOrderWorkbench({ userName }: { userNam
       setOrder(data.draft.order);setLines(data.draft.lines);
       setNextId(Math.max(0,...data.draft.lines.map((l:Line)=>Number(l.id)||0))+1);
       setDraftId(data.id);setRevision(data.revision);setReadOnly(Boolean(data.readOnly));
+      setConfirmedId(null);setConfirmedVersion(0);setConfirmedNo('');setConfirmRequestId(null);
       setListOpen(false);setSaveMessage(data.readOnly?'只读：其他负责人的草稿':'已打开云端草稿');
     } catch(e){setSaveMessage(e instanceof Error?e.message:'打开失败');}
   };
@@ -119,8 +128,9 @@ export default function SupplierProductionOrderWorkbench({ userName }: { userNam
   const add = (category: string) => { setConfirmRequestId(null);setLines(prev => [...prev, { id: nextId, category, name: category === '自定义大项' ? '' : category, spec: '', unit: '项', quantity: '1', price: '', note: '' }]); setNextId(n => n + 1); };
   const updateLine = (id: number, field: keyof Line, value: string) => {setConfirmRequestId(null);setLines(prev => prev.map(line => line.id === id ? { ...line, [field]: value } : line));};
   const print = () => {
-    if (!order.supplier.trim() || !order.deliveryDate || !lines.length || lines.some(l => !l.name.trim() || !l.quantity || !l.price || Number(l.quantity) <= 0 || Number(l.price) < 0 || !Number.isFinite(Number(l.quantity)) || !Number.isFinite(Number(l.price)))) {
-      setPrintError('打印前请填写供应商、交期，以及至少一项完整的生产明细（名称、正数数量、非负单价）。'); return;
+    const checked = validateSupplierOrder({ order, lines });
+    if (!checked.ok) {
+      setPrintError(checked.message); return;
     }
     setPrintError(''); window.print();
   };
@@ -129,6 +139,7 @@ export default function SupplierProductionOrderWorkbench({ userName }: { userNam
     <div className="supplier-no-print mb-5 flex flex-wrap items-center justify-between gap-3">
       <div><h1 className="text-2xl font-bold text-gray-900">供应商布产单</h1><p className="mt-1 text-sm text-gray-500">东莞宏达外协委托生产 · 仅中文版</p></div>
       <div className="flex flex-wrap gap-2">
+      <button type="button" onClick={newOrder} className="rounded-lg border px-4 py-2.5 text-sm font-semibold hover:bg-gray-50">新建布产单</button>
       <button type="button" onClick={loadConfirmedList} className="rounded-lg border px-4 py-2.5 text-sm font-semibold hover:bg-gray-50">已保存布产单</button>
       <button type="button" onClick={saveConfirmed} disabled={confirming||readOnly} className="rounded-lg border border-emerald-600 px-4 py-2.5 text-sm font-semibold text-emerald-700 disabled:opacity-50">{confirming?'保存中...':'保存正式文件'}</button>
       <button type="button" onClick={loadList} className="rounded-lg border px-4 py-2.5 text-sm font-semibold hover:bg-gray-50">云端草稿箱</button>
@@ -144,7 +155,7 @@ export default function SupplierProductionOrderWorkbench({ userName }: { userNam
       {savedList.length===0?<p className="text-sm text-gray-500">暂无草稿</p>:<div className="space-y-2">{savedList.map(d=><button key={d.id} type="button" onClick={()=>openDraft(d.id)} className="block w-full rounded-lg border px-3 py-2 text-left text-sm hover:bg-blue-50"><strong>{d.supplier_name||'未填写供应商'}</strong><span className="ml-3 text-gray-500">修订 {d.revision} · {new Date(d.updated_at).toLocaleString('zh-CN')}</span></button>)}</div>}
     </section>}
     {printError && <div role="alert" className="supplier-no-print mb-4 rounded-lg bg-red-50 p-3 text-sm text-red-700">{printError}</div>}
-    <div className="grid grid-cols-1 items-start gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]"><div className="supplier-no-print min-w-0 space-y-4">
+    <div className="grid grid-cols-1 items-start gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]"><fieldset disabled={saving || confirming || readOnly} className="supplier-no-print min-w-0 space-y-4">
       <section className="rounded-xl border bg-white p-4 shadow-sm"><h2 className="mb-3 font-bold">01 · 布产基本信息</h2><div className="grid gap-3 md:grid-cols-3">
         <Input label="下单日期" type="date" value={order.orderDate} onChange={v=>update('orderDate',v)} />
         <Input label="要求交货日期 *" type="date" value={order.deliveryDate} onChange={v=>update('deliveryDate',v)} />
@@ -183,7 +194,7 @@ export default function SupplierProductionOrderWorkbench({ userName }: { userNam
         <label className="text-sm">税费约定<select value={order.tax} onChange={e=>update('tax',e.target.value)} className="mt-1 block w-full rounded-lg border p-2"><option>未约定</option><option>含税</option><option>不含税</option></select></label>
       </div></section>
       <section className="rounded-xl border bg-white p-4 shadow-sm"><h2 className="mb-3 font-bold">06 · 备注与确认</h2><Input label="特别说明 / 变更要求" area value={order.remarks} onChange={v=>update('remarks',v)} /></section>
-    </div>
+    </fieldset>
     <div className="min-w-0 xl:sticky xl:top-4"><div className="supplier-no-print mb-2 text-sm font-semibold text-gray-700">实时单据预览</div>
     <section id="supplier-print" className="rounded-xl border bg-white p-6 text-sm shadow-sm">
       <div className="mb-4 border-b pb-3 text-center"><p className="text-sm font-semibold">广东宏达印业股份有限公司</p><h2 className="mt-2 text-2xl font-bold">生产委托单（布产单）</h2></div>
