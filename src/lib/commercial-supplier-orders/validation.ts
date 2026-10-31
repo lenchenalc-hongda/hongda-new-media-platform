@@ -74,7 +74,7 @@ export function validateSupplierOrder(snapshot: unknown): SupplierOrderValidatio
       return { ok: false, message: '生产明细格式无效' };
     }
     const line = raw as Record<string, unknown>;
-    if (!Number.isSafeInteger(line.id) || (line.id as number) < 0 ||
+    if (typeof line.id !== 'number' || !Number.isSafeInteger(line.id) || line.id < 0 ||
         ['category', 'name', 'spec', 'unit', 'quantity', 'price', 'note'].some(key =>
           typeof line[key] !== 'string' || (line[key] as string).length > 3000
         ) || !(line.name as string).trim() || !(line.unit as string).trim()) {
