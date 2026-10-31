@@ -1,5 +1,10 @@
+import './global-lead-hub-v2-human-feedback.test';
 import assert from 'node:assert/strict';
 import { GLH_PROVIDER_CALLS_ENABLED } from '../../src/lib/global-lead-hub/channels';
+import {
+  GLH_V2_C_PROVIDER_CALLS,
+  GLH_V2_C_REAL_MODEL_ACCURACY,
+} from '../../src/lib/global-lead-hub/v2-human-feedback';
 import {
   GLH_V2_LLM_EXTRACTION_MAX_MESSAGE_TEXT_CHARS,
   GLH_V2_LLM_EXTRACTION_MAX_MODEL_OUTPUT_CHARS,
@@ -654,6 +659,8 @@ record('32-unknown-language', unknownLanguage, 'UNCLEAR', 'UNKNOWN');
 
 assert.equal(GLH_PROVIDER_CALLS_ENABLED, false);
 assert.equal(GLH_V2_LLM_PROVIDER_CALLS_ENABLED, false);
+assert.equal(GLH_V2_C_PROVIDER_CALLS, 0);
+assert.equal(GLH_V2_C_REAL_MODEL_ACCURACY, 'NOT_MEASURED');
 assert.equal(observations.length >= 20, true);
 assert.equal(JSON.stringify(sourceMessages), initialSourceSnapshot, 'inputs must remain immutable');
 
