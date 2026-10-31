@@ -54,6 +54,24 @@
         "^supabase/migrations/[0-9]+_workshop_order_system_[A-Za-z0-9_]+\\.sql$"
       ],
       "workflow_file": "workshop-order-system-agent-control.yml"
+    },
+    "commercial-supplier-orders": {
+      "control_issue": 195,
+      "task_prefix": "CSO-",
+      "branch_prefix": "codex/cso-",
+      "owned_prefixes": [
+        "docs/commercial-supplier-orders/",
+        "src/app/commercial-documents/production-orders/",
+        "src/app/api/commercial-documents/production-orders/",
+        "src/lib/commercial-supplier-orders/",
+        "src/components/commercial-supplier-orders/",
+        "tests/unit/commercial-supplier-order-",
+        "tests/e2e/commercial-supplier-order-"
+      ],
+      "owned_regexes": [
+        "^supabase/migrations/[0-9]+_commercial_supplier_order_[A-Za-z0-9_]+\\.sql$"
+      ],
+      "workflow_file": "commercial-supplier-orders-agent-control.yml"
     }
   },
   "shared_prefixes": [
