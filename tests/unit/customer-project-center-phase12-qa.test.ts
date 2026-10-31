@@ -321,8 +321,9 @@ assert(
   'Workbench performs independent project/work-item reads concurrently',
 );
 assert(
-  projectsRoute.includes('const [workItems, customers] = await Promise.all(['),
-  'Project list performs independent relation reads concurrently',
+  projectsRoute.includes('const [workItems, customers, owners] = await Promise.all([')
+    && projectsRoute.includes(".rpc('cpc_project_owner_names'"),
+  'Project list performs work-item, customer, and authorized owner-name reads concurrently',
 );
 
 const detailRoutes = [

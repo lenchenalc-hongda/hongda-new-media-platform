@@ -1,0 +1,368 @@
+name: Commercial Supplier Orders Agent Control
+
+on:
+  issue_comment:
+    types: [created]
+  workflow_dispatch:
+    inputs:
+      recovery_task_id:
+        description: Current Agent Control task id
+        required: true
+        type: string
+      recovery_expected_head:
+        description: Current exact task head
+        required: true
+        type: string
+      recovery_attempt:
+        description: Infrastructure retry attempt
+        required: false
+        default: '0'
+        type: string
+      recovery_reason:
+        description: Reliability V2 recovery reason
+        required: false
+        default: LOST_TRIGGER
+        type: string
+
+permissions:
+  contents: read
+  issues: read
+  pull-requests: read
+
+
+jobs:
+  gate:
+    if: >-
+      (
+        github.event_name == 'issue_comment' &&
+        github.repository == 'lenchenalc-hongda/hongda-new-media-platform' &&
+        github.event.issue.number == 195 &&
+        github.event.issue.pull_request == null &&
+        github.event.sender.login == 'lenchenalc-hongda' &&
+        github.event.comment.user.login == 'lenchenalc-hongda' &&
+        github.event.comment.body == 'AGENT_CONTROL_TRIGGER_V1'
+      ) ||
+      (
+        github.event_name == 'workflow_dispatch' &&
+        github.repository == 'lenchenalc-hongda/hongda-new-media-platform' &&
+        inputs.recovery_task_id != '' &&
+        inputs.recovery_expected_head != ''
+      )
+    runs-on: ubuntu-latest
+    outputs:
+      trusted: ${{ steps.gate.outputs.trusted }}
+    steps:
+      - id: gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo 'trusted=true' >> "$GITHUB_OUTPUT"
+
+  validate:
+    needs: gate
+    if: needs.gate.outputs.trusted == 'true'
+    runs-on: ubuntu-latest
+    outputs:
+      result: ${{ steps.validate.outputs.result }}
+      project: ${{ steps.validate.outputs.project }}
+      control_issue: ${{ steps.validate.outputs.control_issue }}
+      task_id: ${{ steps.validate.outputs.task_id }}
+      status: ${{ steps.validate.outputs.status }}
+      base_master_sha: ${{ steps.validate.outputs.base_master_sha }}
+      expected_head: ${{ steps.validate.outputs.expected_head }}
+      active_pr: ${{ steps.validate.outputs.active_pr }}
+      active_branch: ${{ steps.validate.outputs.active_branch }}
+      branch: ${{ steps.validate.outputs.branch }}
+      fix_round: ${{ steps.validate.outputs.fix_round }}
+      max_fix_rounds: ${{ steps.validate.outputs.max_fix_rounds }}
+      task_comment_id: ${{ steps.validate.outputs.task_comment_id }}
+      objective_b64: ${{ steps.validate.outputs.objective_b64 }}
+      allowed_paths_b64: ${{ steps.validate.outputs.allowed_paths_b64 }}
+      checks: ${{ steps.validate.outputs.checks }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Validate project lane task
+        id: validate
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          AGENT_CONTROL_PROJECT: commercial-supplier-orders
+          AGENT_CONTROL_ISSUE: '195'
+        run: node scripts/agent-control/project-lane-validate.mjs
+      - name: Package validated source snapshot
+        if: steps.validate.outputs.result == 'READY'
+        shell: bash
+        run: |
+          set -euo pipefail
+          tar -czf "$RUNNER_TEMP/project-lane-source.tgz" .
+
+      - name: Upload validated source snapshot
+        if: steps.validate.outputs.result == 'READY'
+        uses: actions/upload-artifact@v4
+        with:
+          name: project-lane-source-${{ github.run_id }}
+          path: ${{ runner.temp }}/project-lane-source.tgz
+          if-no-files-found: error
+          retention-days: 1
+
+
+  execute:
+    needs: validate
+    if: needs.validate.outputs.result == 'READY'
+    concurrency:
+      group: agent-control-${{ github.repository }}-commercial-supplier-orders
+      # The latest exact-head validated task supersedes an older execute that is stuck on runner transport.
+      cancel-in-progress: true
+    runs-on: [self-hosted, macOS, X64, hongda-agent-control]
+    timeout-minutes: 90
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      run_result: ${{ steps.run.outputs.run_result }}
+      failure_class: ${{ steps.run.outputs.failure_class }}
+      checks_passed: ${{ steps.run.outputs.checks_passed }}
+      failed_check: ${{ steps.run.outputs.failed_check }}
+      infra_local_attempts: ${{ steps.run.outputs.infra_local_attempts }}
+    steps:
+      - name: Restore exact validated source without marketplace actions
+        shell: bash
+        env:
+          REAL_EXPECTED_HEAD: ${{ needs.validate.outputs.expected_head }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          cd "$GITHUB_WORKSPACE"
+
+          # Fast path: the persistent self-hosted worktree already has the exact
+          # validator-approved commit. This needs no network access at all.
+          if [ -d .git ] && git cat-file -e "$REAL_EXPECTED_HEAD^{commit}" 2>/dev/null; then
+            git reset --hard "$REAL_EXPECTED_HEAD"
+            git clean -ffdx
+            test -z "$(git status --porcelain)"
+            echo "PROJECT_LANE_LOCAL_EXPECTED_HEAD=$REAL_EXPECTED_HEAD" >> "$GITHUB_ENV"
+            echo "PROJECT_LANE_SOURCE_TRANSPORT=LOCAL_GIT_CACHE" >> "$GITHUB_ENV"
+            exit 0
+          fi
+
+          # Bounded fallback: fetch the exact validated SHA as an archive. Avoid
+          # actions/download-artifact, checkout and setup actions on the Mac lane
+          # because downloading action bundles was the recurring transport stall.
+          archive="$RUNNER_TEMP/project-lane-source-fallback.tgz"
+          rm -f "$archive"
+          curl -fL --retry 4 --retry-delay 3 --retry-all-errors \
+            --connect-timeout 20 --max-time 180 \
+            -H "Authorization: Bearer $GITHUB_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/$GITHUB_REPOSITORY/tarball/$REAL_EXPECTED_HEAD" \
+            -o "$archive"
+
+          find "$GITHUB_WORKSPACE" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
+          tar -xzf "$archive" --strip-components=1 -C "$GITHUB_WORKSPACE"
+          cd "$GITHUB_WORKSPACE"
+
+          # The archive is cryptographically selected by the validated Git SHA,
+          # but has no .git directory. Create an isolated local baseline only so
+          # project-lane-run.sh can enforce clean-head/path/diff invariants.
+          git init -q
+          git config user.name "hongda-agent-control-baseline"
+          git config user.email "agent-control@hongda.local"
+          git add -A
+          git commit -q -m "Verified source snapshot $REAL_EXPECTED_HEAD"
+          local_head="$(git rev-parse HEAD)"
+          test -n "$local_head"
+          test -z "$(git status --porcelain)"
+          echo "PROJECT_LANE_LOCAL_EXPECTED_HEAD=$local_head" >> "$GITHUB_ENV"
+          echo "PROJECT_LANE_SOURCE_TRANSPORT=GITHUB_ARCHIVE_SYNTHETIC_BASELINE" >> "$GITHUB_ENV"
+
+      - name: Verify local Node and pnpm runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          add_runtime_dir() {
+            local dir="$1"
+            if [ -d "$dir" ]; then
+              export PATH="$dir:$PATH"
+              echo "$dir" >> "$GITHUB_PATH"
+            fi
+          }
+
+          # Normal machine-level locations plus pnpm/action-setup's persistent
+          # install from previous successful runs.
+          add_runtime_dir /opt/homebrew/bin
+          add_runtime_dir /usr/local/bin
+          add_runtime_dir "$HOME/Library/pnpm"
+          add_runtime_dir "$HOME/.local/share/pnpm"
+          add_runtime_dir "$HOME/setup-pnpm/node_modules/.bin"
+
+          # setup-node caches Node under the runner work tool directory. Reuse
+          # that cache directly so the self-hosted lane does not need to
+          # download the setup-node action on every task.
+          runner_work_dir="$(dirname "$RUNNER_TEMP")"
+          node_path="$(command -v node || true)"
+          if [ -z "$node_path" ]; then
+            for candidate in \
+              "$runner_work_dir"/_tool/node/20.*/x64/bin/node \
+              "$runner_work_dir"/_tool/node/22.*/x64/bin/node \
+              "$runner_work_dir"/_tool/node/24.*/x64/bin/node; do
+              if [ -x "$candidate" ]; then
+                add_runtime_dir "$(dirname "$candidate")"
+                node_path="$candidate"
+                break
+              fi
+            done
+          fi
+
+          pnpm_path="$(command -v pnpm || true)"
+          if [ -z "$node_path" ]; then
+            echo "LOCAL_NODE_RUNTIME=MISSING"
+            exit 1
+          fi
+          if [ -z "$pnpm_path" ]; then
+            echo "LOCAL_PNPM_RUNTIME=MISSING"
+            exit 1
+          fi
+          echo "LOCAL_NODE_RUNTIME=$("$node_path" --version)"
+          echo "LOCAL_PNPM_RUNTIME=$("$pnpm_path" --version)"
+
+      - name: Install dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm install --frozen-lockfile --prefer-offline
+
+      - name: Run bounded project task
+        id: run
+        continue-on-error: true
+        shell: bash
+        env:
+          PROJECT_SLUG: ${{ needs.validate.outputs.project }}
+          TASK_ID: ${{ needs.validate.outputs.task_id }}
+          STATUS: ${{ needs.validate.outputs.status }}
+          BASE_MASTER_SHA: ${{ needs.validate.outputs.base_master_sha }}
+          EXPECTED_HEAD: ${{ env.PROJECT_LANE_LOCAL_EXPECTED_HEAD || needs.validate.outputs.expected_head }}
+          BRANCH_NAME: ${{ needs.validate.outputs.branch }}
+          OBJECTIVE_B64: ${{ needs.validate.outputs.objective_b64 }}
+          ALLOWED_PATHS_B64: ${{ needs.validate.outputs.allowed_paths_b64 }}
+          CHECKS: ${{ needs.validate.outputs.checks }}
+          FIX_ROUND: ${{ needs.validate.outputs.fix_round }}
+          MAX_FIX_ROUNDS: ${{ needs.validate.outputs.max_fix_rounds }}
+          AGENT_CONTROL_DEFAULT_MODEL: ${{ vars.AGENT_CONTROL_DEFAULT_MODEL }}
+          AGENT_CONTROL_STRONG_MODEL: ${{ vars.AGENT_CONTROL_STRONG_MODEL }}
+        run: bash scripts/agent-control/project-lane-run.sh
+
+      - name: Package bounded result patch
+        if: steps.run.outcome == 'success' && (steps.run.outputs.run_result == 'PASS' || steps.run.outputs.run_result == 'CODE_FAILURE')
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$GITHUB_WORKSPACE"
+          {
+            git -c core.quotepath=false diff --name-only --no-renames
+            git -c core.quotepath=false ls-files --others --exclude-standard
+          } | sed '/^$/d' | LC_ALL=C sort -u > "$RUNNER_TEMP/project-lane-changed.txt"
+          while IFS= read -r path; do
+            git add -A -- "$path"
+          done < "$RUNNER_TEMP/project-lane-changed.txt"
+          git diff --cached --binary --full-index --no-ext-diff HEAD > "$RUNNER_TEMP/project-lane-result.patch"
+          git reset -- .
+          test -s "$RUNNER_TEMP/project-lane-result.patch"
+
+      - name: Upload bounded result patch
+        if: steps.run.outcome == 'success' && (steps.run.outputs.run_result == 'PASS' || steps.run.outputs.run_result == 'CODE_FAILURE')
+        uses: actions/upload-artifact@v4
+        with:
+          name: project-lane-result-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/project-lane-result.patch
+            ${{ runner.temp }}/project-lane-changed.txt
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Fail unresolved execution
+        if: steps.run.outcome == 'failure'
+        shell: bash
+        run: |
+          echo "PROJECT_LANE_FINAL=FAILED"
+          echo "FAILURE_CLASS=${{ steps.run.outputs.failure_class }}"
+          exit 1
+
+  publish:
+    needs: [validate, execute]
+    if: needs.validate.result == 'success' && needs.execute.result == 'success' && (needs.execute.outputs.run_result == 'PASS' || needs.execute.outputs.run_result == 'CODE_FAILURE')
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ needs.validate.outputs.expected_head }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Download bounded result patch
+        uses: actions/download-artifact@v4
+        with:
+          name: project-lane-result-${{ github.run_id }}
+          path: ${{ runner.temp }}/project-lane-result
+
+      - name: Apply bounded result patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git apply --check "$RUNNER_TEMP/project-lane-result/project-lane-result.patch"
+          git apply "$RUNNER_TEMP/project-lane-result/project-lane-result.patch"
+          test -n "$(git status --porcelain)"
+
+      - name: Mint scoped GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ vars.AGENT_CONTROL_APP_CLIENT_ID }}
+          private-key: ${{ secrets.AGENT_CONTROL_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+
+      - name: Publish project task
+        shell: bash
+        env:
+          GH_APP_TOKEN: ${{ steps.app-token.outputs.token }}
+          APP_SLUG: ${{ steps.app-token.outputs.app-slug }}
+          PROJECT_SLUG: ${{ needs.validate.outputs.project }}
+          TASK_ID: ${{ needs.validate.outputs.task_id }}
+          STATUS: ${{ needs.validate.outputs.status }}
+          BASE_MASTER_SHA: ${{ needs.validate.outputs.base_master_sha }}
+          EXPECTED_HEAD: ${{ needs.validate.outputs.expected_head }}
+          BRANCH_NAME: ${{ needs.validate.outputs.branch }}
+          CONTROL_ISSUE: ${{ needs.validate.outputs.control_issue }}
+          TASK_COMMENT_ID: ${{ needs.validate.outputs.task_comment_id }}
+          ACTIVE_PR: ${{ needs.validate.outputs.active_pr }}
+          REPOSITORY: ${{ github.repository }}
+          RUN_RESULT: ${{ needs.execute.outputs.run_result }}
+          FAILURE_CLASS: ${{ needs.execute.outputs.failure_class }}
+          CHECKS_PASSED: ${{ needs.execute.outputs.checks_passed }}
+          FAILED_CHECK: ${{ needs.execute.outputs.failed_check }}
+          INFRA_LOCAL_ATTEMPTS: ${{ needs.execute.outputs.infra_local_attempts }}
+        run: bash scripts/agent-control/project-lane-publish.sh
+
+  recover:
+    needs: [validate, execute]
+    if: always() && needs.validate.result == 'success' && needs.execute.result == 'failure'
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Recover infrastructure failure
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          PROJECT_SLUG: commercial-supplier-orders
+          CONTROL_ISSUE: '195'
+          WORKFLOW_FILE: commercial-supplier-orders-agent-control.yml
+          CURRENT_RUN_ID: ${{ github.run_id }}
+          FAILURE_CLASS: ${{ needs.execute.outputs.failure_class }}
+          MAX_INFRA_RETRIES: '3'
+        run: node scripts/agent-control/project-lane-recover.mjs

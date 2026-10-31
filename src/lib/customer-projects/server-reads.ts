@@ -14,6 +14,7 @@ import {
   buildProjectList,
   buildTaskList,
   type ListCustomerRow,
+  type ListProjectOwnerRow,
   type ListProjectRow,
   type ListWorkItemRow,
   type ProjectListItem,
@@ -38,7 +39,7 @@ type ServerReadResult<T> =
   | { ok: true; data: T }
   | { ok: false; status: number; message: string };
 
-export type ProjectListPageItem = ProjectListItem & {
+export type ProjectListPageItem = Omit<ProjectListItem, 'ownerProfileId'> & {
   isOwnedByMe: boolean;
 };
 
@@ -181,7 +182,7 @@ export async function readProjectList(): Promise<ServerReadResult<ProjectListPag
     const customerIds = Array.from(new Set(projects.map(project => project.customer_reference_id)));
 
     const relationsStartedAt = Date.now();
-    const [workItems, customers] = await Promise.all([
+    const [workItems, customers, owners] = await Promise.all([
       (async (): Promise<ListWorkItemRow[]> => {
         if (projectIds.length === 0) return [];
 
@@ -209,18 +210,35 @@ export async function readProjectList(): Promise<ServerReadResult<ProjectListPag
         if (customersResult.error) throw new Error('customer read failed');
         return (customersResult.data ?? []) as ListCustomerRow[];
       })(),
+      (async (): Promise<ListProjectOwnerRow[]> => {
+        if (projectIds.length === 0) return [];
+
+        const ownersResult = await supabase.rpc('cpc_project_owner_names', {
+          p_project_ids: projectIds,
+        });
+        if (ownersResult.error) {
+          // Noncritical display enrichment must not block project access.
+          console.warn('[cpc] project owner name lookup unavailable', {
+            code: ownersResult.error.code,
+          });
+          return [];
+        }
+        return (ownersResult.data ?? []) as ListProjectOwnerRow[];
+      })(),
     ]);
 
     timing.mark('relations', relationsStartedAt);
-    const list = buildProjectList({ projects, workItems, customers }).map(project => ({
+    // Keep ownerProfileId server-side: the browser only needs the name and "mine" flag.
+    const list = buildProjectList({ projects, workItems, customers, owners }).map(({ ownerProfileId, ...project }) => ({
       ...project,
-      isOwnedByMe: project.ownerProfileId === profile.id,
+      isOwnedByMe: ownerProfileId === profile.id,
     }));
 
     timing.finish('ok', {
       projects: projects.length,
       workItems: workItems.length,
       customers: customers.length,
+      ownerNames: owners.filter(owner => owner.owner_name?.trim()).length,
     });
     return { ok: true, data: list };
   } catch {

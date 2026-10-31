@@ -30,16 +30,32 @@ redacted_tail() {
 
 classify_codex_failure() {
   local file="$1"
-  if /usr/bin/grep -Eqi '/usr/bin/security|Failed to resolve external auth|keychain' "$file"; then
-    printf 'KEYCHAIN_FAILURE'
-  elif /usr/bin/grep -Eqi '(^|[^0-9])401([^0-9]|$)|unauthori[sz]ed|invalid (api )?key|authentication failed' "$file"; then
+  # A real API 401 is terminal even if stderr also mentions keychain context.
+  if /usr/bin/grep -Eqi '(^|[^0-9])401([^0-9]|$)|unauthori[sz]ed|invalid (api )?key|authentication failed' "$file"; then
     printf 'PROVIDER_401'
+  elif /usr/bin/grep -Eqi '/usr/bin/security|Failed to resolve external auth|keychain' "$file"; then
+    printf 'KEYCHAIN_FAILURE'
   elif /usr/bin/grep -Eqi '429|Too Many Requests|Could not resolve host|connection reset|network is unreachable|timed? out|TLS|SSL' "$file"; then
     printf 'NETWORK_FAILURE'
   elif /usr/bin/grep -Eqi 'auth|credential|login' "$file"; then
     printf 'AUTH_FAILURE'
   else
     printf 'CODEX_CRASH'
+  fi
+}
+
+# Single execution-path classifier, including stderr/exit-status conflicts.
+# Real provider 401 wins over incidental keychain context and even an
+# unexpected CLI zero-exit with a clear provider rejection diagnostic.
+classify_codex_attempt() {
+  local exit_status="$1" logfile="$2" detected
+  detected="$(classify_codex_failure "$logfile")"
+  if [ "$detected" = "PROVIDER_401" ] || [ "$detected" = "KEYCHAIN_FAILURE" ]; then
+    printf '%s' "$detected"
+  elif [ "$exit_status" -eq 0 ]; then
+    printf 'NONE'
+  else
+    printf '%s' "$detected"
   fi
 }
 
@@ -381,20 +397,25 @@ for attempt in 1 2 3; do
   codex_status=$?
   set -e
 
-  if /usr/bin/grep -Eqi '/usr/bin/security|Failed to resolve external auth|keychain' "$error_log"; then
-    codex_status=72
-    failure_class="KEYCHAIN_FAILURE"
-  elif [ "$codex_status" -eq 0 ]; then
-    failure_class="NONE"
+  # Exercise the same single classifier in tests and live Codex execution.
+  failure_class="$(classify_codex_attempt "$codex_status" "$error_log")"
+  if [ "$failure_class" = "NONE" ]; then
     break
-  else
-    failure_class="$(classify_codex_failure "$error_log")"
   fi
+  if [ "$failure_class" = "KEYCHAIN_FAILURE" ]; then codex_status=72; fi
+  if [ "$codex_status" -eq 0 ]; then codex_status=73; fi
 
   printf 'CODEX_LOCAL_ATTEMPT=%s/3 FAILURE_CLASS=%s\n' "$attempt" "$failure_class"
   printf 'CODEX_STDERR_BEGIN\n'
   redacted_tail "$error_log"
   printf 'CODEX_STDERR_END\n'
+  # Static auth failures cannot self-heal by calling the provider with the
+  # same credential. Escalate after one failed request instead of 3x locally
+  # plus 3x external workflow attempts.
+  if [ "$failure_class" = "PROVIDER_401" ] || [ "$failure_class" = "KEYCHAIN_FAILURE" ]; then
+    printf 'CODEX_LOCAL_RETRY=SKIPPED_NON_RETRYABLE_AUTH\n'
+    break
+  fi
   if [ "$attempt" -lt 3 ]; then
     sleep "$(retry_delay "$attempt")"
   fi
