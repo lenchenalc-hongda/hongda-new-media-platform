@@ -41,7 +41,7 @@ export async function POST(request: NextRequest) {
   const expectedVersion = body.expectedVersion;
   if (typeof requestId !== 'string' || !UUID_PATTERN.test(requestId) ||
       (orderId !== null && (typeof orderId !== 'string' || !UUID_PATTERN.test(orderId))) ||
-      !Number.isSafeInteger(expectedVersion) || (expectedVersion as number) < 0) {
+      typeof expectedVersion !== 'number' || !Number.isSafeInteger(expectedVersion) || expectedVersion < 0) {
     return reply({ ok: false, message: '版本或幂等请求编号错误' }, 400);
   }
 
