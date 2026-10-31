@@ -37,11 +37,28 @@ export default function SupplierProductionOrderWorkbench({ userName }: { userNam
   const [historyOpen,setHistoryOpen] = useState(false);
   const [confirming,setConfirming] = useState(false);
   const [confirmRequestId,setConfirmRequestId] = useState<string|null>(null);
+  const [ownerReadOnly,setOwnerReadOnly] = useState(false);
+  const [displayedVersion,setDisplayedVersion] = useState(0);
+  const [versionHistory,setVersionHistory] = useState<Array<{
+    version:number; snapshot:{order:Order;lines:Line[]};saved_at:string;
+  }>>([]);
+  const viewVersion = (version:number) => {
+    const selected = versionHistory.find(entry=>entry.version===version);
+    if(!selected) return;
+    setOrder(selected.snapshot.order);
+    setLines(selected.snapshot.lines);
+    setNextId(Math.max(0,...selected.snapshot.lines.map(l=>Number(l.id)||0))+1);
+    setDisplayedVersion(version);
+    setReadOnly(ownerReadOnly || version!==confirmedVersion);
+    setConfirmRequestId(null);
+    setSaveMessage(version===confirmedVersion?'正在查看最新版本':'正在查看历史 V'+version+'（只读，允许打印）');
+  };
   const newOrder = () => {
     if (!window.confirm('新建布产单会清空当前页面中未保存的内容，确定继续吗？')) return;
     setOrder(emptyOrder()); setLines([]); setNextId(1);
     setDraftId(null); setRevision(0); setReadOnly(false);
     setConfirmedId(null); setConfirmedVersion(0); setConfirmedNo('');
+    setOwnerReadOnly(false);setDisplayedVersion(0);setVersionHistory([]);
     setConfirmRequestId(null); setSaveMessage('已开始新建布产单'); setPrintError('');
   };
   const loadConfirmedList = async () => {
@@ -62,7 +79,8 @@ export default function SupplierProductionOrderWorkbench({ userName }: { userNam
       setOrder(snapshot.order);setLines(snapshot.lines);
       setNextId(Math.max(0,...snapshot.lines.map((l:Line)=>Number(l.id)||0))+1);
       setConfirmedId(data.order.id);setConfirmedVersion(data.order.latest_version);setConfirmedNo(data.order.order_no);
-      setReadOnly(Boolean(data.readOnly));setHistoryOpen(false);
+      setVersionHistory(data.versions);setDisplayedVersion(data.order.latest_version);
+      setOwnerReadOnly(Boolean(data.readOnly));setReadOnly(Boolean(data.readOnly));setHistoryOpen(false);
       setDraftId(null);setRevision(0);setConfirmRequestId(null);
       setSaveMessage(data.readOnly?'其他业务员订单：只读预览':'已载入正式订单，可修改后保存为新版本');
     }catch(e){setSaveMessage(e instanceof Error?e.message:'读取失败');}
@@ -80,6 +98,8 @@ export default function SupplierProductionOrderWorkbench({ userName }: { userNam
       const data=await res.json();
       if(!res.ok||!data.ok)throw Error(data.message||'保存失败');
       setConfirmedId(data.orderId);setConfirmedVersion(data.version);setConfirmedNo(data.orderNo);
+      setDisplayedVersion(data.version);
+      setVersionHistory(prev=>[{version:data.version,snapshot:{order,lines},saved_at:data.savedAt},...prev]);
       setConfirmRequestId(null);
       setSaveMessage('已保存正式布产单 '+data.orderNo+' · V'+data.version+'（仅结构化数据，PDF 原件归档未完成）');
     }catch(e){setSaveMessage(e instanceof Error?e.message:'保存失败，可重试；请保留当前页面');}
@@ -103,6 +123,7 @@ export default function SupplierProductionOrderWorkbench({ userName }: { userNam
       setNextId(Math.max(0,...data.draft.lines.map((l:Line)=>Number(l.id)||0))+1);
       setDraftId(data.id);setRevision(data.revision);setReadOnly(Boolean(data.readOnly));
       setConfirmedId(null);setConfirmedVersion(0);setConfirmedNo('');setConfirmRequestId(null);
+      setOwnerReadOnly(false);setDisplayedVersion(0);setVersionHistory([]);
       setListOpen(false);setSaveMessage(data.readOnly?'只读：其他负责人的草稿':'已打开云端草稿');
     } catch(e){setSaveMessage(e instanceof Error?e.message:'打开失败');}
   };
@@ -195,10 +216,18 @@ export default function SupplierProductionOrderWorkbench({ userName }: { userNam
       </div></section>
       <section className="rounded-xl border bg-white p-4 shadow-sm"><h2 className="mb-3 font-bold">06 · 备注与确认</h2><Input label="特别说明 / 变更要求" area value={order.remarks} onChange={v=>update('remarks',v)} /></section>
     </fieldset>
-    <div className="min-w-0 xl:sticky xl:top-4"><div className="supplier-no-print mb-2 text-sm font-semibold text-gray-700">实时单据预览</div>
+    <div className="min-w-0 xl:sticky xl:top-4"><div className="supplier-no-print mb-2 flex items-center justify-between gap-2 text-sm font-semibold text-gray-700">
+      <span>实时单据预览</span>
+      {versionHistory.length>0&&<label className="flex items-center gap-2 text-xs font-normal text-gray-600">
+        历史版本
+        <select className="rounded border bg-white px-2 py-1" value={displayedVersion} onChange={e=>viewVersion(Number(e.target.value))}>
+          {versionHistory.map(entry=><option key={entry.version} value={entry.version}>V{entry.version}{entry.version===confirmedVersion?'（最新）':''}</option>)}
+        </select>
+      </label>}
+    </div>
     <section id="supplier-print" className="rounded-xl border bg-white p-6 text-sm shadow-sm">
       <div className="mb-4 border-b pb-3 text-center"><p className="text-sm font-semibold">广东宏达印业股份有限公司</p><h2 className="mt-2 text-2xl font-bold">生产委托单（布产单）</h2></div>
-      <div className="grid grid-cols-2 gap-2"><p>布产单号：{confirmedNo || number}{confirmedNo ? ' · V'+confirmedVersion : '（临时）'}</p><p>下单日期：{order.orderDate}</p><p>委托方：广东宏达印业股份有限公司</p><p>经办人：{userName}</p><p>承制供应商：{order.supplier || '—'}</p><p>供应商联系人：{order.contact || '—'}</p><p>供应商电话：{order.phone || '—'}</p><p>交付日期：{order.deliveryDate || '—'}</p><p>关联项目：{order.project || '—'}</p><p>供应商地址：{order.address || '—'}</p></div>
+      <div className="grid grid-cols-2 gap-2"><p>布产单号：{confirmedNo || number}{confirmedNo ? ' · V'+displayedVersion : '（临时）'}</p><p>下单日期：{order.orderDate}</p><p>委托方：广东宏达印业股份有限公司</p><p>经办人：{userName}</p><p>承制供应商：{order.supplier || '—'}</p><p>供应商联系人：{order.contact || '—'}</p><p>供应商电话：{order.phone || '—'}</p><p>交付日期：{order.deliveryDate || '—'}</p><p>关联项目：{order.project || '—'}</p><p>供应商地址：{order.address || '—'}</p></div>
       <table className="mt-5 w-full border-collapse text-left text-xs"><thead><tr>{['序号','生产内容','规格 / 型号','数量','单位','单价（元）','金额（元）'].map(h=><th key={h} className="border p-2">{h}</th>)}</tr></thead><tbody>{lines.map((line,i)=><tr key={line.id} className="supplier-row">{[String(i+1),line.name,line.spec,line.quantity,line.unit,line.price,format(money(line))].map((x,j)=><td key={j} className="border p-2 align-top break-words">{x}</td>)}</tr>)}</tbody></table>
       <p className="mt-3 text-right text-lg font-bold text-red-700">合计：¥ {format(total)}</p>
       <div className="mt-5 space-y-2 whitespace-pre-wrap break-words"><p><strong>技术要求：</strong>{order.technical || '—'}</p><p><strong>验收与品质：</strong>{order.quality || '—'}</p><p><strong>付款约定：</strong>{order.payment || '—'}</p><p><strong>税费：</strong>{order.tax}</p><p><strong>运输方式：</strong>{order.shipping || '—'}</p><p><strong>收货人 / 交货地址：</strong>{order.receiver || '—'} / {order.deliveryAddress || '—'}</p><p><strong>备注：</strong>{order.remarks || '—'}</p></div>
