@@ -13,9 +13,9 @@ const valid = {
 const good = validateSupplierOrder(valid);
 assert.equal(good.ok, true);
 if (good.ok) assert.equal(good.amountThousandths, 112506);
-assert.equal(lineAmountThousandths('0.1','0.2'), 20n);
-assert.equal(lineAmountThousandths('1.125','100.005'), 112506n);
-assert.equal(toThousandths('1630'), 1630000n);
+assert.equal(lineAmountThousandths('0.1','0.2'), BigInt(20));
+assert.equal(lineAmountThousandths('1.125','100.005'), BigInt(112506));
+assert.equal(toThousandths('1630'), BigInt(1630000));
 assert.equal(lineAmountThousandths('1.1234','2'), null);
 assert.equal(lineAmountThousandths('-1','3'), null);
 assert.equal(lineAmountThousandths('0','3'), null);
