@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { draftContext, privateHeaders } from '@/lib/commercial-documents/cloud-drafts';
+import { supplierOrdersEnabled } from '@/lib/commercial-supplier-orders/availability';
 export const dynamic='force-dynamic';
 const reply=(data:Record<string,unknown>,status=200)=>NextResponse.json(data,{status,headers:privateHeaders});
 const table='commercial_supplier_order_drafts';
@@ -14,6 +15,7 @@ function parse(value:unknown):Record<string,unknown>|null {
  return x;
 }
 export async function GET(){
+ if(!supplierOrdersEnabled())return reply({ok:false,message:'功能尚未开放'},503);
  const ctx=await draftContext();if(!ctx)return reply({ok:false,message:'请重新登录'},403);
  let q=ctx.db.from(table).select('id,supplier_name,revision,updated_at,created_at').eq('org_id',ctx.profile.org_id).eq('status','active').order('updated_at',{ascending:false}).limit(100);
  if(!['admin','manager'].includes(ctx.user.role))q=q.eq('owner_profile_id',ctx.profile.id);
@@ -21,6 +23,7 @@ export async function GET(){
  return error?reply({ok:false,message:'布产单草稿读取失败'},503):reply({ok:true,drafts:data||[]});
 }
 export async function POST(req:NextRequest){
+ if(!supplierOrdersEnabled())return reply({ok:false,message:'功能尚未开放'},503);
  const ctx=await draftContext();if(!ctx)return reply({ok:false,message:'无权保存'},403);
  let body:Record<string,unknown>;try{body=await req.json();}catch{return reply({ok:false,message:'格式无效'},400);}
  const draft=parse(body.draft);if(!draft)return reply({ok:false,message:'布产单草稿格式无效'},422);
