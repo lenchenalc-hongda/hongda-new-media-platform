@@ -1,10 +1,11 @@
 import { NextRequest,NextResponse } from 'next/server';
 import { draftContext,privateHeaders } from '@/lib/commercial-documents/cloud-drafts';
+import { UUID_PATTERN } from '@/lib/commercial-supplier-orders/validation';
 export const dynamic='force-dynamic';
 const reply=(data:Record<string,unknown>,status=200)=>NextResponse.json(data,{status,headers:privateHeaders});
 export async function GET(_req:NextRequest,{params}:{params:{id:string}}){
  const ctx=await draftContext();if(!ctx)return reply({ok:false,message:'未授权'},403);
- if(!/^[a-f0-9]{8}-[a-f0-9-]{27,}$/i.test(params.id))return reply({ok:false,message:'编号无效'},400);
+ if(!UUID_PATTERN.test(params.id))return reply({ok:false,message:'编号无效'},400);
  let q=ctx.db.from('commercial_supplier_orders').select('id,order_no,latest_version,owner_profile_id').eq('id',params.id).eq('org_id',ctx.profile.org_id);
  if(!['admin','manager'].includes(ctx.user.role))q=q.eq('owner_profile_id',ctx.profile.id);
  const {data:order,error}=await q.maybeSingle();
