@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+// Register the supplier-order safety suite in the existing commercial CI gate.
+import './commercial-supplier-order-validation.test';
 import {readFileSync} from 'node:fs';
 import { initialDraft, blankItem, documentAmount, validateForPrint, type CommercialDocumentDraft } from '../../src/lib/commercial-documents/template';
 const migration=readFileSync(new URL('../../supabase/migrations/20261027095000_commercial_confirmed_quotes.sql',import.meta.url),'utf8');
