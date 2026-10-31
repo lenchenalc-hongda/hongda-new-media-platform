@@ -24,14 +24,14 @@ const MAX_SAFE_MILLI = BigInt(Number.MAX_SAFE_INTEGER);
 export function toThousandths(text: string): bigint | null {
   if (!DECIMAL.test(text)) return null;
   const [whole, fraction = ''] = text.split('.');
-  return BigInt(whole) * 1000n + BigInt((fraction + '000').slice(0, 3));
+  return BigInt(whole) * BigInt(1000) + BigInt((fraction + '000').slice(0, 3));
 }
 
 export function lineAmountThousandths(quantity: string, price: string): bigint | null {
   const q = toThousandths(quantity);
   const p = toThousandths(price);
-  if (q === null || p === null || q <= 0n) return null;
-  return (q * p + 500n) / 1000n; // HALF_UP to 0.001 yuan, per line
+  if (q === null || p === null || q <= BigInt(0)) return null;
+  return (q * p + BigInt(500)) / BigInt(1000); // HALF_UP to 0.001 yuan, per line
 }
 
 export function formatSupplierMoney(thousandths: number): string {
@@ -68,7 +68,7 @@ export function validateSupplierOrder(snapshot: unknown): SupplierOrderValidatio
       return { ok: false, message: '单据字段格式无效' };
     }
   }
-  let total = 0n;
+  let total = BigInt(0);
   for (const raw of object.lines) {
     if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
       return { ok: false, message: '生产明细格式无效' };
