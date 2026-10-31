@@ -38,4 +38,17 @@ assert(migration.includes('SUPPLIER_ORDER_VERSION_IMMUTABLE'), 'Archived version
 assert(api.includes('validateSupplierOrder'), 'Server endpoint must validate snapshots');
 assert(api.includes("query = query.eq('owner_profile_id'"), 'Non-manager list must restrict owner');
 assert(editor.includes('xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]'), 'Editor stays left of preview on desktop');
+const availability=readFileSync(new URL('../../src/lib/commercial-supplier-orders/availability.ts',import.meta.url),'utf8');
+const supplierPage=readFileSync(new URL('../../src/app/commercial-documents/production-orders/page.tsx',import.meta.url),'utf8');
+const supplierDraftApi=readFileSync(new URL('../../src/app/api/commercial-documents/production-orders/drafts/route.ts',import.meta.url),'utf8');
+const supplierHistoryApi=readFileSync(new URL('../../src/app/api/commercial-documents/production-orders/confirmed/[id]/route.ts',import.meta.url),'utf8');
+const nav=readFileSync(new URL('../../src/lib/constants/navigation.ts',import.meta.url),'utf8');
+assert(availability.includes('SUPPLIER_ORDERS_PRODUCTION_APPROVED'));
+assert(supplierPage.includes('supplierOrdersEnabled()'));
+assert(api.includes('supplierOrdersEnabled()'));
+assert(supplierDraftApi.includes('supplierOrdersEnabled()'));
+assert(supplierHistoryApi.includes('supplierOrdersEnabled()'));
+assert(nav.includes("NEXT_PUBLIC_FEATURE_SUPPLIER_ORDERS === 'true'"));
+assert(editor.includes('setConfirmedId(null)'), 'Opening a draft must not overwrite a previous confirmed order');
+assert(editor.includes('versionHistory'), 'Historical snapshots must be selectable');
 console.log('commercial-supplier-order-validation.test.ts: PASS');
