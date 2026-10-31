@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { draftContext, privateHeaders } from '@/lib/commercial-documents/cloud-drafts';
 import { UUID_PATTERN, validateSupplierOrder } from '@/lib/commercial-supplier-orders/validation';
+import { supplierOrdersEnabled } from '@/lib/commercial-supplier-orders/availability';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -9,6 +10,7 @@ const reply = (body: Record<string, unknown>, status = 200) =>
   NextResponse.json(body, { status, headers: privateHeaders });
 
 export async function GET() {
+  if (!supplierOrdersEnabled()) return reply({ok:false,message:'功能尚未开放'},503);
   const ctx = await draftContext();
   if (!ctx) return reply({ ok: false, message: '未授权' }, 403);
 
@@ -26,6 +28,7 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
+  if (!supplierOrdersEnabled()) return reply({ok:false,message:'功能尚未开放'},503);
   const ctx = await draftContext();
   if (!ctx) return reply({ ok: false, message: '无权保存' }, 403);
   let payload: unknown;
