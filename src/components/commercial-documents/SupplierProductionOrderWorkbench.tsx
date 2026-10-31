@@ -29,6 +29,54 @@ export default function SupplierProductionOrderWorkbench({ userName }: { userNam
   const [savedList, setSavedList] = useState<Array<{id:string;supplier_name:string;revision:number;updated_at:string}>>([]);
   const [listOpen, setListOpen] = useState(false);
   const [readOnly, setReadOnly] = useState(false);
+  const [confirmedId,setConfirmedId] = useState<string|null>(null);
+  const [confirmedVersion,setConfirmedVersion] = useState(0);
+  const [confirmedNo,setConfirmedNo] = useState('');
+  const [confirmedList,setConfirmedList] = useState<Array<{id:string;order_no:string;latest_version:number}>>([]);
+  const [historyOpen,setHistoryOpen] = useState(false);
+  const [confirming,setConfirming] = useState(false);
+  const [confirmRequestId,setConfirmRequestId] = useState<string|null>(null);
+  const loadConfirmedList = async () => {
+    try {
+      const res=await fetch('/api/commercial-documents/production-orders/confirmed',{cache:'no-store'});
+      const data=await res.json();
+      if(!res.ok||!data.ok)throw Error(data.message||'查询失败');
+      setConfirmedList(data.orders);setHistoryOpen(true);setSaveMessage('');
+    }catch(e){setSaveMessage(e instanceof Error?e.message:'查询失败');}
+  };
+  const openConfirmed = async (id:string) => {
+    try {
+      const res=await fetch('/api/commercial-documents/production-orders/confirmed/'+id,{cache:'no-store'});
+      const data=await res.json();
+      if(!res.ok||!data.ok||!data.versions?.length)throw Error(data.message||'读取失败');
+      const snapshot=data.versions[0].snapshot;
+      if(!snapshot?.order||!Array.isArray(snapshot.lines))throw Error('版本内容无效');
+      setOrder(snapshot.order);setLines(snapshot.lines);
+      setNextId(Math.max(0,...snapshot.lines.map((l:Line)=>Number(l.id)||0))+1);
+      setConfirmedId(data.order.id);setConfirmedVersion(data.order.latest_version);setConfirmedNo(data.order.order_no);
+      setReadOnly(Boolean(data.readOnly));setHistoryOpen(false);
+      setDraftId(null);setRevision(0);setConfirmRequestId(null);
+      setSaveMessage(data.readOnly?'其他业务员订单：只读预览':'已载入正式订单，可修改后保存为新版本');
+    }catch(e){setSaveMessage(e instanceof Error?e.message:'读取失败');}
+  };
+  const saveConfirmed = async () => {
+    if(confirming||readOnly)return;
+    setConfirming(true);setSaveMessage('');
+    const requestId=confirmRequestId||crypto.randomUUID();
+    setConfirmRequestId(requestId);
+    try{
+      const res=await fetch('/api/commercial-documents/production-orders/confirmed',{
+        method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({requestId,orderId:confirmedId,expectedVersion:confirmedVersion,snapshot:{order,lines}})
+      });
+      const data=await res.json();
+      if(!res.ok||!data.ok)throw Error(data.message||'保存失败');
+      setConfirmedId(data.orderId);setConfirmedVersion(data.version);setConfirmedNo(data.orderNo);
+      setConfirmRequestId(null);
+      setSaveMessage('已保存正式布产单 '+data.orderNo+' · V'+data.version+'（仅结构化数据，PDF 原件归档未完成）');
+    }catch(e){setSaveMessage(e instanceof Error?e.message:'保存失败，可重试；请保留当前页面');}
+    finally{setConfirming(false);}
+  };
   const loadList = async () => {
     try {
       const res = await fetch('/api/commercial-documents/production-orders/drafts',{cache:'no-store'});
@@ -81,13 +129,16 @@ export default function SupplierProductionOrderWorkbench({ userName }: { userNam
     <div className="supplier-no-print mb-5 flex flex-wrap items-center justify-between gap-3">
       <div><h1 className="text-2xl font-bold text-gray-900">供应商布产单</h1><p className="mt-1 text-sm text-gray-500">东莞宏达外协委托生产 · 仅中文版</p></div>
       <div className="flex flex-wrap gap-2">
+      <button type="button" onClick={loadConfirmedList} className="rounded-lg border px-4 py-2.5 text-sm font-semibold hover:bg-gray-50">已保存布产单</button>
+      <button type="button" onClick={saveConfirmed} disabled={confirming||readOnly} className="rounded-lg border border-emerald-600 px-4 py-2.5 text-sm font-semibold text-emerald-700 disabled:opacity-50">{confirming?'保存中...':'保存正式文件'}</button>
       <button type="button" onClick={loadList} className="rounded-lg border px-4 py-2.5 text-sm font-semibold hover:bg-gray-50">云端草稿箱</button>
       <button type="button" onClick={saveDraft} disabled={saving||readOnly} className="rounded-lg border border-blue-600 px-4 py-2.5 text-sm font-semibold text-blue-700 disabled:opacity-50">{saving?'保存中...':'保存到云端草稿'}</button>
       <button type="button" onClick={print} className="rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-700">校验并打印 / 另存 PDF</button>
       </div>
     </div>
-    <div className="supplier-no-print mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">当前支持云端草稿保存与重新编辑；尚未支持正式签发、唯一订单编号登记、供应商确认和版本化 PDF 归档。打印 PDF 不代表已向供应商下单。</div>
+    <div className="supplier-no-print mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">当前支持云端草稿及正式结构化版本存档；PDF 原件归档、供应商发单及确认尚未上线。保存正式文件不等于已发单。</div>
     {saveMessage && <div role="status" className="supplier-no-print mb-3 rounded-lg border bg-white p-3 text-sm">{saveMessage}</div>}
+    {historyOpen && <section className="supplier-no-print mb-4 rounded-xl border bg-white p-4 shadow-sm"><div className="mb-3 flex justify-between"><strong>已保存正式布产单</strong><button type="button" onClick={()=>setHistoryOpen(false)}>关闭</button></div>{confirmedList.length===0?<p className="text-sm text-gray-500">暂无记录</p>:<div className="space-y-2">{confirmedList.map(o=><button key={o.id} type="button" onClick={()=>openConfirmed(o.id)} className="block w-full rounded-lg border px-3 py-2 text-left text-sm hover:bg-blue-50">{o.order_no} · V{o.latest_version}</button>)}</div>}</section>}
     {listOpen && <section className="supplier-no-print mb-4 rounded-xl border bg-white p-4 shadow-sm">
       <div className="mb-3 flex justify-between"><strong>我的云端布产单草稿</strong><button type="button" onClick={()=>setListOpen(false)}>关闭</button></div>
       {savedList.length===0?<p className="text-sm text-gray-500">暂无草稿</p>:<div className="space-y-2">{savedList.map(d=><button key={d.id} type="button" onClick={()=>openDraft(d.id)} className="block w-full rounded-lg border px-3 py-2 text-left text-sm hover:bg-blue-50"><strong>{d.supplier_name||'未填写供应商'}</strong><span className="ml-3 text-gray-500">修订 {d.revision} · {new Date(d.updated_at).toLocaleString('zh-CN')}</span></button>)}</div>}
@@ -136,7 +187,7 @@ export default function SupplierProductionOrderWorkbench({ userName }: { userNam
     <div className="min-w-0 xl:sticky xl:top-4"><div className="supplier-no-print mb-2 text-sm font-semibold text-gray-700">实时单据预览</div>
     <section id="supplier-print" className="rounded-xl border bg-white p-6 text-sm shadow-sm">
       <div className="mb-4 border-b pb-3 text-center"><p className="text-sm font-semibold">广东宏达印业股份有限公司</p><h2 className="mt-2 text-2xl font-bold">生产委托单（布产单）</h2></div>
-      <div className="grid grid-cols-2 gap-2"><p>布产单号：{number}（临时）</p><p>下单日期：{order.orderDate}</p><p>委托方：广东宏达印业股份有限公司</p><p>经办人：{userName}</p><p>承制供应商：{order.supplier || '—'}</p><p>供应商联系人：{order.contact || '—'}</p><p>供应商电话：{order.phone || '—'}</p><p>交付日期：{order.deliveryDate || '—'}</p><p>关联项目：{order.project || '—'}</p><p>供应商地址：{order.address || '—'}</p></div>
+      <div className="grid grid-cols-2 gap-2"><p>布产单号：{confirmedNo || number}{confirmedNo ? ' · V'+confirmedVersion : '（临时）'}</p><p>下单日期：{order.orderDate}</p><p>委托方：广东宏达印业股份有限公司</p><p>经办人：{userName}</p><p>承制供应商：{order.supplier || '—'}</p><p>供应商联系人：{order.contact || '—'}</p><p>供应商电话：{order.phone || '—'}</p><p>交付日期：{order.deliveryDate || '—'}</p><p>关联项目：{order.project || '—'}</p><p>供应商地址：{order.address || '—'}</p></div>
       <table className="mt-5 w-full border-collapse text-left text-xs"><thead><tr>{['序号','生产内容','规格 / 型号','数量','单位','单价（元）','金额（元）'].map(h=><th key={h} className="border p-2">{h}</th>)}</tr></thead><tbody>{lines.map((line,i)=><tr key={line.id} className="supplier-row">{[String(i+1),line.name,line.spec,line.quantity,line.unit,line.price,format(money(line))].map((x,j)=><td key={j} className="border p-2 align-top break-words">{x}</td>)}</tr>)}</tbody></table>
       <p className="mt-3 text-right text-lg font-bold text-red-700">合计：¥ {format(total)}</p>
       <div className="mt-5 space-y-2 whitespace-pre-wrap break-words"><p><strong>技术要求：</strong>{order.technical || '—'}</p><p><strong>验收与品质：</strong>{order.quality || '—'}</p><p><strong>付款约定：</strong>{order.payment || '—'}</p><p><strong>税费：</strong>{order.tax}</p><p><strong>运输方式：</strong>{order.shipping || '—'}</p><p><strong>收货人 / 交货地址：</strong>{order.receiver || '—'} / {order.deliveryAddress || '—'}</p><p><strong>备注：</strong>{order.remarks || '—'}</p></div>
