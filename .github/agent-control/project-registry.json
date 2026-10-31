@@ -66,7 +66,8 @@
         "src/lib/commercial-supplier-orders/",
         "src/components/commercial-supplier-orders/",
         "tests/unit/commercial-supplier-order-",
-        "tests/e2e/commercial-supplier-order-"
+        "tests/e2e/commercial-supplier-order-",
+        "src/components/commercial-documents/SupplierProductionOrderWorkbench.tsx"
       ],
       "owned_regexes": [
         "^supabase/migrations/[0-9]+_commercial_supplier_order_[A-Za-z0-9_]+\\.sql$"
