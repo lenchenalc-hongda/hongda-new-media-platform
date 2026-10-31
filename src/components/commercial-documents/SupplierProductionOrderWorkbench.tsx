@@ -22,6 +22,49 @@ export default function SupplierProductionOrderWorkbench({ userName }: { userNam
   const [lines, setLines] = useState<Line[]>([]);
   const [nextId, setNextId] = useState(1);
   const [printError, setPrintError] = useState('');
+  const [draftId, setDraftId] = useState<string | null>(null);
+  const [revision, setRevision] = useState(0);
+  const [saving, setSaving] = useState(false);
+  const [saveMessage, setSaveMessage] = useState('');
+  const [savedList, setSavedList] = useState<Array<{id:string;supplier_name:string;revision:number;updated_at:string}>>([]);
+  const [listOpen, setListOpen] = useState(false);
+  const [readOnly, setReadOnly] = useState(false);
+  const loadList = async () => {
+    try {
+      const res = await fetch('/api/commercial-documents/production-orders/drafts',{cache:'no-store'});
+      const data = await res.json();
+      if(!res.ok||!data.ok) throw Error(data.message||'查询失败');
+      setSavedList(data.drafts);setListOpen(true);setSaveMessage('');
+    } catch(e) {setSaveMessage(e instanceof Error?e.message:'读取失败');}
+  };
+  const openDraft = async (id:string) => {
+    try {
+      const res=await fetch('/api/commercial-documents/production-orders/drafts/'+id,{cache:'no-store'});
+      const data=await res.json();
+      if(!res.ok||!data.ok) throw Error(data.message||'打开失败');
+      if(!data.draft?.order||!Array.isArray(data.draft?.lines))throw Error('草稿内容不完整');
+      setOrder(data.draft.order);setLines(data.draft.lines);
+      setNextId(Math.max(0,...data.draft.lines.map((l:Line)=>Number(l.id)||0))+1);
+      setDraftId(data.id);setRevision(data.revision);setReadOnly(Boolean(data.readOnly));
+      setListOpen(false);setSaveMessage(data.readOnly?'只读：其他负责人的草稿':'已打开云端草稿');
+    } catch(e){setSaveMessage(e instanceof Error?e.message:'打开失败');}
+  };
+  const saveDraft = async () => {
+    if(saving||readOnly)return;
+    setSaving(true);setSaveMessage('');
+    try {
+      const isUpdate=Boolean(draftId);
+      const res=await fetch('/api/commercial-documents/production-orders/drafts'+(draftId?'/'+draftId:''),{
+        method:isUpdate?'PATCH':'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({draft:{order,lines},...(isUpdate?{expectedRevision:revision}:{})})
+      });
+      const data=await res.json();
+      if(!res.ok||!data.ok)throw Error(data.message||'保存失败');
+      setDraftId(data.id);setRevision(data.revision);
+      setSaveMessage('云端草稿已保存 · '+new Date().toLocaleString('zh-CN'));
+    }catch(e){setSaveMessage(e instanceof Error?e.message:'保存失败，请保留当前内容');}
+    finally{setSaving(false);}
+  };
   const [number] = useState(() => 'HD-BP-' + new Date().toISOString().slice(2,7).replace('-','') + '-' + Math.random().toString(36).slice(2,10).toUpperCase());
   const total = useMemo(() => lines.reduce((sum, line) => sum + money(line), 0), [lines]);
   const update = (field: keyof Order, value: string) => setOrder(prev => ({ ...prev, [field]: value }));
@@ -37,9 +80,18 @@ export default function SupplierProductionOrderWorkbench({ userName }: { userNam
     <style>{`@media print { body * { visibility: hidden !important; } #supplier-print, #supplier-print * { visibility: visible !important; } #supplier-print { position: absolute; left: 0; top: 0; width: 100%; box-shadow: none; border: 0; padding: 12mm; } .supplier-no-print { display: none !important; } @page { size: A4; margin: 8mm; } .supplier-row { break-inside: avoid; } }`}</style>
     <div className="supplier-no-print mb-5 flex flex-wrap items-center justify-between gap-3">
       <div><h1 className="text-2xl font-bold text-gray-900">供应商布产单</h1><p className="mt-1 text-sm text-gray-500">东莞宏达外协委托生产 · 仅中文版</p></div>
+      <div className="flex flex-wrap gap-2">
+      <button type="button" onClick={loadList} className="rounded-lg border px-4 py-2.5 text-sm font-semibold hover:bg-gray-50">云端草稿箱</button>
+      <button type="button" onClick={saveDraft} disabled={saving||readOnly} className="rounded-lg border border-blue-600 px-4 py-2.5 text-sm font-semibold text-blue-700 disabled:opacity-50">{saving?'保存中...':'保存到云端草稿'}</button>
       <button type="button" onClick={print} className="rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-700">校验并打印 / 另存 PDF</button>
+      </div>
     </div>
-    <div className="supplier-no-print mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">当前为首版单据制作工作台：尚未接入云端保存、唯一编号登记、供应商发单和状态跟踪。刷新页面会丢失未导出的内容；打印或下载 PDF 不代表已向供应商下单。</div>
+    <div className="supplier-no-print mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">当前支持云端草稿保存与重新编辑；尚未支持正式签发、唯一订单编号登记、供应商确认和版本化 PDF 归档。打印 PDF 不代表已向供应商下单。</div>
+    {saveMessage && <div role="status" className="supplier-no-print mb-3 rounded-lg border bg-white p-3 text-sm">{saveMessage}</div>}
+    {listOpen && <section className="supplier-no-print mb-4 rounded-xl border bg-white p-4 shadow-sm">
+      <div className="mb-3 flex justify-between"><strong>我的云端布产单草稿</strong><button type="button" onClick={()=>setListOpen(false)}>关闭</button></div>
+      {savedList.length===0?<p className="text-sm text-gray-500">暂无草稿</p>:<div className="space-y-2">{savedList.map(d=><button key={d.id} type="button" onClick={()=>openDraft(d.id)} className="block w-full rounded-lg border px-3 py-2 text-left text-sm hover:bg-blue-50"><strong>{d.supplier_name||'未填写供应商'}</strong><span className="ml-3 text-gray-500">修订 {d.revision} · {new Date(d.updated_at).toLocaleString('zh-CN')}</span></button>)}</div>}
+    </section>}
     {printError && <div role="alert" className="supplier-no-print mb-4 rounded-lg bg-red-50 p-3 text-sm text-red-700">{printError}</div>}
     <div className="grid grid-cols-1 items-start gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]"><div className="supplier-no-print min-w-0 space-y-4">
       <section className="rounded-xl border bg-white p-4 shadow-sm"><h2 className="mb-3 font-bold">01 · 布产基本信息</h2><div className="grid gap-3 md:grid-cols-3">
