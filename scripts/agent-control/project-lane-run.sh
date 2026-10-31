@@ -30,10 +30,12 @@ redacted_tail() {
 
 classify_codex_failure() {
   local file="$1"
-  # A real API 401 is terminal even if stderr also mentions keychain context.
-  if /usr/bin/grep -Eqi '(^|[^0-9])401([^0-9]|$)|unauthori[sz]ed|invalid (api )?key|authentication failed' "$file"; then
+  # Treat only actual diagnostic lines as authentication errors.
+  # Codex stderr can contain generated patch lines such as "+ assert(HTTP 401)"
+  # and explanations of invalid keys. Those are TASK OUTPUT, not an API error.
+  if /usr/bin/grep -Eqi '^[[:space:]]*((error:|error sending|stream error:|api error:|request failed:|failed to get response).*((^|[^0-9])401([^0-9]|$)|unauthori[sz]ed|invalid (api )?key|authentication failed)|HTTP[[:space:]]+401([^0-9]|$))' "$file"; then
     printf 'PROVIDER_401'
-  elif /usr/bin/grep -Eqi '/usr/bin/security|Failed to resolve external auth|keychain' "$file"; then
+  elif /usr/bin/grep -Eqi '^[[:space:]]*(Failed to resolve external auth|/usr/bin/security[[:space:]]+keychain|(ERROR:|WARNING:).*(/usr/bin/security|keychain|external auth))' "$file"; then
     printf 'KEYCHAIN_FAILURE'
   elif /usr/bin/grep -Eqi '429|Too Many Requests|Could not resolve host|connection reset|network is unreachable|timed? out|TLS|SSL' "$file"; then
     printf 'NETWORK_FAILURE'
@@ -45,8 +47,9 @@ classify_codex_failure() {
 }
 
 # Single execution-path classifier, including stderr/exit-status conflicts.
-# Real provider 401 wins over incidental keychain context and even an
-# unexpected CLI zero-exit with a clear provider rejection diagnostic.
+# Only anchored provider diagnostic wins over incidental keychain context.
+# Generated code snippets mentioning 401 never turn a successful Codex run into
+# a terminal authentication failure.
 classify_codex_attempt() {
   local exit_status="$1" logfile="$2" detected
   detected="$(classify_codex_failure "$logfile")"

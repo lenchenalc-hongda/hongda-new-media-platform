@@ -241,4 +241,29 @@ const ownerGate = watchdogSource.indexOf("if (['HUMAN_GATE', 'NEEDS_DECISION'].i
 assert(mergedReconciliationGate !== -1 && ownerGate !== -1 && mergedReconciliationGate < ownerGate,
   'merged PR must be reconciled before stale owner-action gate');
 
+// Regression: the real supplier Codex run produced test/code diffs mentioning
+// HTTP 401 and keychain terms, which a broad grep incorrectly treated as a
+// provider rejection despite code being generated. Patch lines are not errors.
+const generatedPatchMentioning401 = [
+  '+assert.match(message, /HTTP 401 Unauthorized invalid api key/);',
+  '+const failedAuthCase = "authentication failed";',
+  '+// Avoid leaking /usr/bin/security keychain data',
+  '+console.log("fake login credentials are not sent")',
+].join('\n');
+assert.equal(classifyActualShellExecution(0, generatedPatchMentioning401),
+  'NONE', 'successful Codex with auth-related source patches must not be discarded');
+assert.notEqual(classifyActualShellExecution(1, generatedPatchMentioning401),
+  'PROVIDER_401', 'Codex exit failure with only generated source is not provider evidence');
+assert.notEqual(classifyActualShellExecution(1, generatedPatchMentioning401),
+  'KEYCHAIN_FAILURE', 'generated source mentioning a keychain is not a system keychain error');
+assert.notEqual(classifyFailureText(generatedPatchMentioning401), 'PROVIDER_401',
+  'JS infrastructure classifier must not turn source patches into terminal provider rejection');
+assert.equal(classifyActualShellExecution(0, 'ERROR: HTTP 401 invalid api key'),
+  'PROVIDER_401', 'genuine even-zero-exit diagnostic remains terminal');
+assert.equal(classifyActualShellExecution(1,
+  'WARNING: legacy /usr/bin/security keychain context\nERROR: HTTP 401 Unauthorized'),
+  'PROVIDER_401', 'real provider error outranks a keychain warning');
+assert.equal(classifyFailureText('ERROR: HTTP 401 Unauthorized invalid api key'),
+  'PROVIDER_401', 'JS classifier recognizes genuine provider diagnostic');
+
 console.log('agent-control-reliability-v2.test.ts: 8/8 PASS');

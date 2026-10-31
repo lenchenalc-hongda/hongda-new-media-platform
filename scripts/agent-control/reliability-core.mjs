@@ -12,9 +12,15 @@ export const INFRA_FAILURES = new Set([
 
 export function classifyFailureText(text) {
   const value = String(text || '');
-  // Explicit provider rejection wins over incidental keychain text in combined logs.
-  if (/(^|[^0-9])401([^0-9]|$)|unauthori[sz]ed|invalid (api )?key|authentication failed/i.test(value)) return 'PROVIDER_401';
-  if (/\/usr\/bin\/security|Failed to resolve external auth|keychain/i.test(value)) return 'KEYCHAIN_FAILURE';
+  // GitHub logs and Codex stderr often contain generated source patches with
+  // test strings such as "HTTP 401 invalid api key". Only actual error or HTTP
+  // diagnostic lines can prove a provider/Keychain authentication failure.
+  const diagnosticLines = value.split(/\r?\n/)
+    .map(line => line.replace(/^\d{4}-\d\d-\d\dT[^\s]+Z\s+/, ''))
+    .filter(line => /^\s*(error:|error sending|stream error:|api error:|request failed:|failed to get response|HTTP\s+401|Failed to resolve external auth|\/usr\/bin\/security\s+keychain|WARNING:)/i.test(line));
+  const providerFailure = /(^|[^0-9])401([^0-9]|$)|unauthori[sz]ed|invalid (api )?key|authentication failed/i;
+  if (diagnosticLines.some(line => providerFailure.test(line))) return 'PROVIDER_401';
+  if (diagnosticLines.some(line => /\/usr\/bin\/security|Failed to resolve external auth|keychain|external auth/i.test(line))) return 'KEYCHAIN_FAILURE';
   if (/429|Too Many Requests|Could not resolve host|connection reset|network is unreachable|timed? out|TLS|SSL/i.test(value)) return 'NETWORK_FAILURE';
   if (/checkout|git fetch|ls-remote/i.test(value) && /fail|error|fatal/i.test(value)) return 'CHECKOUT_FAILURE';
   if (/pnpm install|npm install|dependency/i.test(value) && /fail|error/i.test(value)) return 'DEPENDENCY_FAILURE';
