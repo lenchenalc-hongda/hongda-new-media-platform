@@ -16,6 +16,15 @@ export interface SupplierOrderPayload {
   order: Record<string, string>;
   lines: SupplierOrderLine[];
 }
+export interface SupplierOrderPrintableLine {
+  line: SupplierOrderLine;
+  amountThousandths: bigint;
+}
+export interface SupplierOrderPrintableSnapshot {
+  order: Record<string, string>;
+  lines: SupplierOrderPrintableLine[];
+  totalThousandths: bigint;
+}
 
 export const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const DECIMAL = /^\d{1,12}(?:\.\d{1,3})?$/;
@@ -34,8 +43,47 @@ export function lineAmountThousandths(quantity: string, price: string): bigint |
   return (q * p + BigInt(500)) / BigInt(1000); // HALF_UP to 0.001 yuan, per line
 }
 
-export function formatSupplierMoney(thousandths: number): string {
-  return (thousandths / 1000).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 3 });
+/**
+ * Format integer thousandths without converting the monetary value to a binary
+ * floating-point number. Trailing precision follows the quotation convention:
+ * at least two decimal places and at most three.
+ */
+export function formatSupplierMoney(thousandths: number | bigint): string {
+  let value: bigint;
+  try {
+    value = typeof thousandths === 'bigint' ? thousandths : BigInt(thousandths);
+  } catch {
+    return '0.00';
+  }
+  const negative = value < BigInt(0);
+  const absolute = negative ? -value : value;
+  const whole = absolute / BigInt(1000);
+  const remainder = Number(absolute % BigInt(1000));
+  const fraction = remainder === 0
+    ? '00'
+    : remainder % 10 === 0
+      ? String(remainder / 10).padStart(2, '0')
+      : String(remainder).padStart(3, '0');
+  return `${negative ? '-' : ''}${whole.toLocaleString('zh-CN')}.${fraction}`;
+}
+
+/**
+ * Freeze the exact snapshot that both the normal preview and print view render.
+ * Amounts are calculated per line with integer thousandths so historical output
+ * cannot drift from the archived formal-order calculation.
+ */
+export function buildSupplierOrderPrintableSnapshot(snapshot: SupplierOrderPayload): SupplierOrderPrintableSnapshot {
+  let totalThousandths = BigInt(0);
+  const lines = snapshot.lines.map(line => {
+    const amountThousandths = lineAmountThousandths(line.quantity, line.price) ?? BigInt(0);
+    totalThousandths += amountThousandths;
+    return { line: { ...line }, amountThousandths };
+  });
+  return {
+    order: { ...snapshot.order },
+    lines,
+    totalThousandths,
+  };
 }
 
 export type SupplierOrderValidation =
