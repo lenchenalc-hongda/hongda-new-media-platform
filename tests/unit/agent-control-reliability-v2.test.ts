@@ -400,7 +400,7 @@ assert.equal(successorPathOverlapBlocker([
 const watchdogHandoffSource = readFileSync('scripts/agent-control/reliability-watchdog.mjs','utf8');
 assert(watchdogHandoffSource.includes('await inspectMergedNextTask(project, config, issue, state, registry)'),
   'MERGED must run the explicit-next-task handoff path before terminal skip');
-assert(watchdogHandoffSource.includes("freshState.task_started_at_utc = new Date().toISOString()"),
+assert(watchdogHandoffSource.includes("transferState.task_started_at_utc = new Date().toISOString()"),
   'new task must have a run epoch that isolates it from previous task runs');
 assert(watchdogHandoffSource.includes('const epoch = Date.parse(state.task_started_at_utc'),
   'stale successful project runs may never suppress a new task dispatch');
@@ -427,9 +427,9 @@ assert(watchdogHandoffSource.includes('successor.task.contractBody !== next.cont
   'edited owner comment must invalidate stale successor task');
 assert(watchdogHandoffSource.includes('claimSuccessorWithIssueComment(project, freshIssue, next, liveMasterSha)'),
   'serialized watchdog uses recoverable comment claim without Git ref writes');
-assert(watchdogHandoffSource.includes('freshState.allowed_paths = [...next.allowedPaths]'),
+assert(watchdogHandoffSource.includes('transferState.allowed_paths = [...next.allowedPaths]'),
   'accepted task scope must be persisted before dispatch');
-assert(watchdogHandoffSource.includes('freshState.required_checks = [...next.checks]'),
+assert(watchdogHandoffSource.includes('transferState.required_checks = [...next.checks]'),
   'complete CI checks must be persisted before dispatch');
 assert(watchdogHandoffSource.includes('claimedState?.next_task_dispatch_claim?.commentId !== claim.commentId'),
   'issue-comment claim must be verified after saving state');
