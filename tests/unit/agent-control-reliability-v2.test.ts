@@ -16,6 +16,7 @@ import {
   countActiveProjectLanes,
   successorPathOverlapBlocker,
   selectSuccessorCommentClaim,
+  validateWatchdogClaimRun,
 } from '../../scripts/agent-control/reliability-core.mjs';
 
 // TEST 1 — Keychain unavailable.
@@ -464,7 +465,7 @@ const claimBody = [
   'CONTRACT_SHA256 = '+claimInput.contractSha256,
   'WATCHDOG_RUN_ID = 41280000001',
 ].join('\n');
-const botClaim = {id:102,user:{login:'github-actions[bot]'},body:claimBody};
+const botClaim = {id:102,user:{login:'github-actions[bot]'},body:claimBody,created_at:new Date().toISOString()};
 assert.equal(selectSuccessorCommentClaim({...claimInput,comments:[]}).status,'CREATE',
   'no durable claim means a new comment may be created');
 const recovered = selectSuccessorCommentClaim({...claimInput,comments:[botClaim]});
@@ -493,4 +494,51 @@ assert(watchdogHandoffSource.includes('NEXT_TASK_PREPATCH_ISSUE_CHANGED') &&
 assert(watchdogHandoffSource.includes('selectSuccessorCommentClaim({'),
   'watchdog must read and verify persisted claims before dispatch');
 
-console.log('agent-control-reliability-v2.test.ts: 10/10 PASS');
+
+// TEST 11 — A bot comment must be bound to a real run of the exact scheduled
+// watchdog workflow. Another issues:write workflow cannot substitute its run.
+const provenanceTime = new Date().toISOString();
+const watchdogRun = {
+  id:41280000001,
+  workflow_id:386198615,
+  name:'Agent Control Reliability Watchdog V2',
+  path:'.github/workflows/agent-control-reliability-watchdog-v2.yml',
+  repository:{full_name:'lenchenalc-hongda/hongda-new-media-platform'},
+  event:'schedule',
+  head_branch:'master',
+  head_sha:claimMaster,
+  status:'completed',
+  conclusion:'failure', // A failed run may have durably written its claim.
+  created_at:new Date(Date.now()-30000).toISOString(),
+  updated_at:provenanceTime,
+};
+const proofInput = {
+  run:watchdogRun,
+  claim:{...recovered.claim,createdAt:provenanceTime},
+  repository:'lenchenalc-hongda/hongda-new-media-platform',
+  masterSha:claimMaster,
+};
+assert.equal(validateWatchdogClaimRun(proofInput).status,'PASS',
+  'recovery may reuse a claim from a failed, correctly identified watchdog');
+assert.equal(validateWatchdogClaimRun({
+  ...proofInput,run:{...watchdogRun,workflow_id:386198616},
+}).status,'BLOCKED','foreign issues:write workflow id is never trusted');
+assert.equal(validateWatchdogClaimRun({
+  ...proofInput,run:{...watchdogRun,path:'.github/workflows/agent-control-owner-decision.yml'},
+}).status,'BLOCKED','foreign workflow path is never trusted');
+assert.equal(validateWatchdogClaimRun({
+  ...proofInput,run:{...watchdogRun,repository:{full_name:'other/repository'}},
+}).status,'BLOCKED','foreign repository run is never trusted');
+assert.equal(validateWatchdogClaimRun({
+  ...proofInput,run:{...watchdogRun,event:'issue_comment'},
+}).status,'BLOCKED','issue_comment runs may not produce reliable scheduled claims');
+assert.equal(validateWatchdogClaimRun({
+  ...proofInput,run:{...watchdogRun,head_sha:'a'.repeat(40)},
+}).status,'BLOCKED','claim run must be pinned to exact master');
+assert.equal(validateWatchdogClaimRun({
+  ...proofInput,claim:{...proofInput.claim,createdAt:new Date(Date.now()-90000).toISOString()},
+}).status,'BLOCKED','claim predating the workflow run is not authenticated provenance');
+assert(watchdogHandoffSource.includes('validateWatchdogClaimRun({'),
+  'watchdog runtime must verify each selected claim against live Actions run metadata');
+
+console.log('agent-control-reliability-v2.test.ts: 11/11 PASS');
