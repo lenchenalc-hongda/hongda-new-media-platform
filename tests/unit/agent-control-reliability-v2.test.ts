@@ -14,6 +14,7 @@ import {
   parseProjectValidationProof,
   selectAuthorizedSuccessorTask,
   countActiveProjectLanes,
+  successorPathOverlapBlocker,
 } from '../../scripts/agent-control/reliability-core.mjs';
 
 // TEST 1 — Keychain unavailable.
@@ -300,6 +301,10 @@ function nextContract({
   project = 'commercial-supplier-orders',
   status = 'READY_FOR_CODEX',
   checks = 'typecheck,build,secret-audit,smoke',
+  scope = 'NONPROD_CODE_ONLY', production = 'NO',
+  autoMerge = 'false', autoProduction = 'false',
+  authWidening = 'NO', destructive = 'NO', externalSend = 'NO',
+  objective = 'Add deterministic unit tests for the stage handoff.',
 } = {}) {
   return [
     'AGENT_CONTROL_PROJECT_TASK_V1',
@@ -311,7 +316,14 @@ function nextContract({
     'FIX_ROUND = 0 / 3',
     'ALLOWED_PATHS_JSON = '+JSON.stringify(paths),
     'CHECKS = '+checks,
-    'OBJECTIVE_B64 = '+Buffer.from('Test bounded nonproduction next-stage review with no production writes.').toString('base64'),
+    'SCOPE = '+scope,
+    'PRODUCTION_CHANGED = '+production,
+    'AUTO_MERGE = '+autoMerge,
+    'AUTO_PRODUCTION = '+autoProduction,
+    'AUTH_WIDENING = '+authWidening,
+    'DESTRUCTIVE_SOT_CHANGE = '+destructive,
+    'EXTERNAL_SEND = '+externalSend,
+    'OBJECTIVE_B64 = '+Buffer.from(objective).toString('base64'),
   ].join('\n');
 }
 const nextComment = {id:101,user:{login:'lenchenalc-hongda'},body:nextContract()};
@@ -324,6 +336,8 @@ const selectedSuccessor = selectAuthorizedSuccessorTask(nextInput);
 assert.equal(selectedSuccessor.status,'READY','single exact-head owner-authored next task accepted');
 assert.equal(selectedSuccessor.task?.taskId,nextTask);
 assert.equal(selectedSuccessor.task?.commentId,101);
+assert.deepEqual(selectedSuccessor.task?.checks,['typecheck','build','secret-audit','smoke']);
+assert.deepEqual(selectedSuccessor.task?.allowedPaths,['tests/unit/commercial-supplier-order-handoff.test.ts']);
 assert.equal(selectAuthorizedSuccessorTask({...nextInput,comments:[]}).status,
   'AWAITING_AUTHORIZED_NEXT_TASK','merged state must never invent a follow-up task');
 assert.equal(selectAuthorizedSuccessorTask({...nextInput,comments:[{...nextComment,user:{login:'github-actions[bot]'}}]}).status,
@@ -352,6 +366,36 @@ assert.equal(selectAuthorizedSuccessorTask({...nextInput,comments:[{...nextComme
   'NEXT_TASK_PATH_NOT_OWNED','project ownership contract remains enforced');
 assert.equal(selectAuthorizedSuccessorTask({...nextInput,comments:[{...nextComment,body:nextContract({checks:'skip-tests'})}]}).status,
   'INVALID_NEXT_TASK_CHECKS','cannot bypass existing CI gates');
+assert.equal(selectAuthorizedSuccessorTask({...nextInput,comments:[{...nextComment,body:nextContract({checks:'typecheck'})}]}).status,
+  'INVALID_NEXT_TASK_CHECKS','subset of CI checks must fail closed');
+assert.equal(selectAuthorizedSuccessorTask({...nextInput,comments:[{...nextComment,body:nextContract({production:'YES'})}]}).status,
+  'NEXT_TASK_REQUIRES_SEPARATE_HUMAN_GATE','Production changes are never implicit');
+assert.equal(selectAuthorizedSuccessorTask({...nextInput,comments:[{...nextComment,body:nextContract({autoMerge:'true'})}]}).status,
+  'NEXT_TASK_REQUIRES_SEPARATE_HUMAN_GATE','successor cannot request automatic merge');
+assert.equal(selectAuthorizedSuccessorTask({...nextInput,comments:[{...nextComment,body:nextContract({autoProduction:'true'})}]}).status,
+  'NEXT_TASK_REQUIRES_SEPARATE_HUMAN_GATE','successor cannot request Production deployment');
+assert.equal(selectAuthorizedSuccessorTask({...nextInput,comments:[{...nextComment,body:nextContract({authWidening:'YES'})}]}).status,
+  'NEXT_TASK_REQUIRES_SEPARATE_HUMAN_GATE','auth policy widening needs separate human gate');
+assert.equal(selectAuthorizedSuccessorTask({...nextInput,comments:[{...nextComment,body:nextContract({destructive:'YES'})}]}).status,
+  'NEXT_TASK_REQUIRES_SEPARATE_HUMAN_GATE','destructive source of truth needs separate gate');
+assert.equal(selectAuthorizedSuccessorTask({...nextInput,comments:[{...nextComment,body:nextContract({externalSend:'YES'})}]}).status,
+  'NEXT_TASK_REQUIRES_SEPARATE_HUMAN_GATE','customer/supplier external sends require separate gate');
+assert.equal(selectAuthorizedSuccessorTask({...nextInput,comments:[{...nextComment,body:nextContract({objective:'Change production RLS to grant access.'})}]}).status,
+  'NEXT_TASK_OBJECTIVE_REQUIRES_HUMAN_GATE','high-risk objective cannot bypass structured restrictions');
+assert.equal(successorPathOverlapBlocker([
+  {status:'CODING',active_pr:42,allowed_paths:['src/lib/commercial-supplier-orders/cso.ts']},
+],['src/lib/commercial-supplier-orders/cso.ts']),'ACTIVE_LANE_PATH_OVERLAP',
+  'parallel lanes may not edit the same file');
+assert.equal(successorPathOverlapBlocker([
+  {status:'FIX_REQUIRED',active_pr:42,allowed_paths:null},
+],['tests/unit/commercial-supplier-order-handoff.test.ts']),'ACTIVE_LANE_OWNED_PATHS_UNVERIFIED',
+  'unknown active lane scope is fail-closed');
+assert.equal(successorPathOverlapBlocker([
+  {status:'MERGED',active_pr:null,allowed_paths:[]},
+  {status:'CODING',active_pr:45,allowed_paths:['src/lib/workshop-orders/order.ts']},
+],['tests/unit/commercial-supplier-order-handoff.test.ts']),null,
+  'different paths permit bounded concurrency');
+
 const watchdogHandoffSource = readFileSync('scripts/agent-control/reliability-watchdog.mjs','utf8');
 assert(watchdogHandoffSource.includes('await inspectMergedNextTask(project, config, issue, state, registry)'),
   'MERGED must run the explicit-next-task handoff path before terminal skip');
@@ -374,7 +418,25 @@ assert.equal(countActiveProjectLanes([
 ]),1,'blocked open PR still occupies execution capacity');
 assert.equal(countActiveProjectLanes([{status:'COMPLETE',active_pr:null,active_branch:null}]),0);
 assert.equal(countActiveProjectLanes([null]),Infinity,'invalid foreign project is fail closed');
-assert(watchdogHandoffSource.includes('hasProjectLaneCapacity(project, registry)'),
-  'next-stage watchdog must consult registry concurrency cap before dispatch');
+assert(watchdogHandoffSource.includes('hasProjectLaneCapacity(project, registry, next.allowedPaths)'),
+  'next-stage watchdog must consult cross-project capacity and path overlap');
+assert(watchdogHandoffSource.includes('const currentComments = await recentOwnerTaskComments(issue.number)'),
+  'must re-read owner task after external API calls and before dispatch claim');
+assert(watchdogHandoffSource.includes('successor.task.contractBody !== next.contractBody'),
+  'edited owner comment must invalidate stale successor task');
+assert(watchdogHandoffSource.includes('claimSuccessorWithGitRef(project, next, liveMasterSha)'),
+  'unique GitHub ref prevents duplicate dispatch claims across worker races');
+assert(watchdogHandoffSource.includes('freshState.allowed_paths = [...next.allowedPaths]'),
+  'accepted task scope must be persisted before dispatch');
+assert(watchdogHandoffSource.includes('freshState.required_checks = [...next.checks]'),
+  'complete CI checks must be persisted before dispatch');
+assert(watchdogHandoffSource.includes('claimedState?.next_task_dispatch_claim?.runId !== claim.runId'),
+  'task claim must be verified after saving state');
+const watchdogWorkflow = readFileSync('.github/workflows/agent-control-reliability-watchdog-v2.yml','utf8');
+assert(watchdogWorkflow.includes('group: agent-control-reliability-watchdog-v2') &&
+  watchdogWorkflow.includes('cancel-in-progress: false'),
+  'GitHub Actions workflow remains serialized');
+assert(watchdogWorkflow.includes('contents: write # required only for atomic'),
+  'the GitHub Actions token must have Git refs claim permission');
 
 console.log('agent-control-reliability-v2.test.ts: 8/8 PASS');
