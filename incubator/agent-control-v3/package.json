@@ -1,0 +1,13 @@
+{
+  "name": "hongda-agent-control-v3",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Isolated, fail-closed control plane prototype for HongdaOS autonomous coding",
+  "engines": {"node": ">=22"},
+  "scripts": {
+    "test": "node --test test/*.test.mjs",
+    "demo": "node src/demo.mjs",
+    "check": "node --check src/policy.mjs && node --check src/oidc.mjs && node --check src/core.mjs && node --check src/github-webhook.mjs && node --check src/dispatcher.mjs && node --test test/*.test.mjs"
+  }
+}
