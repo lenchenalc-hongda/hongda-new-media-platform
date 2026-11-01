@@ -472,7 +472,7 @@ export function selectSuccessorCommentClaim({
   const fields = new Map();
   const lines = String(comment.body).replaceAll('\r\n','\n').trimEnd().split('\n');
   for (const line of lines.slice(1)) {
-    const match = /^([A-Z_]+) = (.*)$/.exec(line);
+    const match = /^([A-Z0-9_]+) = (.*)$/.exec(line);
     if (!match || fields.has(match[1])) return invalid('MALFORMED_HANDOFF_CLAIM');
     fields.set(match[1],match[2]);
   }
