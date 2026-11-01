@@ -367,3 +367,23 @@ export function selectAuthorizedSuccessorTask({
     task: { taskId, commentId: comment.id, allowedPaths: paths, checks },
   };
 }
+
+
+/** Count lanes that consume the registry's bounded parallel-development budget.
+ * A BLOCKED project with a still-open PR counts as occupied; a completed
+ * MERGED/COMPLETE code slice does not. Invalid observations fail closed.
+ * @param {Array<Record<string, any>>} states
+ */
+export function countActiveProjectLanes(states) {
+  if (!Array.isArray(states) || states.some(s => !s || typeof s !== 'object'))
+    return Number.POSITIVE_INFINITY;
+  const active = new Set([
+    'READY_FOR_CODEX', 'DISPATCHING', 'CODING', 'FIX_REQUIRED',
+    'READY_FOR_PM_REVIEW', 'WAITING_REVIEW', 'PM_REVIEW', 'APPROVED_FOR_MERGE',
+  ]);
+  return states.filter(s =>
+    active.has(s.status) ||
+    (Number.isSafeInteger(s.active_pr) && s.active_pr > 0) ||
+    (typeof s.active_branch === 'string' && s.active_branch.length > 0)
+  ).length;
+}
