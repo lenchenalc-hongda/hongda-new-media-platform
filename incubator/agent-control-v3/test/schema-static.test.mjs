@@ -12,6 +12,7 @@ test('P1: proposed schema has private role permissions and fail-closed primitive
     'revoke all on schema ac_control from anon',
     'revoke all on schema ac_control from authenticated',
     'enable row level security',
+    'EVENT_LEDGER_APPEND_ONLY',
     'pg_advisory_xact_lock(19260801)',
     't.revision<>p_expected_revision',
     "p.dispatch_owner<>'V3'",
