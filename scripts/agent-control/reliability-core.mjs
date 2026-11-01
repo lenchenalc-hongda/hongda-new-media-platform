@@ -460,17 +460,17 @@ export function selectSuccessorCommentClaim({
       !/^[a-f0-9]{40}$/.test(String(masterSha)) ||
       !/^[a-f0-9]{64}$/.test(String(contractSha256)))
     return invalid('INVALID_CLAIM_INPUT');
-  const prefix = 'AGENT_CONTROL_NEXT_TASK_CLAIM_V1\\n';
+  const prefix = 'AGENT_CONTROL_NEXT_TASK_CLAIM_V1\n';
   const claims = comments.filter(c =>
-    String(c?.body || '').replaceAll('\\r\\n','\\n').startsWith(prefix) &&
-    String(c.body).includes('TASK_ID = ' + taskId + '\\n'));
+    String(c?.body || '').replaceAll('\r\n','\n').startsWith(prefix) &&
+    String(c.body).includes('TASK_ID = ' + taskId + '\n'));
   if (claims.length > 1) return invalid('DUPLICATE_HANDOFF_CLAIMS');
   if (claims.length === 0) return { status:'CREATE', reason:'NO_EXISTING_CLAIM', claim:null };
   const comment = claims[0];
   if (comment?.user?.login !== trustedBot || !Number.isSafeInteger(comment.id) ||
       comment.id <= taskCommentId) return invalid('UNTRUSTED_HANDOFF_CLAIM');
   const fields = new Map();
-  const lines = String(comment.body).replaceAll('\\r\\n','\\n').trimEnd().split('\\n');
+  const lines = String(comment.body).replaceAll('\r\n','\n').trimEnd().split('\n');
   for (const line of lines.slice(1)) {
     const match = /^([A-Z_]+) = (.*)$/.exec(line);
     if (!match || fields.has(match[1])) return invalid('MALFORMED_HANDOFF_CLAIM');
