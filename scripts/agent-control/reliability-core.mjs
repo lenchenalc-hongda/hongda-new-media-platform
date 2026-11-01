@@ -493,6 +493,50 @@ export function selectSuccessorCommentClaim({
       masterSha,
       contractSha256,
       watchdogRunId:fields.get('WATCHDOG_RUN_ID'),
+      createdAt:comment.created_at || null,
     },
   };
+}
+
+
+/**
+ * Bind a reusable Issue-comment handoff claim to a real watchdog workflow run.
+ * A repository-wide github-actions[bot] author is not workflow provenance.
+ * This rejects claims referring to any other issues:write workflow.
+ *
+ * This is a fail-closed provenance check, NOT a cryptographic attestation.
+ * GitHub does not expose per-comment workflow-run signatures, and a separate
+ * bot-authorized workflow could reference an overlapping genuine watchdog run.
+ */
+export function validateWatchdogClaimRun({
+  run, claim, repository, masterSha,
+  workflowId = 386198615,
+  workflowPath = '.github/workflows/agent-control-reliability-watchdog-v2.yml',
+}) {
+  const fail = reason => ({ status:'BLOCKED', reason });
+  if (!claim || typeof claim !== 'object' ||
+      !/^[1-9][0-9]*$/.test(String(claim.watchdogRunId || '')) ||
+      !/^[a-f0-9]{40}$/.test(String(masterSha || '')) ||
+      typeof repository !== 'string' || !repository.includes('/'))
+    return fail('INVALID_WATCHDOG_RUN_CLAIM');
+  if (!run || !Number.isSafeInteger(run.id) ||
+      run.id !== Number(claim.watchdogRunId) ||
+      run.workflow_id !== workflowId ||
+      run.name !== 'Agent Control Reliability Watchdog V2' ||
+      run.path !== workflowPath ||
+      run.repository?.full_name !== repository)
+    return fail('CLAIM_RUN_NOT_THE_RELIABILITY_WATCHDOG');
+  if (!['schedule','workflow_dispatch'].includes(run.event) ||
+      run.head_branch !== 'master' || run.head_sha !== masterSha ||
+      !['in_progress','completed'].includes(run.status))
+    return fail('CLAIM_RUN_WRONG_EVENT_REF_HEAD_OR_STATUS');
+  const commentTime = Date.parse(String(claim.createdAt || ''));
+  const created = Date.parse(String(run.created_at || ''));
+  const updated = Date.parse(String(run.updated_at || ''));
+  if (!Number.isFinite(created) || !Number.isFinite(commentTime) ||
+      commentTime < created - 30000 || commentTime > Date.now() + 30000 ||
+      (run.status === 'completed' &&
+       (!Number.isFinite(updated) || commentTime > updated + 120000)))
+    return fail('CLAIM_COMMENT_OUTSIDE_WATCHDOG_RUN_WINDOW');
+  return { status:'PASS', reason:'EXACT_WATCHDOG_RUN_PROVENANCE' };
 }
