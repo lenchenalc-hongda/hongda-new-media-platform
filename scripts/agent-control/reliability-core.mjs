@@ -251,3 +251,119 @@ export function selectCorrelatedDispatchRun({
   if (checkedAtMs - dispatchedAtMs < 15000) return pending;
   return { status: 'CONFIRMED', run };
 }
+
+
+/**
+ * Parse and select one explicitly owner-authored next task after a verified
+ * code-only merge. The watchdog may not invent business requirements or
+ * broaden Production permissions. An owner pre-registers a complete
+ * AGENT_CONTROL_PROJECT_TASK_V1 comment after the last task comment, pinned
+ * to the live master SHA. No next task => WAITING, not invented progress.
+ *
+ * @param {Record<string, any>} input
+ */
+export function selectAuthorizedSuccessorTask({
+  state, comments, project, config, registry, masterSha,
+  trustedOwner = 'lenchenalc-hongda',
+}) {
+  const decision = (status, reason = status) => ({ status, reason, task: null });
+  if (!state || state.status !== 'MERGED') return decision('NO_ACTION');
+  if (state.owner_action_required === true) return decision('HOLD_OWNER');
+  if (state.active_pr !== null || state.active_branch !== null) return decision('CONTROL_HAS_ACTIVE_PR');
+  const permittedRuntime = [
+    'RELEASE_VERIFIED_CODE_ONLY', 'AWAITING_AUTHORIZED_NEXT_TASK',
+    'NEXT_TASK_VALIDATION_BLOCKED',
+  ];
+  if (!permittedRuntime.includes(state.runtime_status)) return decision('WAIT_RELEASE_VERIFICATION');
+  const ci = state.post_merge_ci_status || state.postmerge_ci_status || '';
+  const deployed = state.vercel_production_status || '';
+  if (!String(ci).startsWith('PASS') || !String(deployed).startsWith('READY'))
+    return decision('WAIT_RELEASE_VERIFICATION');
+  if (!Number.isSafeInteger(state.task_comment_id) || state.task_comment_id <= 0)
+    return decision('MISSING_PREVIOUS_TASK_PROVENANCE');
+  if (!/^[a-f0-9]{40}$/.test(String(masterSha || '')) ||
+      !config || !registry || registry.projects?.[project]?.control_issue !== config.control_issue ||
+      state.project !== project || !config.task_prefix || !config.branch_prefix)
+    return decision('PROJECT_REGISTRY_OR_MASTER_MISMATCH');
+
+  const taskComments = (Array.isArray(comments) ? comments : [])
+    .filter(c => Number.isSafeInteger(c?.id) &&
+      c.id > state.task_comment_id &&
+      c.user?.login === trustedOwner &&
+      String(c.body || '').replaceAll('\r\n', '\n').startsWith('AGENT_CONTROL_PROJECT_TASK_V1\n'))
+    .sort((a, b) => b.id - a.id);
+  const candidateComments = taskComments.filter(c =>
+    !String(c.body).split(/\r?\n/).includes('TASK_ID = ' + state.current_task_id));
+  if (candidateComments.length === 0) return decision('AWAITING_AUTHORIZED_NEXT_TASK');
+  // Multiple different successor comments require explicit reconciliation.
+  // Never select the newest by guesswork while a prior task is still pending.
+  if (candidateComments.length !== 1) return decision('AMBIGUOUS_NEXT_TASK_COMMENTS');
+
+  const comment = candidateComments[0];
+  const lines = String(comment.body).replaceAll('\r\n', '\n').trimEnd().split('\n');
+  if (lines[0] !== 'AGENT_CONTROL_PROJECT_TASK_V1') return decision('INVALID_NEXT_TASK');
+  const fields = new Map();
+  for (const line of lines.slice(1)) {
+    const match = /^([A-Z0-9_]+) = (.*)$/.exec(line);
+    if (!match || fields.has(match[1])) return decision('INVALID_NEXT_TASK');
+    fields.set(match[1], match[2]);
+  }
+  const required = [
+    'PROJECT', 'TASK_ID', 'TASK_STATUS', 'BASE_MASTER_SHA',
+    'EXPECTED_HEAD', 'FIX_ROUND', 'ALLOWED_PATHS_JSON', 'CHECKS',
+    'OBJECTIVE_B64',
+  ];
+  if (required.some(key => !fields.has(key))) return decision('INVALID_NEXT_TASK');
+  const taskId = fields.get('TASK_ID');
+  if (fields.get('PROJECT') !== project ||
+      typeof taskId !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(taskId) ||
+      !taskId.startsWith(config.task_prefix) || taskId === state.current_task_id ||
+      fields.get('TASK_STATUS') !== 'READY_FOR_CODEX' ||
+      fields.get('FIX_ROUND') !== '0 / 3')
+    return decision('NEXT_TASK_IDENTITY_MISMATCH');
+  if (fields.get('BASE_MASTER_SHA') !== masterSha ||
+      fields.get('EXPECTED_HEAD') !== masterSha)
+    return decision('NEXT_TASK_BASE_STALE');
+
+  const encoded = fields.get('OBJECTIVE_B64') || '';
+  if (!/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(encoded))
+    return decision('INVALID_NEXT_TASK_OBJECTIVE');
+  const buffer = Buffer.from(encoded, 'base64');
+  const objective = buffer.toString('utf8');
+  if (!buffer.length || buffer.length > 12000 ||
+      buffer.toString('base64') !== encoded ||
+      !objective.trim() || objective.trim() !== objective)
+    return decision('INVALID_NEXT_TASK_OBJECTIVE');
+
+  let paths;
+  try { paths = JSON.parse(fields.get('ALLOWED_PATHS_JSON')); } catch {
+    return decision('INVALID_NEXT_TASK_PATHS');
+  }
+  if (!Array.isArray(paths) || paths.length < 1 || paths.length > 30 ||
+      new Set(paths).size !== paths.length)
+    return decision('INVALID_NEXT_TASK_PATHS');
+  const ownedRegexes = (config.owned_regexes || []).map(re => new RegExp(re));
+  for (const path of paths) {
+    if (typeof path !== 'string' || path.length < 1 || path.length > 240 ||
+        path.includes('\\') || path.includes('\0') || path.startsWith('/') ||
+        path.split('/').some(segment => !segment || segment === '.' || segment === '..'))
+      return decision('INVALID_NEXT_TASK_PATHS');
+    if ((registry.shared_exact_paths || []).includes(path) ||
+        (registry.shared_prefixes || []).some(prefix => path.startsWith(prefix)) ||
+        path.startsWith('supabase/migrations/'))
+      return decision('SHARED_OR_DATABASE_PATH_REQUIRES_SEPARATE_GATE');
+    if (!(config.owned_prefixes || []).some(prefix => path.startsWith(prefix)) &&
+        !ownedRegexes.some(re => re.test(path)))
+      return decision('NEXT_TASK_PATH_NOT_OWNED');
+  }
+  const checks = String(fields.get('CHECKS') || '').split(',');
+  const allowedChecks = new Set(['typecheck', 'build', 'secret-audit', 'smoke']);
+  if (!checks.length || new Set(checks).size !== checks.length ||
+      checks.some(check => !allowedChecks.has(check)))
+    return decision('INVALID_NEXT_TASK_CHECKS');
+
+  return {
+    status: 'READY', reason: 'TRUSTED_OWNER_EXACT_MASTER_SUCCESSOR',
+    task: { taskId, commentId: comment.id, allowedPaths: paths, checks },
+  };
+}
