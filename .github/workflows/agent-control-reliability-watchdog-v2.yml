@@ -7,7 +7,7 @@ on:
 
 permissions:
   actions: write
-  contents: read
+  contents: write # required only for atomic refs/tags/agent-control-claim/* creation
   issues: write
   pull-requests: read
 
