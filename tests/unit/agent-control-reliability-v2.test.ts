@@ -287,6 +287,79 @@ const nextConfig = {
   control_issue:195, task_prefix:'CSO-', branch_prefix:'codex/cso-',
   owned_prefixes:['src/lib/commercial-supplier-orders/','tests/unit/commercial-supplier-order-'],
   owned_regexes:['^supabase/migrations/[0-9]+_commercial_supplier_order_[A-Za-z0-9_]+\\.sql
+};
+const nextRegistry = {
+  projects:{'commercial-supplier-orders':nextConfig},
+  shared_exact_paths:['AGENTS.md','package.json'],
+  shared_prefixes:['scripts/agent-control/','.github/','src/lib/supabase/'],
+};
+function nextContract({
+  taskId = nextTask, master = nextMaster,
+  paths = ['tests/unit/commercial-supplier-order-handoff.test.ts'],
+  project = 'commercial-supplier-orders',
+  status = 'READY_FOR_CODEX',
+  checks = 'typecheck,build,secret-audit,smoke',
+} = {}) {
+  return [
+    'AGENT_CONTROL_PROJECT_TASK_V1',
+    'PROJECT = '+project,
+    'TASK_ID = '+taskId,
+    'TASK_STATUS = '+status,
+    'BASE_MASTER_SHA = '+master,
+    'EXPECTED_HEAD = '+master,
+    'FIX_ROUND = 0 / 3',
+    'ALLOWED_PATHS_JSON = '+JSON.stringify(paths),
+    'CHECKS = '+checks,
+    'OBJECTIVE_B64 = '+Buffer.from('Test bounded nonproduction next-stage review with no production writes.').toString('base64'),
+  ].join('\n');
+}
+const nextComment = {id:101,user:{login:'lenchenalc-hongda'},body:nextContract()};
+const nextInput = {
+  state:nextState, project:'commercial-supplier-orders',
+  config:nextConfig, registry:nextRegistry, masterSha:nextMaster,
+  comments:[nextComment],
+};
+const selectedSuccessor = selectAuthorizedSuccessorTask(nextInput);
+assert.equal(selectedSuccessor.status,'READY','single exact-head owner-authored next task accepted');
+assert.equal(selectedSuccessor.task?.taskId,nextTask);
+assert.equal(selectedSuccessor.task?.commentId,101);
+assert.equal(selectAuthorizedSuccessorTask({...nextInput,comments:[]}).status,
+  'AWAITING_AUTHORIZED_NEXT_TASK','merged state must never invent a follow-up task');
+assert.equal(selectAuthorizedSuccessorTask({...nextInput,comments:[{...nextComment,user:{login:'github-actions[bot]'}}]}).status,
+  'AWAITING_AUTHORIZED_NEXT_TASK','bot cannot forge the owner-preauthorized next phase');
+assert.equal(selectAuthorizedSuccessorTask({...nextInput,comments:[{...nextComment,id:99}]}).status,
+  'AWAITING_AUTHORIZED_NEXT_TASK','prior task history is not a new task');
+assert.equal(selectAuthorizedSuccessorTask({...nextInput,state:{...nextState,owner_action_required:true}}).status,
+  'HOLD_OWNER','pending owner decision must stop handoff');
+assert.equal(selectAuthorizedSuccessorTask({...nextInput,state:{...nextState,postmerge_ci_status:'FAIL'}}).status,
+  'WAIT_RELEASE_VERIFICATION','failed merge CI cannot hand off');
+assert.equal(selectAuthorizedSuccessorTask({...nextInput,state:{...nextState,vercel_production_status:'BUILDING'}}).status,
+  'WAIT_RELEASE_VERIFICATION','unverified release cannot hand off');
+assert.equal(selectAuthorizedSuccessorTask({...nextInput,comments:[{...nextComment,body:nextContract({master:'b'.repeat(40)})}]}).status,
+  'NEXT_TASK_BASE_STALE','stale master task requires explicit rebase');
+assert.equal(selectAuthorizedSuccessorTask({...nextInput,comments:[{...nextComment,body:nextContract({taskId:priorTask})}]}).status,
+  'AWAITING_AUTHORIZED_NEXT_TASK','old task is never automatically replayed');
+assert.equal(selectAuthorizedSuccessorTask({...nextInput,comments:[nextComment,{...nextComment,id:102}]}).status,
+  'AMBIGUOUS_NEXT_TASK_COMMENTS','duplicate competing next tasks require reconciliation');
+assert.equal(selectAuthorizedSuccessorTask({...nextInput,comments:[{...nextComment,body:nextContract({project:'global-lead-hub'})}]}).status,
+  'NEXT_TASK_IDENTITY_MISMATCH','foreign project cannot use this lane');
+assert.equal(selectAuthorizedSuccessorTask({...nextInput,comments:[{...nextComment,body:nextContract({paths:['scripts/agent-control/reliability-watchdog.mjs']})}]}).status,
+  'SHARED_OR_DATABASE_PATH_REQUIRES_SEPARATE_GATE','successor cannot claim shared infrastructure files');
+assert.equal(selectAuthorizedSuccessorTask({...nextInput,comments:[{...nextComment,body:nextContract({paths:['supabase/migrations/202611010001_commercial_supplier_order_test.sql']})}]}).status,
+  'SHARED_OR_DATABASE_PATH_REQUIRES_SEPARATE_GATE','production migration paths require separate explicit gate');
+assert.equal(selectAuthorizedSuccessorTask({...nextInput,comments:[{...nextComment,body:nextContract({paths:['src/lib/workshop-orders/test.ts']})}]}).status,
+  'NEXT_TASK_PATH_NOT_OWNED','project ownership contract remains enforced');
+assert.equal(selectAuthorizedSuccessorTask({...nextInput,comments:[{...nextComment,body:nextContract({checks:'skip-tests'})}]}).status,
+  'INVALID_NEXT_TASK_CHECKS','cannot bypass existing CI gates');
+const watchdogHandoffSource = readFileSync('scripts/agent-control/reliability-watchdog.mjs','utf8');
+assert(watchdogHandoffSource.includes('await inspectMergedNextTask(project, config, issue, state, registry)'),
+  'MERGED must run the explicit-next-task handoff path before terminal skip');
+assert(watchdogHandoffSource.includes("freshState.task_started_at_utc = new Date().toISOString()"),
+  'new task must have a run epoch that isolates it from previous task runs');
+assert(watchdogHandoffSource.includes('const epoch = Date.parse(state.task_started_at_utc'),
+  'stale successful project runs may never suppress a new task dispatch');
+
+console.log('agent-control-reliability-v2.test.ts: 8/8 PASS');
 ],
 };
 const nextRegistry = {
