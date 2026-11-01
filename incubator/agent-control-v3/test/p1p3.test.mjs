@@ -83,17 +83,17 @@ test('P2: 204 response and lost HTTP response both reconcile, never auto-resend'
   let count=0;
   const github={dispatchWorkflow:async()=>{count++;return {status:204}}};
   const sent=await dispatchOutboxOnce({store:s,opKey:c.opKey,github,remoteDispatchEnabled:true});
-  assert.equal(sent.status,'AWAITING_ATTESTED_RUN');
+  assert.equal(sent.status,'AWAITING_SIGNED_RUN_PROOF');
   assert.equal(s.listOutbox()[0].status,'AMBIGUOUS');
   assert.equal((await dispatchOutboxOnce({store:s,opKey:c.opKey,github,remoteDispatchEnabled:true})).status,
     'NOT_DISPATCHABLE');
   assert.equal(count,1);
-  assert.equal((await reconcileGithubRun({store:s,opKey:c.opKey,github:{findAttestedRun:async()=>({status:'NOT_FOUND'})}})).status,
-    'AMBIGUOUS_HOLD');
-  const reconciled=await reconcileGithubRun({store:s,opKey:c.opKey,github:{findAttestedRun:async()=>({
-    status:'ATTESTED',opKey:c.opKey,runId:435622,epoch:c.epoch})}});
-  assert.equal(reconciled.status,'RUN_BOUND');
-  assert.equal(s.getTask('test-task-0').status,'CODING');
+  assert.equal((await reconcileGithubRun({store:s,opKey:c.opKey,github:{findRunProof:async()=>({status:'NOT_FOUND'})},
+    expectedIdentity:{repository:'test/repo'},jwks:{keys:[]}})).status,'AMBIGUOUS_HOLD');
+  assert.equal((await reconcileGithubRun({store:s,opKey:c.opKey,github:{findRunProof:async()=>({
+    opKey:c.opKey,runId:435622,epoch:c.epoch})},expectedIdentity:{repository:'test/repo'},jwks:{keys:[]}})).status,
+    'AMBIGUOUS_HOLD','run metadata alone is never a signed attestation');
+  assert.equal(s.getTask('test-task-0').status,'DISPATCHING');
   assert.equal(count,1);
 });
 
