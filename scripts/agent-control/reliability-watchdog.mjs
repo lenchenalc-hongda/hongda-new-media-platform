@@ -1,5 +1,5 @@
 import fs from 'node:fs';
-import { displayStatus, shouldRedispatch, watchdogTaskBlocker, selectCorrelatedDispatchRun } from './reliability-core.mjs';
+import { displayStatus, shouldRedispatch, watchdogTaskBlocker, selectCorrelatedDispatchRun, selectAuthorizedSuccessorTask } from './reliability-core.mjs';
 const REPOSITORY = process.env.GITHUB_REPOSITORY || 'lenchenalc-hongda/hongda-new-media-platform';
 const TOKEN = process.env.GITHUB_TOKEN || '';
 const REGISTRY_PATH = process.env.AGENT_CONTROL_REGISTRY || '.github/agent-control/project-registry.json';
@@ -217,7 +217,110 @@ async function reconcileMergedPr(project, issue, state) {
   return true;
 }
 
-async function inspectProject(project, config) {
+
+async function recentOwnerTaskComments(issueNumber) {
+  const all = [];
+  for (let page = 1; page <= 5; page++) {
+    const batch = await api('/repos/' + REPOSITORY + '/issues/' +
+      issueNumber + '/comments?per_page=100&page=' + page);
+    if (!Array.isArray(batch)) throw new Error('WATCHDOG_TASK_COMMENTS_UNAVAILABLE');
+    all.push(...batch);
+    if (batch.length < 100) return all;
+  }
+  throw new Error('WATCHDOG_TASK_HISTORY_TOO_LONG');
+}
+
+async function inspectMergedNextTask(project, config, issue, state, registry) {
+  // A merged PR is an immutable completed code slice. Start a successor only
+  // when the owner explicitly prepared a full task contract on the same Issue.
+  // No successor comment means WAITING, not an invented task or fake Codex run.
+  const master = await api('/repos/' + REPOSITORY + '/branches/master');
+  const liveMasterSha = master?.commit?.sha;
+  const comments = await recentOwnerTaskComments(issue.number);
+  const selected = selectAuthorizedSuccessorTask({
+    state, comments, project, config, registry, masterSha: liveMasterSha,
+  });
+  if (selected.status === 'AWAITING_AUTHORIZED_NEXT_TASK') {
+    if (state.runtime_status !== selected.status) {
+      state.runtime_status = selected.status;
+      state.next_task_handoff_status = selected.status;
+      await updateState(issue, state);
+    }
+    console.log('WATCHDOG_PROJECT=' + project + ' RESULT=' + selected.status);
+    return;
+  }
+  if (selected.status !== 'READY') {
+    if (['NO_ACTION', 'HOLD_OWNER', 'WAIT_RELEASE_VERIFICATION'].includes(selected.status)) {
+      console.log('WATCHDOG_PROJECT=' + project + ' RESULT=' + selected.status);
+      return;
+    }
+    await blockWatchdog(project, issue, state, selected.reason, 'NEXT_TASK_VALIDATION_BLOCKED');
+    return;
+  }
+
+  const next = selected.task;
+  const runs = await workflowRuns(config.workflow_file);
+  if (runs.some(run => ['queued', 'waiting', 'pending', 'in_progress'].includes(run.status))) {
+    console.log('WATCHDOG_PROJECT=' + project + ' RESULT=NEXT_TASK_HELD_ACTIVE_RUN');
+    return;
+  }
+  const proposed = { ...state, current_task_id: next.taskId, master_sha: liveMasterSha };
+  if (await findExistingTaskPr(config, proposed)) {
+    await blockWatchdog(project, issue, state, 'NEXT_TASK_BRANCH_ALREADY_OPEN', 'NEXT_TASK_VALIDATION_BLOCKED');
+    return;
+  }
+  // Reread after external API calls: never move a newer issue status backwards.
+  const freshIssue = await api('/repos/' + REPOSITORY + '/issues/' + issue.number);
+  const freshState = parseState(freshIssue.body);
+  const freshMaster = await api('/repos/' + REPOSITORY + '/branches/master');
+  if (!freshState || freshState.status !== 'MERGED' ||
+      freshState.current_task_id !== state.current_task_id ||
+      freshState.task_comment_id !== state.task_comment_id ||
+      freshState.active_pr !== null || freshState.active_branch !== null ||
+      freshState.owner_action_required === true ||
+      freshMaster?.commit?.sha !== liveMasterSha) {
+    console.log('WATCHDOG_PROJECT=' + project + ' RESULT=NEXT_TASK_RACE_RECHECK_REQUIRED');
+    return;
+  }
+  const successor = selectAuthorizedSuccessorTask({
+    state: freshState, comments, project, config, registry, masterSha: liveMasterSha,
+  });
+  if (successor.status !== 'READY' || successor.task.commentId !== next.commentId) {
+    console.log('WATCHDOG_PROJECT=' + project + ' RESULT=NEXT_TASK_PROVENANCE_CHANGED');
+    return;
+  }
+
+  freshState.previous_completed_task_id = freshState.current_task_id;
+  freshState.previous_completed_head = freshState.verified_head;
+  freshState.current_task_id = next.taskId;
+  freshState.task_comment_id = next.commentId;
+  freshState.status = 'READY_FOR_CODEX';
+  freshState.runtime_status = 'DISPATCHING';
+  freshState.master_sha = liveMasterSha;
+  freshState.verified_head = liveMasterSha;
+  freshState.active_pr = null;
+  freshState.active_branch = null;
+  freshState.fix_round = 0;
+  freshState.infra_retry_count = 0;
+  freshState.last_failure_class = null;
+  freshState.last_failure_run_id = null;
+  freshState.owner_action_required = false;
+  freshState.phase_complete = false;
+  freshState.task_started_at_utc = new Date().toISOString();
+  freshState.next_task_handoff_status = 'TRUSTED_OWNER_NEXT_TASK_DISPATCHING';
+  freshState.next_task_handoff_comment_id = next.commentId;
+  freshState.next_action = 'Run owner-registered task ' + next.taskId +
+    ' from exact master ' + liveMasterSha + '. CI/PM review/owner gates still apply; ' +
+    'no automatic merge, Production DB, secrets or external messages.';
+  // Persist the trusted task identity before dispatch. On transient API errors,
+  // the next watchdog cycle can safely redispatch this READY task once.
+  await updateState(freshIssue, freshState);
+  const confirmed = await dispatch(project, freshIssue, freshState, config, 'OWNER_PREAUTHORIZED_NEXT_PHASE');
+  console.log('WATCHDOG_PROJECT=' + project + ' RESULT=NEXT_TASK_DISPATCHED' +
+    ' TASK=' + next.taskId + ' RUN_ID=' + confirmed.id);
+}
+
+async function inspectProject(project, config, registry) {
   const issue = await api(`/repos/${REPOSITORY}/issues/${config.control_issue}`);
   const state = parseState(issue.body);
   if (!state || state.project !== project) {
@@ -247,7 +350,12 @@ async function inspectProject(project, config) {
     return;
   }
 
-  if (['PASS', 'COMPLETE', 'MERGED', 'BLOCKED'].includes(state.status)) {
+  if (state.status === 'MERGED') {
+    await inspectMergedNextTask(project, config, issue, state, registry);
+    return;
+  }
+
+  if (['PASS', 'COMPLETE', 'BLOCKED'].includes(state.status)) {
     console.log(`WATCHDOG_PROJECT=${project} RESULT=${state.status}`);
     return;
   }
@@ -294,7 +402,16 @@ async function inspectProject(project, config) {
     return;
   }
 
-  const runs = await workflowRuns(config.workflow_file);
+  // Do not treat a successful run for the PREVIOUS completed task as evidence
+  // that this newly handed-off task succeeded or failed.
+  const allRuns = await workflowRuns(config.workflow_file);
+  const epoch = Date.parse(state.task_started_at_utc || '');
+  const runs = Number.isFinite(epoch)
+    ? allRuns.filter(run => {
+        const created = Date.parse(run.created_at || '');
+        return Number.isFinite(created) && created >= epoch - 2000;
+      })
+    : allRuns;
   const active = runs.find(run => ['queued', 'in_progress', 'waiting', 'pending'].includes(run.status));
   if (active) {
     const queued = ['queued', 'waiting', 'pending'].includes(active.status);
@@ -354,7 +471,7 @@ async function main() {
       continue;
     }
     try {
-      await inspectProject(project, config);
+      await inspectProject(project, config, registry);
     } catch (error) {
       console.error(`WATCHDOG_PROJECT=${project} RESULT=ERROR MESSAGE=${error instanceof Error ? error.message : 'unknown'}`);
     }
