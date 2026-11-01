@@ -163,6 +163,17 @@ do $$ declare t text; begin
   end loop;
 end $$;
 
+-- Event ledger is append-only for all ordinary write paths.
+create or replace function ac_control.prevent_event_rewrite()
+returns trigger language plpgsql set search_path=pg_catalog as $
+begin
+  raise exception 'EVENT_LEDGER_APPEND_ONLY';
+end;
+$;
+create trigger ac_control_events_immutable
+  before update or delete on ac_control.events for each row
+  execute function ac_control.prevent_event_rewrite();
+
 -- Compare file scopes: a trailing slash denotes a directory prefix; otherwise
 -- the string denotes an exact path. A directory covers its descendants.
 create or replace function ac_control.scope_overlap(a text,b text)
