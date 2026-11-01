@@ -418,7 +418,7 @@ assert.equal(countActiveProjectLanes([
   {status:'BLOCKED',active_pr:200,active_branch:'codex/cso-active'},
 ]),1,'blocked open PR still occupies execution capacity');
 assert.equal(countActiveProjectLanes([{status:'COMPLETE',active_pr:null,active_branch:null}]),0);
-assert.equal(countActiveProjectLanes([null]),Infinity,'invalid foreign project is fail closed');
+assert.equal(countActiveProjectLanes([null as unknown as Record<string, unknown>]),Infinity,'invalid foreign project is fail closed');
 assert(watchdogHandoffSource.includes('hasProjectLaneCapacity(project, registry, next.allowedPaths)'),
   'next-stage watchdog must consult cross-project capacity and path overlap');
 assert(watchdogHandoffSource.includes('const currentComments = await recentOwnerTaskComments(issue.number)'),
