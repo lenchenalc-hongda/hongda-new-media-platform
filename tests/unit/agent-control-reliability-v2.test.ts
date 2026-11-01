@@ -13,6 +13,7 @@ import {
   selectCorrelatedDispatchRun,
   parseProjectValidationProof,
   selectAuthorizedSuccessorTask,
+  countActiveProjectLanes,
 } from '../../scripts/agent-control/reliability-core.mjs';
 
 // TEST 1 — Keychain unavailable.
@@ -358,5 +359,22 @@ assert(watchdogHandoffSource.includes("freshState.task_started_at_utc = new Date
   'new task must have a run epoch that isolates it from previous task runs');
 assert(watchdogHandoffSource.includes('const epoch = Date.parse(state.task_started_at_utc'),
   'stale successful project runs may never suppress a new task dispatch');
+
+// Registry limit applies across project lanes, not merely within one workflow.
+assert.equal(countActiveProjectLanes([
+  {status:'MERGED',active_pr:null,active_branch:null},
+  {status:'WAITING_REVIEW',active_pr:173,active_branch:'codex/cpc-foo'},
+]),1,'completed phase frees its execution lane');
+assert.equal(countActiveProjectLanes([
+  {status:'READY_FOR_CODEX',active_pr:null,active_branch:null},
+  {status:'FIX_REQUIRED',active_pr:190,active_branch:'codex/glh-bar'},
+]),2,'queued or fixing tasks occupy capacity');
+assert.equal(countActiveProjectLanes([
+  {status:'BLOCKED',active_pr:200,active_branch:'codex/cso-active'},
+]),1,'blocked open PR still occupies execution capacity');
+assert.equal(countActiveProjectLanes([{status:'COMPLETE',active_pr:null,active_branch:null}]),0);
+assert.equal(countActiveProjectLanes([null]),Infinity,'invalid foreign project is fail closed');
+assert(watchdogHandoffSource.includes('hasProjectLaneCapacity(project, registry)'),
+  'next-stage watchdog must consult registry concurrency cap before dispatch');
 
 console.log('agent-control-reliability-v2.test.ts: 8/8 PASS');
