@@ -1,5 +1,5 @@
 import fs from 'node:fs';
-import { displayStatus, shouldRedispatch, watchdogTaskBlocker, selectCorrelatedDispatchRun, selectAuthorizedSuccessorTask } from './reliability-core.mjs';
+import { displayStatus, shouldRedispatch, watchdogTaskBlocker, selectCorrelatedDispatchRun, selectAuthorizedSuccessorTask, countActiveProjectLanes } from './reliability-core.mjs';
 const REPOSITORY = process.env.GITHUB_REPOSITORY || 'lenchenalc-hongda/hongda-new-media-platform';
 const TOKEN = process.env.GITHUB_TOKEN || '';
 const REGISTRY_PATH = process.env.AGENT_CONTROL_REGISTRY || '.github/agent-control/project-registry.json';
@@ -230,6 +230,21 @@ async function recentOwnerTaskComments(issueNumber) {
   throw new Error('WATCHDOG_TASK_HISTORY_TOO_LONG');
 }
 
+async function hasProjectLaneCapacity(project, registry) {
+  // The watchdog workflow runs serially, but its per-project Codex workflows
+  // do not: enforce the registry limit before dispatching another task.
+  if (registry.max_parallel_projects !== 2) throw new Error('WATCHDOG_PARALLEL_POLICY_UNAVAILABLE');
+  const states = [];
+  for (const [other, config] of Object.entries(registry.projects || {})) {
+    if (other === project) continue;
+    const issue = await api('/repos/' + REPOSITORY + '/issues/' + config.control_issue);
+    const state = parseState(issue.body);
+    if (!state || state.project !== other) throw new Error('WATCHDOG_FOREIGN_PROJECT_STATE_INVALID');
+    states.push(state);
+  }
+  return countActiveProjectLanes(states) < registry.max_parallel_projects;
+}
+
 async function inspectMergedNextTask(project, config, issue, state, registry) {
   // A merged PR is an immutable completed code slice. Start a successor only
   // when the owner explicitly prepared a full task contract on the same Issue.
@@ -259,6 +274,10 @@ async function inspectMergedNextTask(project, config, issue, state, registry) {
   }
 
   const next = selected.task;
+  if (!(await hasProjectLaneCapacity(project, registry))) {
+    console.log('WATCHDOG_PROJECT=' + project + ' RESULT=NEXT_TASK_QUEUED_PARALLEL_LIMIT_2');
+    return;
+  }
   const runs = await workflowRuns(config.workflow_file);
   if (runs.some(run => ['queued', 'waiting', 'pending', 'in_progress'].includes(run.status))) {
     console.log('WATCHDOG_PROJECT=' + project + ' RESULT=NEXT_TASK_HELD_ACTIVE_RUN');
@@ -285,6 +304,10 @@ async function inspectMergedNextTask(project, config, issue, state, registry) {
   const successor = selectAuthorizedSuccessorTask({
     state: freshState, comments, project, config, registry, masterSha: liveMasterSha,
   });
+  if (!(await hasProjectLaneCapacity(project, registry))) {
+    console.log('WATCHDOG_PROJECT=' + project + ' RESULT=NEXT_TASK_CAPACITY_CHANGED_BEFORE_DISPATCH');
+    return;
+  }
   if (successor.status !== 'READY' || successor.task.commentId !== next.commentId) {
     console.log('WATCHDOG_PROJECT=' + project + ' RESULT=NEXT_TASK_PROVENANCE_CHANGED');
     return;
