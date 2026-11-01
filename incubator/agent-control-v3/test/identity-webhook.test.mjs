@@ -4,6 +4,7 @@ import {createHmac,webcrypto} from 'node:crypto';
 import {MemoryControlStore} from '../src/core.mjs';
 import {verifyGithubDelivery,ingestGithubDelivery} from '../src/github-webhook.mjs';
 import {verifyGithubOidc} from '../src/oidc.mjs';
+import {dispatchOutboxOnce,reconcileGithubRun} from '../src/dispatcher.mjs';
 
 const secret='synthetic-nonproduction-webhook-secret-value';
 const delivery='ab4a7e44-4c9e-4899-a918-3e3f17c496a1';
@@ -76,4 +77,24 @@ test('P2: signed token from a foreign workflow or wrong event is rejected',async
   assert.equal((await verifyGithubOidc(wrongEvent.token,{jwks:wrongEvent.jwks,expected})).ok,false);
   const expired=await jwtFixture({iat:Math.floor(Date.now()/1000)-700,exp:Math.floor(Date.now()/1000)-600});
   assert.equal((await verifyGithubOidc(expired.token,{jwks:expired.jwks,expected})).ok,false);
+});
+
+
+test('P2: full OIDC-verified dispatch reconciliation accepts only exact signed run',async()=>{
+  const store=new MemoryControlStore();const now=Date.now();
+  store.registerProject({id:'proof',enabled:true,dispatchOwner:'V3'});
+  store.addEpic({id:'proof-epic',projectId:'proof',approvedBy:'owner',approvedUntil:now+600000,
+    paths:['proof/'],risk:'SANDBOX'});
+  store.addApproval({epicId:'proof-epic',scope:'NONPROD_CODE_EXECUTION',approvedBy:'owner',validUntil:now+600000});
+  store.addTask({id:'proof-task',projectId:'proof',epicId:'proof-epic',risk:'SANDBOX',status:'QUEUED',
+    paths:['proof/a.mjs'],checks:['test'],dependsOn:[]});
+  const lease=await store.claim('proof-task',{expectedVersion:0,worker:'synthetic'});
+  const sent=await dispatchOutboxOnce({store,opKey:lease.opKey,remoteDispatchEnabled:true,
+    github:{dispatchWorkflow:async()=>({status:204})}});
+  assert.equal(sent.status,'AWAITING_SIGNED_RUN_PROOF');
+  const {token,jwks}=await jwtFixture();
+  const verified=await reconcileGithubRun({store,opKey:lease.opKey,jwks,expectedIdentity:expected,
+    github:{findRunProof:async()=>({opKey:lease.opKey,epoch:lease.epoch,runId,oidcJwt:token})}});
+  assert.equal(verified.status,'RUN_BOUND');
+  assert.equal(store.getTask('proof-task').runId,runId);
 });
