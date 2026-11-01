@@ -311,7 +311,9 @@ export function selectAuthorizedSuccessorTask({
   const required = [
     'PROJECT', 'TASK_ID', 'TASK_STATUS', 'BASE_MASTER_SHA',
     'EXPECTED_HEAD', 'FIX_ROUND', 'ALLOWED_PATHS_JSON', 'CHECKS',
-    'OBJECTIVE_B64',
+    'OBJECTIVE_B64', 'SCOPE', 'PRODUCTION_CHANGED', 'AUTO_MERGE',
+    'AUTO_PRODUCTION', 'AUTH_WIDENING', 'DESTRUCTIVE_SOT_CHANGE',
+    'EXTERNAL_SEND',
   ];
   if (required.some(key => !fields.has(key))) return decision('INVALID_NEXT_TASK');
   const taskId = fields.get('TASK_ID');
@@ -325,6 +327,17 @@ export function selectAuthorizedSuccessorTask({
       fields.get('EXPECTED_HEAD') !== masterSha)
     return decision('NEXT_TASK_BASE_STALE');
 
+  // An owner task comment is a code-only scope claim, not authorization for
+  // unreviewed Production access, widened auth or outbound communications.
+  if (fields.get('SCOPE') !== 'NONPROD_CODE_ONLY' ||
+      fields.get('PRODUCTION_CHANGED') !== 'NO' ||
+      fields.get('AUTO_MERGE') !== 'false' ||
+      fields.get('AUTO_PRODUCTION') !== 'false' ||
+      fields.get('AUTH_WIDENING') !== 'NO' ||
+      fields.get('DESTRUCTIVE_SOT_CHANGE') !== 'NO' ||
+      fields.get('EXTERNAL_SEND') !== 'NO')
+    return decision('NEXT_TASK_REQUIRES_SEPARATE_HUMAN_GATE');
+
   const encoded = fields.get('OBJECTIVE_B64') || '';
   if (!/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(encoded))
     return decision('INVALID_NEXT_TASK_OBJECTIVE');
@@ -334,6 +347,12 @@ export function selectAuthorizedSuccessorTask({
       buffer.toString('base64') !== encoded ||
       !objective.trim() || objective.trim() !== objective)
     return decision('INVALID_NEXT_TASK_OBJECTIVE');
+
+  // Reject potentially sensitive operations for a fully automatic successor.
+  // A task mentioning them (even as a negation) requires a fresh human-reviewed
+  // scope instead of inferring intent from loosely structured natural language.
+  if (/\b(?:production|prod|live|ddl|sql|rls|database|storage|secret|env|auth|permission|migrat\w*|delete|drop|truncate|overwrite|whatsapp|meta|wechat|customer|supplier|publish|external|payment|financial|salary)\b/i.test(objective))
+    return decision('NEXT_TASK_OBJECTIVE_REQUIRES_HUMAN_GATE');
 
   let paths;
   try { paths = JSON.parse(fields.get('ALLOWED_PATHS_JSON')); } catch {
@@ -357,14 +376,18 @@ export function selectAuthorizedSuccessorTask({
       return decision('NEXT_TASK_PATH_NOT_OWNED');
   }
   const checks = String(fields.get('CHECKS') || '').split(',');
-  const allowedChecks = new Set(['typecheck', 'build', 'secret-audit', 'smoke']);
-  if (!checks.length || new Set(checks).size !== checks.length ||
-      checks.some(check => !allowedChecks.has(check)))
+  const mandatoryChecks = ['typecheck', 'build', 'secret-audit', 'smoke'];
+  if (checks.length !== mandatoryChecks.length ||
+      new Set(checks).size !== mandatoryChecks.length ||
+      mandatoryChecks.some(check => !checks.includes(check)))
     return decision('INVALID_NEXT_TASK_CHECKS');
 
   return {
     status: 'READY', reason: 'TRUSTED_OWNER_EXACT_MASTER_SUCCESSOR',
-    task: { taskId, commentId: comment.id, allowedPaths: paths, checks },
+    task: {
+      taskId, commentId: comment.id, allowedPaths: paths,
+      checks: mandatoryChecks, contractBody: String(comment.body),
+    },
   };
 }
 
@@ -386,4 +409,34 @@ export function countActiveProjectLanes(states) {
     (Number.isSafeInteger(s.active_pr) && s.active_pr > 0) ||
     (typeof s.active_branch === 'string' && s.active_branch.length > 0)
   ).length;
+}
+
+
+/**
+ * Fail closed when a successor would overlap an active lane's file allowlist.
+ * Unknown active ownership is unsafe rather than assuming no collision.
+ */
+export function successorPathOverlapBlocker(states, successorPaths) {
+  if (!Array.isArray(states) || !Array.isArray(successorPaths) ||
+      successorPaths.length === 0 || successorPaths.some(p => typeof p !== 'string'))
+    return 'INVALID_CROSS_PROJECT_PATH_EVIDENCE';
+  const active = new Set([
+    'READY_FOR_CODEX', 'DISPATCHING', 'CODING', 'FIX_REQUIRED',
+    'READY_FOR_PM_REVIEW', 'WAITING_REVIEW', 'PM_REVIEW', 'APPROVED_FOR_MERGE',
+  ]);
+  for (const state of states) {
+    if (!state || typeof state !== 'object') return 'INVALID_CROSS_PROJECT_STATE';
+    const busy = active.has(state.status) ||
+      (Number.isSafeInteger(state.active_pr) && state.active_pr > 0) ||
+      (typeof state.active_branch === 'string' && state.active_branch.length > 0);
+    if (!busy) continue;
+    if (!Array.isArray(state.allowed_paths) || state.allowed_paths.length === 0 ||
+        state.allowed_paths.some(p => typeof p !== 'string'))
+      return 'ACTIVE_LANE_OWNED_PATHS_UNVERIFIED';
+    if (successorPaths.some(p => state.allowed_paths.some(q =>
+      p === q || p.startsWith(q.endsWith('/') ? q : q + '/') ||
+      q.startsWith(p.endsWith('/') ? p : p + '/'))))
+      return 'ACTIVE_LANE_PATH_OVERLAP';
+  }
+  return null;
 }
