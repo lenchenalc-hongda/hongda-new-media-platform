@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import { createHash } from 'node:crypto';
-import { displayStatus, shouldRedispatch, watchdogTaskBlocker, selectCorrelatedDispatchRun, selectAuthorizedSuccessorTask, countActiveProjectLanes, successorPathOverlapBlocker, selectSuccessorCommentClaim } from './reliability-core.mjs';
+import { displayStatus, shouldRedispatch, watchdogTaskBlocker, selectCorrelatedDispatchRun, selectAuthorizedSuccessorTask, countActiveProjectLanes, successorPathOverlapBlocker, selectSuccessorCommentClaim, validateWatchdogClaimRun } from './reliability-core.mjs';
 const REPOSITORY = process.env.GITHUB_REPOSITORY || 'lenchenalc-hongda/hongda-new-media-platform';
 const TOKEN = process.env.GITHUB_TOKEN || '';
 const REGISTRY_PATH = process.env.AGENT_CONTROL_REGISTRY || '.github/agent-control/project-registry.json';
@@ -293,6 +293,17 @@ async function claimSuccessorWithIssueComment(project, issue, task, masterSha) {
         decision.claim?.commentId !== created?.id)
       throw new Error('WATCHDOG_CLAIM_NOT_UNIQUELY_CONFIRMED');
   }
+  if (decision.status !== 'REUSE' || !decision.claim)
+    throw new Error('WATCHDOG_HANDOFF_CLAIM_UNVERIFIED');
+  // The comment actor alone is not enough: all repo GitHub Actions have the
+  // same bot login. Bind the run id to the exact scheduled watchdog identity.
+  const run = await api('/repos/' + REPOSITORY +
+    '/actions/runs/' + decision.claim.watchdogRunId);
+  const runCheck = validateWatchdogClaimRun({
+    run, claim:decision.claim, repository:REPOSITORY, masterSha,
+  });
+  if (runCheck.status !== 'PASS')
+    throw new Error('WATCHDOG_HANDOFF_CLAIM_PROVENANCE_' + runCheck.reason);
   return decision.claim;
 }
 
