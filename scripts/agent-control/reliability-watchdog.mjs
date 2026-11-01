@@ -1,5 +1,5 @@
 import fs from 'node:fs';
-import { displayStatus, shouldRedispatch, watchdogTaskBlocker, selectCorrelatedDispatchRun, selectAuthorizedSuccessorTask, countActiveProjectLanes } from './reliability-core.mjs';
+import { displayStatus, shouldRedispatch, watchdogTaskBlocker, selectCorrelatedDispatchRun, selectAuthorizedSuccessorTask, countActiveProjectLanes, successorPathOverlapBlocker } from './reliability-core.mjs';
 const REPOSITORY = process.env.GITHUB_REPOSITORY || 'lenchenalc-hongda/hongda-new-media-platform';
 const TOKEN = process.env.GITHUB_TOKEN || '';
 const REGISTRY_PATH = process.env.AGENT_CONTROL_REGISTRY || '.github/agent-control/project-registry.json';
@@ -230,9 +230,9 @@ async function recentOwnerTaskComments(issueNumber) {
   throw new Error('WATCHDOG_TASK_HISTORY_TOO_LONG');
 }
 
-async function hasProjectLaneCapacity(project, registry) {
-  // The watchdog workflow runs serially, but its per-project Codex workflows
-  // do not: enforce the registry limit before dispatching another task.
+async function hasProjectLaneCapacity(project, registry, successorPaths) {
+  // Check both lane count and overlapping owned files. Missing path evidence
+  // from an active lane is a deliberate fail-closed condition.
   if (registry.max_parallel_projects !== 2) throw new Error('WATCHDOG_PARALLEL_POLICY_UNAVAILABLE');
   const states = [];
   for (const [other, config] of Object.entries(registry.projects || {})) {
@@ -242,7 +242,46 @@ async function hasProjectLaneCapacity(project, registry) {
     if (!state || state.project !== other) throw new Error('WATCHDOG_FOREIGN_PROJECT_STATE_INVALID');
     states.push(state);
   }
+  const blocker = successorPathOverlapBlocker(states, successorPaths);
+  if (blocker) {
+    console.log('WATCHDOG_PROJECT=' + project + ' RESULT=NEXT_TASK_PATH_GATE REASON=' + blocker);
+    return false;
+  }
   return countActiveProjectLanes(states) < registry.max_parallel_projects;
+}
+
+async function claimSuccessorWithGitRef(project, task, masterSha) {
+  // GitHub's create-ref API atomically rejects duplicate ref names (422).
+  // This makes a durable per-project/per-task single-dispatch claim, even if
+  // two watchdog runs or manual retries race. A lost claim is NOT silently
+  // reused; manual reconciliation can inspect the exact task ref safely.
+  const runId = process.env.GITHUB_RUN_ID || '';
+  if (process.env.GITHUB_ACTIONS !== 'true' ||
+      process.env.GITHUB_WORKFLOW !== 'Agent Control Reliability Watchdog V2' ||
+      !/^[1-9][0-9]*$/.test(runId))
+    throw new Error('WATCHDOG_UNSERIALIZED_TASK_CLAIM_CONTEXT');
+  const ref = 'refs/tags/agent-control-claim/' + project + '/' + task.taskId;
+  const response = await fetch('https://api.github.com/repos/' + REPOSITORY + '/git/refs', {
+    method: 'POST',
+    headers: {
+      Accept: 'application/vnd.github+json',
+      Authorization: 'Bearer ' + TOKEN,
+      'X-GitHub-Api-Version': '2022-11-28',
+      'User-Agent': 'hongda-agent-control-watchdog-v2',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ ref, sha: masterSha }),
+  });
+  if (response.status === 422) {
+    console.log('WATCHDOG_PROJECT=' + project +
+      ' RESULT=NEXT_TASK_CLAIM_ALREADY_EXISTS REF=' + ref);
+    return null;
+  }
+  if (!response.ok) throw new Error('WATCHDOG_DISPATCH_CLAIM_CREATE_FAILED_' + response.status);
+  const created = await response.json();
+  if (created.ref !== ref || created.object?.sha !== masterSha)
+    throw new Error('WATCHDOG_DISPATCH_CLAIM_IDENTITY_MISMATCH');
+  return { ref, masterSha, runId };
 }
 
 async function inspectMergedNextTask(project, config, issue, state, registry) {
@@ -274,7 +313,7 @@ async function inspectMergedNextTask(project, config, issue, state, registry) {
   }
 
   const next = selected.task;
-  if (!(await hasProjectLaneCapacity(project, registry))) {
+  if (!(await hasProjectLaneCapacity(project, registry, next.allowedPaths))) {
     console.log('WATCHDOG_PROJECT=' + project + ' RESULT=NEXT_TASK_QUEUED_PARALLEL_LIMIT_2');
     return;
   }
@@ -301,17 +340,29 @@ async function inspectMergedNextTask(project, config, issue, state, registry) {
     console.log('WATCHDOG_PROJECT=' + project + ' RESULT=NEXT_TASK_RACE_RECHECK_REQUIRED');
     return;
   }
+  // An owner may edit/remove a comment between the first read and claim.
+  // Re-fetch the complete task history and require identical source text.
+  const currentComments = await recentOwnerTaskComments(issue.number);
   const successor = selectAuthorizedSuccessorTask({
-    state: freshState, comments, project, config, registry, masterSha: liveMasterSha,
+    state: freshState, comments: currentComments, project, config, registry,
+    masterSha: liveMasterSha,
   });
-  if (!(await hasProjectLaneCapacity(project, registry))) {
+  if (!(await hasProjectLaneCapacity(project, registry, next.allowedPaths))) {
     console.log('WATCHDOG_PROJECT=' + project + ' RESULT=NEXT_TASK_CAPACITY_CHANGED_BEFORE_DISPATCH');
     return;
   }
-  if (successor.status !== 'READY' || successor.task.commentId !== next.commentId) {
+  if (successor.status !== 'READY' ||
+      successor.task.commentId !== next.commentId ||
+      successor.task.contractBody !== next.contractBody) {
     console.log('WATCHDOG_PROJECT=' + project + ' RESULT=NEXT_TASK_PROVENANCE_CHANGED');
     return;
   }
+
+  // Claim the task atomically before mutating the Issue. The watched workflow
+  // is serialized via GitHub Actions concurrency; the immutable Git ref also
+  // rejects duplicate external claim attempts.
+  const claim = await claimSuccessorWithGitRef(project, next, liveMasterSha);
+  if (!claim) return;
 
   freshState.previous_completed_task_id = freshState.current_task_id;
   freshState.previous_completed_head = freshState.verified_head;
@@ -332,13 +383,30 @@ async function inspectMergedNextTask(project, config, issue, state, registry) {
   freshState.task_started_at_utc = new Date().toISOString();
   freshState.next_task_handoff_status = 'TRUSTED_OWNER_NEXT_TASK_DISPATCHING';
   freshState.next_task_handoff_comment_id = next.commentId;
+  freshState.allowed_paths = [...next.allowedPaths];
+  freshState.required_checks = [...next.checks];
+  freshState.next_task_dispatch_claim = claim;
+  freshState.owner_task_contract_comment_id = next.commentId;
+  freshState.auto_merge = false;
+  freshState.auto_production = false;
+  freshState.production_execution_authorized = false;
   freshState.next_action = 'Run owner-registered task ' + next.taskId +
     ' from exact master ' + liveMasterSha + '. CI/PM review/owner gates still apply; ' +
     'no automatic merge, Production DB, secrets or external messages.';
   // Persist the trusted task identity before dispatch. On transient API errors,
   // the next watchdog cycle can safely redispatch this READY task once.
   await updateState(freshIssue, freshState);
-  const confirmed = await dispatch(project, freshIssue, freshState, config, 'OWNER_PREAUTHORIZED_NEXT_PHASE');
+  const claimedIssue = await api('/repos/' + REPOSITORY + '/issues/' + issue.number);
+  const claimedState = parseState(claimedIssue.body);
+  if (claimedState?.next_task_dispatch_claim?.ref !== claim.ref ||
+      claimedState?.next_task_dispatch_claim?.runId !== claim.runId ||
+      claimedState.current_task_id !== next.taskId ||
+      claimedState.task_comment_id !== next.commentId ||
+      claimedState.status !== 'READY_FOR_CODEX') {
+    console.log('WATCHDOG_PROJECT=' + project + ' RESULT=DISPATCH_CLAIM_LOST_RECONCILIATION_REQUIRED');
+    return;
+  }
+  const confirmed = await dispatch(project, claimedIssue, claimedState, config, 'OWNER_PREAUTHORIZED_NEXT_PHASE');
   console.log('WATCHDOG_PROJECT=' + project + ' RESULT=NEXT_TASK_DISPATCHED' +
     ' TASK=' + next.taskId + ' RUN_ID=' + confirmed.id);
 }
