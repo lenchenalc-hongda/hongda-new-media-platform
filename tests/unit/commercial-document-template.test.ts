@@ -16,7 +16,7 @@ import {
   type CommercialPaymentMethod,
 } from '../../src/lib/commercial-documents/payment-methods';
 import {
-  initialDraft, blankItem, moneyToMinor, quantityToMilli, itemAmountMinor, formatMoney,
+  initialDraft, blankItem, moneyToMinor, unitPriceToTenThousandths, quantityToMilli, itemAmountMinor, formatMoney,
   sectionAmount, documentAmount, validateForPrint, isDraftShape,
   FIXED_SELLER_NAME, PAYMENT_PRESETS, SHIPPING_PRESETS, paymentPresetText, shippingPresetText,
   formatDocumentNumber, isGeneratedDocumentNumber, normalizeImportedDraft,
@@ -37,6 +37,18 @@ assert.equal(moneyToMinor('100000000000.000'), null, 'eleven integer digits is t
 assert.equal(moneyToMinor('-1'), null);
 assert.equal(moneyToMinor('1e6'), null);
 assert.equal(moneyToMinor('abc'), null);
+// 4-decimal UNIT PRICE is distinct from the backward-compatible 0.001 amount parser.
+assert.equal(unitPriceToTenThousandths('0.0064'), 64);
+assert.equal(unitPriceToTenThousandths('3.605'), 36050);
+assert.equal(unitPriceToTenThousandths('0.0001'), 1);
+assert.equal(unitPriceToTenThousandths('0.0000'), 0);
+assert.equal(unitPriceToTenThousandths('0.00641'), null, 'a fifth unit-price decimal is invalid');
+assert.equal(unitPriceToTenThousandths('1e-4'), null);
+assert.equal(unitPriceToTenThousandths('-0.0064'), null);
+assert.equal(itemAmountMinor({ ...blankItem('tiny4'), name: 'Tiny', quantity: '1', unitPrice: '0.0001' }), 0);
+assert.equal(itemAmountMinor({ ...blankItem('half4'), name: 'Half-up', quantity: '5', unitPrice: '0.0001' }), 1);
+assert.equal(itemAmountMinor({ ...blankItem('many4'), name: 'Gravure Film', quantity: '500000', unit: 'pcs', unitPrice: '0.0064' }), 3200000);
+
 assert.equal(quantityToMilli('1.25'), 1250);
 assert.equal(quantityToMilli('1.234'), 1234);
 assert.equal(quantityToMilli('0'), null);
@@ -80,9 +92,38 @@ for (const language of ['zh', 'en'] as const) {
 }
 threeDecimal.taxStatement = 'vat13';
 assert.equal(documentAmount(threeDecimal).amountMinor, 7203, 'Tax label cannot silently change entered prices');
-threeDecimal.sections[0].items[0].unitPrice = '3.6015';
-assert(validateForPrint(threeDecimal).some(error => error.includes('最多3位小数')));
+threeDecimal.sections[0].items[0].unitPrice = '3.60155';
+assert(validateForPrint(threeDecimal).some(error => error.includes('最多4位小数')));
+
 threeDecimal.sections[0].items[0].unitPrice = '3.601';
+
+// Regression: English screenshot 500,000 pcs x US$0.0064 must be US$3,200,
+// not an em dash. Existing US$5,960 must become US$9,160 with this film line.
+const fourDecimal = initialDraft('Precision QA');
+fourDecimal.kind = 'quotation';
+fourDecimal.buyerName = 'Buyer';
+fourDecimal.documentNo = 'HD-4DEC-500K';
+fourDecimal.currency = 'USD';
+fourDecimal.sections = [
+  { id: 'existing', title: 'Other sections', items: [
+    { ...blankItem('existing1'), name: 'Existing charges', quantity: '1', unitPrice: '5960' },
+  ] },
+  { id: 'film4', title: 'Heat Transfer Film', items: [
+    { ...blankItem('film4line'), name: 'Gravure Heat Transfer Films',
+      quantity: '500000', unit: 'pcs', unitPrice: '0.0064' },
+  ] },
+];
+assert.equal(sectionAmount(fourDecimal.sections[1]).amountMinor, 3200000);
+assert.equal(documentAmount(fourDecimal).amountMinor, 9160000);
+assert(formatMoney(3200000, 'USD').includes('3,200.00'));
+assert(formatMoney(9160000, 'USD').includes('9,160.00'));
+for (const language of ['en', 'zh'] as const) {
+  fourDecimal.language = language;
+  assert.deepEqual(validateForPrint(fourDecimal), [], '4-decimal price must be valid in ' + language);
+  const saved = JSON.parse(JSON.stringify(fourDecimal));
+  assert.equal(saved.sections[1].items[0].unitPrice, '0.0064', 'cloud JSON keeps full precision');
+  assert.equal(documentAmount(normalizeImportedDraft(saved, 'Precision QA')).amountMinor, 9160000);
+}
 
 const blankQuotation = initialDraft('业务员');
 assert.deepEqual(blankQuotation.sections, [], 'Section 03 must start with no preselected plate fee');
