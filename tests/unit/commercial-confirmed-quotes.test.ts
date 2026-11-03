@@ -5,10 +5,12 @@ import {readFileSync} from 'node:fs';
 import { initialDraft, blankItem, documentAmount, validateForPrint, type CommercialDocumentDraft } from '../../src/lib/commercial-documents/template';
 const migration=readFileSync(new URL('../../supabase/migrations/20261027095000_commercial_confirmed_quotes.sql',import.meta.url),'utf8');
 const guard=readFileSync(new URL('../../supabase/migrations/20261027100000_commercial_confirmed_guard.sql',import.meta.url),'utf8');
+const fourDigitGuard=readFileSync(new URL('../../supabase/migrations/20261103065800_commercial_quote_unit_price_four_decimals.sql',import.meta.url),'utf8');
 const payment=readFileSync(new URL('../../supabase/migrations/20261027101000_commercial_confirmed_payment_snapshot.sql',import.meta.url),'utf8');
 const api=readFileSync(new URL('../../src/app/api/commercial-documents/confirmed/route.ts',import.meta.url),'utf8');
 const history=readFileSync(new URL('../../src/app/api/commercial-documents/confirmed/[id]/route.ts',import.meta.url),'utf8');
 const editor=readFileSync(new URL('../../src/components/commercial-documents/DocumentWorkbench.tsx',import.meta.url),'utf8');
+const preview=readFileSync(new URL('../../src/components/commercial-documents/DocumentPreview.tsx',import.meta.url),'utf8');
 const library=readFileSync(new URL('../../src/components/commercial-documents/ConfirmedQuoteLibrary.tsx',import.meta.url),'utf8');
 const menu=readFileSync(new URL('../../src/lib/constants/navigation.ts',import.meta.url),'utf8');
 const e:CommercialDocumentDraft=initialDraft('Sales');
@@ -37,4 +39,15 @@ assert(editor.includes('确认并保存报价') && editor.includes("params.get('
 assert(editor.includes('setConfirmedVersion') && editor.includes('crypto.randomUUID()'));
 assert(library.includes('已保存报价') && library.includes('编辑修改'));
 assert(menu.includes("label: '已保存报价'"));
+assert(fourDigitGuard.includes("v_price !~ '^[0-9]{1,11}([.][0-9]{1,4})?$'"),
+  'Cloud confirmed quote guard must permit 4-digit unit prices');
+assert(fourDigitGuard.includes("v_qty !~ '^[0-9]{1,9}([.][0-9]{1,3})?$'"),
+  'Quantity precision remains at 3 decimals');
+assert(fourDigitGuard.includes('CONFIRMED_VERSIONS_ARE_IMMUTABLE'),
+  'Four-decimal guard retains historical version immutability');
+assert(fourDigitGuard.includes('v_total:=v_total+round(v_price::numeric*v_qty::numeric,3)'),
+  'Archive must match integer thousandths line amount calculation');
+assert(editor.includes('Unit price (up to 4 decimals)') && editor.includes('单价（最多4位小数）'));
+assert(preview.includes('unitPriceToTenThousandths(item.unitPrice)'),
+  'Preview must display exact four-decimal unit-price text instead of an em dash');
 console.log('commercial-confirmed-quotes.test.ts: PASS');

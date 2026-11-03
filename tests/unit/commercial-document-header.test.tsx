@@ -120,4 +120,30 @@ assert(pairHtml.indexOf('微信收款') < pairHtml.indexOf('支付宝收款'), '
 assert(pairHtml.includes('WeChat / Alipay'));
 assert(pairHtml.includes('document-payment-qr-grid'));
 assert(!pairHtml.includes('Beneficiary / Account name'), 'QR pair must not display bank-only fields');
+
+/** Screenshot regression: four-decimal USD price must appear in printable HTML. */
+for (const language of ['en', 'zh'] as const) {
+  const quote = initialDraft('业务员测试');
+  quote.language = language;
+  quote.currency = 'USD';
+  quote.buyerName = 'Buyer';
+  quote.documentNo = 'HD-4-DECIMAL-QA';
+  quote.sections = [
+    { id: 'existing', title: 'Existing charges', items: [
+      { ...blankItem('existing'), name: 'Existing subtotal', unit: 'pcs', quantity: '1', unitPrice: '5960' },
+    ] },
+    { id: 'film', title: 'Heat Transfer Film', items: [
+      { ...blankItem('film'), name: 'Gravure Heat Transfer Films', specification: '10x40mm & 17x60mm',
+        quantity: '500000', unit: 'pcs', unitPrice: '0.0064' },
+    ] },
+  ];
+  const rendered = renderToStaticMarkup(React.createElement(DocumentPreview, { draft: quote }));
+  assert(rendered.includes('0.0064 / pcs'), 'Four-decimal unit price must render instead of an em dash');
+  const filmAmount = formatMoney(3200000, 'USD');
+  assert(rendered.split(filmAmount).length - 1 >= 2,
+    'The 4-decimal film line amount and section subtotal must both show US$3,200.00');
+  assert(rendered.includes(formatMoney(9160000, 'USD')),
+    'Grand total must include the previously omitted film line (US$9,160.00)');
+}
+
 console.log('commercial-document-header: PASS (12 template/length combinations)');
