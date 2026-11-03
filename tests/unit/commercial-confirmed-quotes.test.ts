@@ -39,15 +39,13 @@ assert(editor.includes('确认并保存报价') && editor.includes("params.get('
 assert(editor.includes('setConfirmedVersion') && editor.includes('crypto.randomUUID()'));
 assert(library.includes('已保存报价') && library.includes('编辑修改'));
 assert(menu.includes("label: '已保存报价'"));
-assert(fourDigitGuard.includes("v_price !~ '^[0-9]{1,11}([.][0-9]{1,4})?
-"),
+assert(fourDigitGuard.includes("v_price !~ '^[0-9]{1,11}([.][0-9]{1,4})?$'"),
   'Cloud confirmed quote guard must permit 4-digit unit prices');
-assert(fourDigitGuard.includes("v_qty !~ '^[0-9]{1,9}([.][0-9]{1,3})?
-"),
+assert(fourDigitGuard.includes("v_qty !~ '^[0-9]{1,9}([.][0-9]{1,3})?$'"),
   'Quantity precision remains at 3 decimals');
 assert(fourDigitGuard.includes('CONFIRMED_VERSIONS_ARE_IMMUTABLE'),
   'Four-decimal guard retains historical version immutability');
-assert(fourDigitGuard.includes("v_total:=v_total+round(v_price::numeric*v_qty::numeric,3)"),
+assert(fourDigitGuard.includes('v_total:=v_total+round(v_price::numeric*v_qty::numeric,3)'),
   'Archive must match integer thousandths line amount calculation');
 assert(editor.includes('Unit price (up to 4 decimals)') && editor.includes('单价（最多4位小数）'));
 assert(preview.includes('unitPriceToTenThousandths(item.unitPrice)'),
