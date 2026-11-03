@@ -16,23 +16,6 @@ export default function PublishQueuePage() {
     ]).then(([j, l]) => { setJobs(j.jobs || []); setLogs(l.logs || []); setLoading(false); });
   }, []);
 
-  const handleMockPublish = async () => {
-    const res = await fetch('/api/oa/publish', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        action: 'publish', articleId: 'art_' + Date.now(), title: '测试文章 ' + new Date().toLocaleDateString(),
-        score: 75, riskLevel: '低', bodyHtml: '<p>测试内容</p>', summary: '测试发布',
-      }),
-    });
-    const data = await res.json();
-    if (data.success) {
-      setJobs(prev => [data.job, ...prev]);
-      alert('✅ Mock 发布成功（模拟）');
-    } else {
-      alert('❌ ' + (data.error || '发布失败'));
-    }
-  };
-
   const statusColors: Record<string, string> = {
     published: 'bg-green-100 text-green-700',
     publishing: 'bg-blue-100 text-blue-700',
@@ -44,7 +27,7 @@ export default function PublishQueuePage() {
 
   return (
     <AppLayout>
-      <PageHeader title="发布队列" description="文章发布管理与日志" />
+      <PageHeader title="发布队列（尚未接入微信）" description="仅供查看非持久化模拟记录；真实微信草稿箱写入和发布均未启用" />
 
       {/* Actions */}
       <div className="flex items-center justify-between mb-4">
@@ -54,7 +37,7 @@ export default function PublishQueuePage() {
           <button className={`px-3 py-1.5 text-xs rounded-lg border transition-colors ${tab === 'logs' ? 'bg-blue-50 text-blue-700 border-blue-200' : 'bg-white text-gray-500 border-gray-200'}`}
             onClick={() => setTab('logs')}>发布日志 ({logs.length})</button>
         </div>
-        <button className="btn-primary btn-sm text-xs" onClick={handleMockPublish}>+ Mock 发布测试</button>
+        <span className="text-xs text-amber-700">当前不可发布或同步微信草稿</span>
       </div>
 
       {loading ? (
