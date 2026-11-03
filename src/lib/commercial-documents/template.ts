@@ -217,6 +217,20 @@ export function moneyToMinor(value: string): number | null {
   return Number.isSafeInteger(thousandths) ? thousandths : null;
 }
 
+/**
+ * Unit prices may have four decimal places (e.g. USD 0.0064 per piece).
+ * Parse in integer 0.0001 currency units, never round the input to 0.001.
+ * The public amountMinor format remains integer thousandths for backward
+ * compatibility with existing quotation drafts, PDF totals and archives.
+ */
+export function unitPriceToTenThousandths(value: string): number | null {
+  const text = value.trim();
+  if (!/^\d{1,11}(?:\.\d{1,4})?$/.test(text)) return null;
+  const [whole, fraction = ''] = text.split('.');
+  const tenThousandths = Number(whole) * 10000 + Number(fraction.padEnd(4, '0'));
+  return Number.isSafeInteger(tenThousandths) ? tenThousandths : null;
+}
+
 /** Quantity is fixed-point 1/1000 unit, not binary float. */
 export function quantityToMilli(value: string): number | null {
   const text = value.trim();
@@ -228,13 +242,13 @@ export function quantityToMilli(value: string): number | null {
 
 export function itemAmountMinor(item: DocumentItem): number | null {
   if (item.mode === 'catalog') return null;
-  const minor = moneyToMinor(item.unitPrice);
+  const priceTenThousandths = unitPriceToTenThousandths(item.unitPrice);
   const milli = quantityToMilli(item.quantity);
-  if (minor === null || milli === null) return null;
-  // Both operands are integer thousandths. Multiply exactly, then round each
-  // line to 0.001 (half-up for these nonnegative values). Never round the
-  // entered unit price to cents before multiplication.
-  const total = (BigInt(minor) * BigInt(milli) + BigInt(500)) / BigInt(1000);
+  if (priceTenThousandths === null || milli === null) return null;
+  // Unit price uses 0.0001, quantity uses 0.001. Calculate with integers
+  // and round the final line amount to 0.001 currency units (half-up).
+  // Never round the four-decimal unit price before multiplication.
+  const total = (BigInt(priceTenThousandths) * BigInt(milli) + BigInt(5000)) / BigInt(10000);
   return total <= BigInt(Number.MAX_SAFE_INTEGER) ? Number(total) : null;
 }
 
@@ -311,7 +325,7 @@ export function validateForPrint(draft: CommercialDocumentDraft): string[] {
     for (const [lineIndex, item] of section.items.entries()) {
       const name = prefix + ' 第 ' + (lineIndex + 1) + ' 行';
       if (!item.name.trim()) errors.push(name + '：缺少产品名称');
-      if (moneyToMinor(item.unitPrice) === null) errors.push(name + '：请输入有效单价（最多3位小数）');
+      if (unitPriceToTenThousandths(item.unitPrice) === null) errors.push(name + '：请输入有效单价（最多4位小数）');
       if (item.mode === 'amount' && quantityToMilli(item.quantity) === null) {
         errors.push(name + '：请输入有效数量（最多3位小数）');
       }
