@@ -49,20 +49,7 @@ begin
    v_price:=coalesce(v_line->>'unitPrice','');
    v_qty:=coalesce(v_line->>'quantity','');
    if v_name='' or v_mode not in ('amount','catalog') or
-     v_price !~ '^[0-9]{1,11}([.][0-9]{1,4})?
-   then raise exception 'INVALID_LINE';end if;
-   if v_mode='amount' then
-    if v_qty !~ '^[0-9]{1,9}([.][0-9]{1,3})?$' or v_qty::numeric<=0
-    then raise exception 'INVALID_QUANTITY'; end if;
-    v_total:=v_total+round(v_price::numeric*v_qty::numeric,3);
-   end if;
-  end loop;
- end loop;
- if v_lines>1000 or v_total*1000<>new.amount_thousandths or
- v_total>9007199254740.991
- then raise exception 'AMOUNT_MISMATCH';end if;
- return new;
-end $guard$;
+     v_price !~ '^[0-9]{1,11}([.][0-9]{1,4})?$'
    then raise exception 'INVALID_LINE';end if;
    if v_mode='amount' then
     if v_qty !~ '^[0-9]{1,9}([.][0-9]{1,3})?$' or v_qty::numeric<=0
