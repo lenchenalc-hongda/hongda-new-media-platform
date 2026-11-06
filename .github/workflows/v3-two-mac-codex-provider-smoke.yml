@@ -1,0 +1,97 @@
+name: V3 Two Mac DeepSeek Codex Sandboxed Smoke
+
+on:
+  push:
+    branches: [qa/v3-dual-mac-runner-proof-20261107]
+    paths:
+      - '.github/workflows/v3-two-mac-codex-provider-smoke.yml'
+
+permissions:
+  actions: read
+  contents: read
+
+concurrency:
+  group: v3-two-mac-deepseek-qa-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  no-write-model-inference:
+    name: Codex Mac Slot ${{ matrix.slot }}
+    if: github.repository == 'lenchenalc-hongda/hongda-new-media-platform' && github.ref == 'refs/heads/qa/v3-dual-mac-runner-proof-20261107'
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        slot: [A, B]
+    runs-on: [self-hosted, macOS, X64, hongda-agent-control]
+    timeout-minutes: 6
+    steps:
+      - name: Run one tiny original JavaScript model-only request (no repo, writes or logs)
+        shell: bash
+        run: |
+          set -euo pipefail
+          set +x
+          if [[ -z "${DEEPSEEK_API_KEY:-}" ]]; then
+            export DEEPSEEK_API_KEY="$(launchctl getenv DEEPSEEK_API_KEY 2>/dev/null || true)"
+          fi
+          if [[ -z "${DEEPSEEK_API_KEY:-}" ]]; then
+            echo "V3_DEEPSEEK_RUNNER_KEY=UNAVAILABLE"
+            exit 1
+          fi
+          binary="$(command -v codex || true)"
+          if [[ -z "$binary" && -x "$HOME/.codex/plugins/.plugin-appserver/codex-cli/bin/codex" ]]; then
+            binary="$HOME/.codex/plugins/.plugin-appserver/codex-cli/bin/codex"
+          fi
+          if [[ -z "$binary" ]]; then
+            echo "V3_CODEX_CLI=UNAVAILABLE"
+            exit 1
+          fi
+          echo "V3_CLI_PRESENT=YES"
+          temp="$(mktemp -d)"
+          trap 'rm -rf "$temp"' EXIT
+          cd "$temp"
+          # All model output and errors are quarantined; NEVER print an auth
+          # header, secret, file contents, private prompt or provider trace.
+          # This generative test never downloads business code or writes a PR.
+          if ! "$binary" exec --skip-git-repo-check --sandbox read-only \
+              -m deepseek-v4-flash --output-last-message "$temp/answer.txt" \
+              "Write exactly one original JavaScript source line: export function addTwo(a,b){ return a+b; } Return code only. No files or network tools." \
+              >"$temp/provider.log" 2>&1; then
+            echo "V3_MODEL_SMOKE=FAILED_CLI_OR_PROVIDER"
+            exit 1
+          fi
+          if [[ ! -s "$temp/answer.txt" ]] || ! grep -Fq 'addTwo' "$temp/answer.txt"; then
+            echo "V3_MODEL_SMOKE=INVALID_GENERATION"
+            exit 1
+          fi
+          echo "V3_MODEL_SMOKE=PASS"
+          echo "V3_RUNNER=${RUNNER_NAME}"
+          echo "V3_REAL_CODING_TASK_COUNTED=NO"
+          echo "V3_PRODUCTION_WRITES=ZERO"
+
+  verify-distinct-mac-provider:
+    name: Verify two distinct Codex Mac slots
+    needs: [no-write-model-inference]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Prove both model calls passed on different physical runners
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const [owner,repo]=process.env.GITHUB_REPOSITORY.split('/');
+            const {data}=await github.rest.actions.listJobsForWorkflowRun({
+              owner,repo,run_id:Number(process.env.GITHUB_RUN_ID),per_page:100,
+            });
+            const jobs=data.jobs.filter(j=>/^Codex Mac Slot [AB]$/.test(j.name));
+            if(jobs.length!==2||jobs.some(j=>j.conclusion!=='success')){
+              core.setFailed('V3_TWO_CODEX_MODEL_CALLS_NOT_BOTH_PROVEN');
+            }else if(!jobs[0].runner_id||!jobs[1].runner_id||
+                jobs[0].runner_id===jobs[1].runner_id){
+              core.setFailed('V3_TWO_DISTINCT_MAC_RUNNERS_NOT_PROVEN');
+            }else{
+              core.info('V3_TWO_INDEPENDENT_MAC_MODEL_CALLS=PASS');
+              core.info('V3_MAC_A='+jobs[0].runner_name);
+              core.info('V3_MAC_B='+jobs[1].runner_name);
+              core.info('V3_REAL_CODING_CONTINUATION_COUNT=0');
+            }
