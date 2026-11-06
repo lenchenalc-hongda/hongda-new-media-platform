@@ -71,9 +71,22 @@ organizations/<organization_id>/wos/<entity>/<entity_id>/images/<category>/
 
 图片 ID 是不可变身份。新图片只能追加，不能覆盖已有记录或对象键。重复图片 ID、重复
 对象键、复用旧对象路径均失败关闭。离线契约没有受认证数据库或不可变服务端行可供核验，
-因此任何调用方 `replay` 声明都失败关闭并返回 `REPLAY_MISMATCH`；即使候选身份、对象键、
-fingerprint 与重放声明完全自洽，也不能自证为服务端已保存事实。未来受认证服务器 RPC
-必须将重放声明绑定到服务端不可变图片身份和已存 fingerprint，不能信任客户端成对声明。
+因此调用方 `replay` 声明本身永远不能自证为服务端已保存事实，即使候选身份、对象键、
+fingerprint 与重放声明完全自洽也不行；缺失服务端证据、或声明中夹带 `trusted`、
+`trustedStoredFact`、`serverVerified` 等伪信任标志，都返回 `REPLAY_MISMATCH`。
+
+可信重放必须走一条独立于客户端 JSON 的通道：调用方注入由未来受认证服务器上下文提供的
+`replayVerifier` 校验函数，该函数返回服务端派生、不可变且带 canonical 键和已存 fingerprint
+的图片事实。离线契约随后把该事实逐项绑定到当前受信组织、入口、实体、版本和 profile、
+精确图片 ID、规范对象键、已存 fingerprint 与 `READY` 状态，任一字段不一致、外来组织或
+版本、事实格式错误、校验函数缺失或抛错都返回 `REPLAY_MISMATCH`。缺少服务端派生事实时
+不虚构其存在。
+
+通过绑定后的可信重放只作为只读幂等观察：返回同一张既有图片投影，不追加、不覆盖、不替代，
+也绝不把 `persisted`、`uploadOccurred`、`storageAuthorizationVerified` 或
+`signedUrlIssued` 置为 true。该纯契约本身不证明服务器权威，也不执行或证明任何数据库写入；
+`replayVerifier` 只是未来受认证服务器集成预留的注入点，不引入任何可由客户端 JSON 声明为
+`serverVerified=true` 的宽松来源。
 
 新图片必须是 `READY`。`UPLOADING`、`FAILED`、`QUARANTINED`、`SUPERSEDED` 或
 `ARCHIVED` 都不能成为新的当前版本图片。
@@ -124,6 +137,10 @@ pending 不能绕过菲林、治具、来料、签样、技术/主管确认、�
 - 路径穿越、公开 URL、任意 bucket、MIME/字节阈值，以及 upsert/overwrite 的真值、
   非布尔值、大小写/空白/mode 变体；
 - 重复图片 ID、重复对象键、自洽客户端重放、fingerprint 不一致且没有受信存储事实；
+- 缺失 `replayVerifier` 的合法重放声明、夹带 `trustedStoredFact`/`trusted` 伪信任标志的
+  完全序列化伪造对、外来组织与外来版本的校验事实、以及 fingerprint 不一致的校验事实；
+- 注入服务端不可变校验结果后的只读幂等可信重放：返回同一图片投影且不追加、不覆盖、
+  不替代，所有持久化/上传/存储授权/签名 URL 证据仍为 false；
 - 旧图片替代后的 `SUPERSEDED` 投影和新版本追加；
 - 严格前进的 `V1 -> V2`，以及 `V3 -> V2`、`V2 -> V1`、相等、格式错误和无法比较版本；
 - baseline 替换后车间确认清空；

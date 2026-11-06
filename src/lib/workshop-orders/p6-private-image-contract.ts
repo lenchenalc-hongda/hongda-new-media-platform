@@ -74,6 +74,27 @@ export interface WosPrivateImageReplayClaim {
   readonly fingerprint: string;
 }
 
+export interface WosPrivateImageStoredFact {
+  readonly organizationId: string;
+  readonly entityType: WosEntityType;
+  readonly entityId: string;
+  readonly versionLabel: string;
+  readonly uploadedByProfileId: string;
+  readonly imageId: string;
+  readonly objectKey: string;
+  readonly fingerprint: string;
+  readonly imageStatus: 'READY';
+}
+
+export interface WosPrivateImageReplayVerificationRequest {
+  readonly trustedBinding: WosPrivateImageTrustedBinding;
+  readonly claim: WosPrivateImageReplayClaim;
+}
+
+export type WosPrivateImageReplayVerifier = (
+  request: WosPrivateImageReplayVerificationRequest,
+) => WosPrivateImageStoredFact | null;
+
 export interface WosPrivateImageContractInput {
   readonly trustedBinding: WosPrivateImageTrustedBinding;
   readonly candidate: WosPrivateImageIntent;
@@ -84,6 +105,7 @@ export interface WosPrivateImageContractInput {
   readonly signedSampleRequired?: boolean;
   readonly action?: WosPrivateImageAction;
   readonly replay?: WosPrivateImageReplayClaim | null;
+  readonly replayVerifier?: WosPrivateImageReplayVerifier | null;
 }
 
 export type WosPrivateImageBlockerCode =
@@ -576,17 +598,158 @@ function proposedReferenceImage(
   };
 }
 
+const SPOOFED_TRUST_KEYS = new Set([
+  'trusted',
+  'trustedstoredfact',
+  'serververified',
+  'serververifiedfact',
+  'verifiedstoredfact',
+  'storageverifiedfact',
+  'storedfact',
+  'trustedfact',
+]);
+
+function hasSpoofedTrustKey(value: unknown): boolean {
+  if (!isRecord(value)) return false;
+  return Object.keys(value).some((key) =>
+    SPOOFED_TRUST_KEYS.has(key.trim().toLowerCase()),
+  );
+}
+
+function hasSpoofedTrustEvidence(value: unknown): boolean {
+  if (!isRecord(value)) return false;
+  if (hasSpoofedTrustKey(value)) return true;
+  return Object.values(value).some((nested) =>
+    hasSpoofedTrustEvidence(nested),
+  );
+}
+
+function isStoredFactRecord(
+  value: unknown,
+): value is WosPrivateImageStoredFact {
+  return isRecord(value)
+    && isText(value.organizationId)
+    && isEntityType(value.entityType)
+    && isText(value.entityId)
+    && isText(value.versionLabel)
+    && isText(value.uploadedByProfileId)
+    && isText(value.imageId)
+    && isText(value.objectKey)
+    && isText(value.fingerprint)
+    && value.imageStatus === 'READY';
+}
+
 function validateReplay(
   input: WosPrivateImageContractInput,
+  binding: WosPrivateImageTrustedBinding,
+  candidate: WosPrivateImageIntent,
   blockers: WosPrivateImageBlocker[],
 ): WosReferenceImage | null {
   const { replay } = input;
   if (replay === null || replay === undefined) return null;
-  // This offline module cannot authenticate stored image fingerprints. A
-  // caller-controlled claim must never become replay evidence, even when it
-  // matches every candidate field and its own client-provided fingerprint.
-  addBlocker(blockers, 'REPLAY_MISMATCH');
-  return null;
+
+  // A caller-controlled JSON claim can never self-attest, even when every
+  // field matches the candidate and its own fingerprint. Spoofed trust
+  // evidence inside the claim is rejected outright.
+  if (
+    !isRecord(replay)
+    || !isText(replay.imageId)
+    || !isText(replay.objectKey)
+    || !isText(replay.fingerprint)
+    || hasSpoofedTrustEvidence(replay)
+    || hasSpoofedTrustKey(input)
+  ) {
+    addBlocker(blockers, 'REPLAY_MISMATCH');
+    return null;
+  }
+
+  // Trusted exact replay is a read-only idempotent observation. A candidate
+  // that declares a supersession is a write intent, not a replay.
+  if (candidate.supersedesImageId !== null) {
+    addBlocker(blockers, 'REPLAY_MISMATCH');
+    return null;
+  }
+
+  // Server evidence must arrive through the separately injected verification
+  // callback supplied by the future authenticated server context. A JSON
+  // object in client input is not that channel.
+  const verifier = input.replayVerifier;
+  if (typeof verifier !== 'function') {
+    addBlocker(blockers, 'REPLAY_MISMATCH');
+    return null;
+  }
+
+  let fact: unknown;
+  try {
+    fact = verifier({
+      trustedBinding: binding,
+      claim: replay as WosPrivateImageReplayClaim,
+    });
+  } catch {
+    addBlocker(blockers, 'REPLAY_MISMATCH');
+    return null;
+  }
+
+  if (!isStoredFactRecord(fact)) {
+    addBlocker(blockers, 'REPLAY_MISMATCH');
+    return null;
+  }
+
+  let expectedKey: string;
+  try {
+    expectedKey = buildWosPrivateImageObjectKey({
+      organizationId: binding.organizationId,
+      entityType: binding.entityType,
+      entityId: binding.entityId,
+      category: candidate.category,
+      versionLabel: binding.versionLabel,
+      imageId: candidate.id,
+      fileName: candidate.fileName,
+    });
+  } catch {
+    addBlocker(blockers, 'REPLAY_MISMATCH');
+    return null;
+  }
+
+  if (
+    fact.organizationId !== binding.organizationId
+    || fact.entityType !== binding.entityType
+    || fact.entityId !== binding.entityId
+    || fact.versionLabel !== binding.versionLabel
+    || fact.uploadedByProfileId !== binding.profile.profileId
+    || fact.imageId !== candidate.id
+    || fact.imageId !== replay.imageId
+    || fact.objectKey !== expectedKey
+    || fact.objectKey !== replay.objectKey
+    || fact.objectKey !== candidate.storagePath
+    || fact.fingerprint !== replay.fingerprint
+    || fact.fingerprint !== candidate.fingerprint
+    || fact.imageStatus !== 'READY'
+  ) {
+    addBlocker(blockers, 'REPLAY_MISMATCH');
+    return null;
+  }
+
+  const existing = input.existingImages.find(
+    (image) =>
+      image.id === fact.imageId
+      && image.storagePath === fact.objectKey,
+  );
+  if (
+    !existing
+    || existing.organizationId !== fact.organizationId
+    || existing.entityType !== fact.entityType
+    || existing.entityId !== fact.entityId
+    || existing.versionLabel !== fact.versionLabel
+    || existing.uploadedByProfileId !== fact.uploadedByProfileId
+    || existing.storageBucket !== WOS_PRIVATE_IMAGE_BUCKET
+    || existing.imageStatus !== 'READY'
+  ) {
+    addBlocker(blockers, 'REPLAY_MISMATCH');
+    return null;
+  }
+
+  return existing;
 }
 
 function uniqueExistingImages(
@@ -924,7 +1087,7 @@ export function evaluateWosPrivateImageVersionContract(
     addBlocker(blockers, 'IMAGE_NOT_READY');
   }
 
-  const replayed = validateReplay(input, blockers);
+  const replayed = validateReplay(input, binding, candidate, blockers);
   const duplicateId = input.existingImages.some(
     (image) => image.id === candidate.id,
   );

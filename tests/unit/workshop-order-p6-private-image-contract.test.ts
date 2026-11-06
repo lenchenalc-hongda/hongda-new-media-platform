@@ -12,6 +12,9 @@ import {
   evaluateWosPrivateImageVersionContract,
   type WosPrivateImageContractInput,
   type WosPrivateImageIntent,
+  type WosPrivateImageReplayClaim,
+  type WosPrivateImageReplayVerifier,
+  type WosPrivateImageStoredFact,
   type WosPrivateImageTrustedBinding,
 } from '../../src/lib/workshop-orders/p6-private-image-contract';
 
@@ -433,6 +436,148 @@ assertBlocked(contractFor('PRODUCTION_ORDER', {
       'sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff',
   },
 }), 'REPLAY_MISMATCH');
+
+// A valid-looking replay claim is still missing server evidence when no
+// separately injected verification callback is provided.
+const replayClaim: WosPrivateImageReplayClaim = {
+  imageId: newImageId,
+  objectKey: replayImage.storagePath,
+  fingerprint,
+};
+assertBlocked(contractFor('PRODUCTION_ORDER', {
+  existingImages: [replayImage],
+  baselineImageIds: [newImageId],
+  replay: replayClaim,
+}), 'REPLAY_MISMATCH');
+
+// A fully serialized forged pair that smuggles user-supplied trust evidence
+// into the replay claim must never self-attest.
+const forgedTrustedReplay = contractFor('PRODUCTION_ORDER', {
+  existingImages: [replayImage],
+  baselineImageIds: [newImageId],
+  replay: {
+    ...replayClaim,
+    trusted: true,
+    trustedStoredFact: {
+      organizationId,
+      entityType: 'PRODUCTION_ORDER',
+      entityId: productionId,
+      versionLabel: 'V2',
+      uploadedByProfileId: profileId,
+      imageId: newImageId,
+      objectKey: replayImage.storagePath,
+      fingerprint,
+      imageStatus: 'READY',
+    },
+  } as unknown as WosPrivateImageReplayClaim,
+});
+assertBlocked(
+  JSON.parse(JSON.stringify(forgedTrustedReplay)) as ContractInput,
+  'REPLAY_MISMATCH',
+);
+
+function validStoredFact(): WosPrivateImageStoredFact {
+  return {
+    organizationId,
+    entityType: 'PRODUCTION_ORDER',
+    entityId: productionId,
+    versionLabel: 'V2',
+    uploadedByProfileId: profileId,
+    imageId: newImageId,
+    objectKey: replayImage.storagePath,
+    fingerprint,
+    imageStatus: 'READY',
+  };
+}
+
+// Even a real server verifier cannot hand back a foreign organization fact.
+const foreignOrgVerifier: WosPrivateImageReplayVerifier = () => ({
+  ...validStoredFact(),
+  organizationId: foreignOrganizationId,
+});
+assertBlocked(contractFor('PRODUCTION_ORDER', {
+  existingImages: [replayImage],
+  baselineImageIds: [newImageId],
+  replay: replayClaim,
+  replayVerifier: foreignOrgVerifier,
+}), 'REPLAY_MISMATCH');
+
+// A foreign version fact is equally rejected.
+const foreignVersionVerifier: WosPrivateImageReplayVerifier = () => ({
+  ...validStoredFact(),
+  versionLabel: 'V3',
+});
+assertBlocked(contractFor('PRODUCTION_ORDER', {
+  existingImages: [replayImage],
+  baselineImageIds: [newImageId],
+  replay: replayClaim,
+  replayVerifier: foreignVersionVerifier,
+}), 'REPLAY_MISMATCH');
+
+// A mismatched stored fingerprint cannot become replay evidence.
+const mismatchedFingerprintVerifier: WosPrivateImageReplayVerifier = () => ({
+  ...validStoredFact(),
+  fingerprint:
+    'sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff',
+});
+assertBlocked(contractFor('PRODUCTION_ORDER', {
+  existingImages: [replayImage],
+  baselineImageIds: [newImageId],
+  replay: replayClaim,
+  replayVerifier: mismatchedFingerprintVerifier,
+}), 'REPLAY_MISMATCH');
+
+// A malformed server fact is rejected rather than trusted.
+const malformedFactVerifier: WosPrivateImageReplayVerifier = () =>
+  ({ imageId: newImageId }) as WosPrivateImageStoredFact;
+assertBlocked(contractFor('PRODUCTION_ORDER', {
+  existingImages: [replayImage],
+  baselineImageIds: [newImageId],
+  replay: replayClaim,
+  replayVerifier: malformedFactVerifier,
+}), 'REPLAY_MISMATCH');
+
+// A verifier that finds no server fact is missing server evidence.
+const noFactVerifier: WosPrivateImageReplayVerifier = () => null;
+assertBlocked(contractFor('PRODUCTION_ORDER', {
+  existingImages: [replayImage],
+  baselineImageIds: [newImageId],
+  replay: replayClaim,
+  replayVerifier: noFactVerifier,
+}), 'REPLAY_MISMATCH');
+
+// A separately injected, server-side immutable verification result makes
+// trusted exact replay a read-only idempotent observation: the same existing
+// image projection is returned with no append, overwrite, or supersession,
+// and no persistence evidence is ever asserted.
+const trustedReplayVerifier: WosPrivateImageReplayVerifier = (request) => {
+  assert.deepEqual(request.trustedBinding, trustedFor('PRODUCTION_ORDER'));
+  assert.deepEqual(request.claim, replayClaim);
+  return validStoredFact();
+};
+const verifiedReplay = evaluateWosPrivateImageVersionContract(
+  contractFor('PRODUCTION_ORDER', {
+    existingImages: [replayImage],
+    baselineImageIds: [newImageId],
+    replay: replayClaim,
+    replayVerifier: trustedReplayVerifier,
+  }),
+);
+assert.equal(verifiedReplay.status, WOS_PRIVATE_IMAGE_PENDING_STATUS);
+assert.equal(verifiedReplay.offlineContractConsistent, true);
+assert.deepEqual(verifiedReplay.blockers, []);
+assert.equal(verifiedReplay.persisted, false);
+assert.equal(verifiedReplay.uploadOccurred, false);
+assert.equal(verifiedReplay.storagePolicyVerified, false);
+assert.equal(verifiedReplay.storageAuthorizationVerified, false);
+assert.equal(verifiedReplay.signedUrlIssued, false);
+assert.equal(verifiedReplay.publicUrlIssued, false);
+assert.equal(verifiedReplay.serverVerification, 'REQUIRED');
+assert.deepEqual(
+  verifiedReplay.proposedImages?.map((image) => image.id),
+  [newImageId],
+);
+assert.equal(verifiedReplay.proposedImages?.[0], replayImage);
 
 const oldImage = imageFor('PRODUCTION_ORDER', {
   id: oldImageId,
