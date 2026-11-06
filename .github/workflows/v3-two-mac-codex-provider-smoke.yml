@@ -50,6 +50,51 @@ jobs:
           temp="$(mktemp -d)"
           trap 'rm -rf "$temp"' EXIT
           cd "$temp"
+          # A 200 from GET /models is NOT a valid Codex/Responses proof.
+          # First test the actual provider's Responses API with a bounded,
+          # original request. Never print the request key or response body.
+          direct_status="$(curl --silent --max-time 45 \\
+            --output "$temp/direct-response.json" --write-out '%{http_code}' \\
+            -H "Authorization: Bearer ${DEEPSEEK_API_KEY}" \\
+            -H 'Content-Type: application/json' \\
+            --data '{"model":"deepseek-flash","input":"Return exactly: ready","max_output_tokens":48,"stream":false}' \\
+            'https://api.deepseek.com/responses' 2>"$temp/direct-curl.log" || true)"
+          case "$direct_status" in
+            200)
+              echo "V3_DIRECT_RESPONSES_HTTP=PASS"
+              ;;
+            400|401|403|404|422|429)
+              echo "V3_DIRECT_RESPONSES_HTTP=HTTP_${direct_status}"
+              exit 1
+              ;;
+            *)
+              echo "V3_DIRECT_RESPONSES_HTTP=NETWORK_OR_OTHER"
+              exit 1
+              ;;
+          esac
+          # The Mac user's interactive Codex config may be pointed at OpenAI
+          # or cc-switch. Do not inherit it. Isolate ONLY this one smoke job,
+          # use a dedicated provider ID, and read the existing DeepSeek key
+          # from the environment. Never write a bearer token to config files.
+          mkdir -p "$temp/codex-home"
+          cat > "$temp/codex-home/config.toml" <<'TOML'
+          model = "deepseek-flash"
+          model_provider = "hongda_deepseek_smoke"
+          preferred_auth_method = "apikey"
+          forced_login_method = "api"
+          model_reasoning_effort = "low"
+          web_search = "disabled"
+
+          [model_providers.hongda_deepseek_smoke]
+          name = "DeepSeek sandbox"
+          base_url = "https://api.deepseek.com"
+          env_key = "DEEPSEEK_API_KEY"
+          wire_api = "responses"
+          requires_openai_auth = false
+          TOML
+          chmod 600 "$temp/codex-home/config.toml"
+          export CODEX_HOME="$temp/codex-home"
+          echo "V3_CODEX_ISOLATED_DEEPSEEK_PROVIDER=YES"
           # All model output and errors are quarantined; NEVER print an auth
           # header, secret, file contents, private prompt or provider trace.
           # This generative test never downloads business code or writes a PR.
