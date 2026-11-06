@@ -1,0 +1,73 @@
+name: V3 Two Mac DeepSeek Provider Diagnostics (No Model Spend)
+
+on:
+  push:
+    branches: [qa/v3-dual-mac-runner-proof-20261107]
+    paths:
+      - '.github/workflows/v3-two-mac-provider-diagnostic.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  mac-deepseek-read-only-diagnostics:
+    name: DeepSeek Diagnostic ${{ matrix.lane }}
+    if: github.repository == 'lenchenalc-hongda/hongda-new-media-platform' && github.ref == 'refs/heads/qa/v3-dual-mac-runner-proof-20261107'
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        lane: [A, B]
+    runs-on: [self-hosted, macOS, X64, hongda-agent-control]
+    timeout-minutes: 4
+    steps:
+      - name: Read-only provider /models authentication and CLI flags (NEVER output credentials)
+        shell: bash
+        run: |
+          set -euo pipefail
+          set +x
+          if [[ -z "${DEEPSEEK_API_KEY:-}" ]]; then
+            export DEEPSEEK_API_KEY="$(launchctl getenv DEEPSEEK_API_KEY 2>/dev/null || true)"
+          fi
+          if [[ -z "${DEEPSEEK_API_KEY:-}" ]]; then
+            echo 'V3_KEY_STATUS=MISSING'
+            exit 1
+          fi
+          echo 'V3_KEY_STATUS=PRESENT'
+          binary="$(command -v codex || true)"
+          if [[ -z "$binary" && -x "$HOME/.codex/plugins/.plugin-appserver/codex-cli/bin/codex" ]]; then
+            binary="$HOME/.codex/plugins/.plugin-appserver/codex-cli/bin/codex"
+          fi
+          [[ -n "$binary" ]] || { echo 'V3_CLI_STATUS=MISSING'; exit 1; }
+          echo 'V3_CLI_STATUS=PRESENT'
+          version="$("$binary" --version 2>/dev/null || true)"
+          case "$version" in codex*) echo 'V3_CLI_VERSION_CATEGORY=CODEX_CLI' ;; *) echo 'V3_CLI_VERSION_CATEGORY=UNKNOWN' ;; esac
+          temp="$(mktemp -d)"
+          trap 'rm -rf "$temp"' EXIT
+          "$binary" exec --help >"$temp/help" 2>&1 || true
+          for flag in '--skip-git-repo-check' '--sandbox' '--output-last-message'; do
+            if grep -Fq -- "$flag" "$temp/help"; then
+              echo "V3_CLI_FLAG_${flag#--}=AVAILABLE"
+            else
+              echo "V3_CLI_FLAG_${flag#--}=NOT_AVAILABLE"
+            fi
+          done
+          if [[ -n "${HTTPS_PROXY:-}${https_proxy:-}${HTTP_PROXY:-}${http_proxy:-}" ]]; then
+            echo 'V3_PROXY_STATUS=PRESENT'
+          else
+            echo 'V3_PROXY_STATUS=NOT_INHERITED'
+          fi
+          # This is GET /models only: no generative API billing and no payload.
+          # Do NOT print the URL response body or token or proxy address.
+          status="$(curl --silent --max-time 18 --output /dev/null --write-out '%{http_code}' \
+            -H "Authorization: Bearer ${DEEPSEEK_API_KEY}" \
+            'https://api.deepseek.com/models' 2>/dev/null || true)"
+          case "$status" in
+            200) echo 'V3_MODELS_AUTH=PASS' ;;
+            401|403) echo 'V3_MODELS_AUTH=UNAUTHORIZED' ;;
+            429) echo 'V3_MODELS_AUTH=RATE_LIMIT' ;;
+            000|'') echo 'V3_MODELS_AUTH=NETWORK_UNREACHABLE' ;;
+            *) echo 'V3_MODELS_AUTH=OTHER_HTTP_ERROR' ;;
+          esac
+          echo "V3_RUNNER_NAME=${RUNNER_NAME}"
+          echo 'V3_NO_CODING_NO_SECRETS_NO_BILLING=PASS'
