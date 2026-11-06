@@ -80,7 +80,7 @@ function validId(x: unknown): x is string {
 
 function validTime(x: unknown): x is string {
   if (typeof x !== 'string' || x.length > 35
-    || !/^\\d{4}-\\d\\d-\\d\\dT\\d\\d:\\d\\d:\\d\\d(?:\\.\\d{3})?Z$/.test(x)) return false;
+    || !/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d{3})?Z$/.test(x)) return false;
   const stamp = Date.parse(x);
   return Number.isFinite(stamp)
     && (new Date(stamp).toISOString() === x
