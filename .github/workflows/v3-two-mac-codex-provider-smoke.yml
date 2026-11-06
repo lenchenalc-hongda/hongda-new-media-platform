@@ -54,9 +54,22 @@ jobs:
           # header, secret, file contents, private prompt or provider trace.
           # This generative test never downloads business code or writes a PR.
           if ! "$binary" exec --skip-git-repo-check --sandbox read-only \
-              -m deepseek-v4-flash --output-last-message "$temp/answer.txt" \
+              -m deepseek-flash --output-last-message "$temp/answer.txt" \
               "Write exactly one original JavaScript source line: export function addTwo(a,b){ return a+b; } Return code only. No files or network tools." \
               >"$temp/provider.log" 2>&1; then
+            if grep -Eqi 'model not found|model.*invalid|unsupported model|unknown model|not supported' "$temp/provider.log"; then
+              echo "V3_MODEL_FAILURE_CLASS=MODEL_UNAVAILABLE"
+            elif grep -Eqi '401|403|authentication|invalid api key' "$temp/provider.log"; then
+              echo "V3_MODEL_FAILURE_CLASS=PROVIDER_AUTH"
+            elif grep -Eqi 'timeout|connection|network|dns|refused|disconnect' "$temp/provider.log"; then
+              echo "V3_MODEL_FAILURE_CLASS=PROVIDER_NETWORK"
+            elif grep -Eqi 'sandbox|permission|read.only|untrusted' "$temp/provider.log"; then
+              echo "V3_MODEL_FAILURE_CLASS=SANDBOX_OR_TRUST"
+            elif grep -Eqi 'config|provider|option|argument' "$temp/provider.log"; then
+              echo "V3_MODEL_FAILURE_CLASS=CODEX_CONFIGURATION"
+            else
+              echo "V3_MODEL_FAILURE_CLASS=OTHER_REDACTED"
+            fi
             echo "V3_MODEL_SMOKE=FAILED_CLI_OR_PROVIDER"
             exit 1
           fi
