@@ -4,7 +4,6 @@ STATUS = DRAFT_ONLY / NONPRODUCTION
 PROJECT = global-lead-hub
 TASK = GLH-V2F-TRUSTED-MULTICHANNEL-OFFLINE-001
 BASE_MASTER_SHA = 7d4b373e26a8785e4b5f4aa9d197357681341125
-SOURCE_HEAD = 87bcd7cae1b1673af5b6411e0570213712edc91b
 IMPLEMENTATION = src/lib/global-lead-hub/v2-multichannel-sim.ts
 TEST = tests/unit/global-lead-hub-v2-multichannel-sim.test.ts
 SUITE_REGISTRATION = tests/unit/global-lead-hub-v2-llm-extraction-eval.test.ts
@@ -206,6 +205,7 @@ non-Production data.
 
 ## 9. Release boundary
 
-This task keeps all edits unstaged. Codex does not stage, commit, push, switch branches,
-edit Git metadata, call GitHub write APIs, merge, deploy, or perform external publishing.
-The wrapper publishes the bounded Draft PR state for independent PM review.
+The committed code and this acceptance document perform no GitHub write, merge, deploy,
+provider send, external publish, database/RLS/env/secret mutation, or Production action.
+The Agent Control wrapper publishes the bounded Draft PR for independent PM review without
+enabling any of those runtime actions.
