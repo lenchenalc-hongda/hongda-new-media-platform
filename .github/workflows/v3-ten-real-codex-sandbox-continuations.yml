@@ -28,6 +28,10 @@ jobs:
     env:
       V3_SANDBOX_TASK_NUMBER: ${{ matrix.task }}
     steps:
+      - name: Provision isolated Node.js 22 runtime on self-hosted Mac
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
       - name: Generate and execute original isolated JS (never checks out business repo)
         shell: bash
         run: |
