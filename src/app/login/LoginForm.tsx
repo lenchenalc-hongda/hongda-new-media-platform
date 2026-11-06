@@ -34,15 +34,21 @@ export default function LoginForm({ mode }: { mode: AuthMode }) {
       const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        cache: 'no-store',
         body: JSON.stringify({ email, password, redirect: redirectTo }),
       });
-      const data = await res.json();
-      if (!res.ok) {
-        setError(data.error || '登录失败，请检查邮箱和密码');
+      const data = await res.json().catch(() => null);
+      if (!res.ok || data?.ok !== true) {
+        setError(data?.error || (res.ok
+          ? '登录状态尚未确认，请重新尝试'
+          : '登录失败，请检查账号或联系管理员'));
         return;
       }
-      router.push(data.redirect || redirectTo);
-      router.refresh();
+      // Use a full browser navigation AFTER the Set-Cookie response has arrived.
+      // router.push() + router.refresh() may race with a prefetched anonymous
+      // App Router tree, leaving users on the login screen after Auth succeeds.
+      window.location.assign(data.redirect || redirectTo);
     } catch {
       setError('网络错误，请稍后重试');
     } finally {
