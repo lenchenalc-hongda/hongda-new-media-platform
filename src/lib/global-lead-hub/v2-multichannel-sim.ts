@@ -96,7 +96,7 @@ function validScope(x: unknown): x is GlhV2FTrustedChannel {
     && typeof v.conversationMode === 'string' && MODES.has(v.conversationMode);
 }
 
-function validInbound(x: unknown): x is GlhV2FSyntheticInbound {
+function validInbound(x: unknown): boolean {
   if (!x || typeof x !== 'object' || Array.isArray(x)) return false;
   const v = x as Partial<GlhV2FSyntheticInbound>;
   return validId(v.organizationId) && validId(v.inquiryId)
