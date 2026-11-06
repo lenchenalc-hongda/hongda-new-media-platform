@@ -4,6 +4,8 @@
 // Run: node --import tsx tests/e2e/commercial-supplier-order-nonprod.spec.ts
 
 import { createRequire } from 'node:module';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { isDeepStrictEqual } from 'node:util';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import {
@@ -19,6 +21,12 @@ const { loadEnvConfig } = require('@next/env');
 loadEnvConfig(process.cwd());
 
 const ISOLATED_SUPABASE_PROJECT_REF = 'xulmpqaknlwqqculbsek';
+const HARNESS_FIXTURE_MODE_ENV = 'CSO_NONPROD_HARNESS_FIXTURE';
+const HARNESS_FIXTURE_MODES = [
+  'missing-credentials',
+  'unexpected-static',
+  'unexpected-after-write-checkpoint',
+] as const;
 const LIVE_MATRIX_ROWS = [
   'owner_two_session_auth',
   'draft_create_and_revision_conflict',
@@ -34,6 +42,7 @@ type MatrixRow = typeof LIVE_MATRIX_ROWS[number];
 type MatrixStatus = 'PASS' | 'FAIL' | 'NOT_VERIFIED';
 type LiveMatrix = Record<MatrixRow, MatrixStatus>;
 type LiveGateEnv = Record<string, string | undefined>;
+type HarnessFixtureMode = typeof HARNESS_FIXTURE_MODES[number];
 
 type LiveGateResult =
   | { allowed: true }
@@ -54,6 +63,9 @@ let staticFailed = 0;
 let livePassed = 0;
 let liveFailed = 0;
 let liveWritesStarted = false;
+let unexpectedFailure = false;
+let activeFixtureMode: HarnessFixtureMode | null = null;
+let activeMatrix: LiveMatrix = emptyMatrix();
 
 function present(value: string | undefined): boolean {
   return typeof value === 'string' && value.length > 0;
@@ -126,6 +138,15 @@ function checkLive(condition: boolean, label: string): boolean {
   liveFailed++;
   console.error(`FAIL: ${label}`);
   return false;
+}
+
+function finishExpectedPreflightUnavailable(
+  reason: 'AUTHENTICATION_UNAVAILABLE' | 'PREFLIGHT_IDENTITY_UNAVAILABLE' |
+    'PREFLIGHT_PROFILE_UNAVAILABLE',
+  matrix: LiveMatrix,
+): void {
+  console.log(`LIVE_E2E_REASON: ${reason}`);
+  finish('NOT_VERIFIED', matrix);
 }
 
 function rpcRow(result: RpcResult): Record<string, unknown> | null {
@@ -211,19 +232,39 @@ function rowMatchesFixture(
 }
 
 function finish(liveStatus: 'PASS' | 'FAIL' | 'NOT_VERIFIED', matrix: LiveMatrix): void {
+  const effectiveStatus = unexpectedFailure ? 'FAIL' : liveStatus;
   const result = {
     event: 'CSO_NONPROD_E2E_RESULT',
     project_ref: ISOLATED_SUPABASE_PROJECT_REF,
-    live_e2e: liveStatus,
+    live_e2e: effectiveStatus,
     mode: liveWritesStarted ? 'LIVE_WRITES_ATTEMPTED' : 'SAFE_DRY_RUN',
+    fixture_mode: activeFixtureMode,
     matrix: Object.fromEntries(LIVE_MATRIX_ROWS.map(row => [row, matrix[row]])),
     static_checks: { passed: staticPassed, failed: staticFailed },
     live_checks: { passed: livePassed, failed: liveFailed },
   };
   console.log(`CSO_NONPROD_E2E_RESULT=${JSON.stringify(result)}`);
-  console.log(`LIVE_E2E: ${liveStatus}`);
+  console.log(`LIVE_E2E: ${effectiveStatus}`);
   console.log(`MATRIX: ${LIVE_MATRIX_ROWS.map(row => `${row}=${matrix[row]}`).join(',')}`);
-  process.exitCode = staticFailed === 0 && liveStatus !== 'FAIL' ? 0 : 1;
+  process.exitCode =
+    !unexpectedFailure && staticFailed === 0 && effectiveStatus !== 'FAIL' ? 0 : 1;
+}
+
+function recordUnexpectedFailure(matrix: LiveMatrix = activeMatrix): void {
+  unexpectedFailure = true;
+  console.error('FAIL: sanitized unexpected harness exception');
+  finish('FAIL', matrix);
+}
+
+async function runWithUnexpectedFailureGuard(
+  run: () => Promise<void>,
+  matrix: LiveMatrix,
+): Promise<void> {
+  try {
+    await run();
+  } catch {
+    recordUnexpectedFailure(matrix);
+  }
 }
 
 async function profileFor(
@@ -270,8 +311,7 @@ async function runLive(
       !ownerALogin.data.user || !ownerBLogin.data.user || !viewerLogin.data.user ||
       !ownerALogin.data.session?.access_token || !ownerBLogin.data.session?.access_token ||
       !viewerLogin.data.session?.access_token) {
-    console.log('LIVE_E2E_REASON: AUTHENTICATION_UNAVAILABLE');
-    finish('NOT_VERIFIED', matrix);
+    finishExpectedPreflightUnavailable('AUTHENTICATION_UNAVAILABLE', matrix);
     return;
   }
 
@@ -284,13 +324,9 @@ async function runLive(
   const realDistinctSessions = ownerAToken !== ownerBToken &&
     ownerAToken !== viewerToken && ownerBToken !== viewerToken;
 
-  if (!checkLive(ownerAUserId === ownerBUserId,
-      'the two independent owner sign-ins must resolve to the same Auth user') ||
-      !checkLive(viewerUserId !== ownerAUserId,
-        'the viewer must be a separate Auth user') ||
-      !checkLive(realDistinctSessions,
-        'all three password sign-ins must return distinct real session bearer tokens')) {
-    finish('NOT_VERIFIED', matrix);
+  if (ownerAUserId !== ownerBUserId || viewerUserId === ownerAUserId ||
+      !realDistinctSessions) {
+    finishExpectedPreflightUnavailable('PREFLIGHT_IDENTITY_UNAVAILABLE', matrix);
     return;
   }
 
@@ -300,9 +336,7 @@ async function runLive(
     profileFor(viewerClient, viewerUserId),
   ]);
   if (!ownerAProfile || !ownerBProfile || !viewerProfile) {
-    checkLive(false,
-      'owner sessions and viewer must match the expected same-org disposable QA profiles');
-    finish('NOT_VERIFIED', matrix);
+    finishExpectedPreflightUnavailable('PREFLIGHT_PROFILE_UNAVAILABLE', matrix);
     return;
   }
   const profilesReady =
@@ -319,9 +353,8 @@ async function runLive(
     ownerBProfile.org_id === expectedOrgId &&
     viewerProfile.org_id === expectedOrgId &&
     isDeepStrictEqual(ownerAProfile, ownerBProfile);
-  if (!checkLive(profilesReady,
-      'owner sessions and viewer must match the expected same-org disposable QA profiles')) {
-    finish('NOT_VERIFIED', matrix);
+  if (!profilesReady) {
+    finishExpectedPreflightUnavailable('PREFLIGHT_PROFILE_UNAVAILABLE', matrix);
     return;
   }
 
@@ -682,9 +715,104 @@ async function runLive(
   }
 }
 
+function fixtureEnvironment(mode: HarnessFixtureMode): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = {
+    NODE_ENV: 'test',
+    [HARNESS_FIXTURE_MODE_ENV]: mode,
+  };
+  for (const key of ['PATH', 'TMPDIR', 'TMP', 'TEMP']) {
+    if (process.env[key]) env[key] = process.env[key];
+  }
+  return env;
+}
+
+function fixtureResult(stdout: string): Record<string, unknown> | null {
+  const prefix = 'CSO_NONPROD_E2E_RESULT=';
+  const line = stdout.split('\n').find(candidate => candidate.startsWith(prefix));
+  if (!line) return null;
+  try {
+    return JSON.parse(line.slice(prefix.length)) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
+
+function runHarnessFixture(mode: HarnessFixtureMode) {
+  return spawnSync(
+    process.execPath,
+    ['--import', 'tsx', fileURLToPath(import.meta.url)],
+    {
+      cwd: process.cwd(),
+      env: fixtureEnvironment(mode),
+      encoding: 'utf8',
+      timeout: 30_000,
+    },
+  );
+}
+
+function runDeterministicExceptionFixtures(): void {
+  const missingCredentials = runHarnessFixture('missing-credentials');
+  const missingCredentialsResult = fixtureResult(missingCredentials.stdout);
+  const missingMatrix = missingCredentialsResult?.matrix as Record<string, unknown> | undefined;
+  checkStatic(
+    !missingCredentials.error && missingCredentials.status === 0 &&
+      missingCredentialsResult?.live_e2e === 'NOT_VERIFIED' &&
+      missingCredentialsResult.mode === 'SAFE_DRY_RUN' &&
+      missingCredentialsResult.fixture_mode === 'missing-credentials' &&
+      LIVE_MATRIX_ROWS.every(row => missingMatrix?.[row] === 'NOT_VERIFIED'),
+    'fixture: missing credentials must take the zero-write NOT_VERIFIED path',
+  );
+
+  const unexpectedStatic = runHarnessFixture('unexpected-static');
+  const unexpectedStaticResult = fixtureResult(unexpectedStatic.stdout);
+  checkStatic(
+    !unexpectedStatic.error && unexpectedStatic.status === 1 &&
+      unexpectedStaticResult?.live_e2e === 'FAIL' &&
+      unexpectedStaticResult.fixture_mode === 'unexpected-static',
+    'fixture: an unexpected static exception must emit sanitized FAIL and exit 1',
+  );
+
+  const unexpectedAfterWrite = runHarnessFixture('unexpected-after-write-checkpoint');
+  const unexpectedAfterWriteResult = fixtureResult(unexpectedAfterWrite.stdout);
+  checkStatic(
+    !unexpectedAfterWrite.error && unexpectedAfterWrite.status === 1 &&
+      unexpectedAfterWriteResult?.live_e2e === 'FAIL' &&
+      unexpectedAfterWriteResult.mode === 'LIVE_WRITES_ATTEMPTED' &&
+      unexpectedAfterWriteResult.fixture_mode === 'unexpected-after-write-checkpoint',
+    'fixture: an unexpected post-write checkpoint exception must emit FAIL and exit 1',
+  );
+}
+
 async function main(): Promise<void> {
   console.log('\n=== Commercial Supplier Orders Isolated Nonproduction E2E ===');
   const matrix = emptyMatrix();
+  activeMatrix = matrix;
+  const requestedFixtureMode = process.env[HARNESS_FIXTURE_MODE_ENV];
+  activeFixtureMode = HARNESS_FIXTURE_MODES.includes(
+    requestedFixtureMode as HarnessFixtureMode,
+  ) ? requestedFixtureMode as HarnessFixtureMode : null;
+
+  if (activeFixtureMode === 'unexpected-static') {
+    throw new Error('synthetic static exception fixture');
+  }
+  if (activeFixtureMode === 'unexpected-after-write-checkpoint') {
+    liveWritesStarted = true;
+    await runWithUnexpectedFailureGuard(async () => {
+      throw new Error('synthetic post-write exception fixture');
+    }, matrix);
+    return;
+  }
+  if (activeFixtureMode === 'missing-credentials') {
+    const gate = evaluateCsoLiveGate({});
+    if (gate.allowed) {
+      checkStatic(false, 'fixture: an empty credential gate must remain closed');
+      finish('NOT_VERIFIED', matrix);
+      return;
+    }
+    console.log(`LIVE_E2E_GATE: CLOSED (${gate.reasons.join('; ')})`);
+    finish('NOT_VERIFIED', matrix);
+    return;
+  }
 
   const v1 = printableFixture(1, 'DETERMINISTIC');
   const v2 = printableFixture(2, 'DETERMINISTIC');
@@ -705,6 +833,8 @@ async function main(): Promise<void> {
     formatSupplierMoney(printableV2.totalThousandths) === '1.006',
     'V2 print model must preserve its own snapshot rather than V1');
 
+  runDeterministicExceptionFixtures();
+
   if (staticFailed > 0) {
     finish('NOT_VERIFIED', matrix);
     return;
@@ -718,15 +848,12 @@ async function main(): Promise<void> {
   }
 
   const expectedOrgId = process.env.LIVE_TEST_EXPECTED_ORG_ID!.trim();
-  try {
-    await runLive(process.env, matrix, expectedOrgId);
-  } catch {
-    console.error('FAIL: live harness stopped on an unexpected sanitized error');
-    finish(liveWritesStarted ? 'FAIL' : 'NOT_VERIFIED', matrix);
-  }
+  await runWithUnexpectedFailureGuard(
+    () => runLive(process.env, matrix, expectedOrgId),
+    matrix,
+  );
 }
 
 main().catch(() => {
-  console.error('FAIL: static harness stopped on an unexpected sanitized error');
-  finish('NOT_VERIFIED', emptyMatrix());
+  recordUnexpectedFailure();
 });

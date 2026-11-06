@@ -4,7 +4,8 @@ Task: `CSO-P2B-TRUSTED-TWO-SESSION-QA-GATE-001`
 
 Base master: `7d4b373e26a8785e4b5f4aa9d197357681341125`
 
-Expected execution head: `150f09525d150bba2ba57c98bc65ec76363fb9fe`
+Canonical review HEAD is fetched from GitHub PR/CI and is not pinned in this
+document.
 
 Evidence date: 2026-11-06, Asia/Shanghai
 
@@ -15,7 +16,9 @@ build and bundle secret audit pass. The live test gate closed because this
 runner has no approved disposable QA credentials. The harness therefore took
 its safe dry-run path, performed no database or Auth request, and returned a
 successful `NOT_VERIFIED` result with every live acceptance matrix row still
-`NOT_VERIFIED`.
+`NOT_VERIFIED`. Deterministic child-process fixtures also prove that an
+unexpected static exception and an unexpected post-write checkpoint exception
+each emit sanitized `FAIL` and exit 1.
 
 The live contract has not been executed against the isolated QA project. It
 must not be reported as a simulated pass.
@@ -56,6 +59,24 @@ If any gate item is absent or invalid, the run emits structured
 `NOT_VERIFIED`, zero live checks and a successful process exit when the
 deterministic checks pass. A missing credential is not treated as test
 evidence.
+
+## Exception Semantics
+
+The expected pre-write unavailability paths are distinct from harness
+failures. A closed credential gate, authentication failure or unavailable
+preflight profile returns sanitized `NOT_VERIFIED`. A closed credential gate
+returns before constructing a Supabase client or issuing an Auth or database
+request. Once the gate is open, expected login or account unavailability may
+perform Auth and profile reads but performs no database write. When
+deterministic checks pass, these intentional `NOT_VERIFIED` results exit 0.
+
+Any unexpected static, runner or live-harness exception instead sets a fatal
+result latch and emits sanitized `FAIL`. The latch also downgrades any later
+result to `FAIL` and forces `process.exitCode=1`, including an exception after
+live writes have begun. Raw exceptions and credential values are not printed.
+The deterministic fixture mode
+`unexpected-after-write-checkpoint` exercises that post-write fail-closed
+behavior without making a live request.
 
 ## Authenticated Preflight
 
@@ -126,7 +147,8 @@ inputs above. This task intentionally did not execute the live path.
 | --- | --- | --- |
 | Typecheck | `PASS` | `tsc --noEmit` exited 0 |
 | Focused deterministic test | `PASS` | `tests/unit/commercial-supplier-order-validation.test.ts` |
-| Supplier-order safe dry-run | `PASS` | Four static checks passed; no client created; all eight live rows `NOT_VERIFIED`; exit 0 |
+| Supplier-order safe dry-run | `PASS` | Seven static checks passed; no client created; all eight live rows `NOT_VERIFIED`; exit 0 |
+| Exception fail-closed fixtures | `PASS` | Missing credentials exited 0 as `SAFE_DRY_RUN`; unexpected static and simulated post-write exceptions emitted sanitized `FAIL` and exited 1 |
 | Production build | `PASS` | Next.js 14.2.35 compiled and generated 128 static pages |
 | Bundle secret audit | `PASS` | No configured secret patterns found in `.next/static` |
 | Built-app HTTP smoke | `BLOCKED_BY_SANDBOX_LISTEN_EPERM` | `next start` was attempted on `0.0.0.0:3000` and `127.0.0.1:3000`; both listeners were denied |
@@ -154,8 +176,8 @@ LIVE_TEST_VIEWER_* credentials missing
 
 ## Boundaries Preserved
 
-This task did not change migrations, Production SQL/RLS, Auth or Storage
-policies, environment variables, secrets, Production data, supplier order
-workbench behavior, saved-draft logic, PDF/data semantics, external supplier
-messaging, archived PDF state, auto-merge or Production rollout. Edits are
-limited to the authorized test and documentation paths and remain unstaged.
+Only the two allowlisted files are committed in Draft PR #210. No Production
+data, environment, SQL or side effect was changed. The task did not change
+migrations, Production RLS, Auth or Storage policies, secrets, supplier order
+workbench behavior, saved-draft logic, PDF/data semantics, customer or
+supplier messaging, archived PDF state, auto-merge or Production rollout.
