@@ -1,0 +1,139 @@
+name: V3 Ten Real Codex Nonproduction Sandbox Tasks
+
+on:
+  push:
+    branches: [qa/v3-dual-mac-runner-proof-20261107]
+    paths:
+      - '.github/workflows/v3-ten-real-codex-sandbox-continuations.yml'
+
+permissions:
+  actions: read
+  contents: read
+
+concurrency:
+  group: v3-10-original-codex-tasks-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  real-original-codex-task:
+    name: Original JS Codex Task ${{ matrix.task }}
+    if: github.repository == 'lenchenalc-hongda/hongda-new-media-platform' && github.ref == 'refs/heads/qa/v3-dual-mac-runner-proof-20261107'
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        task: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+    runs-on: [self-hosted, macOS, X64, hongda-agent-control]
+    timeout-minutes: 7
+    env:
+      V3_SANDBOX_TASK_NUMBER: ${{ matrix.task }}
+    steps:
+      - name: Generate and execute original isolated JS (never checks out business repo)
+        shell: bash
+        run: |
+          set -euo pipefail
+          set +x
+          if [[ -z "${DEEPSEEK_API_KEY:-}" ]]; then
+            export DEEPSEEK_API_KEY="$(launchctl getenv DEEPSEEK_API_KEY 2>/dev/null || true)"
+          fi
+          if [[ -z "${DEEPSEEK_API_KEY:-}" ]]; then
+            echo 'V3_PROVIDER_KEY_NOT_AVAILABLE'
+            exit 1
+          fi
+          codex_binary="$(command -v codex || true)"
+          if [[ -z "$codex_binary" && -x "$HOME/.codex/plugins/.plugin-appserver/codex-cli/bin/codex" ]]; then
+            codex_binary="$HOME/.codex/plugins/.plugin-appserver/codex-cli/bin/codex"
+          fi
+          if [[ -z "$codex_binary" ]]; then
+            echo 'V3_CODEX_CLI_NOT_AVAILABLE'
+            exit 1
+          fi
+          task="$V3_SANDBOX_TASK_NUMBER"
+          [[ "$task" =~ ^(10|[1-9])$ ]] || exit 1
+          tmp="$(mktemp -d)"
+          trap 'rm -rf "$tmp"' EXIT
+          mkdir -p "$tmp/codex-home"
+          cat > "$tmp/codex-home/config.toml" <<'TOML'
+          model = "deepseek-flash"
+          model_provider = "hongda_deepseek_smoke"
+          preferred_auth_method = "apikey"
+          forced_login_method = "api"
+          model_reasoning_effort = "low"
+          web_search = "disabled"
+
+          [model_providers.hongda_deepseek_smoke]
+          name = "DeepSeek sandbox"
+          base_url = "https://api.deepseek.com"
+          env_key = "DEEPSEEK_API_KEY"
+          wire_api = "responses"
+          requires_openai_auth = false
+          TOML
+          chmod 600 "$tmp/codex-home/config.toml"
+          export CODEX_HOME="$tmp/codex-home"
+          cd "$tmp"
+          # No business repo checkout, remote write, code execution tool use or
+          # long-lived credential write. The Codex answer is a temp file only.
+          if ! "$codex_binary" exec --skip-git-repo-check --sandbox read-only \
+            -m deepseek-flash --output-last-message "$tmp/generated.mjs" \
+            "Write one original JavaScript ES module line that exports a function named task${task} taking two numbers a,b and returns their sum plus the integer ${task}. Return valid JavaScript source only, without markdown, text or backticks. Do not access any tools or files." \
+            >"$tmp/codex-private.log" 2>&1; then
+            echo "V3_TASK_${task}_CODEX_PROVIDER_CALL=FAILED_REDACTED"
+            exit 1
+          fi
+          if [[ ! -s "$tmp/generated.mjs" ]]; then
+            echo "V3_TASK_${task}_GENERATION=EMPTY"
+            exit 1
+          fi
+          if ! command -v node >/dev/null 2>&1; then
+            echo 'V3_NODE_RUNTIME=UNAVAILABLE'
+            exit 1
+          fi
+          if ! node --check "$tmp/generated.mjs" >"$tmp/check.log" 2>&1; then
+            echo "V3_TASK_${task}_CODE_SYNTAX=FAILED_REDACTED"
+            exit 1
+          fi
+          if ! node --input-type=module - "$tmp/generated.mjs" "$task" >"$tmp/test.log" 2>&1 <<'JS'
+          import {pathToFileURL} from 'node:url';
+          const file=process.argv[2],n=Number(process.argv[3]);
+          const module=await import(pathToFileURL(file).href);
+          const f=module['task'+n];
+          if(typeof f!=='function'||f(2,3)!==5+n||f(-1,4)!==3+n){
+            throw Error('Original JS arithmetic contract failed');
+          }
+          JS
+          then
+            echo "V3_TASK_${task}_BEHAVIOR=FAILED_REDACTED"
+            exit 1
+          fi
+          echo "V3_TASK_${task}_ORIGINAL_CODEX_GENERATION=PASS"
+          echo "V3_TASK_${task}_RUNNER=${RUNNER_NAME}"
+          echo 'V3_BUSINESS_SOURCE_WRITES=ZERO'
+          echo 'V3_CONTROL_DB_WRITES=ZERO'
+          echo 'V3_RELEASE_OR_MERGE=NONE'
+
+  verify-ten-real-model-tasks:
+    name: Verify Ten Independent Mac Codex Tasks
+    needs: [real-original-codex-task]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Verify ten completed tasks across two physical Mac runners
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const [owner,repo]=process.env.GITHUB_REPOSITORY.split('/');
+            const {data}=await github.rest.actions.listJobsForWorkflowRun({
+              owner,repo,run_id:Number(process.env.GITHUB_RUN_ID),per_page:100,
+            });
+            const jobs=data.jobs.filter(j=>/^Original JS Codex Task (10|[1-9])$/.test(j.name));
+            const names=new Set(jobs.map(j=>j.name));
+            const runners=new Set(jobs.map(j=>j.runner_id));
+            if(jobs.length!==10||names.size!==10||runners.size<2
+              ||jobs.some(j=>j.conclusion!=='success'||!j.runner_id)){
+              core.setFailed('V3_TEN_REAL_CODEX_SANDBOX_TASKS_NOT_PROVEN');
+            }else{
+              core.info('V3_TEN_REAL_CODEX_SANDBOX_TASKS=PASS');
+              core.info('V3_DISTINCT_MAC_RUNNERS='+runners.size);
+              core.info('V3_REAL_BUSINESS_CODING_CONTINUATIONS=0');
+              core.info('V3_NO_PRODUCTION_OR_GIT_WRITES=YES');
+            }
