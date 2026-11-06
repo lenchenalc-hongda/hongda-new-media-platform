@@ -1,0 +1,98 @@
+name: V3 Two Mac Runner Nonproduction Proof
+
+on:
+  push:
+    branches: [qa/v3-dual-mac-runner-proof-20261107]
+    paths:
+      - '.github/workflows/v3-dual-mac-nonprod-proof.yml'
+
+permissions:
+  actions: read
+  contents: read
+
+concurrency:
+  group: v3-dual-mac-qa-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  mac-lane-a:
+    name: Mac Lane A
+    if: github.repository == 'lenchenalc-hongda/hongda-new-media-platform' && github.ref == 'refs/heads/qa/v3-dual-mac-runner-proof-20261107'
+    runs-on: [self-hosted, macOS, X64, hongda-agent-control]
+    timeout-minutes: 8
+    steps:
+      - name: Harmless runner identity and overlap proof
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "V3_DUAL_MAC_LANE=A"
+          echo "V3_GITHUB_RUN_ID=${GITHUB_RUN_ID}"
+          echo "V3_GITHUB_RUN_ATTEMPT=${GITHUB_RUN_ATTEMPT}"
+          echo "V3_RUNNER_OS=${RUNNER_OS}"
+          echo "V3_RUNNER_ARCH=${RUNNER_ARCH}"
+          echo "V3_REAL_RUNNER_NAME=${RUNNER_NAME}"
+          echo "V3_PROOF_START_UTC=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          test "${RUNNER_OS}" = "macOS"
+          test "${RUNNER_ARCH}" = "X64"
+          sleep 25
+          echo "V3_PROOF_END_UTC=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          echo "V3_NO_CODEX_NO_SECRETS_NO_PRODUCTION=PASS"
+
+  mac-lane-b:
+    name: Mac Lane B
+    if: github.repository == 'lenchenalc-hongda/hongda-new-media-platform' && github.ref == 'refs/heads/qa/v3-dual-mac-runner-proof-20261107'
+    runs-on: [self-hosted, macOS, X64, hongda-agent-control]
+    timeout-minutes: 8
+    steps:
+      - name: Harmless runner identity and overlap proof
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "V3_DUAL_MAC_LANE=B"
+          echo "V3_GITHUB_RUN_ID=${GITHUB_RUN_ID}"
+          echo "V3_GITHUB_RUN_ATTEMPT=${GITHUB_RUN_ATTEMPT}"
+          echo "V3_RUNNER_OS=${RUNNER_OS}"
+          echo "V3_RUNNER_ARCH=${RUNNER_ARCH}"
+          echo "V3_REAL_RUNNER_NAME=${RUNNER_NAME}"
+          echo "V3_PROOF_START_UTC=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          test "${RUNNER_OS}" = "macOS"
+          test "${RUNNER_ARCH}" = "X64"
+          sleep 25
+          echo "V3_PROOF_END_UTC=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          echo "V3_NO_CODEX_NO_SECRETS_NO_PRODUCTION=PASS"
+
+  verify-two-physical-runners:
+    name: Verify Two Independent Physical Mac Runners
+    needs: [mac-lane-a, mac-lane-b]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Compare actual GitHub Job runner identities and time overlap
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const repo=process.env.GITHUB_REPOSITORY.split('/');
+            const {data}=await github.rest.actions.listJobsForWorkflowRun({
+              owner:repo[0],repo:repo[1],run_id:Number(process.env.GITHUB_RUN_ID),
+              per_page:100,
+            });
+            const a=data.jobs.find(j=>j.name==='Mac Lane A');
+            const b=data.jobs.find(j=>j.name==='Mac Lane B');
+            if(!a||!b||a.conclusion!=='success'||b.conclusion!=='success')
+              core.setFailed('V3_TWO_MAC_JOB_SUCCESS_NOT_PROVEN');
+            else if(!a.runner_name||!b.runner_name||a.runner_id===b.runner_id)
+              core.setFailed('V3_TWO_DISTINCT_MAC_RUNNERS_NOT_PROVEN');
+            else {
+              const start=Math.max(Date.parse(a.started_at),Date.parse(b.started_at));
+              const end=Math.min(Date.parse(a.completed_at),Date.parse(b.completed_at));
+              if(!Number.isFinite(start)||!Number.isFinite(end)||end<=start)
+                core.setFailed('V3_TWO_MAC_OVERLAPPING_RUNTIME_NOT_PROVEN');
+              else {
+                core.info('V3_DUAL_MAC_OVERLAP_PROVEN=YES');
+                core.info('V3_RUNNER_A='+a.runner_name);
+                core.info('V3_RUNNER_B='+b.runner_name);
+                core.info('V3_EXECUTION_OVERLAP_MS='+(end-start));
+                core.info('V3_CODING_PROVIDER_NOT_EXERCISED=YES');
+                core.info('V3_NO_DATABASE_OR_RELEASE_ACTIONS=YES');
+              }
+            }
