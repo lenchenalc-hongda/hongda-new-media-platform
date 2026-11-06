@@ -53,11 +53,11 @@ jobs:
           # A 200 from GET /models is NOT a valid Codex/Responses proof.
           # First test the actual provider's Responses API with a bounded,
           # original request. Never print the request key or response body.
-          direct_status="$(curl --silent --max-time 45 \\
-            --output "$temp/direct-response.json" --write-out '%{http_code}' \\
-            -H "Authorization: Bearer ${DEEPSEEK_API_KEY}" \\
-            -H 'Content-Type: application/json' \\
-            --data '{"model":"deepseek-flash","input":"Return exactly: ready","max_output_tokens":48,"stream":false}' \\
+          direct_status="$(curl --silent --max-time 45 \
+            --output "$temp/direct-response.json" --write-out '%{http_code}' \
+            -H "Authorization: Bearer ${DEEPSEEK_API_KEY}" \
+            -H 'Content-Type: application/json' \
+            --data '{"model":"deepseek-flash","input":"Return exactly: ready","max_output_tokens":48,"stream":false}' \
             'https://api.deepseek.com/responses' 2>"$temp/direct-curl.log" || true)"
           case "$direct_status" in
             200)
