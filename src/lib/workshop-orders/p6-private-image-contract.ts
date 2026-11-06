@@ -188,7 +188,7 @@ const BLOCKER_MESSAGES: Readonly<
   BASELINE_IMAGE_NOT_READY: '当前基准包含非 READY 图片',
   BASELINE_IMAGE_SUPERSEDED: '当前基准仍引用已替代图片',
   SIGNED_SAMPLE_NOT_READY: '必需签样缺失或不是 READY 图片',
-  REPLAY_MISMATCH: '重放声明与图片身份或指纹不一致',
+  REPLAY_MISMATCH: '缺少受信存储事实，拒绝客户端重放声明',
   UPSERT_OR_OVERWRITE_NOT_ALLOWED: '私有图片只允许追加，不允许 upsert 或覆盖',
 };
 
@@ -218,6 +218,7 @@ const AUTHORIZED_ROLES = new Set<string>(WOS_PRIVATE_IMAGE_AUTHORIZED_ROLES);
 const APPROVED_MIME_TYPES = new Set<string>(WOS_PRIVATE_IMAGE_MIME_TYPES);
 const SAFE_KEY_SEGMENT = /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/;
 const SAFE_FILE_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,199}$/;
+const SUPPORTED_VERSION_LABEL = /^V([1-9][0-9]{0,126})$/;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -400,6 +401,43 @@ function hasPublicUrl(value: unknown): boolean {
     || value.includes('://');
 }
 
+function supportedVersionDigits(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  return SUPPORTED_VERSION_LABEL.exec(value)?.[1] ?? null;
+}
+
+function compareSupportedVersionLabels(
+  left: unknown,
+  right: unknown,
+): -1 | 0 | 1 | null {
+  const leftDigits = supportedVersionDigits(left);
+  const rightDigits = supportedVersionDigits(right);
+  if (leftDigits === null || rightDigits === null) return null;
+  if (leftDigits.length !== rightDigits.length) {
+    return leftDigits.length < rightDigits.length ? -1 : 1;
+  }
+  if (leftDigits === rightDigits) return 0;
+  return leftDigits < rightDigits ? -1 : 1;
+}
+
+function hasUnsafeWriteInstruction(
+  candidate: WosPrivateImageIntent,
+): boolean {
+  for (const [key, value] of Object.entries(candidate)) {
+    const normalizedKey = key.trim().toLowerCase();
+    if (normalizedKey !== 'upsert' && normalizedKey !== 'overwrite') continue;
+    if (key !== normalizedKey || (value !== undefined && value !== false)) {
+      return true;
+    }
+  }
+
+  const mode = candidate.mode;
+  if (mode === undefined || mode === null) return false;
+  if (typeof mode !== 'string') return true;
+  const normalizedMode = mode.trim().toLowerCase().replace(/[\s_-]+/g, '');
+  return normalizedMode === 'upsert' || normalizedMode === 'overwrite';
+}
+
 function sameEntity(
   value: {
     readonly organizationId: string;
@@ -448,7 +486,11 @@ function validateCandidateIdentityAndFile(
   if (candidate.uploadedByProfileId !== binding.profile.profileId) {
     addBlocker(blockers, 'PROFILE_ORGANIZATION_MISMATCH');
   }
-  if (candidate.versionLabel !== binding.versionLabel) {
+  if (
+    candidate.versionLabel !== binding.versionLabel
+    || supportedVersionDigits(candidate.versionLabel) === null
+    || supportedVersionDigits(binding.versionLabel) === null
+  ) {
     addBlocker(blockers, 'VERSION_MISMATCH');
   }
   if (
@@ -472,12 +514,7 @@ function validateCandidateIdentityAndFile(
   ) {
     addBlocker(blockers, 'PUBLIC_URL_NOT_ALLOWED');
   }
-  if (
-    candidate.upsert === true
-    || candidate.overwrite === true
-    || candidate.mode === 'upsert'
-    || candidate.mode === 'overwrite'
-  ) {
+  if (hasUnsafeWriteInstruction(candidate)) {
     addBlocker(blockers, 'UPSERT_OR_OVERWRITE_NOT_ALLOWED');
   }
 
@@ -519,25 +556,6 @@ function validateCandidateIdentityAndFile(
   return expectedKey;
 }
 
-function candidateShapeMatchesExisting(
-  candidate: WosPrivateImageIntent,
-  existing: WosReferenceImage,
-): boolean {
-  return candidate.id === existing.id
-    && candidate.organizationId === existing.organizationId
-    && candidate.entityType === existing.entityType
-    && candidate.entityId === existing.entityId
-    && candidate.category === existing.category
-    && candidate.storageBucket === existing.storageBucket
-    && candidate.storagePath === existing.storagePath
-    && candidate.fileName === existing.fileName
-    && candidate.mimeType === existing.mimeType
-    && candidate.versionLabel === existing.versionLabel
-    && candidate.imageStatus === existing.imageStatus
-    && candidate.supersedesImageId === existing.supersedesImageId
-    && candidate.uploadedByProfileId === existing.uploadedByProfileId;
-}
-
 function proposedReferenceImage(
   candidate: WosPrivateImageIntent,
 ): WosReferenceImage {
@@ -560,29 +578,15 @@ function proposedReferenceImage(
 
 function validateReplay(
   input: WosPrivateImageContractInput,
-  expectedKey: string | null,
   blockers: WosPrivateImageBlocker[],
 ): WosReferenceImage | null {
-  const { candidate, replay } = input;
+  const { replay } = input;
   if (replay === null || replay === undefined) return null;
-  if (
-    !isRecord(replay)
-    || replay.imageId !== candidate.id
-    || replay.objectKey !== expectedKey
-    || !isText(replay.fingerprint)
-    || replay.fingerprint !== candidate.fingerprint
-  ) {
-    addBlocker(blockers, 'REPLAY_MISMATCH');
-    return null;
-  }
-  const existing = input.existingImages.find(
-    (image) => image.id === candidate.id,
-  ) ?? null;
-  if (!existing || !candidateShapeMatchesExisting(candidate, existing)) {
-    addBlocker(blockers, 'REPLAY_MISMATCH');
-    return null;
-  }
-  return existing;
+  // This offline module cannot authenticate stored image fingerprints. A
+  // caller-controlled claim must never become replay evidence, even when it
+  // matches every candidate field and its own client-provided fingerprint.
+  addBlocker(blockers, 'REPLAY_MISMATCH');
+  return null;
 }
 
 function uniqueExistingImages(
@@ -833,7 +837,11 @@ function validateSupersession(
         : 'SUPERSEDE_TARGET_NOT_READY',
     );
   }
-  if (target.versionLabel === candidate.versionLabel) {
+  const versionOrder = compareSupportedVersionLabels(
+    candidate.versionLabel,
+    target.versionLabel,
+  );
+  if (versionOrder === null || versionOrder <= 0) {
     addBlocker(blockers, 'SUPERSEDE_VERSION_MISMATCH');
   }
   if (
@@ -907,7 +915,7 @@ export function evaluateWosPrivateImageVersionContract(
     };
   }
 
-  const expectedKey = validateCandidateIdentityAndFile(
+  validateCandidateIdentityAndFile(
     binding,
     candidate,
     blockers,
@@ -916,7 +924,7 @@ export function evaluateWosPrivateImageVersionContract(
     addBlocker(blockers, 'IMAGE_NOT_READY');
   }
 
-  const replayed = validateReplay(input, expectedKey, blockers);
+  const replayed = validateReplay(input, blockers);
   const duplicateId = input.existingImages.some(
     (image) => image.id === candidate.id,
   );

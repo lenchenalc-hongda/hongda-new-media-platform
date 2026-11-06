@@ -61,7 +61,8 @@ organizations/<organization_id>/wos/<entity>/<entity_id>/images/<category>/
 - storage path 与规范键不完全一致，包括任意路径替换；
 - storage path 或图片字段包含公开 URL；
 - 文件名与 MIME 不匹配、MIME 不在 JPEG/PNG/WebP 白名单、字节数为零或超过 20 MiB；
-- 调用方声明 `upsert` 或 `overwrite`。
+- `upsert` 或 `overwrite` 不是显式 `false`，包括真值、字符串、数字、`null` 等
+  非布尔值及大小写或空白变体；`mode` 的 upsert/覆盖变体同样拒绝。
 
 纯契约不会返回可复用公开链接或已颁发的签名 URL。`signedUrl` 只能被当作不可信输入
 声明，不进入结果证明，结果始终为 `signedUrlIssued=false`。本切片不生成任何 URL。
@@ -69,8 +70,10 @@ organizations/<organization_id>/wos/<entity>/<entity_id>/images/<category>/
 ## 4. 图片与版本的追加规则
 
 图片 ID 是不可变身份。新图片只能追加，不能覆盖已有记录或对象键。重复图片 ID、重复
-对象键、复用旧对象路径均失败关闭。精确重放只有在图片身份、对象键和 fingerprint 与
-已有事实一致时才能维持 pending；任一重放字段不一致返回 `REPLAY_MISMATCH`。
+对象键、复用旧对象路径均失败关闭。离线契约没有受认证数据库或不可变服务端行可供核验，
+因此任何调用方 `replay` 声明都失败关闭并返回 `REPLAY_MISMATCH`；即使候选身份、对象键、
+fingerprint 与重放声明完全自洽，也不能自证为服务端已保存事实。未来受认证服务器 RPC
+必须将重放声明绑定到服务端不可变图片身份和已存 fingerprint，不能信任客户端成对声明。
 
 新图片必须是 `READY`。`UPLOADING`、`FAILED`、`QUARANTINED`、`SUPERSEDED` 或
 `ARCHIVED` 都不能成为新的当前版本图片。
@@ -78,8 +81,10 @@ organizations/<organization_id>/wos/<entity>/<entity_id>/images/<category>/
 若新图片声明替代旧图片：
 
 - 旧图片必须存在，属于相同组织、入口、实体和类别；
-- 旧图片必须为 `READY`，且同一版本不能被“替代”；
+- 旧图片必须为 `READY`，且同版本不能被“替代”；
 - 旧图片不能已经由另一新图片替代；
+- 版本标签必须是规范的 `V<正整数>`，且旧版本严格小于候选版本；相等、倒退、格式错误
+  或无法比较的版本返回 `SUPERSEDE_VERSION_MISMATCH`；
 - 通过校验的离线建议会把旧图片投影为 `SUPERSEDED`，同时保留其记录并追加新图片。
 
 这只是待服务器核验的追加建议，并不代表旧记录已经更新或新记录已经持久化。
@@ -116,9 +121,11 @@ pending 不能绕过菲林、治具、来料、签样、技术/主管确认、�
 - `UPLOADING`、`FAILED`、`QUARANTINED` 图片不能成为基准；
 - 非 `CURRENT`、跨入口和旧版本的 baseline；
 - 当前 baseline 引用 `SUPERSEDED` 图片；
-- 路径穿越、公开 URL、任意 bucket、MIME/字节阈值和 upsert/overwrite；
-- 重复图片 ID、重复对象键、精确重放和 fingerprint 不一致；
+- 路径穿越、公开 URL、任意 bucket、MIME/字节阈值，以及 upsert/overwrite 的真值、
+  非布尔值、大小写/空白/mode 变体；
+- 重复图片 ID、重复对象键、自洽客户端重放、fingerprint 不一致且没有受信存储事实；
 - 旧图片替代后的 `SUPERSEDED` 投影和新版本追加；
+- 严格前进的 `V1 -> V2`，以及 `V3 -> V2`、`V2 -> V1`、相等、格式错误和无法比较版本；
 - baseline 替换后车间确认清空；
 - `PREVIEW` 与 `START` 均拒绝非 `READY` 基准图片；
 - 规范对象键构造器拒绝危险组织和版本段。

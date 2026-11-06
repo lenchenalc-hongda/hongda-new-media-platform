@@ -352,9 +352,34 @@ assertBlocked(contractFor('PRODUCTION_ORDER', {
     publicUrl: 'https://public.example.invalid/reference.png',
   }),
 }), 'PUBLIC_URL_NOT_ALLOWED');
+for (const writeInstruction of [
+  { upsert: true },
+  { overwrite: true },
+  { upsert: 'false' },
+  { overwrite: 1 },
+  { upsert: null },
+  { mode: 'UPSERT' },
+  { mode: ' OverWrite ' },
+  { mode: 'up_sert' },
+] as const) {
+  assertBlocked(contractFor('PRODUCTION_ORDER', {
+    candidate: intentFor('PRODUCTION_ORDER', writeInstruction),
+  }), 'UPSERT_OR_OVERWRITE_NOT_ALLOWED');
+}
+const alternateFlagCandidate = {
+  ...intentFor('PRODUCTION_ORDER'),
+  UPSERT: false,
+} as unknown as WosPrivateImageIntent;
 assertBlocked(contractFor('PRODUCTION_ORDER', {
-  candidate: intentFor('PRODUCTION_ORDER', { upsert: true }),
+  candidate: alternateFlagCandidate,
 }), 'UPSERT_OR_OVERWRITE_NOT_ALLOWED');
+assertPending(contractFor('PRODUCTION_ORDER', {
+  candidate: intentFor('PRODUCTION_ORDER', {
+    upsert: false,
+    overwrite: false,
+    mode: 'append',
+  }),
+}));
 
 for (const candidate of [
   intentFor('PRODUCTION_ORDER', { mimeType: 'image/svg+xml', fileName: 'x.svg' }),
@@ -385,7 +410,7 @@ const replayImage = imageFor('PRODUCTION_ORDER', {
   id: newImageId,
   versionLabel: 'V2',
 });
-assertPending(contractFor('PRODUCTION_ORDER', {
+const selfConsistentReplay = contractFor('PRODUCTION_ORDER', {
   existingImages: [replayImage],
   baselineImageIds: [newImageId],
   replay: {
@@ -393,7 +418,12 @@ assertPending(contractFor('PRODUCTION_ORDER', {
     objectKey: replayImage.storagePath,
     fingerprint,
   },
-}));
+});
+assertBlocked(selfConsistentReplay, 'REPLAY_MISMATCH');
+assertBlocked(
+  JSON.parse(JSON.stringify(selfConsistentReplay)) as ContractInput,
+  'REPLAY_MISMATCH',
+);
 assertBlocked(contractFor('PRODUCTION_ORDER', {
   existingImages: [replayImage],
   replay: {
@@ -430,6 +460,57 @@ assert.equal(
     ?.imageStatus,
   'READY',
 );
+
+const backwardV3ToV2Target = imageFor('PRODUCTION_ORDER', {
+  id: oldImageId,
+  versionLabel: 'V3',
+  fileName: 'old-v3.png',
+});
+assertBlocked(contractFor('PRODUCTION_ORDER', {
+  candidate: intentFor('PRODUCTION_ORDER', {
+    supersedesImageId: oldImageId,
+  }),
+  existingImages: [backwardV3ToV2Target],
+}), 'SUPERSEDE_VERSION_MISMATCH');
+
+const backwardV2ToV1Target = imageFor('PRODUCTION_ORDER', {
+  id: oldImageId,
+  versionLabel: 'V2',
+  fileName: 'old-v2.png',
+});
+assertBlocked(contractFor('PRODUCTION_ORDER', {
+  trustedBinding: trustedFor('PRODUCTION_ORDER', { versionLabel: 'V1' }),
+  candidate: intentFor('PRODUCTION_ORDER', {
+    versionLabel: 'V1',
+    supersedesImageId: oldImageId,
+  }),
+  currentBaseline: baselineFor('PRODUCTION_ORDER', {
+    versionLabel: 'V1',
+  }),
+  existingImages: [backwardV2ToV1Target],
+  baselineImageIds: [newImageId],
+}), 'SUPERSEDE_VERSION_MISMATCH');
+
+for (const malformedTargetVersion of ['V02', 'V2-B', 'V0', 'legacy']) {
+  assertBlocked(contractFor('PRODUCTION_ORDER', {
+    candidate: intentFor('PRODUCTION_ORDER', {
+      supersedesImageId: oldImageId,
+    }),
+    existingImages: [imageFor('PRODUCTION_ORDER', {
+      id: oldImageId,
+      versionLabel: malformedTargetVersion,
+      fileName: 'malformed-version.png',
+    })],
+  }), 'SUPERSEDE_VERSION_MISMATCH');
+}
+assertBlocked(contractFor('PRODUCTION_ORDER', {
+  trustedBinding: trustedFor('PRODUCTION_ORDER', { versionLabel: 'V02' }),
+  candidate: intentFor('PRODUCTION_ORDER', { versionLabel: 'V02' }),
+  currentBaseline: baselineFor('PRODUCTION_ORDER', {
+    versionLabel: 'V02',
+  }),
+  baselineImageIds: [newImageId],
+}), 'VERSION_MISMATCH');
 
 const sameVersionOldImage = imageFor('PRODUCTION_ORDER', {
   id: oldImageId,
