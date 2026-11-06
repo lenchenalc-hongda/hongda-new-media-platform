@@ -128,6 +128,20 @@ assert.equal(corrupted.ok,false);
 if(corrupted.ok) throw Error('history provenance must be checked');
 assert.equal(corrupted.code,'UNTRUSTED_HISTORY');
 
+const forgedFingerprint=simulateGlhV2FInbound({
+  trusted:wa,inbound:text,history:[{...first.event,fingerprint:'forged'}],
+});
+assert.equal(forgedFingerprint.ok,false);
+if(forgedFingerprint.ok) throw Error('forged historical digest must be rejected');
+assert.equal(forgedFingerprint.code,'UNTRUSTED_HISTORY');
+
+const duplicateHistory=simulateGlhV2FInbound({
+  trusted:wa,inbound:text,history:[first.event,first.event],
+});
+assert.equal(duplicateHistory.ok,false);
+if(duplicateHistory.ok) throw Error('duplicate persisted event identity must be rejected');
+assert.equal(duplicateHistory.code,'UNTRUSTED_HISTORY');
+
 assert.equal(history.length,3,'original input history cannot be mutated');
 assert.equal(first.events.length,4,'idempotency conflict must not mutate successful history');
 console.log('GLH_V2F_MULTICHANNEL_OFFLINE_PASS: 3 providers, replay, provenance, media, human takeover, no sending');
