@@ -139,18 +139,34 @@ export function simulateGlhV2FInbound(input: {
     || inbound.provider !== trusted.provider
     || inbound.channelAccountId !== trusted.channelAccountId)
     return reject('UNTRUSTED_CHANNEL_SCOPE',history);
-  if (history.length > 200 || history.some(x=>
-      !x || x.schema !== 'GLH-V2F-SIM-001'
+  // Historical messages must be internally consistent. A caller may not
+  // insert a forged fingerprint, duplicate event, conflicting provider message
+  // identity or cross-tenant record and then leverage REPLAYED to hide it.
+  if (history.length > 200) return reject('UNTRUSTED_HISTORY',history);
+  const observedEvents = new Set<string>();
+  const observedMessages = new Set<string>();
+  for (const x of history) {
+    if (!x || x.schema !== 'GLH-V2F-SIM-001'
+      || !validInbound(x) || !CHANNELS.has(x.provider)
       || x.organizationId !== trusted.organizationId
       || x.inquiryId !== trusted.inquiryId
-      || !CHANNELS.has(x.provider)
       || x.customerFacingAutoSendAllowed !== false
       || x.preserveOriginalMessage !== true
-      || x.direction !== 'INBOUND'
+      || x.humanReviewRequired !== true
+      || x.authority !== 'UNVERIFIED_CHANNEL_EVENT'
       || x.idempotencyKey !== JSON.stringify([
         x.provider,x.channelAccountId,x.externalEventId,
       ])
-    )) return reject('UNTRUSTED_HISTORY',history);
+      || x.fingerprint !== fingerprintOf(x)
+    ) return reject('UNTRUSTED_HISTORY',history);
+    const messageKey = JSON.stringify([
+      x.provider,x.channelAccountId,x.externalMessageId,
+    ]);
+    if (observedEvents.has(x.idempotencyKey) || observedMessages.has(messageKey))
+      return reject('UNTRUSTED_HISTORY',history);
+    observedEvents.add(x.idempotencyKey);
+    observedMessages.add(messageKey);
+  }
 
   const idempotencyKey = JSON.stringify([
     inbound.provider,inbound.channelAccountId,inbound.externalEventId,
