@@ -1,125 +1,161 @@
 # Commercial Supplier Orders Nonproduction QA
 
-Task: `CSO-P2-NONPROD-E2E-001`
+Task: `CSO-P2B-TRUSTED-TWO-SESSION-QA-GATE-001`
 
-Base master: `578b3d67ea0b3c5f67bd10a902d89900577b231b`
+Base master: `7d4b373e26a8785e4b5f4aa9d197357681341125`
 
-Execution head: `dec9d59c81aab2366f3c5caf78cb565939a9f0d2`
+Expected execution head: `150f09525d150bba2ba57c98bc65ec76363fb9fe`
 
-Evidence date: 2026-11-01, Asia/Shanghai
+Evidence date: 2026-11-06, Asia/Shanghai
 
 ## Current Result
 
-The deterministic commercial-supplier-order checks pass. The isolated live E2E
-suite is executable and fail-closed, but it was not run against a database on
-this runner because no isolated Supabase credentials or authenticated QA
-accounts were available. Live database, RLS and archived-snapshot behavior is
-therefore `NOT_VERIFIED`; it is not reported as a simulated pass.
+The deterministic checks, focused supplier-order test, typecheck, production
+build and bundle secret audit pass. The live test gate closed because this
+runner has no approved disposable QA credentials. The harness therefore took
+its safe dry-run path, performed no database or Auth request, and returned a
+successful `NOT_VERIFIED` result with every live acceptance matrix row still
+`NOT_VERIFIED`.
 
-| Readiness area | Deterministic evidence | Live nonproduction evidence |
-| --- | --- | --- |
-| Draft creation and revision conflict | `PASS` contract assertions | `NOT_VERIFIED` |
-| Immutable formal-order V1/V2 history | `PASS` contract assertions | `NOT_VERIFIED` |
-| Exact 0.001 RMB calculation | `PASS` execution | `NOT_VERIFIED` |
-| Cross-user RLS contract | `PASS` policy/source assertions | `NOT_VERIFIED` |
-| Printable historical snapshot parity | `PASS` model/source assertions | `NOT_VERIFIED` |
-| Server and client feature gates closed by default | `PASS` execution | Not applicable |
+The live contract has not been executed against the isolated QA project. It
+must not be reported as a simulated pass.
 
-## Deterministic Coverage
+| Live acceptance row | Current status |
+| --- | --- |
+| Two independent owner sign-ins plus a separate viewer | `NOT_VERIFIED` |
+| Draft creation and revision conflict | `NOT_VERIFIED` |
+| Concurrent `expectedVersion=2` writes produce one V3 and one conflict | `NOT_VERIFIED` |
+| Winning request UUID replay returns V3 without V4 | `NOT_VERIFIED` |
+| Immutable V1/V2 history remains unchanged | `NOT_VERIFIED` |
+| Same-org viewer is denied by actual RLS and the RPC authorization gate | `NOT_VERIFIED` |
+| Exact 0.001 RMB archived amount | `NOT_VERIFIED` |
+| Archived V1/V2 printable snapshot parity | `NOT_VERIFIED` |
 
-`tests/unit/commercial-supplier-order-validation.test.ts` verifies:
+## Trusted Live Gate
 
-- integer thousandth conversion and per-line HALF_UP rounding at 0.001 RMB;
-- `0.003 x 1.5 = 0.005` and `1.005 x 1.001 = 1.006`, without binary
-  floating-point conversion;
-- draft creation stamps the authenticated owner and exposes revision 1;
-- draft updates require `expectedRevision`, compare the stored revision, and
-  return a visible 409 version conflict;
-- formal saves use the append-only RPC, compare `latest_version`, increment
-  exactly one version, and reject changed idempotency replays;
-- the database migration carries immutable-version, trusted-amount,
-  advisory-lock, unique-version, ownership and RLS constraints;
-- the server feature flag defaults closed and remains closed on Vercel
-  Production without separate approval;
-- a V1 and V2 print model preserve every order and line field independently,
-  use their own archived amounts, and feed the preview and printable section
-  from the same frozen model.
+The harness evaluates the gate before constructing a Supabase client or
+issuing any database or Auth request. Every item below is mandatory:
 
-The component workbench now formats integer thousandths directly. It no longer
-converts the total through binary floating point before displaying or printing
-the snapshot.
+| Input | Requirement |
+| --- | --- |
+| `LIVE_TEST` | Exact value `true` |
+| `LIVE_TEST_ACKNOWLEDGE_IMMUTABLE_TEST_VERSIONS` | Exact value `true`; acknowledges that immutable synthetic formal versions may remain in a disposable TEST database |
+| `NEXT_PUBLIC_SUPABASE_URL` | Exact HTTPS project URL `https://xulmpqaknlwqqculbsek.supabase.co`, with no alternate host, path, port, query or fragment |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Present |
+| `LIVE_TEST_EXPECTED_ORG_ID` | Valid expected organization UUID |
+| `LIVE_TEST_ADMIN_EMAIL`, `LIVE_TEST_ADMIN_PASSWORD` | Genuine disposable admin Auth credentials |
+| `LIVE_TEST_VIEWER_EMAIL`, `LIVE_TEST_VIEWER_PASSWORD` | Genuine separate disposable viewer Auth credentials |
 
-## Executable Live Harness
+The harness does not read or require `SUPABASE_SERVICE_ROLE_KEY`. It never
+prints email addresses, passwords, bearer tokens, API keys or full Supabase
+errors. It does not mint JWT claims, use SQL `SET ROLE`, or otherwise bypass
+live Auth.
 
-Run only against a disposable development or preview database:
+If any gate item is absent or invalid, the run emits structured
+`CSO_NONPROD_E2E_RESULT` JSON with `mode=SAFE_DRY_RUN`, all live rows
+`NOT_VERIFIED`, zero live checks and a successful process exit when the
+deterministic checks pass. A missing credential is not treated as test
+evidence.
+
+## Authenticated Preflight
+
+Before the first write, an allowed live run must complete all preflight checks:
+
+1. Create three independent clients and perform three separate password
+   sign-ins: two for the same admin/owner and one for a separate viewer.
+2. Require all three returned session bearer tokens to be non-empty and
+   mutually distinct.
+3. Require both owner sign-ins to resolve to the same Auth user and the viewer
+   to resolve to a different Auth user.
+4. Read each caller's active profile through its own authenticated session.
+5. Require both owner profiles to be identical, role `admin`, and in
+   `LIVE_TEST_EXPECTED_ORG_ID`.
+6. Require the viewer profile to be role `viewer`, active, and in the same
+   expected organization.
+
+An Auth, token, user or profile ambiguity returns `NOT_VERIFIED` without a
+write. No test-only claims or role impersonation are accepted as substitutes.
+
+## Live Acceptance Contract
+
+After preflight succeeds, the harness:
+
+1. Creates an owner draft, advances it from revision 1 to 2, rejects a stale
+   revision-1 write, verifies revision 2 content is intact, and proves a
+   same-org viewer cannot read, update or create owner drafts under actual RLS.
+2. Creates and verifies a disposable formal fixture at V1 and V2 before the
+   concurrency check. V1 is `0.001 x 1.000 = 0.001 RMB`; V2 is
+   `1.005 x 1.001 = 1.006 RMB`.
+3. Uses two independent owner sessions and two distinct request UUIDs to issue
+   simultaneous `save_supplier_order_version` calls at `expectedVersion=2`.
+   Exactly one call must return V3 and exactly one must return
+   `VERSION_CONFLICT`; any other combination fails closed.
+4. Replays the winning UUID with its exact V3 payload. The replay must return
+   the same V3 row and `saved_at`, and history must remain exactly V1, V2 and
+   V3 with no V4.
+5. Verifies V1 and V2 request IDs, snapshots and integer thousandth amounts
+   are unchanged. The order's `latest_version` must remain 3.
+6. Verifies direct archived-version mutation is rejected. A same-org viewer
+   must not read the formal order or history and must receive
+   `NOT_AUTHORIZED` from the formal writer.
+7. Rebuilds printable output from both archived snapshots and compares every
+   frozen order and line field, each archived amount and the exact printable
+   totals.
+8. Soft-deletes the synthetic active draft. Formal versions intentionally
+   cannot be deleted and may remain in the disposable TEST database.
+
+Any unexpected, missing or contradictory result returns `FAIL` or
+`NOT_VERIFIED`; it never returns `PASS`.
+
+## Execution
+
+Run the static/dry-run path without live credentials:
 
 ```bash
 node --import tsx tests/e2e/commercial-supplier-order-nonprod.spec.ts
 ```
 
-The harness uses the repository live-test safety gate. It requires
-`AUTH_MODE=supabase`, `ALLOW_LIVE_AUTH_TESTS=true`, an isolated
-`SUPABASE_ENVIRONMENT` of `development` or `preview`, the three Supabase
-connection variables, and admin/viewer QA account variables using the
-`LIVE_TEST_*` names defined in `.env.example`. It does not print their values.
-
-When setup is unavailable, the harness prints `LIVE_E2E: NOT_VERIFIED` and
-leaves all setup-dependent rows `NOT_VERIFIED`. Once setup is available, it:
-
-1. creates an owner-owned draft, advances revision 1 to 2, rejects a stale
-   revision-1 write, and proves the stale write did not replace revision 2;
-2. creates formal V1 and V2 through `save_supplier_order_version`, rejects a
-   stale expected-version write and a changed idempotency replay, and verifies
-   that only V1/V2 remain with their original snapshots and amounts;
-3. proves a same-org viewer cannot read or write another user's draft, formal
-   order, or version history and cannot invoke the formal-order RPC;
-4. rebuilds printable V1/V2 output from the archived database snapshots and
-   compares each version with its own fixture and exact thousandth total;
-5. soft-deletes the synthetic active draft. Synthetic formal versions remain
-   by design because archived versions are immutable.
-
-The database must be disposable. The live harness intentionally cannot delete
-formal versions after creation.
+The command using `node_modules/tsx/dist/cli.mjs` is also supported in an
+environment that permits the runner IPC socket. Live execution is allowed only
+with credentials injected through the approved protected runner and all gate
+inputs above. This task intentionally did not execute the live path.
 
 ## Required Checks
 
 | Check | Result | Evidence |
 | --- | --- | --- |
-| Focused deterministic test | `PASS` | `commercial-supplier-order-validation.test.ts: PASS` |
 | Typecheck | `PASS` | `tsc --noEmit` exited 0 |
-| Build | `PASS` | metadata generation and Next.js production build exited 0 |
-| Bundle secret audit | `PASS` | no configured secret patterns found in `.next/static` |
-| Built-app HTTP smoke | `BLOCKED_BY_SANDBOX_LISTEN_EPERM` | `next start` was attempted on `0.0.0.0:3000` and `127.0.0.1:3000`; both were denied |
-| Isolated live nonproduction E2E | `NOT_VERIFIED` | required live environment and authenticated QA accounts absent |
+| Focused deterministic test | `PASS` | `tests/unit/commercial-supplier-order-validation.test.ts` |
+| Supplier-order safe dry-run | `PASS` | Four static checks passed; no client created; all eight live rows `NOT_VERIFIED`; exit 0 |
+| Production build | `PASS` | Next.js 14.2.35 compiled and generated 128 static pages |
+| Bundle secret audit | `PASS` | No configured secret patterns found in `.next/static` |
+| Built-app HTTP smoke | `BLOCKED_BY_SANDBOX_LISTEN_EPERM` | `next start` was attempted on `0.0.0.0:3000` and `127.0.0.1:3000`; both listeners were denied |
+| Live isolated nonproduction E2E | `NOT_VERIFIED` | No approved disposable QA credentials were injected |
 
 The build emitted the existing Edge Runtime warning for
-`@supabase/supabase-js` using `process.version`, but compilation and type
+`@supabase/supabase-js` referencing `process.version`; compilation and type
 validation completed successfully. The wrapper's independent check
-environment is still responsible for the final HTTP smoke result.
+environment remains responsible for its own smoke result.
 
-## Sanitized Environment Evidence
+## Sanitized Gate Evidence
 
-Only presence was checked; no credential values were read into the report.
+Only presence and closed-gate reasons were observed. No credential value was
+read into this report or printed by the harness.
 
 ```text
-AUTH_MODE=MISSING
-NEXT_PUBLIC_SUPABASE_URL=MISSING
-NEXT_PUBLIC_SUPABASE_ANON_KEY=MISSING
-SUPABASE_SERVICE_ROLE_KEY=MISSING
-ALLOW_LIVE_AUTH_TESTS=MISSING
-SUPABASE_ENVIRONMENT=MISSING
-LIVE_TEST_ADMIN_EMAIL=MISSING
-LIVE_TEST_ADMIN_PASSWORD=MISSING
-LIVE_TEST_VIEWER_EMAIL=MISSING
-LIVE_TEST_VIEWER_PASSWORD=MISSING
-FEATURE_SUPPLIER_ORDERS=MISSING
-NEXT_PUBLIC_FEATURE_SUPPLIER_ORDERS=MISSING
-SUPPLIER_ORDERS_PRODUCTION_APPROVED=MISSING
+LIVE_TEST != true
+immutable disposable-test-version acknowledgement missing
+Supabase URL is not the exact isolated QA project
+NEXT_PUBLIC_SUPABASE_ANON_KEY missing
+LIVE_TEST_EXPECTED_ORG_ID missing or invalid
+LIVE_TEST_ADMIN_* credentials missing
+LIVE_TEST_VIEWER_* credentials missing
 ```
 
 ## Boundaries Preserved
 
-This task did not change migrations, database RLS, Auth or Storage policies,
-environment variables, secrets, Production data, official PDF archive
-semantics, real supplier messaging, auto-merge, or Production rollout. Edits
-are limited to the task-authorized paths and remain unstaged.
+This task did not change migrations, Production SQL/RLS, Auth or Storage
+policies, environment variables, secrets, Production data, supplier order
+workbench behavior, saved-draft logic, PDF/data semantics, external supplier
+messaging, archived PDF state, auto-merge or Production rollout. Edits are
+limited to the authorized test and documentation paths and remain unstaged.
