@@ -20,6 +20,7 @@ therefore `NOT_VERIFIED`; it is not reported as a simulated pass.
 | --- | --- | --- |
 | Draft creation and revision conflict | `PASS` contract assertions | `NOT_VERIFIED` |
 | Immutable formal-order V1/V2 history | `PASS` contract assertions | `NOT_VERIFIED` |
+| Two-session authenticated V3 conflict and winner replay | Test harness added; not yet executed with QA credentials | `NOT_VERIFIED` |
 | Exact 0.001 RMB calculation | `PASS` execution | `NOT_VERIFIED` |
 | Cross-user RLS contract | `PASS` policy/source assertions | `NOT_VERIFIED` |
 | Printable historical snapshot parity | `PASS` model/source assertions | `NOT_VERIFIED` |
@@ -75,11 +76,17 @@ leaves all setup-dependent rows `NOT_VERIFIED`. Once setup is available, it:
    order, or version history and cannot invoke the formal-order RPC;
 4. rebuilds printable V1/V2 output from the archived database snapshots and
    compares each version with its own fixture and exact thousandth total;
-5. soft-deletes the synthetic active draft. Synthetic formal versions remain
+5. logs the same authorized owner in through a **second independent Auth session** and sends two distinct simultaneous `expectedVersion=2` RPC writes; exactly one must create V3, the other must fail with `VERSION_CONFLICT`, the losing write must leave V1/V2 unchanged, and replaying the winning request must return V3 without V4;
+6. soft-deletes the synthetic active draft. Synthetic formal versions remain
    by design because archived versions are immutable.
 
 The database must be disposable. The live harness intentionally cannot delete
-formal versions after creation.
+formal versions after creation. The concurrent case adds exactly one immutable
+V3 on successful execution. Two independent sessions of the **same** admin
+account prove concurrent optimistic locking; the separate viewer session proves
+cross-account RLS. These are distinct acceptance criteria, and neither can be
+claimed from SQL `SET ROLE`/JWT GUC simulation. No live test should run without
+its explicit environment/credential gate.
 
 ## Required Checks
 

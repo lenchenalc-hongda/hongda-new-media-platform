@@ -89,6 +89,7 @@ async function main() {
   const matrix: Record<string, string> = {
     draft_create_and_revision_conflict: 'NOT_VERIFIED',
     formal_immutable_v1_v2_history: 'NOT_VERIFIED',
+    concurrent_same_owner_rpc_conflict: 'NOT_VERIFIED',
     cross_user_rls_contract: 'NOT_VERIFIED',
     exact_0_001_rmb_calculation: 'NOT_VERIFIED',
     printable_historical_snapshot_parity: 'NOT_VERIFIED',
@@ -399,6 +400,86 @@ async function main() {
   } else {
     matrix.formal_immutable_v1_v2_history = 'FAIL';
     matrix.cross_user_rls_contract = 'FAIL';
+  }
+
+  // Two independent Supabase Auth sessions for the SAME authorized owner send
+  // distinct requests against the SAME expected version at the same time.
+  // The losing writer must receive VERSION_CONFLICT without producing V4.
+  // A separately authenticated viewer session already exercises cross-user RLS.
+  if (orderId && failed === 0) {
+    const peerWriterClient = createClient(url, anonKey, clientOptions);
+    const peerSignIn = await peerWriterClient.auth.signInWithPassword({
+      email: process.env.LIVE_TEST_ADMIN_EMAIL!,
+      password: process.env.LIVE_TEST_ADMIN_PASSWORD!,
+    });
+    const peerAuthenticated = !peerSignIn.error &&
+      peerSignIn.data.user?.id === adminLogin.data.user.id &&
+      !!peerSignIn.data.session?.access_token &&
+      peerSignIn.data.session.access_token !== adminLogin.data.session?.access_token;
+    check(peerAuthenticated,
+      'concurrent RPC fixture must have distinct real Auth login sessions');
+    if (peerAuthenticated) {
+      const concurrentA = validateSupplierOrder(printableFixture(1, tag + '-RACE-A'));
+      const concurrentB = validateSupplierOrder(printableFixture(2, tag + '-RACE-B'));
+      if (!concurrentA.ok || !concurrentB.ok) {
+        check(false, 'concurrent RPC fixtures must pass shared validation');
+      } else {
+        const requestA = crypto.randomUUID();
+        const requestB = crypto.randomUUID();
+        const [raceA, raceB] = await Promise.all([
+          adminClient.rpc('save_supplier_order_version', {
+            p_request_id: requestA, p_order_id: orderId, p_expected_version: 2,
+            p_snapshot: concurrentA.snapshot,
+            p_total_thousandths: concurrentA.amountThousandths,
+          }),
+          peerWriterClient.rpc('save_supplier_order_version', {
+            p_request_id: requestB, p_order_id: orderId, p_expected_version: 2,
+            p_snapshot: concurrentB.snapshot,
+            p_total_thousandths: concurrentB.amountThousandths,
+          }),
+        ]);
+        const aWon = !raceA.error && rpcRow(raceA)?.version === 3;
+        const bWon = !raceB.error && rpcRow(raceB)?.version === 3;
+        const aConflict = rpcErrorIs(raceA, 'VERSION_CONFLICT');
+        const bConflict = rpcErrorIs(raceB, 'VERSION_CONFLICT');
+        check((aWon && bConflict && !bWon) || (bWon && aConflict && !aWon),
+          'simultaneous version-2 writers must create exactly one V3 and one VERSION_CONFLICT');
+        const raceHistory = await adminClient.from('commercial_supplier_order_versions')
+          .select('id,version,snapshot,total_thousandths')
+          .eq('order_id', orderId).order('version', { ascending: true });
+        const raceOrder = await adminClient.from('commercial_supplier_orders')
+          .select('latest_version').eq('id', orderId).maybeSingle();
+        check(!raceHistory.error && raceHistory.data?.length === 3 &&
+          raceHistory.data[0]?.version === 1 &&
+          raceHistory.data[0]?.snapshot?.order?.supplier === liveV1.order.supplier &&
+          raceHistory.data[0]?.total_thousandths === 5 &&
+          raceHistory.data[1]?.version === 2 &&
+          raceHistory.data[1]?.snapshot?.order?.supplier === liveV2.order.supplier &&
+          raceHistory.data[1]?.total_thousandths === 1006 &&
+          raceHistory.data[2]?.version === 3 &&
+          !raceOrder.error && raceOrder.data?.latest_version === 3,
+          'concurrent writes must preserve immutable V1/V2 and leave exactly one latest V3');
+        const winningRequest = aWon ? requestA : requestB;
+        const winningPayload = aWon ? concurrentA : concurrentB;
+        if (aWon || bWon) {
+          const replay = await adminClient.rpc('save_supplier_order_version', {
+            p_request_id: winningRequest, p_order_id: orderId,
+            p_expected_version: 2, p_snapshot: winningPayload.snapshot,
+            p_total_thousandths: winningPayload.amountThousandths,
+          });
+          check(!replay.error && rpcRow(replay)?.version === 3,
+            'winner idempotency replay must return V3 without creating V4');
+          const finalVersions = await adminClient.from('commercial_supplier_order_versions')
+            .select('version').eq('order_id', orderId);
+          check(!finalVersions.error && finalVersions.data?.length === 3,
+            'idempotent replay must not append another formal order version');
+        }
+      }
+    }
+    await peerWriterClient.auth.signOut();
+    matrix.concurrent_same_owner_rpc_conflict = failed === 0 ? 'PASS' : 'FAIL';
+  } else if (orderId) {
+    matrix.concurrent_same_owner_rpc_conflict = 'NOT_VERIFIED';
   }
 
   const cleanup = await adminClient.from('commercial_supplier_order_drafts').update({
