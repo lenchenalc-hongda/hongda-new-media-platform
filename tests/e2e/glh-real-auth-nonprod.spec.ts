@@ -87,14 +87,14 @@ async function run() {
     const collision = await admin.client.rpc('glh_create_manual_production_lead', {
       ...args, p_display_name: 'MUTATED QA KEY',
     });
-    // PostgREST may sanitize an explicit SQLSTATE 40001 response message.
-    // The isolated RPC raises SQLSTATE 40001 for mutated idempotency keys.
-    const mutatedReplayDenied = !!collision.error && collision.error.code === '40001';
+    // Expected application conflict uses PostgREST PT409 to avoid SQLSTATE 40001 retry loops.
+    // The isolated RPC raises PT409 (HTTP 409) for mutated idempotency keys.
+    const mutatedReplayDenied = !!collision.error && collision.error.code === 'PT409';
     const code = collision.error?.code;
     const safeCode = typeof code === 'string' && /^[0-9A-Z_]{3,30}$/.test(code) ? code : 'UNAVAILABLE';
     console.log('GLH_MUTATED_REPLAY_HAS_ERROR=' + (!!collision.error ? 'YES' : 'NO'));
     console.log('GLH_MUTATED_REPLAY_SAFE_CODE=' + safeCode);
-    console.log('GLH_MUTATED_REPLAY_SQLSTATE_40001=' + (mutatedReplayDenied ? 'PASS' : 'FAIL'));
+    console.log('GLH_MUTATED_REPLAY_HTTP409=' + (mutatedReplayDenied ? 'PASS' : 'FAIL'));
     check(mutatedReplayDenied, 'CHANGED_REPLAY_DENIED');
     const assign = await admin.client.rpc('glh_assign_lead', {
       p_lead_id: leadId, p_assignee_profile_id: sales.profileId,
