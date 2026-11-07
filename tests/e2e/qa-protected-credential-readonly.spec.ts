@@ -48,10 +48,12 @@ async function checkRole(
 
   let client: SupabaseClient | null = null;
   let signedIn = false;
+  let stage: 'CLIENT_INIT' | 'AUTH_REQUEST' | 'PROFILE_READ' = 'CLIENT_INIT';
   try {
     client = createClient(QA_URL, anonKey, {
       auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
     });
+    stage = 'AUTH_REQUEST';
     // The only network destination is the exact isolated Supabase project.
     const auth = await client.auth.signInWithPassword({ email, password });
     if (auth.error || !auth.data.session?.access_token || !auth.data.user?.id) {
@@ -63,6 +65,7 @@ async function checkRole(
     result.sessionUserId = auth.data.user.id;
     announce(role.name + '_LOGIN', true);
 
+    stage = 'PROFILE_READ';
     const profile = await client.from('profiles')
       .select('role,org_id,is_active')
       .eq('user_id', auth.data.user.id)
@@ -77,10 +80,13 @@ async function checkRole(
     announce(role.name + '_PROFILE', result.profile);
     announce(role.name + '_ORG', result.org);
     return result;
-  } catch {
-    // Deliberately do not print the original exception: auth/HTTP errors
-    // may contain user data, tokens, or request parameters.
-    announce(role.name + '_CONNECTION', false);
+  } catch (caught: unknown) {
+    // Output only allowlisted error *classes*, not messages. No credentials,
+    // raw HTTP bodies, email addresses, user IDs, or JWTs reach logs.
+    const category = caught instanceof TypeError ? 'TYPE_ERROR' :
+      caught instanceof RangeError ? 'RANGE_ERROR' : 'OTHER';
+    announce(role.name + '_' + stage, false);
+    console.log('QA_' + role.name + '_EXCEPTION_CLASS=' + category);
     return result;
   } finally {
     if (signedIn && client) await client.auth.signOut().catch(() => undefined);
