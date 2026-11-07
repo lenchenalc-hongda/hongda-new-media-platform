@@ -142,8 +142,10 @@ jobs:
           echo 'CSO_REAL_AUTH=PASS'
 
   glh-real-auth-three-account:
-    if: github.ref == 'refs/heads/qa/real-auth-cso-glh-20261107'
-    needs: [protected-secret-preflight, protected-auth-credentials-readonly]
+    # Serialize synthetic database writes. Continue even if CSO fails, provided
+    # the protected real Auth preflight passed; never bypass secret/role gates.
+    if: ${{ !cancelled() && github.ref == 'refs/heads/qa/real-auth-cso-glh-20261107' && needs.protected-auth-credentials-readonly.result == 'success' }}
+    needs: [protected-secret-preflight, protected-auth-credentials-readonly, cso-real-auth-two-session]
     runs-on: ubuntu-latest
     timeout-minutes: 18
     environment: hongda-review-dev
@@ -173,8 +175,10 @@ jobs:
         run: node --import tsx tests/e2e/glh-real-auth-nonprod.spec.ts
 
   wos-real-auth-private-storage:
-    if: github.ref == 'refs/heads/qa/real-auth-cso-glh-20261107'
-    needs: [protected-secret-preflight, protected-auth-credentials-readonly]
+    # Never overlap GLH and WOS real writes on the small isolated PostgREST pool.
+    # A GLH assertion failure must not silently suppress independent WOS QA.
+    if: ${{ !cancelled() && github.ref == 'refs/heads/qa/real-auth-cso-glh-20261107' && needs.protected-auth-credentials-readonly.result == 'success' }}
+    needs: [protected-secret-preflight, protected-auth-credentials-readonly, glh-real-auth-three-account]
     runs-on: ubuntu-latest
     timeout-minutes: 18
     environment: hongda-review-dev
