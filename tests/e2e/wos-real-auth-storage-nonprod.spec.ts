@@ -99,8 +99,11 @@ async function test() {
     p_order_id:orderId,p_expected_revision:1,p_expected_label:'V1',
     p_idempotency_key:randomUUID(),
   });
-  assert(!!duplicate.error && duplicate.error.message.includes('VERSION_CONFLICT'),
-   'SAME_ORDER_SECOND_SUBMIT_DENIED');
+  // Exact SQLSTATE from the trusted P7 RPC; do not rely on a localized or
+  // proxy-sanitized PostgREST error message.
+  const secondSubmissionDenied = !!duplicate.error && duplicate.error.code === '40001';
+  console.log('WOS_SECOND_SUBMIT_SQLSTATE_40001=' + (secondSubmissionDenied ? 'PASS' : 'FAIL'));
+  assert(secondSubmissionDenied,'SAME_ORDER_SECOND_SUBMIT_DENIED');
   const inbox=await workshop.client.from('wos_workshop_inbox')
    .select('id,order_id,submission_id,workflow_status').eq('order_id',orderId);
   assert(!inbox.error && inbox.data?.length===1 &&
