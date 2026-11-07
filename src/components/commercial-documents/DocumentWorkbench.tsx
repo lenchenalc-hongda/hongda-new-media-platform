@@ -3,6 +3,7 @@
 
 import { useEffect, useRef, useState, type ChangeEvent, type ReactNode } from 'react';
 import DocumentPreview from './DocumentPreview';
+import { collectQuotationImagePaths, MAX_IMAGE_UPLOAD_BYTES } from '@/lib/commercial-documents/item-images';
 import {
   methodLabel,
   qrCodeLabel,
@@ -131,6 +132,31 @@ export default function DocumentWorkbench({ userName, userRole, initialCloudList
   const [confirmRequestId,setConfirmRequestId] = useState('');
   const hasUnsavedChanges = !!cloudId && !!lastSavedSnapshot && JSON.stringify(draft) !== lastSavedSnapshot;
   const [cloudStatus, setCloudStatus] = useState('');
+  const [photoUrls, setPhotoUrls] = useState<Record<string,string>>({});
+  const [photoUploading, setPhotoUploading] = useState<string | null>(null);
+  const [photoStatus, setPhotoStatus] = useState('');
+  const photoPathKey = collectQuotationImagePaths(draft).join('|');
+
+  useEffect(() => {
+    let cancelled = false;
+    const paths = photoPathKey ? photoPathKey.split('|') : [];
+    async function refresh() {
+      if (!paths.length) { if (!cancelled) setPhotoUrls({}); return; }
+      const entries = await Promise.all(paths.map(async path => {
+        try {
+          const res = await fetch('/api/commercial-documents/item-images?path=' + encodeURIComponent(path),
+            { cache:'no-store' });
+          const data: { ok?: boolean; url?: string } = await res.json();
+          return [path, res.ok && data.ok && data.url ? data.url : ''] as const;
+        } catch { return [path, ''] as const; }
+      }));
+      if (!cancelled) setPhotoUrls(Object.fromEntries(entries));
+    }
+    void refresh();
+    window.addEventListener('focus', refresh);
+    return () => { cancelled = true; window.removeEventListener('focus', refresh); };
+  }, [photoPathKey]);
+
   const [cloudBusy, setCloudBusy] = useState(false);
   const [cloudListOpen, setCloudListOpen] = useState(initialCloudListOpen);
   const [cloudList, setCloudList] = useState<Array<{
@@ -334,6 +360,48 @@ export default function DocumentWorkbench({ userName, userRole, initialCloudList
     updateSection(sectionId, section => ({
       ...section, items: section.items.map(item => item.id === itemId ? { ...item, ...change } : item),
     }));
+  };
+
+  const uploadItemPhoto = async (sectionId: string, itemId: string, file: File) => {
+    if (readOnlyConfirmed || photoUploading) return;
+    setPhotoUploading(itemId); setPhotoStatus('');
+    try {
+      if (!['image/jpeg','image/png','image/webp'].includes(file.type) || file.size > 15 * 1024 * 1024) {
+        throw new Error('仅支持 JPG、PNG、WebP，原始图片不得超过 15 MB');
+      }
+      // Resize in the browser; flatten transparency, remove EXIF, and limit cloud/PDF size.
+      const source = await createImageBitmap(file);
+      const scale = Math.min(1, 1600 / Math.max(source.width, source.height));
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.max(1, Math.round(source.width * scale));
+      canvas.height = Math.max(1, Math.round(source.height * scale));
+      const ctx = canvas.getContext('2d');
+      if (!ctx) { source.close(); throw new Error('浏览器无法处理所选图片'); }
+      ctx.fillStyle = '#fff'; ctx.fillRect(0,0,canvas.width,canvas.height);
+      ctx.drawImage(source,0,0,canvas.width,canvas.height); source.close();
+      const blob = await new Promise<Blob>((resolve,reject) =>
+        canvas.toBlob(out => out ? resolve(out) : reject(new Error('图片压缩失败')),
+          'image/jpeg',0.82));
+      if (blob.size > MAX_IMAGE_UPLOAD_BYTES) throw new Error('图片压缩后仍超过 3 MB，请换一张');
+      const payload = new FormData();
+      payload.append('photo', new File([blob],'quotation-item.jpg',{type:'image/jpeg'}));
+      const response = await fetch('/api/commercial-documents/item-images', {
+        method: 'POST', body: payload, cache:'no-store',
+      });
+      const result: { ok?: boolean; path?: string; url?: string; message?: string } = await response.json();
+      if (!response.ok || !result.ok || !result.path || !result.url) {
+        throw new Error(result.message || '照片上传失败');
+      }
+      updateItem(sectionId,itemId,{photoPath:result.path});
+      setPhotoUrls(prev=>({...prev,[result.path!]:result.url!}));
+      setPhotoStatus(draft.language==='en'
+        ? 'Photo uploaded. Save the draft or confirm the quote to retain the link.'
+        : '照片已上传。请保存草稿或确认报价，才能永久关联这张照片。');
+    } catch(e) {
+      setPhotoStatus(e instanceof Error ? e.message : '图片上传失败，请重试');
+    } finally {
+      setPhotoUploading(null);
+    }
   };
   const editProductNotice = (type: ProductNoticeType, value: string) => {
     setDraft(previous => ({
@@ -658,6 +726,10 @@ export default function DocumentWorkbench({ userName, userRole, initialCloudList
   };
   const printPdf = async () => {
     const problems = validateForPrint(draft);
+    if (photoUploading) problems.push('照片还在上传中，请稍后再生成 PDF');
+    if (collectQuotationImagePaths(draft).some(path => !photoUrls[path])) {
+      problems.push('报价照片尚未加载成功，请检查网络或重新打开草稿后再生成 PDF');
+    }
     if (archivedQrChanged) {
       problems.push('历史二维码已经与当前收款账户不同，无法原样重新生成 PDF，请核对原始记录');
     }
@@ -695,7 +767,7 @@ export default function DocumentWorkbench({ userName, userRole, initialCloudList
       }
       window.print();
     } catch {
-      setErrors(['PDF 图片（报价抬头或原始收款二维码）加载失败，已阻止输出；请刷新后重试。']);
+      setErrors(['PDF 图片（报价抬头、产品照片或收款二维码）加载失败，已阻止输出；请刷新后重试。']);
       setActiveTab('edit');
     }
   };
@@ -712,9 +784,9 @@ export default function DocumentWorkbench({ userName, userRole, initialCloudList
         </div>
         <div className="flex gap-2 flex-wrap">
 
-          <button type="button" className="btn-primary btn-sm" disabled={cloudBusy || readOnlyConfirmed || draft.kind !== 'quotation'}
+          <button type="button" className="btn-primary btn-sm" disabled={cloudBusy || !!photoUploading || readOnlyConfirmed || draft.kind !== 'quotation'}
             onClick={saveCloudDraft}>{cloudBusy ? '处理中…' : '保存到草稿箱 / Save Draft'}</button>
-          <button type="button" className="btn-primary btn-sm" disabled={cloudBusy || readOnlyConfirmed || draft.kind !== 'quotation'}
+          <button type="button" className="btn-primary btn-sm" disabled={cloudBusy || !!photoUploading || readOnlyConfirmed || draft.kind !== 'quotation'}
             onClick={confirmQuote}>确认并保存报价</button>
           {cloudId && <button type="button" className="btn-secondary btn-sm" onClick={copyToNewCloudDraft}>复制为新草稿</button>}
           <button type="button" className="btn-secondary btn-sm" onClick={saveJson}>下载草稿 JSON</button>
@@ -731,6 +803,7 @@ export default function DocumentWorkbench({ userName, userRole, initialCloudList
         {hasUnsavedChanges ? '● 有未保存的修改' : '✓ 已与云端草稿同步'} · 当前 V{cloudRevision}
       </p>}
       {cloudStatus && <p role="status" className="rounded bg-blue-50 border border-blue-200 text-blue-900 text-xs p-3">{cloudStatus}</p>}
+      {photoStatus && <p role="status" className="rounded bg-amber-50 border border-amber-200 text-amber-900 text-xs p-3">{photoStatus}</p>}
       {cloudListOpen && (
         <section className="rounded-xl border border-gray-200 bg-white p-4 space-y-3">
           <div className="flex gap-2 flex-wrap">
@@ -1241,7 +1314,7 @@ export default function DocumentWorkbench({ userName, userRole, initialCloudList
               <button type="button" className="btn-secondary btn-sm" onClick={printPdf}>保存为 PDF</button>
             </div>
             <div className="commercial-preview-scroll max-h-[78vh] overflow-auto border border-gray-200 rounded-lg bg-gray-100 p-2">
-              <DocumentPreview draft={draft} selectedMethod={selectedMethod} />
+              <DocumentPreview draft={draft} selectedMethod={selectedMethod} imageUrls={photoUrls} />
             </div>
             <p className="commercial-preview-help text-xs text-gray-500">点击“保存为 PDF”会打开浏览器打印窗口，选择“另存为 PDF”。</p>
           </div>
