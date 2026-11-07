@@ -128,8 +128,16 @@ async function main() {
       auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
     });
     dummyClientBuild = true;
-  } catch {
+  } catch (error: unknown) {
     dummyClientBuild = false;
+    // Only the synthetic, non-secret dummy-key constructor exception may be
+    // displayed. All values are fixed test strings, with no real credential.
+    const raw = error instanceof Error ? error.message : 'NON_ERROR_THROW';
+    const safe = raw
+      .replaceAll('sb_publishable_FAKEDIAGNOSTICONLYNOTAREALKEY12345', '[DUMMY_KEY]')
+      .replaceAll(QA_URL, '[QA_URL]')
+      .slice(0, 160);
+    console.log('QA_PUBLIC_DUMMY_INIT_CAUSE=' + safe);
   }
   announce('PUBLIC_FAKE_KEY_CLIENT_INIT', dummyClientBuild);
 
