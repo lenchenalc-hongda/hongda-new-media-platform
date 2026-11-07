@@ -130,8 +130,11 @@ async function test() {
   await Promise.allSettled([admin.client.auth.signOut(),workshop.client.auth.signOut(),foreign.client.auth.signOut()]);
  }
 }
-test().catch(()=>{
- // No raw auth errors or credential fields are ever logged.
+test().catch((error: unknown)=>{
+ // Only a hard-coded assertion label is emitted, never raw Auth/HTTP errors.
+ const message = error instanceof Error ? error.message : '';
+ const match = /^WOS_REAL_QA_FAILED:([A-Za-z_]+)$/.exec(message);
+ console.error('WOS_QA_FAILURE_STAGE=' + (match ? match[1] : 'UNCLASSIFIED'));
  console.error('WOS_REAL_AUTH_PRIVATE_STORAGE_E2E=NOT_VERIFIED_OR_FAIL');
  process.exitCode=1;
 });
