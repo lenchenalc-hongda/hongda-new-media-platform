@@ -13,10 +13,12 @@ import {
   isWosNonproductionApiEnabled,
   isApprovedWosSandboxUrl,
   resolveWosApiActor,
+  parseWosProductionSubmitEnvelope,
   validateWosPostEnvelope,
   type WosApiActor,
 } from './api-contract';
 import type { WosEntityType } from './domain';
+import { submitWosProductionNonproduction } from './p7-nonprod-submit';
 
 const headers = { 'Cache-Control': 'no-store, private' } as const;
 
@@ -151,6 +153,16 @@ export async function rejectUnsafeWosOfficePost(req: NextRequest, entityType: Wo
     return response('INVALID_INPUT', 400);
   }
   if (!validateWosPostEnvelope(value)) return response('INVALID_INPUT', 400);
+
+  // Only a separately enabled, exact-project-pinned Preview can submit a
+  // previously-created production DRAFT. Sampling remains 409 fail-closed.
+  if (entityType === 'PRODUCTION_ORDER'
+    && process.env.WOS_P7_NONPROD_SUBMIT_ENABLED === 'true') {
+    const input = parseWosProductionSubmitEnvelope(value);
+    if (!input) return response('INVALID_INPUT', 400);
+    const result = await submitWosProductionNonproduction(auth.client, auth.actor, input);
+    return response(result.code, result.status, result.data ?? null);
+  }
 
   // Existing Phase 1 tables only permit independent DRAFT INSERTs; they do
   // not atomically create a SUBMITTED record, immutable audit trail and
