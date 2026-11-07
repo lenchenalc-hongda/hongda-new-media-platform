@@ -46,11 +46,12 @@ async function checkRole(
     return result;
   }
 
-  const client: SupabaseClient = createClient(QA_URL, anonKey, {
-    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
-  });
+  let client: SupabaseClient | null = null;
   let signedIn = false;
   try {
+    client = createClient(QA_URL, anonKey, {
+      auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+    });
     // The only network destination is the exact isolated Supabase project.
     const auth = await client.auth.signInWithPassword({ email, password });
     if (auth.error || !auth.data.session?.access_token || !auth.data.user?.id) {
@@ -82,7 +83,7 @@ async function checkRole(
     announce(role.name + '_CONNECTION', false);
     return result;
   } finally {
-    if (signedIn) await client.auth.signOut().catch(() => undefined);
+    if (signedIn && client) await client.auth.signOut().catch(() => undefined);
   }
 }
 
@@ -91,8 +92,14 @@ async function main() {
   const expectedOrg = process.env.REVIEW_DEV_EXPECTED_ORG_ID;
   const validOrg = !!expectedOrg &&
     /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(expectedOrg);
+  const validKeyShape = !!anonKey && (
+    /^sb_publishable_[a-zA-Z0-9_-]{12,}$/.test(anonKey) ||
+    /^eyJ[a-zA-Z0-9_-]+\.eyJ[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+$/.test(anonKey)
+  );
+  announce('EXPECTED_ORG_UUID_SHAPE', validOrg);
+  announce('ANON_KEY_FORMAT', validKeyShape);
   if (process.env.NEXT_PUBLIC_SUPABASE_URL !== QA_URL ||
-      !anonKey || !validOrg) {
+      !validKeyShape || !validOrg) {
     console.error('QA_PINNED_PROJECT_OR_REQUIRED_CONFIGURATION=FAIL');
     process.exitCode = 1;
     return;
