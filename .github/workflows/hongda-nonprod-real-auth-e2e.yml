@@ -16,8 +16,53 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  protected-secret-preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    environment: hongda-review-dev
+    env:
+      REVIEW_DEV_SUPABASE_ANON_KEY: ${{ secrets.REVIEW_DEV_SUPABASE_ANON_KEY }}
+      REVIEW_DEV_EXPECTED_ORG_ID: ${{ secrets.REVIEW_DEV_EXPECTED_ORG_ID }}
+      REVIEW_DEV_ADMIN_EMAIL: ${{ secrets.REVIEW_DEV_ADMIN_EMAIL }}
+      REVIEW_DEV_ADMIN_PASSWORD: ${{ secrets.REVIEW_DEV_ADMIN_PASSWORD }}
+      REVIEW_DEV_VIEWER_EMAIL: ${{ secrets.REVIEW_DEV_VIEWER_EMAIL }}
+      REVIEW_DEV_VIEWER_PASSWORD: ${{ secrets.REVIEW_DEV_VIEWER_PASSWORD }}
+      REVIEW_DEV_SALES_EMAIL: ${{ secrets.REVIEW_DEV_SALES_EMAIL }}
+      REVIEW_DEV_SALES_PASSWORD: ${{ secrets.REVIEW_DEV_SALES_PASSWORD }}
+      REVIEW_DEV_FOREIGN_EMAIL: ${{ secrets.REVIEW_DEV_FOREIGN_EMAIL }}
+      REVIEW_DEV_FOREIGN_PASSWORD: ${{ secrets.REVIEW_DEV_FOREIGN_PASSWORD }}
+      REVIEW_DEV_OPERATOR_EMAIL: ${{ secrets.REVIEW_DEV_OPERATOR_EMAIL }}
+      REVIEW_DEV_OPERATOR_PASSWORD: ${{ secrets.REVIEW_DEV_OPERATOR_PASSWORD }}
+    steps:
+      - name: Validate protected QA environment names without reading or printing values
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import os,sys
+          required = [
+              'REVIEW_DEV_SUPABASE_ANON_KEY',
+              'REVIEW_DEV_EXPECTED_ORG_ID',
+              'REVIEW_DEV_ADMIN_EMAIL',
+              'REVIEW_DEV_ADMIN_PASSWORD',
+              'REVIEW_DEV_VIEWER_EMAIL',
+              'REVIEW_DEV_VIEWER_PASSWORD',
+              'REVIEW_DEV_SALES_EMAIL',
+              'REVIEW_DEV_SALES_PASSWORD',
+              'REVIEW_DEV_FOREIGN_EMAIL',
+              'REVIEW_DEV_FOREIGN_PASSWORD',
+              'REVIEW_DEV_OPERATOR_EMAIL',
+              'REVIEW_DEV_OPERATOR_PASSWORD',
+          ]
+          missing = [name for name in required if not os.environ.get(name, '').strip()]
+          if missing:
+              print('QA_PROTECTED_SECRET_NAMES_MISSING=' + ','.join(missing))
+              sys.exit(1)
+          print('QA_PROTECTED_SECRETS_PRESENT=YES')
+          PY
+
   cso-real-auth-two-session:
     if: github.ref == 'refs/heads/qa/real-auth-cso-glh-20261107'
+    needs: [protected-secret-preflight]
     runs-on: ubuntu-latest
     timeout-minutes: 18
     environment: hongda-review-dev
@@ -62,6 +107,7 @@ jobs:
 
   glh-real-auth-three-account:
     if: github.ref == 'refs/heads/qa/real-auth-cso-glh-20261107'
+    needs: [protected-secret-preflight]
     runs-on: ubuntu-latest
     timeout-minutes: 18
     environment: hongda-review-dev
@@ -92,6 +138,7 @@ jobs:
 
   wos-real-auth-private-storage:
     if: github.ref == 'refs/heads/qa/real-auth-cso-glh-20261107'
+    needs: [protected-secret-preflight]
     runs-on: ubuntu-latest
     timeout-minutes: 18
     environment: hongda-review-dev
