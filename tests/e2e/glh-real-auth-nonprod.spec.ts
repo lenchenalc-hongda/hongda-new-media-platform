@@ -122,8 +122,12 @@ async function run() {
     await Promise.allSettled([admin.client.auth.signOut(), sales.client.auth.signOut(), foreign.client.auth.signOut()]);
   }
 }
-run().catch(() => {
-  // No untrusted error objects, raw HTTP responses or credentials in CI logs.
+run().catch((error: unknown) => {
+  // Whitelist only hard-coded test assertion labels; never raw API errors,
+  // HTTP bodies, email addresses, passwords, user IDs, or JWTs.
+  const message = error instanceof Error ? error.message : '';
+  const match = /^QA_CHECK_FAILED:([A-Za-z_]+)$/.exec(message);
+  console.error('GLH_QA_FAILURE_STAGE=' + (match ? match[1] : 'UNCLASSIFIED'));
   console.error('GLH_REAL_AUTH_E2E=NOT_VERIFIED_OR_FAIL');
   process.exitCode=1;
 });
