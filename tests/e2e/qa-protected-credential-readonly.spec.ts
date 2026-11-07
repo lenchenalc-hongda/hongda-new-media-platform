@@ -66,17 +66,30 @@ async function checkRole(
     announce(role.name + '_LOGIN', true);
 
     stage = 'PROFILE_READ';
-    const profile = await client.from('profiles')
-      .select('role,org_id,is_active')
-      .eq('user_id', auth.data.user.id)
-      .maybeSingle();
-
+    // A single transient PostgREST timeout must not turn all five valid Auth
+    // credentials into a false "wrong password" incident.
+    let profile: { data: { is_active: boolean; role: string; org_id: string } | null; error: unknown } =
+      { data: null, error: new Error('NOT_TRIED') };
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      try {
+        const response = await client.from('profiles')
+          .select('role,org_id,is_active')
+          .eq('user_id', auth.data.user.id)
+          .abortSignal(AbortSignal.timeout(12000))
+          .maybeSingle();
+        profile = response as typeof profile;
+        if (!profile.error && profile.data) break;
+      } catch {
+        profile = { data: null, error: new Error('QA_RETRYABLE_PROFILE_READ') };
+      }
+    }
     result.profile = !profile.error && profile.data?.is_active === true &&
       profile.data?.role === role.expectedRole;
     result.org = result.profile && typeof profile.data?.org_id === 'string' &&
       (role.foreign
         ? profile.data.org_id !== expectedOrgId
         : profile.data.org_id === expectedOrgId);
+    if (!result.profile) announce(role.name + '_PROFILE_READ_RETRY_EXHAUSTED', true);
     announce(role.name + '_PROFILE', result.profile);
     announce(role.name + '_ORG', result.org);
     return result;
