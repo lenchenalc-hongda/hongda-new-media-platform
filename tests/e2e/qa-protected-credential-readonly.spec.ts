@@ -84,9 +84,18 @@ async function checkRole(
     // Output only allowlisted error *classes*, not messages. No credentials,
     // raw HTTP bodies, email addresses, user IDs, or JWTs reach logs.
     const category = caught instanceof TypeError ? 'TYPE_ERROR' :
-      caught instanceof RangeError ? 'RANGE_ERROR' : 'OTHER';
+      caught instanceof RangeError ? 'RANGE_ERROR' :
+      caught instanceof Error ? 'GENERIC_ERROR' : 'NON_ERROR';
+    const msg = caught instanceof Error ? caught.message.toLowerCase() : '';
+    // Error text is intentionally NOT logged. Only broad allowlisted buckets.
+    const group = /supabasekey|api key|apikey|publishable|jwt|key missing/.test(msg)
+      ? 'KEY_RELATED' : /url|hostname|domain/.test(msg)
+      ? 'URL_RELATED' : /fetch|network|timeout|connect/.test(msg)
+      ? 'NETWORK_RELATED' : /crypto|webcrypto/.test(msg)
+      ? 'CRYPTO_RELATED' : 'UNCLASSIFIED';
     announce(role.name + '_' + stage, false);
     console.log('QA_' + role.name + '_EXCEPTION_CLASS=' + category);
+    console.log('QA_' + role.name + '_EXCEPTION_GROUP=' + group);
     return result;
   } finally {
     if (signedIn && client) await client.auth.signOut().catch(() => undefined);
@@ -110,6 +119,19 @@ async function main() {
     process.exitCode = 1;
     return;
   }
+
+  // Safe constructor-only control using a known fake publishable-shaped key.
+  // This does not sign in, connect to an API, or inspect any real secret value.
+  let dummyClientBuild = false;
+  try {
+    createClient(QA_URL, 'sb_publishable_FAKEDIAGNOSTICONLYNOTAREALKEY12345', {
+      auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+    });
+    dummyClientBuild = true;
+  } catch {
+    dummyClientBuild = false;
+  }
+  announce('PUBLIC_FAKE_KEY_CLIENT_INIT', dummyClientBuild);
 
   const outcomes: TestOutcome[] = [];
   for (const role of testRoles) {
