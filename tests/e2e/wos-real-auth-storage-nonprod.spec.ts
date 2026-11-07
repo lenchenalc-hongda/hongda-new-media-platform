@@ -101,12 +101,12 @@ async function test() {
   });
   // Exact SQLSTATE from the trusted P7 RPC; do not rely on a localized or
   // proxy-sanitized PostgREST error message.
-  const secondSubmissionDenied = !!duplicate.error && duplicate.error.code === '40001';
+  const secondSubmissionDenied = !!duplicate.error && duplicate.error.code === 'PT409';
   const code = duplicate.error?.code;
   const safeCode = typeof code === 'string' && /^[0-9A-Z_]{3,30}$/.test(code) ? code : 'UNAVAILABLE';
   console.log('WOS_SECOND_SUBMIT_HAS_ERROR=' + (!!duplicate.error ? 'YES' : 'NO'));
   console.log('WOS_SECOND_SUBMIT_SAFE_CODE=' + safeCode);
-  console.log('WOS_SECOND_SUBMIT_SQLSTATE_40001=' + (secondSubmissionDenied ? 'PASS' : 'FAIL'));
+  console.log('WOS_SECOND_SUBMIT_HTTP409=' + (secondSubmissionDenied ? 'PASS' : 'FAIL'));
   assert(secondSubmissionDenied,'SAME_ORDER_SECOND_SUBMIT_DENIED');
   const inbox=await workshop.client.from('wos_workshop_inbox')
    .select('id,order_id,submission_id,workflow_status').eq('order_id',orderId);
