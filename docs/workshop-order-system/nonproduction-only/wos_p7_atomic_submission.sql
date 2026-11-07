@@ -90,7 +90,7 @@ BEGIN
  THEN RAISE EXCEPTION 'NOT_AUTHORIZED' USING ERRCODE='42501'; END IF;
  IF v_order.workflow_status<>'DRAFT' OR v_order.version<>p_expected_revision
    OR v_order.version_label<>p_expected_label
- THEN RAISE EXCEPTION 'STALE_OR_UNEDITABLE_ORDER' USING ERRCODE='40001'; END IF;
+ THEN RAISE EXCEPTION 'STALE_OR_UNEDITABLE_ORDER' USING ERRCODE='PT409'; END IF;
  IF NOT EXISTS (
    SELECT 1 FROM public.wos_reference_images im
    WHERE im.organization_id=v_actor.org_id AND im.entity_type='PRODUCTION_ORDER'
@@ -157,7 +157,7 @@ BEGIN
  THEN RAISE EXCEPTION 'NOT_AUTHORIZED' USING ERRCODE='42501'; END IF;
  IF v_order.workflow_status<>'DRAFT' OR v_order.version<>p_expected_revision
   OR v_order.version_label<>p_expected_label
- THEN RAISE EXCEPTION 'VERSION_CONFLICT' USING ERRCODE='40001'; END IF;
+ THEN RAISE EXCEPTION 'VERSION_CONFLICT' USING ERRCODE='PT409'; END IF;
  SELECT id INTO v_readiness FROM public.wos_office_readiness_receipts
  WHERE organization_id=v_actor.org_id AND order_id=p_order_id
  AND source_revision=p_expected_revision AND source_version_label=p_expected_label;
@@ -171,7 +171,7 @@ BEGIN
  submitted_at=v_receipt.created_at,version=version+1,updated_at=now()
  WHERE id=p_order_id AND organization_id=v_actor.org_id AND version=p_expected_revision
  AND workflow_status='DRAFT';
- IF NOT FOUND THEN RAISE EXCEPTION 'CONCURRENT_VERSION_CHANGE' USING ERRCODE='40001'; END IF;
+ IF NOT FOUND THEN RAISE EXCEPTION 'CONCURRENT_VERSION_CHANGE' USING ERRCODE='PT409'; END IF;
  INSERT INTO public.wos_workshop_inbox(
  organization_id,order_id,submission_id,source_revision,source_version_label)
  VALUES(v_actor.org_id,p_order_id,v_receipt.id,p_expected_revision,p_expected_label)
