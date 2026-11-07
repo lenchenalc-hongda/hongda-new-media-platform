@@ -146,4 +146,28 @@ for (const language of ['en', 'zh'] as const) {
     'Grand total must include the previously omitted film line (US$9,160.00)');
 }
 
+
+const photoPath='0ff53d93-2b9e-48b9-8113-a4768c39cdd2/f8adf44a-f04e-44b4-9c82-8b96508097bb/c1d14e2a-f72f-4f95-8370-9ccb44b71c5e.jpg';
+const photoQuote = initialDraft('QA');
+photoQuote.kind='quotation';
+photoQuote.language='en';
+photoQuote.buyerName='Customer';
+photoQuote.sections=[{id:'film',title:'Heat Transfer Film',items:[
+  {...blankItem('photo-row'),name:'Gravure Film',quantity:'500000',unit:'pcs',unitPrice:'0.0064',photoPath},
+  {...blankItem('no-photo'),name:'Plate fee',quantity:'1',unitPrice:'1000'},
+]}];
+const originalWithoutUrls=renderToStaticMarkup(React.createElement(DocumentPreview,{draft:photoQuote}));
+assert(!originalWithoutUrls.includes('data-item-photo="true"'), 'Private photo must never use a public URL');
+const originalPhotoUrl='https://example.invalid/private-signed-image.jpg?token=QA';
+const photoHtml=renderToStaticMarkup(React.createElement(DocumentPreview,{
+ draft:photoQuote,imageUrls:{[photoPath]:originalPhotoUrl},
+}));
+assert(photoHtml.includes('data-item-photo="true"'));
+assert(photoHtml.includes('document-item-photo') && photoHtml.includes('private-signed-image.jpg'));
+assert(photoHtml.includes('Gravure Film') && photoHtml.includes('0.0064 / pcs'));
+assert.equal((photoHtml.match(/data-item-photo="true"/g)||[]).length,1,'Only attached item shows a photo');
+photoQuote.sections[0].items[0].photoPath='';
+const noPhotoHtml=renderToStaticMarkup(React.createElement(DocumentPreview,{draft:photoQuote}));
+assert(!noPhotoHtml.includes('data-item-photo="true"'),'No photo leaves PDF layout unchanged');
+
 console.log('commercial-document-header: PASS (12 template/length combinations)');
