@@ -1048,6 +1048,49 @@ export default function DocumentWorkbench({ userName, userRole, initialCloudList
                             onChange={value => updateItem(section.id, item.id, { unitPrice: value })} placeholder="0.0000" />
                         </div>
                         <Field label={draft.language === 'en' ? 'Notes' : '备注'} value={item.note} onChange={value => updateItem(section.id, item.id, { note: value })} />
+
+                        {draft.kind === 'quotation' && (
+                          <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 p-2.5 space-y-2">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="text-xs font-medium text-gray-700">{draft.language === 'en' ? 'Product photo (optional)' : '产品照片（选填）'}</span>
+                              <label className="btn-secondary btn-sm cursor-pointer text-xs">
+                                {photoUploading === item.id
+                                  ? (draft.language === 'en' ? 'Uploading…' : '上传中…')
+                                  : item.photoPath
+                                    ? (draft.language === 'en' ? 'Replace photo' : '更换照片')
+                                    : (draft.language === 'en' ? '+ Upload photo' : '+ 上传照片')}
+                                <input type="file" className="sr-only" disabled={!!photoUploading || readOnlyConfirmed}
+                                  accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp"
+                                  aria-label={draft.language === 'en' ? 'Upload product photo' : '上传产品照片'}
+                                  onChange={event => {
+                                    const file = event.target.files?.[0];
+                                    event.target.value = '';
+                                    if (file) void uploadItemPhoto(section.id, item.id, file);
+                                  }} />
+                              </label>
+                              {!!item.photoPath && <button type="button" className="text-xs text-red-700"
+                                disabled={!!photoUploading}
+                                onClick={() => {
+                                  updateItem(section.id, item.id, {photoPath:''});
+                                  setPhotoStatus(draft.language === 'en'
+                                    ? 'Photo removed from this draft; archived versions remain unchanged.'
+                                    : '已从当前报价移除照片，历史正式版本不受影响。');
+                                }}>
+                                {draft.language === 'en' ? 'Remove photo' : '移除照片'}
+                              </button>}
+                            </div>
+                            {!!item.photoPath && (photoUrls[item.photoPath]
+                              ? <img src={photoUrls[item.photoPath]} alt={item.name || '产品照片'}
+                                  className="max-w-[130px] max-h-[105px] object-contain rounded border bg-white" />
+                              : <p className="text-xs text-amber-700">{draft.language === 'en'
+                                  ? 'Loading private photo…' : '正在读取私有照片…'}</p>)}
+                            {!item.photoPath && <p className="text-[11px] text-gray-500">
+                              {draft.language === 'en'
+                                ? 'No photo is required. One photo per line; JPG/PNG/WebP (auto-compressed).'
+                                : '无需上传也可正常报价；每条明细支持一张照片，自动压缩。'}
+                            </p>}
+                          </div>
+                        )}
                         <div className="flex justify-between text-xs">
                           <span className="text-gray-500">{draft.language === 'en'
                               ? (item.mode === 'catalog' ? 'Unit-price-only item (excluded)' : 'Item Amount')
