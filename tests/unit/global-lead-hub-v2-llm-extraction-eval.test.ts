@@ -1,4 +1,5 @@
 import './global-lead-hub-v2-human-feedback.test';
+import './global-lead-hub-v2-multichannel-sim.test';
 import assert from 'node:assert/strict';
 import { GLH_PROVIDER_CALLS_ENABLED } from '../../src/lib/global-lead-hub/channels';
 import {
