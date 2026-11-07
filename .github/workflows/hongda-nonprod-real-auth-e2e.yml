@@ -6,6 +6,7 @@ on:
       - '.github/workflows/hongda-nonprod-real-auth-e2e.yml'
       - 'tests/e2e/commercial-supplier-order-nonprod.spec.ts'
       - 'tests/e2e/glh-real-auth-nonprod.spec.ts'
+      - 'tests/e2e/wos-real-auth-storage-nonprod.spec.ts'
 
 permissions:
   contents: read
@@ -88,3 +89,33 @@ jobs:
           LIVE_TEST_FOREIGN_EMAIL: ${{ secrets.REVIEW_DEV_FOREIGN_EMAIL }}
           LIVE_TEST_FOREIGN_PASSWORD: ${{ secrets.REVIEW_DEV_FOREIGN_PASSWORD }}
         run: node --import tsx tests/e2e/glh-real-auth-nonprod.spec.ts
+
+  wos-real-auth-private-storage:
+    if: github.ref == 'refs/heads/qa/real-auth-cso-glh-20261107'
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    environment: hongda-review-dev
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - run: pnpm install --frozen-lockfile
+      - name: WOS real JWT private binary + atomic receipt
+        env:
+          LIVE_TEST: 'true'
+          WOS_ACK_PERSISTENT_NONPROD_QA_ORDER: 'true'
+          NEXT_PUBLIC_SUPABASE_URL: 'https://xulmpqaknlwqqculbsek.supabase.co'
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.REVIEW_DEV_SUPABASE_ANON_KEY }}
+          LIVE_TEST_ADMIN_EMAIL: ${{ secrets.REVIEW_DEV_ADMIN_EMAIL }}
+          LIVE_TEST_ADMIN_PASSWORD: ${{ secrets.REVIEW_DEV_ADMIN_PASSWORD }}
+          LIVE_TEST_OPERATOR_EMAIL: ${{ secrets.REVIEW_DEV_OPERATOR_EMAIL }}
+          LIVE_TEST_OPERATOR_PASSWORD: ${{ secrets.REVIEW_DEV_OPERATOR_PASSWORD }}
+          LIVE_TEST_FOREIGN_EMAIL: ${{ secrets.REVIEW_DEV_FOREIGN_EMAIL }}
+          LIVE_TEST_FOREIGN_PASSWORD: ${{ secrets.REVIEW_DEV_FOREIGN_PASSWORD }}
+        run: node --import tsx tests/e2e/wos-real-auth-storage-nonprod.spec.ts
