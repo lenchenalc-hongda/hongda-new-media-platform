@@ -47,6 +47,7 @@ const printStyles = [
   '.commercial-print .document-payment-qr { min-width: 0; margin: 0; text-align: center; break-inside: avoid; page-break-inside: avoid; }',
   '.commercial-print .document-payment-qr img { display: block; width: 100%; max-width: 58mm; height: auto; margin: 0 auto 4px; border: 1px solid #d1d5db; border-radius: 4px; background: #fff; object-fit: contain; }',
   '.commercial-print .document-payment-qr figcaption { font-weight: 700; line-height: 1.35; }',
+  '.commercial-print .document-item-photo { display: block; width: auto; max-width: 32mm; max-height: 26mm; object-fit: contain; margin-top: 5px; border: 1px solid #e5e7eb; border-radius: 3px; break-inside: avoid; page-break-inside: avoid; }',
   '.commercial-print .document-product-notices { margin-top: 9px !important; font-size: 11px; line-height: 1.5; }',
   '.commercial-print .document-product-notices h2 { padding-bottom: 4px; margin-bottom: 3px; break-after: avoid-page; page-break-after: avoid; }',
   '.commercial-print .document-product-note { display: grid; grid-template-columns: 120px minmax(0, 1fr); column-gap: 9px; padding: 5px 0; margin-top: 0; border-bottom: 1px solid #e5e7eb; break-inside: avoid; page-break-inside: avoid; }',
@@ -76,7 +77,7 @@ const printStyles = [
   '}',
 ].join('\n');
 
-export default function DocumentPreview({ draft, selectedMethod }: { draft: CommercialDocumentDraft; selectedMethod?: CommercialPaymentMethod | null }) {
+export default function DocumentPreview({ draft, selectedMethod, imageUrls = {} }: { draft: CommercialDocumentDraft; selectedMethod?: CommercialPaymentMethod | null; imageUrls?: Record<string,string> }) {
   const en = draft.language === 'en';
   const contract = draft.kind === 'machine_contract';
   const imageHeader = draft.kind === 'quotation'
@@ -174,6 +175,16 @@ export default function DocumentPreview({ draft, selectedMethod }: { draft: Comm
                           <p className="font-medium whitespace-pre-wrap">{safeDisplay(item.name)}</p>
                           {item.specification && <p className="text-[11px] text-gray-600 whitespace-pre-wrap">{item.specification}</p>}
                           {item.note && <p className="text-[11px] text-gray-500 whitespace-pre-wrap">{item.note}</p>}
+                          {draft.kind === 'quotation' && item.photoPath && (
+                            imageUrls[item.photoPath]
+                              ? <img className="document-item-photo" data-item-photo="true"
+                                  src={imageUrls[item.photoPath]}
+                                  alt={(en ? 'Product photo: ' : '产品照片：') + item.name}
+                                  loading="eager" />
+                              : <p className="text-[10px] text-amber-700">
+                                  {label('照片加载中，暂不可打印', 'Photo loading; PDF unavailable until ready')}
+                                </p>
+                          )}
                         </td>
                         <td className="p-2 text-right">{item.mode === 'catalog' ? '—' : (item.quantity + ' ' + item.unit)}</td>
                         <td className="p-2 text-right">{unitPriceToTenThousandths(item.unitPrice) !== null ? item.unitPrice + ' / ' + item.unit : '—'}</td>

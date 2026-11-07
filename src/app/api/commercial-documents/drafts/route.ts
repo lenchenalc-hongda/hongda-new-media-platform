@@ -1,3 +1,4 @@
+import { hasAuthorizedQuotationImages } from '@/lib/commercial-documents/item-images';
 import { NextRequest, NextResponse } from 'next/server';
 import { draftContext, draftMetadata, privateHeaders, safeDraft } from '@/lib/commercial-documents/cloud-drafts';
 export const dynamic = 'force-dynamic';
@@ -33,6 +34,7 @@ export async function POST(request: NextRequest) {
     ? (payload as Record<string, unknown>).draft : null;
   const draft = safeDraft(value, ctx.user.name);
   if (!draft) return response({ ok: false, message: '草稿内容格式无效或超过容量限制' }, 422);
+  if (!hasAuthorizedQuotationImages(draft, ctx.profile.org_id, ctx.profile.id, ctx.user.role)) return response({ ok: false, message: '报价照片归属校验失败' }, 403);
   const { data, error } = await ctx.db.from('commercial_quotation_drafts')
     .insert({
       org_id: ctx.profile.org_id, owner_profile_id: ctx.profile.id,

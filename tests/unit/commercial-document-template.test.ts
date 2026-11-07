@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import './commercial-item-images.test';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import DocumentWorkbench from '../../src/components/commercial-documents/DocumentWorkbench';

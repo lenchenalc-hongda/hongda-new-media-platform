@@ -1,3 +1,4 @@
+import { isQuotationImagePath } from './item-images';
 // HongdaOS Commercial Documents - draft-only template model.
 // No price/tax inference: sales enters the final agreed unit prices.
 export type DocumentKind = 'quotation' | 'machine_contract';
@@ -104,6 +105,8 @@ export interface DocumentItem {
   unitPrice: string;
   mode: ItemMode;
   note: string;
+  /** Optional private image object reference. Never store a signed URL or image bytes. */
+  photoPath?: string;
 }
 
 export interface DocumentSection {
@@ -325,6 +328,7 @@ export function validateForPrint(draft: CommercialDocumentDraft): string[] {
     for (const [lineIndex, item] of section.items.entries()) {
       const name = prefix + ' 第 ' + (lineIndex + 1) + ' 行';
       if (!item.name.trim()) errors.push(name + '：缺少产品名称');
+      if (item.photoPath && !isQuotationImagePath(item.photoPath)) errors.push(name + '：产品照片引用格式无效');
       if (unitPriceToTenThousandths(item.unitPrice) === null) errors.push(name + '：请输入有效单价（最多4位小数）');
       if (item.mode === 'amount' && quantityToMilli(item.quantity) === null) {
         errors.push(name + '：请输入有效数量（最多3位小数）');
@@ -384,7 +388,8 @@ export function isDraftShape(value: unknown): value is CommercialDocumentDraft {
       && g.items.every(i => typeof i?.id === 'string'
         && ['amount', 'catalog'].includes(i?.mode)
         && ['name', 'specification', 'quantity', 'unit', 'unitPrice', 'note']
-          .every(k => typeof (i as unknown as Record<string, unknown>)[k] === 'string')))
+          .every(k => typeof (i as unknown as Record<string, unknown>)[k] === 'string')
+        && (i.photoPath === undefined || i.photoPath === '' || isQuotationImagePath(i.photoPath))))
   );
 }
 
