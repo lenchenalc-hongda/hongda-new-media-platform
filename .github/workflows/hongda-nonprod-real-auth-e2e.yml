@@ -7,6 +7,7 @@ on:
       - 'tests/e2e/commercial-supplier-order-nonprod.spec.ts'
       - 'tests/e2e/glh-real-auth-nonprod.spec.ts'
       - 'tests/e2e/wos-real-auth-storage-nonprod.spec.ts'
+      - 'tests/e2e/qa-protected-credential-readonly.spec.ts'
 
 permissions:
   contents: read
@@ -60,9 +61,44 @@ jobs:
           print('QA_PROTECTED_SECRETS_PRESENT=YES')
           PY
 
-  cso-real-auth-two-session:
+
+  protected-auth-credentials-readonly:
     if: github.ref == 'refs/heads/qa/real-auth-cso-glh-20261107'
     needs: [protected-secret-preflight]
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    environment: hongda-review-dev
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - run: pnpm install --frozen-lockfile
+      - name: Read-only real Auth sign-in and role/org checks (no account details printed)
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: 'https://xulmpqaknlwqqculbsek.supabase.co'
+          REVIEW_DEV_SUPABASE_ANON_KEY: ${{ secrets.REVIEW_DEV_SUPABASE_ANON_KEY }}
+          REVIEW_DEV_EXPECTED_ORG_ID: ${{ secrets.REVIEW_DEV_EXPECTED_ORG_ID }}
+          REVIEW_DEV_ADMIN_EMAIL: ${{ secrets.REVIEW_DEV_ADMIN_EMAIL }}
+          REVIEW_DEV_ADMIN_PASSWORD: ${{ secrets.REVIEW_DEV_ADMIN_PASSWORD }}
+          REVIEW_DEV_VIEWER_EMAIL: ${{ secrets.REVIEW_DEV_VIEWER_EMAIL }}
+          REVIEW_DEV_VIEWER_PASSWORD: ${{ secrets.REVIEW_DEV_VIEWER_PASSWORD }}
+          REVIEW_DEV_SALES_EMAIL: ${{ secrets.REVIEW_DEV_SALES_EMAIL }}
+          REVIEW_DEV_SALES_PASSWORD: ${{ secrets.REVIEW_DEV_SALES_PASSWORD }}
+          REVIEW_DEV_OPERATOR_EMAIL: ${{ secrets.REVIEW_DEV_OPERATOR_EMAIL }}
+          REVIEW_DEV_OPERATOR_PASSWORD: ${{ secrets.REVIEW_DEV_OPERATOR_PASSWORD }}
+          REVIEW_DEV_FOREIGN_EMAIL: ${{ secrets.REVIEW_DEV_FOREIGN_EMAIL }}
+          REVIEW_DEV_FOREIGN_PASSWORD: ${{ secrets.REVIEW_DEV_FOREIGN_PASSWORD }}
+        run: node --import tsx tests/e2e/qa-protected-credential-readonly.spec.ts
+
+  cso-real-auth-two-session:
+    if: github.ref == 'refs/heads/qa/real-auth-cso-glh-20261107'
+    needs: [protected-secret-preflight, protected-auth-credentials-readonly]
     runs-on: ubuntu-latest
     timeout-minutes: 18
     environment: hongda-review-dev
@@ -107,7 +143,7 @@ jobs:
 
   glh-real-auth-three-account:
     if: github.ref == 'refs/heads/qa/real-auth-cso-glh-20261107'
-    needs: [protected-secret-preflight]
+    needs: [protected-secret-preflight, protected-auth-credentials-readonly]
     runs-on: ubuntu-latest
     timeout-minutes: 18
     environment: hongda-review-dev
@@ -138,7 +174,7 @@ jobs:
 
   wos-real-auth-private-storage:
     if: github.ref == 'refs/heads/qa/real-auth-cso-glh-20261107'
-    needs: [protected-secret-preflight]
+    needs: [protected-secret-preflight, protected-auth-credentials-readonly]
     runs-on: ubuntu-latest
     timeout-minutes: 18
     environment: hongda-review-dev
