@@ -1,3 +1,4 @@
+import { hasAuthorizedQuotationImages } from '@/lib/commercial-documents/item-images';
 import { NextRequest, NextResponse } from 'next/server';
 import { draftContext, privateHeaders, safeDraft } from '@/lib/commercial-documents/cloud-drafts';
 import { documentAmount, validateForPrint } from '@/lib/commercial-documents/template';
@@ -37,6 +38,7 @@ export async function POST(request:NextRequest) {
  try { data=await request.json(); } catch {return reply({ok:false,message:'请求格式错误'},400);}
  const draft=safeDraft(data?.draft,ctx.user.name);
  if(!draft) return reply({ok:false,message:'报价数据无效'},422);
+ if(!hasAuthorizedQuotationImages(draft,ctx.profile.org_id,ctx.profile.id,ctx.user.role)) return reply({ok:false,message:'报价照片归属校验失败'},403);
  const errors=validateForPrint(draft);
  if(errors.length) return reply({ok:false,message:'正式确认前请修正报价内容',errors},422);
  const amount=documentAmount(draft);
