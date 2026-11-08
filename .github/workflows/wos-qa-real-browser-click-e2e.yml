@@ -6,6 +6,7 @@ on:
     paths:
       - '.github/workflows/wos-qa-real-browser-click-e2e.yml'
       - 'tests/e2e/wos-qa-real-browser.cjs'
+      - 'tests/e2e/wos-qa-resilience.cjs'
       - 'src/components/workshop-orders/LiveQaProductionSubmit.tsx'
       - 'src/components/workshop-orders/LiveQaWorkshopInbox.tsx'
       - 'src/components/workshop-orders/ProductionOrderForm.tsx'
@@ -104,6 +105,9 @@ jobs:
           # multiple orders. Repeat office-to-workshop operations with the
           # SAME four verified sessions, not forty rapid login attempts.
           node tests/e2e/wos-qa-real-browser.cjs
+          # Separate browser process + fresh Auth login/refresh and upload
+          # interruption QA. All secrets remain in the Playwright process.
+          node tests/e2e/wos-qa-resilience.cjs
 
 # WOS_QA_SOAK_INVOCATION_2026_11_08: 10 sequential synthetic Auth/HTTP/image tests.
 
