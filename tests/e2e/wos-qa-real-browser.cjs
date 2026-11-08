@@ -82,6 +82,46 @@ async function main() {
     await office.page.getByText('已由真实 HTTP API 提交', { exact: false }).waitFor();
     const orderId = postBody.data.orderId;
 
+    // Simulate the hardest crash: the server commits the submission but the
+    // browser never sees the HTTP response. Reload in the *same tab* and
+    // prove the original order and idempotency key are recovered, not remade.
+    stage = 'RESPONSE_LOSS_PREPARE';
+    await office.page.reload({ waitUntil: 'domcontentloaded' });
+    await office.page.getByRole('heading', { name: 'QA Preview · 真实 HTTP 提交验收' }).waitFor();
+    await office.page.getByRole('button', { name: '自动填入全套合成 QA 测试资料' }).click();
+    const interruptedNumber = await office.page.locator('input#orderNumber').inputValue();
+    assert(interruptedNumber.startsWith('QA-NONPROD-') && interruptedNumber !== orderNumber);
+    await office.page.locator('input[type=file]').setInputFiles({
+      name: 'qa-browser-proof.png', mimeType: 'image/png', buffer: png,
+    });
+    await office.page.getByRole('button', { name: '检查资料完整性' }).click();
+    await office.page.getByText('本地字段完整性检查通过', { exact: false }).waitFor();
+    let responseDropped = false;
+    await office.page.route('**/api/workshop-orders/production', async route => {
+      if (responseDropped) { await route.continue(); return; }
+      const actual = await route.fetch();
+      if (actual.status() !== 200) { await route.fulfill({ response: actual }); return; }
+      responseDropped = true;
+      await route.abort('failed');
+    });
+    stage = 'RESPONSE_LOSS_SIMULATION';
+    await office.page.getByRole('button', { name: '上传图片并提交 QA 订单' }).click();
+    await office.page.getByText('QA_UNVERIFIED_UNEXPECTED_ERROR', { exact: false })
+      .waitFor({ timeout: 95000 });
+    assert(responseDropped, 'HTTP_RESPONSE_NOT_DROPPED');
+    await office.page.unroute('**/api/workshop-orders/production');
+    stage = 'RECOVER_AFTER_RELOAD';
+    await office.page.reload({ waitUntil: 'domcontentloaded' });
+    await office.page.getByText('检测到同一用户上次中断的合成订单', { exact: false })
+      .waitFor({ timeout: 30000 });
+    assert.equal(await office.page.locator('input#orderNumber').inputValue(), interruptedNumber,
+      'recovered original order number');
+    await office.page.getByRole('button', { name: '检查资料完整性' }).click();
+    await office.page.getByRole('button', { name: '使用同一订单和幂等键继续验证' }).click();
+    await office.page.getByText('已由真实 HTTP API 提交', { exact: false })
+      .waitFor({ timeout: 40000 });
+    trace('LOST_HTTP_RESPONSE_RECOVERED_SAME_ORDER', true);
+
     stage = 'OPERATOR_AUTH';
     const workshop = await login(browser,'OPERATOR','/workshop-orders/inbox');
     stage = 'OPERATOR_INBOX';
