@@ -64,6 +64,13 @@ Deno.serve(async (req:Request)=>{
      return answer(423,'QA_ORPHAN_DELETE_DISABLED');
    if(body.ack!=='WOS_QA_SYNTHETIC_ORPHAN_DELETE_ONLY')
      return answer(400,'EXPLICIT_QA_DELETE_ACK_REQUIRED');
+   // Recover claims left uncertain by a timed-out Storage API response.
+   // The SQL RPC updates only cleanup lease records, never storage.objects.
+   const {data:recovery,error:recoveryError}=await admin.rpc(
+     'wos_qa_reconcile_expired_cleanup_claims',
+     {p_organization_id:profile.org_id,p_limit:100});
+   if(recoveryError||recovery?.status!=='RECONCILED')
+     return answer(503,'QA_CLEANUP_RECOVERY_UNAVAILABLE');
    const {data:claim,error:claimError}=await admin.rpc('wos_qa_claim_stale_orphan_for_org',
      {p_organization_id:profile.org_id,p_min_age_hours:age});
    if(claimError||!claim)return answer(503,'CLEANUP_CLAIM_FAILED');
