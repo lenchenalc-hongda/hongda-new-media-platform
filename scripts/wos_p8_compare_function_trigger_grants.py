@@ -35,6 +35,8 @@ def to_string(value):
         return "true" if value else "false"
     if value is None:
         return ""
+    if isinstance(value, str) and value.lower() in ("t","f","true","false"):
+        return "true" if value.lower() in ("t","true") else "false"
     return str(value)
 
 
