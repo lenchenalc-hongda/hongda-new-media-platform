@@ -72,11 +72,15 @@ def audit(manifest: dict, root: Path) -> dict:
         "do_not_apply_to_production",
         "do_not_copy_customer_data",
         "do_not_rewrite_applied_migration_history",
-        "production_sql_text_identity_unverified",
+        "production_migration_sql_identity_attested",
+        "full_public_schema_parity_not_verified",
+        "historical_untracked_bootstrap_not_verified",
         "mapping_is_investigative_not_approval",
     ):
         require(rules.get(key) is True, f"required safety rule missing: {key}")
 
+    require(rules.get("production_sql_text_identity_unverified") is False,
+            "previously verified SQL source bodies must not regress")
     baseline = manifest.get("production_read_only_baseline") or {}
     require(baseline.get("public_tables") == 67, "recheck live table baseline first")
     require(baseline.get("recorded_migrations") == 29, "recheck live migration count first")
@@ -88,6 +92,8 @@ def audit(manifest: dict, root: Path) -> dict:
     seen_files: set[str] = set()
     versions: list[str] = []
     counts = dict.fromkeys(sorted(BASIS), 0)
+    methods = {"exact_git_blob_sha1": 0, "terminator_separator_only": 0,
+               "ordered_exact_statements_with_trivia_gaps": 0}
     for row in rows:
         version = row["applied_version"]
         basis = row["mapping_basis"]
@@ -96,7 +102,23 @@ def audit(manifest: dict, root: Path) -> dict:
         require(version not in seen_version, "duplicate Production version")
         require(relative not in seen_files, "same SQL assigned to multiple versions")
         require(basis in BASIS, "invalid mapping basis")
-        require(row["sql_identity_verified"] is False, "unattested source marked verified")
+        require(row["sql_identity_verified"] is True, "source SQL identity not attested")
+        method = row.get("sql_identity_method")
+        require(method in methods, "unrecognized SQL attestation method")
+        count = row.get("applied_statement_count")
+        require(isinstance(count, int) and count >= 1, "invalid statement count")
+        applied = row.get("applied_single_statement_git_blob_sha")
+        if method == "exact_git_blob_sha1":
+            require(count == 1 and applied == row["repo_blob_sha"],
+                    "applied SQL Git blob does not match pinned file")
+        elif method == "terminator_separator_only":
+            require(count == 1 and version == "20261002033500"
+                    and applied != row["repo_blob_sha"]
+                    and bool(SHA.fullmatch(applied or "")),
+                    "unexpected single-statement SQL delimiter case")
+        else:
+            require(count > 1 and applied is None, "invalid multi-statement attestation")
+        methods[method] += 1
         require(bool(row.get("applied_name")), "missing applied migration name")
         require("wos" not in row["applied_name"].lower(), "Production WOS is not deployed")
         if basis == "exact_version":
@@ -115,6 +137,10 @@ def audit(manifest: dict, root: Path) -> dict:
         versions.append(version)
         counts[basis] += 1
     require(versions == sorted(versions), "Production version order changed")
+    require(methods["exact_git_blob_sha1"] == 20, "expected 20 exact SQL blobs")
+    require(methods["terminator_separator_only"] == 1, "expected one delimiter-only case")
+    require(methods["ordered_exact_statements_with_trivia_gaps"] == 8,
+            "expected eight ordered SQL statement matches")
     require(counts["exact_version"] == 9, "expected 9 timestamp-matched files")
     require(sum(v for k, v in counts.items() if k != "exact_version") == 20,
             "expected 20 Production timestamp divergences")
@@ -151,7 +177,7 @@ def audit(manifest: dict, root: Path) -> dict:
         "source_timestamp_matches": counts["exact_version"],
         "source_timestamp_mismatches": 20,
         "legacy_untracked_candidates": len(legacy),
-        "production_sql_text_identity": "NOT_ATTESTED",
+        "production_sql_bodies": "29_ATTESTED_PINNED",
         "full_production_schema_replay": "NOT_VERIFIED",
         "production_writes_performed": False,
         "safe_to_merge_or_deploy": False,
@@ -172,7 +198,7 @@ def self_test(root: Path) -> None:
         elif scenario == "blob_drift":
             rows[0]["repo_blob_sha"] = "0" * 40
         elif scenario == "unsafe_claim":
-            bad["rules"]["production_sql_text_identity_unverified"] = False
+            bad["rules"]["full_public_schema_parity_not_verified"] = False
         try:
             audit(bad, root)
         except LineageError:
