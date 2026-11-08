@@ -1,7 +1,8 @@
 /**
  * Synthetic WOS P7 Preview-only crash recovery.
  *
- * Stores only non-sensitive QA identifiers in sessionStorage (same tab).
+ * Stores only non-sensitive synthetic QA identifiers in scoped localStorage;
+ * migrates legacy same-tab state only after actor and organization match.
  * Never stores credentials, JWT, client files, customer data, or image bytes.
  * Every resumed operation MUST revalidate the current Supabase identity and
  * query canonical DB state before it can write.
