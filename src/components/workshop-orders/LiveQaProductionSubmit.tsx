@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState, type ChangeEvent } from 'react';
+import { useEffect, useRef, useState, type ChangeEvent } from 'react';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
 import type { NormalizedProductionOrderDraft } from '@/lib/workshop-orders/office-entry';
@@ -38,6 +38,7 @@ function newProgress(): Progress {
 
 export default function LiveQaProductionSubmit({ draft, valid, onFillQaSample }: Props) {
   const [file, setFile] = useState<File | null>(null);
+  const [officeAuthorized, setOfficeAuthorized] = useState<boolean | null>(null);
   const [note, setNote] = useState('QA nonproduction office readiness; test only, not released for workshop production.');
   const [busy, setBusy] = useState(false);
   const [stageLabel, setStageLabel] = useState('待提交');
@@ -46,12 +47,36 @@ export default function LiveQaProductionSubmit({ draft, valid, onFillQaSample }:
   const [successOrderId, setSuccessOrderId] = useState('');
   const stateRef = useRef<Progress | null>(null);
 
+  useEffect(() => {
+    let active = true;
+    const verifyOfficeRole = async () => {
+      try {
+        const client = createClient();
+        if (!client) { if (active) setOfficeAuthorized(false); return; }
+        const auth = await client.auth.getUser();
+        if (auth.error || !auth.data.user?.id) {
+          if (active) setOfficeAuthorized(false);
+          return;
+        }
+        const { data, error } = await client.from('profiles')
+          .select('role,is_active')
+          .eq('user_id', auth.data.user.id)
+          .maybeSingle();
+        if (active) setOfficeAuthorized(!error && data?.is_active === true &&
+          ['admin','manager','sales'].includes(data?.role ?? ''));
+      } catch { if (active) setOfficeAuthorized(false); }
+    };
+    void verifyOfficeRole();
+    return () => { active = false; };
+  }, []);
+
   function selectFile(event: ChangeEvent<HTMLInputElement>) {
     if (stateRef.current?.orderId) return;
     setFile(event.target.files?.[0] ?? null);
   }
 
   function guard(): string | null {
+    if (officeAuthorized !== true) return 'QA_OFFICE_ROLE_NOT_ALLOWED';
     const allowedHost = typeof window !== 'undefined' && (
       window.location.hostname.endsWith('.vercel.app') ||
       (window.location.hostname === 'localhost' && process.env.NEXT_PUBLIC_WOS_QA_LOCAL_TEST === 'true')
@@ -211,6 +236,16 @@ export default function LiveQaProductionSubmit({ draft, valid, onFillQaSample }:
     } finally {
       setBusy(false);
     }
+  }
+
+  if (officeAuthorized !== true) {
+    return (
+      <section role="status" className="rounded-lg border border-blue-200 bg-blue-50 p-4 text-xs text-blue-900">
+        {officeAuthorized === null
+          ? '正在核对非生产账号是否拥有办公室下单权限...'
+          : '当前测试账号没有办公室下单权限；仅 Admin、Manager 和 Sales 可以显示 QA 提交按钮。'}
+      </section>
+    );
   }
 
   return (
