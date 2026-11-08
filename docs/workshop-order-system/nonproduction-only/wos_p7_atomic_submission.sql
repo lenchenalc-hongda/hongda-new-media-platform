@@ -174,6 +174,10 @@ BEGIN
  WHERE organization_id=v_actor.org_id AND order_id=p_order_id
  AND source_revision=p_expected_revision AND source_version_label=p_expected_label;
  IF v_readiness IS NULL THEN RAISE EXCEPTION 'OFFICE_READINESS_REQUIRED' USING ERRCODE='23514'; END IF;
+ IF EXISTS (SELECT 1 FROM public.wos_qa_orphan_cleanup_claims c
+    WHERE c.order_id=p_order_id AND c.state='CLAIMED'
+      AND c.lease_expires_at>clock_timestamp())
+ THEN RAISE EXCEPTION 'QA_ORPHAN_CLEANUP_IN_PROGRESS' USING ERRCODE='PT409'; END IF;
  INSERT INTO public.wos_submission_receipts(
  organization_id,order_id,source_revision,source_version_label,idempotency_key,
  actor_profile_id,request_fingerprint)
