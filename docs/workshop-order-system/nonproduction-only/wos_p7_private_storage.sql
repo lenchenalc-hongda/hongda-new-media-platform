@@ -163,6 +163,10 @@ BEGIN
  v_size:=(v_object.metadata->>'size')::bigint;
  IF v_size<1 OR v_size>20971520
  THEN RAISE EXCEPTION 'UNSUPPORTED_IMAGE_SIZE' USING ERRCODE='23514';END IF;
+ IF EXISTS (SELECT 1 FROM public.wos_qa_orphan_cleanup_claims c
+     WHERE c.storage_object_id=v_object.id AND c.state='CLAIMED'
+       AND c.lease_expires_at>clock_timestamp())
+ THEN RAISE EXCEPTION 'QA_ORPHAN_CLEANUP_IN_PROGRESS' USING ERRCODE='PT409'; END IF;
  SELECT * INTO v_row FROM public.wos_reference_images WHERE id=p_image_id;
  IF FOUND THEN
   IF v_row.organization_id<>v_actor.org_id OR v_row.entity_id<>p_order_id
