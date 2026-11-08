@@ -41,7 +41,10 @@ CREATE FUNCTION storage.filename(path text) RETURNS text
  $$;
 GRANT EXECUTE ON FUNCTION storage.foldername(text) TO authenticated;
 GRANT EXECUTE ON FUNCTION storage.filename(text) TO authenticated;
-CREATE ROLE service_role NOLOGIN;
+DO $role$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='service_role')
+  THEN CREATE ROLE service_role NOLOGIN; END IF;
+END $role$;
 
 INSERT INTO public.organizations(id) VALUES
  ('aaaaaaaa-1111-1111-1111-111111111111'),
