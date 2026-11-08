@@ -97,6 +97,16 @@ async function main() {
     const matches = inbox?.data?.items?.filter(i => i.id === orderId && i.orderNumber === orderNumber);
     const matched = inboxResponse.status() === 200 && inbox?.code === 'OK'
       && matches?.length === 1 && matches[0]?.workflowStatus === 'SUBMITTED';
+    // Only safe status, allowlisted code, and matching booleans are logged.
+    const inboxCode = typeof inbox?.code === 'string' && /^[A-Z_]{2,40}$/.test(inbox.code)
+      ? inbox.code : 'UNAVAILABLE';
+    console.log('WOS_BROWSER_QA_OPERATOR_HTTP_STATUS=' + inboxResponse.status());
+    console.log('WOS_BROWSER_QA_OPERATOR_HTTP_CODE=' + inboxCode);
+    console.log('WOS_BROWSER_QA_OPERATOR_RESPONSE_COUNT=' +
+      (Number.isSafeInteger(inbox?.data?.count) ? inbox.data.count : 'UNAVAILABLE'));
+    console.log('WOS_BROWSER_QA_OPERATOR_TARGET_MATCH_COUNT=' + (matches?.length ?? 'UNAVAILABLE'));
+    console.log('WOS_BROWSER_QA_OPERATOR_TARGET_STATUS=' +
+      (matches?.[0]?.workflowStatus === 'SUBMITTED' ? 'SUBMITTED' : 'NOT_MATCHED'));
     trace('OPERATOR_REFRESH_HTTP_INBOX',matched);
     assert(matched,'OPERATOR_INBOX_NOT_VISIBLE');
     stage = 'OPERATOR_IMAGE';
