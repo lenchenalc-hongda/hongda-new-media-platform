@@ -13,6 +13,10 @@ BEGIN
  WHERE bucket_id='wos-private' AND name=p_path
   AND is_delete_marker=false AND archived_at IS NULL;
  IF NOT FOUND THEN RAISE EXCEPTION 'STORAGE_OBJECT_NOT_FOUND' USING ERRCODE='22023'; END IF;
+ IF EXISTS (SELECT 1 FROM public.wos_qa_orphan_cleanup_claims c
+   WHERE c.storage_object_id=obj.id AND c.state='CLAIMED'
+     AND c.lease_expires_at>clock_timestamp())
+ THEN RAISE EXCEPTION 'QA_ORPHAN_CLEANUP_IN_PROGRESS' USING ERRCODE='PT409'; END IF;
  RETURN jsonb_build_object('id',obj.id,'ownerId',obj.owner_id,
   'version',obj.version,'updatedAt',obj.updated_at,
   'mimeType',obj.metadata->>'mimetype','byteSize',obj.metadata->>'size');
