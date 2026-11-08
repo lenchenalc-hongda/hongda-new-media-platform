@@ -72,12 +72,22 @@ async function main() {
     await office.page.getByRole('button', { name: '检查资料完整性' }).click();
     await office.page.getByText('本地字段完整性检查通过', { exact: false }).waitFor();
     let postResponse = null;
+    const trustedEdgeWait = office.page.waitForResponse(response =>
+      response.url() === origin + '/api/workshop-orders/qa-image-verify'
+      && response.request().method() === 'POST',
+      {timeout: 90000});
     const postWait = office.page.waitForResponse(response => {
       return response.url() === origin + '/api/workshop-orders/production'
         && response.request().method() === 'POST';
     }, { timeout: 110000 });
     stage = 'OFFICE_HTTP_SUBMIT';
     await office.page.getByRole('button', { name: '上传图片并提交 QA 订单' }).click();
+    const trustedEdgeResponse=await trustedEdgeWait;
+    const trustedEdgeBody=await trustedEdgeResponse.json().catch(()=>null);
+    const attestationPassed=trustedEdgeResponse.status()===200
+      &&trustedEdgeBody?.code==='QA_IMAGE_VERIFIED';
+    trace('TRUSTED_EDGE_PROOF_REQUIRED_ON_HTTP_PATH',attestationPassed);
+    assert(attestationPassed,'TRUSTED_EDGE_PROOF_NOT_VERIFIED');
     postResponse = await postWait;
     const postBody = await postResponse.json();
     const correct = postResponse.status() === 200
