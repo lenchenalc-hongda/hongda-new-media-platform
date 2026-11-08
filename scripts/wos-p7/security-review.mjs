@@ -175,6 +175,7 @@ gate('ORPHAN_WORKER_DEFAULTS_TO_NO_DELETE',
   && orphanEdge.includes("admin.rpc('wos_qa_finish_orphan_claim'"));
 gate('BROWSER_QA_MANUAL_PROTECTED_ONLY',
   gatedQaWorkflow.includes('workflow_dispatch:')
+  && gatedQaWorkflow.includes("WOS_QA_SOAK_ROUNDS: '10'")
   && gatedQaWorkflow.includes('environment: hongda-review-dev')
   && gatedQaWorkflow.includes("github.ref == 'refs/heads/qa/wos-nonprod-atomic-storage-20261107'")
   && !/^\s*push:\s*$/m.test(gatedQaWorkflow)
