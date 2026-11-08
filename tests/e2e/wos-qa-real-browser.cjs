@@ -49,10 +49,19 @@ async function main() {
   const browser = await chromium.launch({ headless: true, args: ['--no-sandbox'] });
   stage = 'ADMIN_AUTH';
   const contexts = [];
+  const rounds = Number(process.env.WOS_QA_SOAK_ROUNDS || '1');
+  assert([1,10].includes(rounds), 'QA_ROUND_COUNT_NOT_ALLOWED');
+  let office = null, workshop = null, viewer = null, foreign = null;
   try {
-    const office = await login(browser, 'ADMIN', '/workshop-orders/production/new');
-    stage = 'OFFICE_QA_FORM';
-    contexts.push(office.ctx);
+    for (let iteration = 1; iteration <= rounds; iteration++) {
+      stage = 'ADMIN_AUTH';
+      if (!office) {
+        office = await login(browser, 'ADMIN', '/workshop-orders/production/new');
+        contexts.push(office.ctx);
+      } else {
+        await office.page.goto(origin + '/workshop-orders/production/new', { waitUntil: 'domcontentloaded' });
+      }
+      stage = 'OFFICE_QA_FORM';
     await office.page.getByRole('heading', { name: 'QA Preview · 真实 HTTP 提交验收' }).waitFor({ timeout: 20000 });
     await office.page.getByRole('button', { name: '自动填入全套合成 QA 测试资料' }).click();
     const orderNumber = await office.page.locator('input#orderNumber').inputValue();
@@ -123,9 +132,13 @@ async function main() {
     trace('LOST_HTTP_RESPONSE_RECOVERED_SAME_ORDER', true);
 
     stage = 'OPERATOR_AUTH';
-    const workshop = await login(browser,'OPERATOR','/workshop-orders/inbox');
+    if (!workshop) {
+      workshop = await login(browser,'OPERATOR','/workshop-orders/inbox');
+      contexts.push(workshop.ctx);
+    } else {
+      await workshop.page.goto(origin + '/workshop-orders/inbox', { waitUntil: 'domcontentloaded' });
+    }
     stage = 'OPERATOR_INBOX';
-    contexts.push(workshop.ctx);
     await workshop.page.getByRole('button', { name: '刷新真实车间任务' }).waitFor();
     const inboxResponsePromise = workshop.page.waitForResponse(
       r => r.url() === origin + '/api/workshop-orders/inbox'
@@ -170,9 +183,11 @@ async function main() {
     trace('OPERATOR_FORBIDDEN_TO_SUBMIT',true);
 
     stage = 'VIEWER_AUTH';
-    const viewer = await login(browser,'VIEWER','/workspace-home');
+    if (!viewer) {
+      viewer = await login(browser,'VIEWER','/workspace-home');
+      contexts.push(viewer.ctx);
+    }
     stage = 'VIEWER_API';
-    contexts.push(viewer.ctx);
     const viewerApi = await viewer.page.evaluate(async () => {
       const r = await fetch('/api/workshop-orders/inbox', { credentials:'same-origin',cache:'no-store' });
       return {status:r.status,body:await r.json().catch(()=>null)};
@@ -188,9 +203,11 @@ async function main() {
     assert(viewerOfficeActionHidden,'VIEWER_OFFICE_ACTION_VISIBLE');
 
     stage = 'FOREIGN_AUTH';
-    const foreign = await login(browser,'FOREIGN','/workspace-home');
+    if (!foreign) {
+      foreign = await login(browser,'FOREIGN','/workspace-home');
+      contexts.push(foreign.ctx);
+    }
     stage = 'FOREIGN_API';
-    contexts.push(foreign.ctx);
     const foreignApi = await foreign.page.evaluate(async () => {
       const r = await fetch('/api/workshop-orders/inbox',{credentials:'same-origin',cache:'no-store'});
       return {status:r.status,body:await r.json().catch(()=>null)};
@@ -202,6 +219,10 @@ async function main() {
       && foreignApi.body.data.items.length === 0;
     trace('FOREIGN_ORG_INBOX_DENIED',foreignDenied);
     assert(foreignDenied,'FOREIGN_ORG_UNEXPECTED_READ');
+    console.log('WOS_BROWSER_QA_SOAK_ROUND_' + iteration + '=PASS');
+      if (iteration < rounds) await new Promise(resolve => setTimeout(resolve, 1500));
+    }
+    console.log('WOS_BROWSER_QA_SOAK_SUCCESS_COUNT=' + rounds);
     console.log('WOS_BROWSER_QA_LOCAL_PREVIEW_HTTP_E2E=PASS');
   } finally {
     await Promise.allSettled(contexts.map(ctx => ctx.close()));
