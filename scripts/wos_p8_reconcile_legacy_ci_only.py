@@ -110,8 +110,12 @@ def sql_query(text):
 
 
 def quote(identifier):
-    if not identifier or not all(c.isascii() and
-             (c.isalnum() or c == "_") for c in identifier):
+    # Policy names contain spaces, colons and '/' in the historical schema.
+    # SQL identifiers are NOT SQL strings; permit a narrow, fixed alphabet
+    # and always double-quote. Names must already match the exact allowlist.
+    allowed = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_ /:-")
+    if (not isinstance(identifier, str) or not identifier or
+            len(identifier) > 120 or any(c not in allowed for c in identifier)):
         fail("unexpected identifier")
     return '"' + identifier + '"'
 
