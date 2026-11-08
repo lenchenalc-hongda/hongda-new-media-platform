@@ -144,6 +144,8 @@ gate('EDGE_ATTESTATION_PINNED_AND_CHECKED',
 const orphanClaims=read('docs/workshop-order-system/nonproduction-only/wos_p7_qa_orphan_claims_20261108.sql');
 const orphanRace=read('docs/workshop-order-system/nonproduction-only/wos_p7_qa_cleanup_race_guards_20261108.sql');
 const orphanParity=read('docs/workshop-order-system/nonproduction-only/wos_p7_qa_orphan_inventory_parity_20261108.sql');
+const orphanScoped=read('docs/workshop-order-system/nonproduction-only/wos_p7_qa_scoped_cleanup_claim_20261108.sql');
+const orphanScopedInventory=read('docs/workshop-order-system/nonproduction-only/wos_p7_qa_scoped_orphan_inventory_20261108.sql');
 const orphanEdge=read('supabase/functions/wos-p7-orphan-cleanup/index.ts');
 gate('ORPHAN_LEASED_EXCLUSIVE_AND_PROOF_SERIALIZED',
   orphanClaims.includes('wos_qa_claim_one_stale_orphan')
@@ -154,6 +156,13 @@ gate('ORPHAN_LEASED_EXCLUSIVE_AND_PROOF_SERIALIZED',
   && orphanClaims.includes('wos_qa_trusted_proof_guard')
   && orphanClaims.includes('STORAGE_BINARY_METADATA_STILL_PRESENT')
   && orphanClaims.includes('REVOKE ALL ON public.wos_qa_orphan_cleanup_claims'));
+gate('ORPHAN_ORGANIZATION_SCOPE',
+  orphanScoped.includes('wos_qa_claim_stale_orphan_for_org')
+  && orphanScoped.includes('po.organization_id=p_organization_id')
+  && orphanScopedInventory.includes('wos_qa_list_stale_orphans_for_org')
+  && orphanScopedInventory.includes('po.organization_id=p_organization_id')
+  && orphanEdge.includes("admin.rpc('wos_qa_claim_stale_orphan_for_org'")
+  && orphanEdge.includes("admin.rpc('wos_qa_list_stale_orphans_for_org'"));
 gate('ORPHAN_DRY_RUN_MATCHES_CLAIM',
   orphanParity.includes("po.workflow_status IN ('DRAFT','SUBMITTED')")
   && orphanParity.includes('wos_qa_orphan_cleanup_claims')
