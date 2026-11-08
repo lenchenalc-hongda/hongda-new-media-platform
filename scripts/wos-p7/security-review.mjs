@@ -118,6 +118,29 @@ gate('QA_SERVER_BINARY_VERIFICATION', httpVerifier.includes('resolveVerifiedSupa
 // Direct authenticated RPC remains callable: this is not production-grade
 // cryptographic proof binding. Production release stays blocked.
 
+const trustedSql=read('docs/workshop-order-system/nonproduction-only/wos_p7_trusted_binary_proof_20261108.sql');
+const trustedReadySql=read('docs/workshop-order-system/nonproduction-only/wos_p7_qa_trusted_readiness_20261108.sql');
+const edge=read('supabase/functions/wos-p7-verify-image/index.ts');
+const nextVerify=read('src/app/api/workshop-orders/qa-image-verify/route.ts');
+gate('ATTESTATION_PRIVATE_TO_SERVER',trustedSql.includes('CREATE TABLE public.wos_qa_verified_image_proofs')
+  &&trustedSql.includes('ENABLE ROW LEVEL SECURITY')
+  &&trustedSql.includes('REVOKE ALL ON public.wos_qa_verified_image_proofs FROM PUBLIC,anon,authenticated')
+  &&trustedSql.includes('QA_TRUSTED_BINARY_PROOF_REQUIRED')
+  &&trustedSql.includes('proof.actor_user_id=auth.uid()')
+  &&trustedSql.includes('proof.storage_object_id=v_object.id')
+  &&trustedSql.includes('proof.expires_at>clock_timestamp()'));
+gate('READY_REQUIRES_TRUSTED_BINARY',trustedReadySql.includes('TRUSTED_PRIVATE_IMAGE_REQUIRED')
+  &&trustedReadySql.includes('JOIN public.wos_qa_verified_image_proofs proof')
+  &&trustedReadySql.includes('JOIN storage.objects obj'));
+gate('EDGE_ATTESTATION_PINNED_AND_CHECKED',
+  edge.includes("QA_URL='https://xulmpqaknlwqqculbsek.supabase.co'")
+  &&edge.includes('await userDb.auth.getUser(token)')
+  &&edge.includes('await pngValid(bytes')
+  &&edge.includes("userDb.storage.from('wos-private').download(path)")
+  &&edge.includes("admin.rpc('wos_qa_get_storage_object_for_proof'")
+  &&edge.includes("admin.from('wos_qa_verified_image_proofs').upsert")
+  &&nextVerify.includes("client.functions.invoke('wos-p7-verify-image'"));
+
 const flowHeader = gatedQaWorkflow.slice(0, gatedQaWorkflow.indexOf('\njobs:'));
 gate('QA_SECRETS_NOT_AUTO_ON_PUSH', /^\s*on:\s*\n\s*workflow_dispatch:\s*$/m.test(flowHeader)
   && !/^\s*push:\s*$/m.test(flowHeader)
