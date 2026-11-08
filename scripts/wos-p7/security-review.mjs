@@ -148,7 +148,7 @@ const orphanScoped=read('docs/workshop-order-system/nonproduction-only/wos_p7_qa
 const orphanScopedInventory=read('docs/workshop-order-system/nonproduction-only/wos_p7_qa_scoped_orphan_inventory_20261108.sql');
 const orphanEdge=read('supabase/functions/wos-p7-orphan-cleanup/index.ts');
 gate('ORPHAN_LEASED_EXCLUSIVE_AND_PROOF_SERIALIZED',
-  orphanClaims.includes('wos_qa_claim_one_stale_orphan')
+  orphanClaims.includes('wos_qa_claim_stale_orphan_for_org')
   && orphanClaims.includes('FOR UPDATE OF so,po SKIP LOCKED')
   && orphanClaims.includes('wos_qa_predelete_orphan')
   && orphanClaims.includes('wos_qa_finish_orphan_claim')
