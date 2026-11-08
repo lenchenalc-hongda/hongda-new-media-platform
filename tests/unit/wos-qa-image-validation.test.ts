@@ -5,11 +5,14 @@ import { verifyWosSyntheticPngBinary } from '../../src/lib/workshop-orders/qa-im
 
 // Public, 1x1 synthetic PNG, never customer data. Same fixture as real browser QA.
 const raw = Buffer.from(
-  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jGZ0AAAAASUVORK5CYII=',
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII=',
   'base64',
 );
 const digest=(data:Uint8Array)=>createHash('sha256').update(data).digest('hex');
 assert.equal(verifyWosSyntheticPngBinary(raw,digest(raw)),true,'valid PNG + hash allowed');
+const oldInvalidFixture=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jGZ0AAAAASUVORK5CYII=','base64');
+assert.equal(verifyWosSyntheticPngBinary(oldInvalidFixture,digest(oldInvalidFixture)),false,
+  'historical browser fixture has invalid IDAT CRC');
 const brokenCrc=Buffer.from(raw);brokenCrc[29]^=1;
 assert.equal(verifyWosSyntheticPngBinary(brokenCrc,digest(brokenCrc)),false,'reject header CRC forgery');
 const brokenIdat=Buffer.from(raw);brokenIdat[47]^=1;
