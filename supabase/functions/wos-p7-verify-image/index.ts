@@ -88,12 +88,18 @@ async function pngValid(bytes:Uint8Array,expectedSha:string):Promise<boolean>{
   }catch{return false;}
 }
 function secretKey():string{
-  const legacy=Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
-  if(legacy)return legacy;
-  try {
+  try{
     const keys=JSON.parse(Deno.env.get('SUPABASE_SECRET_KEYS')||'{}');
-    return typeof keys.default==='string'?keys.default:'';
-  }catch{return '';}
+    if(typeof keys.default==='string'&&keys.default)return keys.default;
+  }catch{ /* older isolated QA runtime */ }
+  return Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')||'';
+}
+function publicKey():string{
+  try{
+    const keys=JSON.parse(Deno.env.get('SUPABASE_PUBLISHABLE_KEYS')||'{}');
+    if(typeof keys.default==='string'&&keys.default)return keys.default;
+  }catch{ /* older isolated QA runtime */ }
+  return Deno.env.get('SUPABASE_ANON_KEY')||'';
 }
 Deno.serve(async(req:Request)=>{
   if(req.method!=='POST')return output('METHOD_NOT_ALLOWED',405);
@@ -101,7 +107,7 @@ Deno.serve(async(req:Request)=>{
   const h=req.headers.get('authorization')||'';
   if(!/^Bearer [^\s]+$/.test(h))return output('UNAUTHENTICATED',401);
   if(!req.headers.get('content-type')?.startsWith('application/json'))return output('INVALID_INPUT',400);
-  const key=Deno.env.get('SUPABASE_ANON_KEY')||'',serverKey=secretKey();
+  const key=publicKey(),serverKey=secretKey();
   if(!key||!serverKey)return output('QA_SERVER_CONFIG_INCOMPLETE',503);
   let body:Record<string,unknown>;
   try{
