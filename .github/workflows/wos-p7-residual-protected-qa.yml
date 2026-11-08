@@ -96,8 +96,8 @@ jobs:
       - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1
         with:
           version: 10
-      - name: Install reviewed dependencies with no QA credentials
-        run: pnpm install --frozen-lockfile
+      - name: Install reviewed dependencies without lifecycle hooks or QA credentials
+        run: pnpm install --frozen-lockfile --ignore-scripts
       - name: Verify script blob and dry self-test before any QA secrets
         env:
           EXPECTED_SCRIPT_BLOB: 4902ba60644549dd4681edd8ae0fdcbc4e8d7ce1
