@@ -8,7 +8,7 @@ const { chromium } = require('/tmp/hongda-qa-browser/node_modules/playwright');
 const origin = 'http://localhost:3000';
 const projectRef = 'xulmpqaknlwqqculbsek';
 const qaEnvKeys = [
-  'REVIEW_DEV_SUPABASE_ANON_KEY',
+  'NEXT_PUBLIC_SUPABASE_ANON_KEY',
   'REVIEW_DEV_ADMIN_EMAIL','REVIEW_DEV_ADMIN_PASSWORD',
   'REVIEW_DEV_OPERATOR_EMAIL','REVIEW_DEV_OPERATOR_PASSWORD',
   'REVIEW_DEV_VIEWER_EMAIL','REVIEW_DEV_VIEWER_PASSWORD',
