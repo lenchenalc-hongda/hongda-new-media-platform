@@ -44,6 +44,9 @@ jobs:
       - name: WOS P7 protected QA workflow independent secretless security review
         run: node scripts/wos-p7/verify-protected-acceptance.mjs
 
+      - name: WOS P7 residual QA-only JWT/orphan safety contracts (no credentials)
+        run: node scripts/wos-p7/qa-residual-gates.mjs self-test
+
       - name: Commercial document template tests
         run: pnpm exec tsx tests/unit/commercial-document-template.test.ts
 
