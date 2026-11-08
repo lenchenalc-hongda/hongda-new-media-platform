@@ -64,9 +64,8 @@ jobs:
           WOS_P7_NONPROD_SUBMIT_ENABLED: 'true'
           NEXT_PUBLIC_WOS_QA_LOCAL_TEST: 'true'
           WOS_QA_BROWSER_ACK_TEST_WRITES: 'true'
-          # A deliberate reviewed [wos-qa-soak-10] commit runs ten serial
-          # browser/Auth/Storage cycles; routine QA pushes run once.
-          WOS_QA_SOAK_ROUNDS: ${{ contains(github.event.head_commit.message, '[wos-qa-soak-10]') && '10' || '1' }}
+          # Manual protected exact-HEAD verification runs ten sequential QA business cycles.
+          WOS_QA_SOAK_ROUNDS: '10'
           REVIEW_DEV_ADMIN_EMAIL: ${{ secrets.REVIEW_DEV_ADMIN_EMAIL }}
           REVIEW_DEV_ADMIN_PASSWORD: ${{ secrets.REVIEW_DEV_ADMIN_PASSWORD }}
           REVIEW_DEV_VIEWER_EMAIL: ${{ secrets.REVIEW_DEV_VIEWER_EMAIL }}
