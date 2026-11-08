@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {
-  isValidQaRecovery, verifyQaImageSignature, qaFileSha256, type QaRecovery,
+  isValidQaRecovery, verifyQaImageSignature, qaFileSha256, readQaRecovery, saveQaRecovery, clearQaRecovery, WOS_QA_RECOVERY_KEY, type QaRecovery,
 } from '../../src/lib/workshop-orders/qa-recovery';
 
 const uid = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
@@ -34,3 +34,34 @@ assert.equal(await verifyQaImageSignature(new Blob([png],{type:'image/jpeg'})),f
 assert.equal(await verifyQaImageSignature(new Blob(['<script>malware</script>'],{type:'image/png'})),false,'reject spoofed magic');
 assert.equal((await qaFileSha256(new Blob([png],{type:'image/png'}))).length,64,'content digest');
 console.log('WOS_QA_RECOVERY_UNIT=PASS');
+
+// Restart-simulation: QA identifiers survive a newly instantiated window;
+// browser storage is actor/org-specific and never contains credential data.
+const sharedLocal = new Map<string, string>();
+const newStore = (data: Map<string,string>) => ({
+  getItem: (key: string) => data.get(key) ?? null,
+  setItem: (key: string, value: string) => { data.set(key, value); },
+  removeItem: (key: string) => { data.delete(key); },
+});
+const holder = globalThis as unknown as {window: {
+  localStorage: ReturnType<typeof newStore>;
+  sessionStorage: ReturnType<typeof newStore>;
+}};
+holder.window = {localStorage:newStore(sharedLocal), sessionStorage:newStore(new Map())};
+saveQaRecovery(saved);
+const scopedKey = WOS_QA_RECOVERY_KEY + uid + ':' + org;
+assert.equal(sharedLocal.has(scopedKey), true, 'recovery persists locally');
+assert.equal(sharedLocal.get(scopedKey)?.includes('access_token'), false, 'no token in QA recovery');
+holder.window = {localStorage:newStore(sharedLocal), sessionStorage:newStore(new Map())};
+assert.deepEqual(readQaRecovery(uid,org), saved, 'survives browser restart');
+assert.equal(readQaRecovery(uid,'ffffffff-ffff-4fff-8fff-ffffffffffff'),null,'deny different organization');
+assert.equal(readQaRecovery('ffffffff-ffff-4fff-8fff-ffffffffffff',org),null,'deny different actor');
+clearQaRecovery(uid,org);
+assert.equal(readQaRecovery(uid,org),null,'clear scoped recovery only');
+const legacy = newStore(new Map());
+legacy.setItem('hongda:wos-qa:synthetic-recovery:v1',JSON.stringify(saved));
+holder.window = {localStorage:newStore(sharedLocal),sessionStorage:legacy};
+assert.deepEqual(readQaRecovery(uid,org),saved,'migrate only matching legacy actor');
+assert.equal(legacy.getItem('hongda:wos-qa:synthetic-recovery:v1'),null,'remove legacy after migration');
+clearQaRecovery(uid,org);
+console.log('WOS_QA_BROWSER_RESTART_SCOPED_RECOVERY_UNIT=PASS');
