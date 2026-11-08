@@ -115,8 +115,8 @@ gate('QA_SERVER_BINARY_VERIFICATION', httpVerifier.includes('resolveVerifiedSupa
   && binaryVerifier.includes("inflateSync(Buffer.concat(compressed)")
   && binaryVerifier.includes('crc32(buf.subarray(offset+4,dataEnd))')
   && component.includes("fetch('/api/workshop-orders/qa-image-verify'"));
-// Direct authenticated RPC remains callable: this is not production-grade
-// cryptographic proof binding. Production release stays blocked.
+// The authenticated RPC must now check an Edge-minted DB proof.
+// This technical check is not independent QA browser approval or release authorization.
 
 const trustedSql=read('docs/workshop-order-system/nonproduction-only/wos_p7_trusted_binary_proof_20261108.sql');
 const trustedReadySql=read('docs/workshop-order-system/nonproduction-only/wos_p7_qa_trusted_readiness_20261108.sql');
@@ -140,6 +140,45 @@ gate('EDGE_ATTESTATION_PINNED_AND_CHECKED',
   &&edge.includes("admin.rpc('wos_qa_get_storage_object_for_proof'")
   &&edge.includes("admin.from('wos_qa_verified_image_proofs').upsert")
   &&nextVerify.includes("client.functions.invoke('wos-p7-verify-image'"));
+
+const orphanClaims=read('docs/workshop-order-system/nonproduction-only/wos_p7_qa_orphan_claims_20261108.sql');
+const orphanRace=read('docs/workshop-order-system/nonproduction-only/wos_p7_qa_cleanup_race_guards_20261108.sql');
+const orphanParity=read('docs/workshop-order-system/nonproduction-only/wos_p7_qa_orphan_inventory_parity_20261108.sql');
+const orphanEdge=read('supabase/functions/wos-p7-orphan-cleanup/index.ts');
+gate('ORPHAN_LEASED_EXCLUSIVE_AND_PROOF_SERIALIZED',
+  orphanClaims.includes('wos_qa_claim_one_stale_orphan')
+  && orphanClaims.includes('FOR UPDATE OF so,po SKIP LOCKED')
+  && orphanClaims.includes('wos_qa_predelete_orphan')
+  && orphanClaims.includes('wos_qa_finish_orphan_claim')
+  && orphanClaims.includes('wos_qa_proof_write_guard')
+  && orphanClaims.includes('wos_qa_trusted_proof_guard')
+  && orphanClaims.includes('STORAGE_BINARY_METADATA_STILL_PRESENT')
+  && orphanClaims.includes('REVOKE ALL ON public.wos_qa_orphan_cleanup_claims'));
+gate('ORPHAN_DRY_RUN_MATCHES_CLAIM',
+  orphanParity.includes("po.workflow_status IN ('DRAFT','SUBMITTED')")
+  && orphanParity.includes('wos_qa_orphan_cleanup_claims')
+  && orphanParity.includes('wos_qa_verified_image_proofs')
+  && orphanParity.includes('wos_reference_images'));
+gate('ORPHAN_REGISTER_SUBMIT_BLOCKED_DURING_CLAIM',
+  orphanRace.includes('CREATE OR REPLACE FUNCTION public.wos_register_uploaded_reference_image(')
+  && orphanRace.includes('CREATE OR REPLACE FUNCTION public.wos_submit_production_order(')
+  && orphanRace.includes('CREATE OR REPLACE FUNCTION public.wos_qa_get_storage_object_for_proof(')
+  && (orphanRace.match(/QA_ORPHAN_CLEANUP_IN_PROGRESS/g)??[]).length>=3);
+gate('ORPHAN_WORKER_DEFAULTS_TO_NO_DELETE',
+  orphanEdge.includes("QA_URL='https://xulmpqaknlwqqculbsek.supabase.co'")
+  && orphanEdge.includes("profile.role!=='admin'")
+  && orphanEdge.includes("const mode=body.mode??'dry_run'")
+  && orphanEdge.includes("WOS_P7_QA_ORPHAN_DELETE_ENABLED")
+  && orphanEdge.includes("WOS_QA_SYNTHETIC_ORPHAN_DELETE_ONLY")
+  && orphanEdge.includes("admin.rpc('wos_qa_predelete_orphan'")
+  && orphanEdge.includes("admin.storage.from('wos-private').remove([claim.path])")
+  && orphanEdge.includes("admin.rpc('wos_qa_finish_orphan_claim'"));
+gate('BROWSER_QA_REQUIRES_EXACT_REVIEWED_SHA',
+  gatedQaWorkflow.includes('expected_sha:')
+  && gatedQaWorkflow.includes('CURRENT_SHA: ${{ github.sha }}')
+  && gatedQaWorkflow.includes('WOS_QA_EXACT_SHA_REVIEW_PREFLIGHT=PASS')
+  && gatedQaWorkflow.includes('needs: [reviewed-sha-preflight]')
+  && gatedQaWorkflow.includes('WOS_QA_SOAK_ROUNDS: ${{ inputs.rounds }}'));
 
 const flowHeader = gatedQaWorkflow.slice(0, gatedQaWorkflow.indexOf('\njobs:'));
 gate('QA_SECRETS_NOT_AUTO_ON_PUSH', /^\s*on:\s*\n\s*workflow_dispatch:\s*$/m.test(flowHeader)
