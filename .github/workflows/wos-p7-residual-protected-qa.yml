@@ -1,0 +1,141 @@
+name: WOS P7 Residual QA - Natural JWT and Disposable Orphan (manual only)
+# Protected-master source; no writable-PR checkout or QA secrets in preflight.
+# The secret-bearing script is pinned to a reviewed Git blob SHA.
+# This workflow cannot delete Storage objects or change Auth/JWT settings.
+on:
+  workflow_dispatch:
+    inputs:
+      reviewed_sha:
+        description: 'Exact reviewed QA PR #213 WOS P7 40-char HEAD'
+        required: true
+        type: string
+      mode:
+        description: 'Isolated QA test only; no physical deletion'
+        required: true
+        default: dryrun
+        type: choice
+        options:
+          - dryrun
+          - seed
+          - jwt
+      expected_candidates:
+        description: 'Dryrun only: exact 24h-aged disposable orphan count'
+        required: true
+        default: '0'
+        type: choice
+        options:
+          - '0'
+          - '1'
+permissions:
+  contents: read
+concurrency:
+  group: wos-p7-residual-qa-${{ inputs.mode }}
+  cancel-in-progress: false
+jobs:
+  preflight:
+    name: Secretless exact-SHA and PR green-CI gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+      checks: read
+    steps:
+      - name: Gate against approved QA code SHA, repository and source CI
+        shell: bash
+        env:
+          REQUESTED_SHA: ${{ inputs.reviewed_sha }}
+          APPROVED_QA_SHA: 29f908a0b32b530d551886e3ce4b6a0762f86cdc
+          QA_TEST_MODE: ${{ inputs.mode }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          [ "$GITHUB_REF" = 'refs/heads/master' ]
+          [ "$GITHUB_EVENT_NAME" = 'workflow_dispatch' ]
+          [ "$REQUESTED_SHA" = "$APPROVED_QA_SHA" ]
+          printf '%s' "$REQUESTED_SHA" | grep -Eq '^[a-f0-9]{40}$'
+          case "$QA_TEST_MODE" in jwt|seed|dryrun) ;; *) exit 1 ;; esac
+          PR=$(curl --fail --silent --show-error --max-time 25 \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/$GITHUB_REPOSITORY/pulls/213")
+          [ "$(printf '%s' "$PR" | jq -r '.head.sha')" = "$REQUESTED_SHA" ]
+          [ "$(printf '%s' "$PR" | jq -r '.head.ref')" = 'qa/wos-nonprod-atomic-storage-20261107' ]
+          [ "$(printf '%s' "$PR" | jq -r '.head.repo.full_name')" = "$GITHUB_REPOSITORY" ]
+          [ "$(printf '%s' "$PR" | jq -r '.base.ref')" = 'master' ]
+          [ "$(printf '%s' "$PR" | jq -r '.state')" = 'open' ]
+          [ "$(printf '%s' "$PR" | jq -r '.draft')" = 'true' ]
+          CHECKS=$(curl --fail --silent --show-error --max-time 25 \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H 'Accept: application/vnd.github+json' \
+            "https://api.github.com/repos/$GITHUB_REPOSITORY/commits/$REQUESTED_SHA/check-runs?per_page=100")
+          for job in lint-and-audit glh-stage1-postgres-synthetic wos-p7-static-security; do
+            count=$(printf '%s' "$CHECKS" | jq --arg name "$job" \
+              '[.check_runs[] | select(.name==$name and .app.slug=="github-actions" and .status=="completed" and .conclusion=="success")] | length')
+            [ "$count" -ge 1 ]
+          done
+          echo 'WOS_P7_RESIDUAL_NO_SECRET_EXACT_SHA_AND_CI_GATE=PASS'
+
+  protected-qa:
+    needs: preflight
+    if: needs.preflight.result == 'success' && github.ref == 'refs/heads/master'
+    name: QA-only natural JWT or orphan seed/dryrun
+    runs-on: ubuntu-latest
+    timeout-minutes: 140
+    permissions:
+      contents: read
+    environment: hongda-review-dev
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1
+        with:
+          version: 10
+      - name: Install reviewed dependencies with no QA credentials
+        run: pnpm install --frozen-lockfile
+      - name: Verify script blob and dry self-test before any QA secrets
+        env:
+          EXPECTED_SCRIPT_BLOB: 4902ba60644549dd4681edd8ae0fdcbc4e8d7ce1
+        run: |
+          set -euo pipefail
+          [ "$(git hash-object scripts/wos-p7/qa-residual-gates.mjs)" = "$EXPECTED_SCRIPT_BLOB" ]
+          node --check scripts/wos-p7/qa-residual-gates.mjs
+          node scripts/wos-p7/qa-residual-gates.mjs self-test
+          echo 'WOS_P7_RESIDUAL_APPROVED_SCRIPT_BLOB=PASS'
+
+      - name: Real JWT expiry and refresh after wall-clock expiry
+        if: inputs.mode == 'jwt'
+        env:
+          QA_APPROVED_SHA: 29f908a0b32b530d551886e3ce4b6a0762f86cdc
+          QA_PROJECT_URL: https://xulmpqaknlwqqculbsek.supabase.co
+          REVIEW_DEV_SUPABASE_ANON_KEY: ${{ secrets.REVIEW_DEV_SUPABASE_ANON_KEY }}
+          REVIEW_DEV_VIEWER_EMAIL: ${{ secrets.REVIEW_DEV_VIEWER_EMAIL }}
+          REVIEW_DEV_VIEWER_PASSWORD: ${{ secrets.REVIEW_DEV_VIEWER_PASSWORD }}
+        run: node scripts/wos-p7/qa-residual-gates.mjs jwt
+
+      - name: Seed one disposable synthetic DRAFT and unregistered private PNG
+        if: inputs.mode == 'seed'
+        env:
+          QA_APPROVED_SHA: 29f908a0b32b530d551886e3ce4b6a0762f86cdc
+          QA_PROJECT_URL: https://xulmpqaknlwqqculbsek.supabase.co
+          QA_DISPOSABLE_SEED_ACK: WOS_P7_ISOLATED_SYNTHETIC_ONLY
+          REVIEW_DEV_SUPABASE_ANON_KEY: ${{ secrets.REVIEW_DEV_SUPABASE_ANON_KEY }}
+          REVIEW_DEV_ADMIN_EMAIL: ${{ secrets.REVIEW_DEV_ADMIN_EMAIL }}
+          REVIEW_DEV_ADMIN_PASSWORD: ${{ secrets.REVIEW_DEV_ADMIN_PASSWORD }}
+        run: node scripts/wos-p7/qa-residual-gates.mjs seed
+
+      - name: QA orphan dryrun with real 24h retention and no deletes
+        if: inputs.mode == 'dryrun'
+        env:
+          QA_APPROVED_SHA: 29f908a0b32b530d551886e3ce4b6a0762f86cdc
+          QA_PROJECT_URL: https://xulmpqaknlwqqculbsek.supabase.co
+          QA_EXPECTED_CANDIDATES: ${{ inputs.expected_candidates }}
+          REVIEW_DEV_SUPABASE_ANON_KEY: ${{ secrets.REVIEW_DEV_SUPABASE_ANON_KEY }}
+          REVIEW_DEV_ADMIN_EMAIL: ${{ secrets.REVIEW_DEV_ADMIN_EMAIL }}
+          REVIEW_DEV_ADMIN_PASSWORD: ${{ secrets.REVIEW_DEV_ADMIN_PASSWORD }}
+        run: node scripts/wos-p7/qa-residual-gates.mjs dryrun
