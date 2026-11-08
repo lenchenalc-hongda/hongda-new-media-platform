@@ -88,6 +88,36 @@ gate('RESTRICTIVE_READ_ROLE_RLS', (reader.match(/AS RESTRICTIVE FOR SELECT TO au
   && reader.includes("bucket_id IS DISTINCT FROM 'wos-private'")
   && reader.includes("p.role IN ('admin','manager','sales','operator','workshop','technician')"));
 
+// Guard against later accidental widening of office reference-image privileges.
+const uploadPolicy = storage.split('CREATE POLICY wos_p7_private_object_insert')[1]
+  ?.split('CREATE POLICY wos_p7_private_object_select')[0] ?? '';
+const readPolicy = storage.split('CREATE POLICY wos_p7_private_object_select')[1]
+  ?.split('CREATE OR REPLACE FUNCTION')[0] ?? '';
+const registerRpc = definer(storage,'wos_register_uploaded_reference_image');
+const qaHardening = read('docs/workshop-order-system/nonproduction-only/wos_p7_security_hardening_20261108.sql');
+const httpVerifier = read('src/app/api/workshop-orders/qa-image-verify/route.ts');
+const binaryVerifier = read('src/lib/workshop-orders/qa-image-validation.ts');
+gate('NO_OPERATOR_REFERENCE_UPLOAD', uploadPolicy.includes("p.role IN ('admin','manager','sales')")
+  && !uploadPolicy.includes("p.role IN ('admin','manager','sales','operator')")
+  && uploadPolicy.includes("po.workflow_status='DRAFT'"));
+gate('POST_SUBMIT_IMAGE_REGISTRATION_DENIED', registerRpc.includes("role IN ('admin','manager','sales')")
+  && !registerRpc.includes("role IN ('admin','manager','sales','operator')")
+  && registerRpc.includes("v_order.workflow_status <> 'DRAFT'"));
+gate('OPERATOR_READS_SUBMITTED_ONLY', readPolicy.includes("p.role IN ('operator','workshop','technician') AND po.workflow_status='SUBMITTED'"));
+gate('QA_HARDENING_MIGRATION_PARITY', qaHardening.includes('WOS_NONPRODUCTION_SYNTHETIC_DATA_REQUIRED')
+  && qaHardening.includes("po.workflow_status='DRAFT'")
+  && qaHardening.includes("v_order.workflow_status <> 'DRAFT'"));
+gate('QA_SERVER_BINARY_VERIFICATION', httpVerifier.includes('resolveVerifiedSupabaseIdentity')
+  && httpVerifier.includes('isApprovedWosSandboxUrl')
+  && httpVerifier.includes("order.data.workflow_status!=='DRAFT'")
+  && httpVerifier.includes("client.storage.from('wos-private').download(expected)")
+  && httpVerifier.includes('verifyWosSyntheticPngBinary(binary,x.sha256)')
+  && binaryVerifier.includes("inflateSync(Buffer.concat(compressed)")
+  && binaryVerifier.includes('crc32(buf.subarray(offset+4,dataEnd))')
+  && component.includes("fetch('/api/workshop-orders/qa-image-verify'"));
+// Direct authenticated RPC remains callable: this is not production-grade
+// cryptographic proof binding. Production release stays blocked.
+
 const flowHeader = gatedQaWorkflow.slice(0, gatedQaWorkflow.indexOf('\njobs:'));
 gate('QA_SECRETS_NOT_AUTO_ON_PUSH', /^\s*on:\s*\n\s*workflow_dispatch:\s*$/m.test(flowHeader)
   && !/^\s*push:\s*$/m.test(flowHeader)
