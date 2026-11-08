@@ -107,3 +107,5 @@ jobs:
             if [ "$round" -lt "$WOS_QA_SOAK_ROUNDS" ]; then sleep 3; fi
           done
           echo "WOS_QA_SOAK_SUCCESS_COUNT=$WOS_QA_SOAK_ROUNDS"
+
+# WOS_QA_SOAK_INVOCATION_2026_11_08: 10 sequential synthetic Auth/HTTP/image tests.
