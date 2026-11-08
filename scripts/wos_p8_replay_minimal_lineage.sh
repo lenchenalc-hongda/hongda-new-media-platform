@@ -20,6 +20,11 @@ run tests/sql/wos_p8_lineage_ephemeral_auth_fixture.sql
 # Legacy bootstrap is untracked in Production migration history. Run only
 # inside the isolated PG17 service to detect first missing prerequisite.
 run supabase/migrations/001_initial_schema.sql
+# Legacy July field upgrades must predate the old RLS policy that references
+# topics.owner_id; original 001 bootstrap does not contain that column.
+run supabase/migrations/20260705_knowledge_upgrade.sql
+run supabase/migrations/20260705_topics_upgrade.sql
+run supabase/migrations/20260705_scripts_score_fields.sql
 run supabase/migrations/20260705_rls_policies.sql
 run supabase/migrations/20260801000000_review_center_auth_forward_migration.sql
 run supabase/migrations/20260817_review_center_phase2_core_foundation.sql
