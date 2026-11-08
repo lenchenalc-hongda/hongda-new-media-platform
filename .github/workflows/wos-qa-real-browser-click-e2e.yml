@@ -106,3 +106,5 @@ jobs:
           node tests/e2e/wos-qa-real-browser.cjs
 
 # WOS_QA_SOAK_INVOCATION_2026_11_08: 10 sequential synthetic Auth/HTTP/image tests.
+
+# WOS_QA_PERSISTENT_SESSION_SOAK_V2: same four identities, ten serial WOS business transactions.
