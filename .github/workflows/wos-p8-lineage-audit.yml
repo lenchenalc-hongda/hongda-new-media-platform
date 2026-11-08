@@ -8,6 +8,8 @@ on:
       - ".github/workflows/wos-p8-lineage-audit.yml"
       - "docs/workshop-order-system/nonproduction-only/wos_p8_production_migration_lineage_20261109.json"
       - "scripts/check_wos_p8_production_lineage.py"
+      - "scripts/wos_p8_schema_drift_report.py"
+      - "docs/workshop-order-system/nonproduction-only/wos_p8_production_public_table_inventory_20261109.json"
       - "scripts/wos_p8_replay_minimal_lineage.sh"
       - "tests/sql/wos_p8_lineage_ephemeral_auth_fixture.sql"
       - "supabase/migrations/**"
@@ -65,3 +67,5 @@ jobs:
           sudo apt-get install -y postgresql-client
       - name: Replay verified legacy prerequisites and first CPC migration
         run: bash scripts/wos_p8_replay_minimal_lineage.sh
+      - name: Report real schema parity gaps (diagnostic, non-deploying)
+        run: python3 scripts/wos_p8_schema_drift_report.py
