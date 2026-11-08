@@ -63,9 +63,14 @@ BEGIN
  UPDATE storage.objects SET name=name||'.changed' WHERE bucket_id='wos-private';
  GET DIAGNOSTICS n=ROW_COUNT;
  IF n<>0 THEN RAISE EXCEPTION 'WOS_UPDATE_BYPASS_%',n; END IF;
- DELETE FROM storage.objects WHERE bucket_id='wos-private';
- GET DIAGNOSTICS n=ROW_COUNT;
- IF n<>0 THEN RAISE EXCEPTION 'WOS_DELETE_BYPASS_%',n; END IF;
+ -- Do NOT issue SQL DELETE on Storage metadata, even in an ephemeral
+ -- test: Supabase intentionally rejects direct deletion. Check the
+ -- restrictive policy definition instead; physical deletion is out of scope.
+ IF NOT EXISTS(SELECT 1 FROM pg_policies
+   WHERE schemaname='storage' AND tablename='objects'
+     AND policyname='wos_p8_stage_object_no_delete'
+     AND permissive='RESTRICTIVE' AND cmd='DELETE')
+ THEN RAISE EXCEPTION 'WOS_NO_DELETE_POLICY_MISSING'; END IF;
 END $admin$;
 RESET ROLE;
 
