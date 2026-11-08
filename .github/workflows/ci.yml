@@ -41,6 +41,9 @@ jobs:
       - name: TypeScript check
         run: pnpm exec tsc --noEmit
 
+      - name: WOS P7 protected QA workflow independent secretless security review
+        run: node scripts/wos-p7/verify-protected-acceptance.mjs
+
       - name: Commercial document template tests
         run: pnpm exec tsx tests/unit/commercial-document-template.test.ts
 
