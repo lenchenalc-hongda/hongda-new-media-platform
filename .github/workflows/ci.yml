@@ -47,6 +47,9 @@ jobs:
       - name: WOS P7 residual QA-only JWT/orphan safety contracts (no credentials)
         run: node scripts/wos-p7/qa-residual-gates.mjs self-test
 
+      - name: WOS P8 migration foundation preflight and rollback gate (no secrets)
+        run: node scripts/wos-p8/verify-staging-migration-preflight.mjs
+
       - name: Commercial document template tests
         run: pnpm exec tsx tests/unit/commercial-document-template.test.ts
 
