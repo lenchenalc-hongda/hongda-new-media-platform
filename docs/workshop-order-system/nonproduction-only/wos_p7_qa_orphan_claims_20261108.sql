@@ -61,15 +61,15 @@ CREATE TRIGGER wos_qa_trusted_proof_guard
 
 -- Acquire at most one stale synthetic orphan per transaction. Locks on
 -- the Storage object and order serialize against proof writes / submissions.
-CREATE OR REPLACE FUNCTION public.wos_qa_claim_one_stale_orphan(
- p_min_age_hours integer DEFAULT 48)
+CREATE OR REPLACE FUNCTION public.wos_qa_claim_stale_orphan_for_org(
+ p_organization_id uuid,p_min_age_hours integer DEFAULT 48)
 RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=''
 AS $claim$
 DECLARE
  v_obj record; v_claim public.wos_qa_orphan_cleanup_claims%ROWTYPE;
  v_claim_token uuid:=gen_random_uuid();
 BEGIN
- IF p_min_age_hours IS NULL OR p_min_age_hours<24 OR p_min_age_hours>720 THEN
+ IF p_organization_id IS NULL OR p_min_age_hours IS NULL OR p_min_age_hours<24 OR p_min_age_hours>720 THEN
   RAISE EXCEPTION 'INVALID_CLEANUP_AGE' USING ERRCODE='22023'; END IF;
  SELECT so.id AS obj_id,so.name,so.version,so.updated_at AS object_updated_at,
   po.id AS order_id,po.organization_id
@@ -82,6 +82,7 @@ BEGIN
  WHERE so.bucket_id='wos-private'
   AND so.name LIKE 'organizations/%/wos/production-order/%/images/%'
   AND so.is_delete_marker=false AND so.archived_at IS NULL
+  AND po.organization_id=p_organization_id
   AND po.order_number LIKE 'QA-NONPROD-%'
   AND po.workflow_status IN ('DRAFT','SUBMITTED')
   AND so.created_at<now()-make_interval(hours=>p_min_age_hours)
@@ -118,9 +119,9 @@ BEGIN
   'orderId',v_claim.order_id,'organizationId',v_claim.organization_id,
   'leaseExpiresAt',v_claim.lease_expires_at);
 END $claim$;
-REVOKE ALL ON FUNCTION public.wos_qa_claim_one_stale_orphan(integer)
+REVOKE ALL ON FUNCTION public.wos_qa_claim_stale_orphan_for_org(uuid,integer)
  FROM PUBLIC,anon,authenticated;
-GRANT EXECUTE ON FUNCTION public.wos_qa_claim_one_stale_orphan(integer) TO service_role;
+GRANT EXECUTE ON FUNCTION public.wos_qa_claim_stale_orphan_for_org(uuid,integer) TO service_role;
 
 -- Second check immediately before Storage API deletion. Recheck every
 -- eligibility predicate, row identity and lease; never delete by SQL.
