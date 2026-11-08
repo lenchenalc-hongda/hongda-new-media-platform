@@ -1,0 +1,414 @@
+{
+  "schema_version": 1,
+  "observed_utc": "2026-11-09",
+  "project_ref": "amqpvxrurenevniilhtl",
+  "read_only": true,
+  "contains_business_rows": false,
+  "table_inventory_production_structure_only": true,
+  "sql_text_identity_verified": false,
+  "expected_table_count": 67,
+  "public_tables": [
+    {
+      "table_name": "account_rules",
+      "column_count": 9,
+      "rls_enabled": true,
+      "policy_count": 0
+    },
+    {
+      "table_name": "accounts",
+      "column_count": 16,
+      "rls_enabled": true,
+      "policy_count": 1
+    },
+    {
+      "table_name": "ai_runs",
+      "column_count": 8,
+      "rls_enabled": true,
+      "policy_count": 0
+    },
+    {
+      "table_name": "commercial_confirmed_quote_versions",
+      "column_count": 13,
+      "rls_enabled": true,
+      "policy_count": 1
+    },
+    {
+      "table_name": "commercial_confirmed_quotes",
+      "column_count": 6,
+      "rls_enabled": true,
+      "policy_count": 1
+    },
+    {
+      "table_name": "commercial_payment_methods",
+      "column_count": 19,
+      "rls_enabled": true,
+      "policy_count": 3
+    },
+    {
+      "table_name": "commercial_quotation_draft_revisions",
+      "column_count": 9,
+      "rls_enabled": true,
+      "policy_count": 1
+    },
+    {
+      "table_name": "commercial_quotation_drafts",
+      "column_count": 13,
+      "rls_enabled": true,
+      "policy_count": 3
+    },
+    {
+      "table_name": "cpc_ai_drafts",
+      "column_count": 18,
+      "rls_enabled": true,
+      "policy_count": 1
+    },
+    {
+      "table_name": "cpc_audit_log",
+      "column_count": 13,
+      "rls_enabled": true,
+      "policy_count": 1
+    },
+    {
+      "table_name": "cpc_customer_potential_assessments",
+      "column_count": 21,
+      "rls_enabled": true,
+      "policy_count": 1
+    },
+    {
+      "table_name": "cpc_customer_references",
+      "column_count": 16,
+      "rls_enabled": true,
+      "policy_count": 1
+    },
+    {
+      "table_name": "cpc_customer_workspaces",
+      "column_count": 16,
+      "rls_enabled": true,
+      "policy_count": 1
+    },
+    {
+      "table_name": "cpc_external_profile_mappings",
+      "column_count": 11,
+      "rls_enabled": true,
+      "policy_count": 1
+    },
+    {
+      "table_name": "cpc_project_events",
+      "column_count": 17,
+      "rls_enabled": true,
+      "policy_count": 1
+    },
+    {
+      "table_name": "cpc_project_members",
+      "column_count": 9,
+      "rls_enabled": true,
+      "policy_count": 1
+    },
+    {
+      "table_name": "cpc_projects",
+      "column_count": 21,
+      "rls_enabled": true,
+      "policy_count": 1
+    },
+    {
+      "table_name": "cpc_reports",
+      "column_count": 21,
+      "rls_enabled": true,
+      "policy_count": 1
+    },
+    {
+      "table_name": "cpc_work_items",
+      "column_count": 21,
+      "rls_enabled": true,
+      "policy_count": 1
+    },
+    {
+      "table_name": "glh_activity_events",
+      "column_count": 11,
+      "rls_enabled": true,
+      "policy_count": 1
+    },
+    {
+      "table_name": "glh_ad_campaigns",
+      "column_count": 10,
+      "rls_enabled": true,
+      "policy_count": 1
+    },
+    {
+      "table_name": "glh_ad_creatives",
+      "column_count": 11,
+      "rls_enabled": true,
+      "policy_count": 1
+    },
+    {
+      "table_name": "glh_ai_actions",
+      "column_count": 16,
+      "rls_enabled": true,
+      "policy_count": 1
+    },
+    {
+      "table_name": "glh_assignments",
+      "column_count": 11,
+      "rls_enabled": true,
+      "policy_count": 1
+    },
+    {
+      "table_name": "glh_audit_events",
+      "column_count": 14,
+      "rls_enabled": true,
+      "policy_count": 1
+    },
+    {
+      "table_name": "glh_automation_runs",
+      "column_count": 12,
+      "rls_enabled": true,
+      "policy_count": 1
+    },
+    {
+      "table_name": "glh_channel_accounts",
+      "column_count": 11,
+      "rls_enabled": true,
+      "policy_count": 1
+    },
+    {
+      "table_name": "glh_contacts",
+      "column_count": 16,
+      "rls_enabled": true,
+      "policy_count": 1
+    },
+    {
+      "table_name": "glh_conversations",
+      "column_count": 14,
+      "rls_enabled": true,
+      "policy_count": 1
+    },
+    {
+      "table_name": "glh_followups",
+      "column_count": 14,
+      "rls_enabled": true,
+      "policy_count": 1
+    },
+    {
+      "table_name": "glh_lead_profiles",
+      "column_count": 30,
+      "rls_enabled": true,
+      "policy_count": 1
+    },
+    {
+      "table_name": "glh_lead_scores",
+      "column_count": 10,
+      "rls_enabled": true,
+      "policy_count": 1
+    },
+    {
+      "table_name": "glh_leads",
+      "column_count": 19,
+      "rls_enabled": true,
+      "policy_count": 1
+    },
+    {
+      "table_name": "glh_manual_intake_requests",
+      "column_count": 8,
+      "rls_enabled": true,
+      "policy_count": 0
+    },
+    {
+      "table_name": "glh_manual_work_updates",
+      "column_count": 9,
+      "rls_enabled": true,
+      "policy_count": 1
+    },
+    {
+      "table_name": "glh_messages",
+      "column_count": 16,
+      "rls_enabled": true,
+      "policy_count": 1
+    },
+    {
+      "table_name": "glh_role_bindings",
+      "column_count": 11,
+      "rls_enabled": true,
+      "policy_count": 1
+    },
+    {
+      "table_name": "glh_tasks",
+      "column_count": 14,
+      "rls_enabled": true,
+      "policy_count": 1
+    },
+    {
+      "table_name": "glh_webhook_events",
+      "column_count": 12,
+      "rls_enabled": true,
+      "policy_count": 1
+    },
+    {
+      "table_name": "knowledge_cards",
+      "column_count": 19,
+      "rls_enabled": true,
+      "policy_count": 0
+    },
+    {
+      "table_name": "lead_interactions",
+      "column_count": 10,
+      "rls_enabled": true,
+      "policy_count": 0
+    },
+    {
+      "table_name": "leads",
+      "column_count": 29,
+      "rls_enabled": true,
+      "policy_count": 2
+    },
+    {
+      "table_name": "media_assets",
+      "column_count": 10,
+      "rls_enabled": true,
+      "policy_count": 0
+    },
+    {
+      "table_name": "organizations",
+      "column_count": 5,
+      "rls_enabled": true,
+      "policy_count": 2
+    },
+    {
+      "table_name": "post_metrics",
+      "column_count": 16,
+      "rls_enabled": true,
+      "policy_count": 0
+    },
+    {
+      "table_name": "posts",
+      "column_count": 13,
+      "rls_enabled": true,
+      "policy_count": 0
+    },
+    {
+      "table_name": "profiles",
+      "column_count": 11,
+      "rls_enabled": true,
+      "policy_count": 3
+    },
+    {
+      "table_name": "review_actions",
+      "column_count": 21,
+      "rls_enabled": true,
+      "policy_count": 1
+    },
+    {
+      "table_name": "review_audit_logs",
+      "column_count": 11,
+      "rls_enabled": true,
+      "policy_count": 1
+    },
+    {
+      "table_name": "review_case_audit_logs",
+      "column_count": 9,
+      "rls_enabled": true,
+      "policy_count": 0
+    },
+    {
+      "table_name": "review_case_number_counters",
+      "column_count": 3,
+      "rls_enabled": true,
+      "policy_count": 0
+    },
+    {
+      "table_name": "review_cases",
+      "column_count": 29,
+      "rls_enabled": true,
+      "policy_count": 2
+    },
+    {
+      "table_name": "review_dict_items",
+      "column_count": 12,
+      "rls_enabled": true,
+      "policy_count": 2
+    },
+    {
+      "table_name": "review_knowledge_case_metadata",
+      "column_count": 7,
+      "rls_enabled": true,
+      "policy_count": 0
+    },
+    {
+      "table_name": "review_knowledge_case_metadata_items",
+      "column_count": 7,
+      "rls_enabled": true,
+      "policy_count": 0
+    },
+    {
+      "table_name": "review_knowledge_cases",
+      "column_count": 23,
+      "rls_enabled": true,
+      "policy_count": 0
+    },
+    {
+      "table_name": "review_members",
+      "column_count": 8,
+      "rls_enabled": true,
+      "policy_count": 1
+    },
+    {
+      "table_name": "review_metadata",
+      "column_count": 8,
+      "rls_enabled": true,
+      "policy_count": 1
+    },
+    {
+      "table_name": "review_metadata_items",
+      "column_count": 6,
+      "rls_enabled": true,
+      "policy_count": 1
+    },
+    {
+      "table_name": "review_timeline_events",
+      "column_count": 8,
+      "rls_enabled": true,
+      "policy_count": 1
+    },
+    {
+      "table_name": "review_type_details",
+      "column_count": 23,
+      "rls_enabled": true,
+      "policy_count": 1
+    },
+    {
+      "table_name": "reviews",
+      "column_count": 13,
+      "rls_enabled": true,
+      "policy_count": 0
+    },
+    {
+      "table_name": "scripts",
+      "column_count": 19,
+      "rls_enabled": true,
+      "policy_count": 0
+    },
+    {
+      "table_name": "site_data",
+      "column_count": 3,
+      "rls_enabled": true,
+      "policy_count": 3
+    },
+    {
+      "table_name": "tasks",
+      "column_count": 12,
+      "rls_enabled": true,
+      "policy_count": 0
+    },
+    {
+      "table_name": "topics",
+      "column_count": 16,
+      "rls_enabled": true,
+      "policy_count": 1
+    },
+    {
+      "table_name": "viral_teardowns",
+      "column_count": 22,
+      "rls_enabled": true,
+      "policy_count": 0
+    }
+  ]
+}
