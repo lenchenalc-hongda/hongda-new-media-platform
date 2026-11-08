@@ -100,7 +100,7 @@ jobs:
         run: pnpm install --frozen-lockfile --ignore-scripts
       - name: Verify script blob and dry self-test before any QA secrets
         env:
-          EXPECTED_SCRIPT_BLOB: 4902ba60644549dd4681edd8ae0fdcbc4e8d7ce1
+          EXPECTED_SCRIPT_BLOB: edb6e4b0a3c44a37cf518bea7d295508be42c5a1
         run: |
           set -euo pipefail
           [ "$(git hash-object scripts/wos-p7/qa-residual-gates.mjs)" = "$EXPECTED_SCRIPT_BLOB" ]
