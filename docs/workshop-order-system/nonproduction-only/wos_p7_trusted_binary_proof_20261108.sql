@@ -28,6 +28,28 @@ ALTER TABLE public.wos_qa_verified_image_proofs ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON public.wos_qa_verified_image_proofs FROM PUBLIC,anon,authenticated;
 GRANT SELECT,INSERT,UPDATE ON public.wos_qa_verified_image_proofs TO service_role;
 
+-- Privileged metadata lookup only for the audited isolated QA Edge Function.
+-- No direct caller can supply owner/org proof; the Edge Function checks them.
+CREATE OR REPLACE FUNCTION public.wos_qa_get_storage_object_for_proof(p_path text)
+RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=''
+AS $wos$ DECLARE obj storage.objects%ROWTYPE;
+BEGIN
+ IF p_path IS NULL OR length(p_path)>600
+    OR p_path NOT LIKE 'organizations/%/wos/production-order/%/images/%'
+ THEN RAISE EXCEPTION 'INVALID_STORAGE_PATH' USING ERRCODE='22023'; END IF;
+ SELECT * INTO obj FROM storage.objects
+ WHERE bucket_id='wos-private' AND name=p_path
+  AND is_delete_marker=false AND archived_at IS NULL;
+ IF NOT FOUND THEN RAISE EXCEPTION 'STORAGE_OBJECT_NOT_FOUND' USING ERRCODE='22023'; END IF;
+ RETURN jsonb_build_object('id',obj.id,'ownerId',obj.owner_id,
+  'version',obj.version,'updatedAt',obj.updated_at,
+  'mimeType',obj.metadata->>'mimetype','byteSize',obj.metadata->>'size');
+END $wos$;
+REVOKE ALL ON FUNCTION public.wos_qa_get_storage_object_for_proof(text)
+ FROM PUBLIC,anon,authenticated;
+GRANT EXECUTE ON FUNCTION public.wos_qa_get_storage_object_for_proof(text)
+ TO service_role;
+
 CREATE OR REPLACE FUNCTION public.wos_register_uploaded_reference_image(
  p_order_id uuid,p_image_id uuid,p_category text,p_storage_path text)
 RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=''
