@@ -242,19 +242,16 @@ jobs:
       - name: Build metadata
         run: node scripts/build-meta.mjs
 
+      # Security gate: PR builds execute repository source, build hooks and dependencies.
+      # Never inject privileged provider credentials into such unreviewed code.
+      # Only publishable client configuration is allowed; the leakage auditor
+      # below checks static bundles by key *name*, not by secret values.
       - name: Build
         run: pnpm next build
         env:
           NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL || '' }}
           NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY || '' }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY || '' }}
           OPENAI_MODEL: gpt-4o
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY || '' }}
-          WECHAT_VIDEO_ACCESS_TOKEN: ${{ secrets.WECHAT_VIDEO_ACCESS_TOKEN || '' }}
-          WECHAT_APP_ID: ${{ secrets.WECHAT_APP_ID || '' }}
-          WECHAT_APP_SECRET: ${{ secrets.WECHAT_APP_SECRET || '' }}
-          DOUYIN_CLIENT_KEY: ${{ secrets.DOUYIN_CLIENT_KEY || '' }}
-          DOUYIN_CLIENT_SECRET: ${{ secrets.DOUYIN_CLIENT_SECRET || '' }}
 
       - name: Audit bundle for secret leakage
         run: bash scripts/audit-bundle-secrets.sh
