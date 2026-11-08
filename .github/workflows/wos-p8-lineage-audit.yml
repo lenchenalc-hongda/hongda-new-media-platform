@@ -1,0 +1,67 @@
+name: WOS P8 isolated migration lineage audit
+
+on:
+  pull_request:
+    branches:
+      - master
+    paths:
+      - ".github/workflows/wos-p8-lineage-audit.yml"
+      - "docs/workshop-order-system/nonproduction-only/wos_p8_production_migration_lineage_20261109.json"
+      - "scripts/check_wos_p8_production_lineage.py"
+      - "scripts/wos_p8_replay_minimal_lineage.sh"
+      - "tests/sql/wos_p8_lineage_ephemeral_auth_fixture.sql"
+      - "supabase/migrations/**"
+
+permissions:
+  contents: read
+
+jobs:
+  offline-provenance:
+    name: offline-provenance
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Validate immutable migration file mapping (no credentials)
+        run: python3 scripts/check_wos_p8_production_lineage.py
+      - name: Negative tests for renamed, forged or unsafe lineage
+        run: python3 scripts/check_wos_p8_production_lineage.py --self-test
+
+  pg17-oldest-production-prerequisite:
+    name: pg17-oldest-production-prerequisite
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: wos-p8-local-ephemeral-only
+          POSTGRES_DB: wos_p8_lineage_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d wos_p8_lineage_ci"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      PGHOST: localhost
+      PGPORT: "5432"
+      PGUSER: postgres
+      PGPASSWORD: wos-p8-local-ephemeral-only
+      PGDATABASE: wos_p8_lineage_ci
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Install disposable PostgreSQL client
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y postgresql-client
+      - name: Replay verified legacy prerequisites and first CPC migration
+        run: bash scripts/wos_p8_replay_minimal_lineage.sh
