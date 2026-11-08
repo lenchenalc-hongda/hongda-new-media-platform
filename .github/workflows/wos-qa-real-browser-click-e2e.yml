@@ -1,21 +1,10 @@
 name: WOS Isolated QA Real Browser Click E2E
 
+# SAFETY HOLD (WOS P7): this job consumes real isolated QA credentials.
+# Never automatically execute source from a writable QA branch with secrets.
+# Enable secret-bearing tests again only from a reviewed, protected ref after
+# validating GitHub Environment branch allowlist + required reviewer gate.
 on:
-  push:
-    branches: [qa/wos-nonprod-atomic-storage-20261107]
-    paths:
-      - '.github/workflows/wos-qa-real-browser-click-e2e.yml'
-      - 'tests/e2e/wos-qa-real-browser.cjs'
-      - 'tests/e2e/wos-qa-resilience.cjs'
-      - 'src/components/workshop-orders/LiveQaProductionSubmit.tsx'
-      - 'src/components/workshop-orders/LiveQaWorkshopInbox.tsx'
-      - 'src/components/workshop-orders/ProductionOrderForm.tsx'
-      - 'src/app/workshop-orders/production/new/page.tsx'
-      - 'src/app/workshop-orders/inbox/page.tsx'
-      - 'src/lib/workshop-orders/api-server.ts'
-      - 'src/lib/workshop-orders/qa-recovery.ts'
-      - 'tests/unit/wos-qa-recovery.test.ts'
-      - 'src/middleware.ts'
   workflow_dispatch:
 
 permissions:
