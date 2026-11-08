@@ -56,6 +56,7 @@ export function isValidQaRecovery(input: unknown, userId: string, orgId: string,
     && (q.fileSha256 === null || (typeof q.fileSha256 === 'string' && HASH.test(q.fileSha256)))
     && typeof q.stage === 'string'
     && allowedStages.includes(q.stage as QaRecoveryStage)
+    && (q.objectPath === null || (q.orderId !== null && q.imageId !== null))
     && qaBucketPath(q as unknown as QaRecovery);
 }
 
@@ -75,7 +76,7 @@ export function saveQaRecovery(recovery: QaRecovery): void {
   }
   try {
     window.sessionStorage.setItem(WOS_QA_RECOVERY_KEY, JSON.stringify(recovery));
-  } catch { /* Storage disabled: fail without using new idempotency keys. */ }
+  } catch { throw new Error('QA_SESSION_STORAGE_UNAVAILABLE'); }
 }
 
 export function clearQaRecovery(): void {
