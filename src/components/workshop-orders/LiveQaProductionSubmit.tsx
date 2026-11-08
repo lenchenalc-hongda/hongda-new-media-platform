@@ -257,8 +257,10 @@ export default function LiveQaProductionSubmit({ draft, valid, onFillQaSample }:
 
       if (state.stage === 'DRAFT') {
         // The MIME field and extension alone are not a file-type check.
-        if (!file || !await verifyQaImageSignature(file))
-          throw new Error('QA_PRIVATE_IMAGE_MAGIC_BYTES_INVALID');
+        // Only synthetic PNG is supported by the strict QA server integrity
+        // verifier. JPEG/WebP remain blocked pending full decoder review.
+        if (!file || file.type!=='image/png' || !await verifyQaImageSignature(file))
+          throw new Error('QA_PRIVATE_IMAGE_PNG_REQUIRED');
         const fileHash = await qaFileSha256(file);
         if (state.fileSha256 && state.fileSha256 !== fileHash)
           throw new Error('QA_RECOVERY_RESELECT_ORIGINAL_IMAGE');
@@ -295,6 +297,26 @@ export default function LiveQaProductionSubmit({ draft, valid, onFillQaSample }:
       }
 
       if (state.stage === 'UPLOADED') {
+        // Read back exact bytes through a SAME-ORIGIN, authenticated server
+        // endpoint before the normal UI path may call image-registration RPC.
+        // This protects the normal QA flow from browser-only MIME spoofing.
+        // Direct RPC bypass remains a separate Production safety gate.
+        if (!state.orderId || !state.imageId || !state.objectPath || !state.fileSha256)
+          throw new Error('QA_IMAGE_VERIFY_STATE_MISSING');
+        const verified = await fetch('/api/workshop-orders/qa-image-verify', {
+          method: 'POST', credentials: 'same-origin', cache: 'no-store',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            orderId: state.orderId, imageId: state.imageId,
+            storagePath: state.objectPath, sha256: state.fileSha256,
+          }),
+        });
+        const proof:unknown=await verified.json().catch(()=>null);
+        if (!verified.ok || !proof || typeof proof!=='object'
+          || !('code' in proof) || proof.code!=='QA_IMAGE_VERIFIED'
+          || !('data' in proof) || !proof.data || typeof proof.data!=='object'
+          || !('sha256' in proof.data) || proof.data.sha256!==state.fileSha256)
+          throw new Error('QA_IMAGE_SERVER_BINARY_VERIFY_FAILED');
         const registeredImage = async () => {
           const result = await client.from('wos_reference_images')
             .select('id,storage_path,image_status').eq('id', state!.imageId!)
