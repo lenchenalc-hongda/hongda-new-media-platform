@@ -140,6 +140,12 @@ async function main() {
     const viewerDenied = viewerApi.status === 403 && viewerApi.body?.code === 'FORBIDDEN';
     trace('VIEWER_INBOX_DENIED',viewerDenied);
     assert(viewerDenied,'VIEWER_UNEXPECTED_READ');
+    await viewer.page.goto(origin + '/workshop-orders/production/new', { waitUntil: 'domcontentloaded' });
+    await viewer.page.getByText('当前测试账号没有办公室下单权限', { exact: false }).waitFor({ timeout: 30000 });
+    const viewerOfficeActionHidden =
+      (await viewer.page.getByRole('button', {name: '上传图片并提交 QA 订单'}).count()) === 0;
+    trace('VIEWER_OFFICE_SUBMIT_BUTTON_HIDDEN',viewerOfficeActionHidden);
+    assert(viewerOfficeActionHidden,'VIEWER_OFFICE_ACTION_VISIBLE');
 
     stage = 'FOREIGN_AUTH';
     const foreign = await login(browser,'FOREIGN','/workspace-home');
