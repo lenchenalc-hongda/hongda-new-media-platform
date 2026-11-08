@@ -42,12 +42,16 @@ const png = Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jGZ0AAAAASUVORK5CYII=',
   'base64'
 );
+let stage = 'PRECHECK';
 async function main() {
   assert(allowed(), 'QA_PINS_OR_PROTECTED_SECRETS_MISSING');
+  stage = 'CHROMIUM_LAUNCH';
   const browser = await chromium.launch({ headless: true, args: ['--no-sandbox'] });
+  stage = 'ADMIN_AUTH';
   const contexts = [];
   try {
     const office = await login(browser, 'ADMIN', '/workshop-orders/production/new');
+    stage = 'OFFICE_QA_FORM';
     contexts.push(office.ctx);
     await office.page.getByRole('heading', { name: 'QA Preview · 真实 HTTP 提交验收' }).waitFor({ timeout: 20000 });
     await office.page.getByRole('button', { name: '自动填入全套合成 QA 测试资料' }).click();
@@ -63,6 +67,7 @@ async function main() {
       return response.url() === origin + '/api/workshop-orders/production'
         && response.request().method() === 'POST';
     }, { timeout: 110000 });
+    stage = 'OFFICE_HTTP_SUBMIT';
     await office.page.getByRole('button', { name: '上传图片并提交 QA 订单' }).click();
     postResponse = await postWait;
     const postBody = await postResponse.json();
@@ -77,7 +82,9 @@ async function main() {
     await office.page.getByText('已由真实 HTTP API 提交', { exact: false }).waitFor();
     const orderId = postBody.data.orderId;
 
+    stage = 'OPERATOR_AUTH';
     const workshop = await login(browser,'OPERATOR','/workshop-orders/inbox');
+    stage = 'OPERATOR_INBOX';
     contexts.push(workshop.ctx);
     await workshop.page.getByRole('button', { name: '刷新真实车间任务' }).waitFor();
     const inboxResponsePromise = workshop.page.waitForResponse(
@@ -92,12 +99,14 @@ async function main() {
       && matches?.length === 1 && matches[0]?.workflowStatus === 'SUBMITTED';
     trace('OPERATOR_REFRESH_HTTP_INBOX',matched);
     assert(matched,'OPERATOR_INBOX_NOT_VISIBLE');
+    stage = 'OPERATOR_IMAGE';
     const card = workshop.page.locator('article').filter({ hasText: orderNumber });
     await card.getByRole('button', { name: '用当前车间身份读取私有图片' }).click();
     await card.getByRole('link', { name: '打开已验证的私有图片' })
       .waitFor({ timeout: 50000 });
     trace('OPERATOR_PRIVATE_IMAGE_BINARY_READ',true);
 
+    stage = 'OPERATOR_FORBIDDEN';
     const operatorForbidden = await workshop.page.evaluate(async () => {
       const res = await fetch('/api/workshop-orders/production', {
         method:'POST', credentials:'same-origin',
@@ -110,7 +119,9 @@ async function main() {
     assert.equal(operatorForbidden,403);
     trace('OPERATOR_FORBIDDEN_TO_SUBMIT',true);
 
+    stage = 'VIEWER_AUTH';
     const viewer = await login(browser,'VIEWER','/workspace-home');
+    stage = 'VIEWER_API';
     contexts.push(viewer.ctx);
     const viewerApi = await viewer.page.evaluate(async () => {
       const r = await fetch('/api/workshop-orders/inbox', { credentials:'same-origin',cache:'no-store' });
@@ -120,7 +131,9 @@ async function main() {
     trace('VIEWER_INBOX_DENIED',viewerDenied);
     assert(viewerDenied,'VIEWER_UNEXPECTED_READ');
 
+    stage = 'FOREIGN_AUTH';
     const foreign = await login(browser,'FOREIGN','/workspace-home');
+    stage = 'FOREIGN_API';
     contexts.push(foreign.ctx);
     const foreignApi = await foreign.page.evaluate(async () => {
       const r = await fetch('/api/workshop-orders/inbox',{credentials:'same-origin',cache:'no-store'});
@@ -139,8 +152,14 @@ async function main() {
     await browser.close();
   }
 }
-main().catch(() => {
-  // No credentials, response bodies, browser screenshots, JWT or HTTP traces.
+main().catch((error) => {
+  // Explicitly allowlist failure *stage* and JavaScript error type, never raw
+  // browser/HTTP error messages that might embed URLs or sensitive values.
+  const kind = error && error.name === 'AssertionError' ? 'ASSERTION'
+    : error && error.name === 'TimeoutError' ? 'TIMEOUT'
+    : error && error.name === 'Error' ? 'ERROR' : 'OTHER';
+  console.error('WOS_BROWSER_QA_FAILURE_STAGE=' + stage);
+  console.error('WOS_BROWSER_QA_FAILURE_CLASS=' + kind);
   console.error('WOS_BROWSER_QA_LOCAL_PREVIEW_HTTP_E2E=FAIL');
   process.exitCode = 1;
 });
