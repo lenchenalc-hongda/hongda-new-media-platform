@@ -147,6 +147,49 @@ export default function LiveQaProductionSubmit({ draft, valid, onFillQaSample }:
           state.orderNumber !== draft.orderNumber || state.versionLabel !== draft.versionLabel)
         throw new Error('QA_RECOVERY_ACTOR_OR_ORDER_CHANGED');
 
+      // Do not trust tab memory as an authoritative order status. After an
+      // interrupted POST/refresh, look up the exact synthetic order first.
+      if (!state.orderId) {
+        const lookup = await client.from('wos_production_orders')
+          .select('id,version,workflow_status,version_label')
+          .eq('organization_id', orgId)
+          .eq('created_by_profile_id', profileId)
+          .eq('order_number', state.orderNumber).maybeSingle();
+        if (lookup.error) throw new Error('QA_RECOVERY_ORDER_LOOKUP_FAILED');
+        if (lookup.data) {
+          if (lookup.data.version_label !== state.versionLabel ||
+              !['DRAFT', 'SUBMITTED'].includes(lookup.data.workflow_status))
+            throw new Error('QA_RECOVERY_ORDER_CONFLICT');
+          state.orderId = lookup.data.id;
+          save('DRAFT', '已找到此前创建的同一张 QA 草稿，不再重复创建');
+        }
+      }
+
+      if (state.orderId) {
+        const canonical = await client.from('wos_production_orders')
+          .select('id,workflow_status,version,version_label,organization_id,created_by_profile_id')
+          .eq('id', state.orderId).eq('organization_id', orgId).maybeSingle();
+        if (canonical.error || !canonical.data ||
+            canonical.data.version_label !== state.versionLabel ||
+            canonical.data.created_by_profile_id !== profileId)
+          throw new Error('QA_RECOVERY_CANONICAL_ORDER_MISMATCH');
+        if (canonical.data.workflow_status === 'SUBMITTED') {
+          const receipt = await client.from('wos_submission_receipts')
+            .select('id').eq('order_id', state.orderId)
+            .eq('idempotency_key', state.idempotencyKey)
+            .limit(1).maybeSingle();
+          if (receipt.error || !receipt.data?.id)
+            throw new Error('QA_ALREADY_SUBMITTED_WITH_DIFFERENT_REQUEST');
+          save('SUBMITTED', '数据库确认原请求已提交；无需再写一次');
+          setSuccessOrderId(state.orderId);
+          setDone(true);
+          clearQaRecovery();
+          return;
+        }
+        if (canonical.data.workflow_status !== 'DRAFT' || canonical.data.version !== 1)
+          throw new Error('QA_RECOVERY_ORDER_NO_LONGER_EDITABLE');
+      }
+
       if (!state.orderId) {
         save('NEW', '正在创建真实非生产草稿...');
         const creation = await client.from('wos_production_orders').insert({
@@ -184,44 +227,92 @@ export default function LiveQaProductionSubmit({ draft, valid, onFillQaSample }:
       }
 
       if (state.stage === 'DRAFT') {
+        // The MIME field and extension alone are not a file-type check.
+        if (!file || !await verifyQaImageSignature(file))
+          throw new Error('QA_PRIVATE_IMAGE_MAGIC_BYTES_INVALID');
+        const fileHash = await qaFileSha256(file);
+        if (state.fileSha256 && state.fileSha256 !== fileHash)
+          throw new Error('QA_RECOVERY_RESELECT_ORIGINAL_IMAGE');
+        state.fileSha256 = fileHash;
         const imageId = state.imageId ?? crypto.randomUUID();
         state.imageId = imageId;
-        const extension = mimeExtensions[file!.type];
+        const extension = mimeExtensions[file.type];
         const path = [
           'organizations', orgId, 'wos', 'production-order',
           state.orderId!, 'images', 'product', 'versions',
           draft.versionLabel, imageId, 'qa-preview-proof.' + extension,
         ].join('/');
+        if (state.objectPath && state.objectPath !== path)
+          throw new Error('QA_RECOVERY_IMAGE_PATH_CHANGED');
         state.objectPath = path;
-        const upload = await client.storage.from('wos-private').upload(
-          path, file!, { contentType: file!.type, cacheControl: '0', upsert: false },
-        );
-        if (upload.error) throw new Error('QA_PRIVATE_IMAGE_UPLOAD_FAILED');
-        save('UPLOADED', '图片已上传到私有 Storage；正在登记校验');
+        save('DRAFT', '已固定图片哈希和唯一对象路径；正在安全核对上传');
+        const bucket = client.storage.from('wos-private');
+        const previous = await bucket.download(path);
+        if (previous.data) {
+          if (await qaFileSha256(previous.data) !== fileHash)
+            throw new Error('QA_PRIVATE_IMAGE_EXISTING_BINARY_MISMATCH');
+        } else {
+          const upload = await bucket.upload(path, file,
+            { contentType: file.type, cacheControl: '0', upsert: false });
+          if (upload.error) {
+            // A lost upload response may mean the object was already stored.
+            // Re-download and hash-compare before accepting any retry.
+            const afterError = await bucket.download(path);
+            if (!afterError.data || await qaFileSha256(afterError.data) !== fileHash)
+              throw new Error('QA_PRIVATE_IMAGE_UPLOAD_UNVERIFIED');
+          }
+        }
+        save('UPLOADED', '已校验私有对象真实字节和文件哈希；正在登记');
       }
 
       if (state.stage === 'UPLOADED') {
-        const registered = await client.rpc('wos_register_uploaded_reference_image', {
-          p_order_id: state.orderId!,
-          p_image_id: state.imageId!,
-          p_category: 'PRODUCT',
-          p_storage_path: state.objectPath!,
-        });
-        if (registered.error || registered.data?.status !== 'CREATED')
-          throw new Error('QA_PRIVATE_IMAGE_SERVER_REGISTRATION_FAILED');
-        save('REGISTERED', '图片已通过服务器登记；正在确认办公室资料');
+        const registeredImage = async () => {
+          const result = await client.from('wos_reference_images')
+            .select('id,storage_path,image_status').eq('id', state!.imageId!)
+            .eq('entity_id', state!.orderId!).maybeSingle();
+          if (result.error) throw new Error('QA_IMAGE_REGISTRY_READ_UNAVAILABLE');
+          if (!result.data) return false;
+          if (result.data.storage_path !== state!.objectPath || result.data.image_status !== 'READY')
+            throw new Error('QA_RECOVERY_IMAGE_REGISTRY_MISMATCH');
+          return true;
+        };
+        if (!await registeredImage()) {
+          const registration = await client.rpc('wos_register_uploaded_reference_image', {
+            p_order_id: state.orderId!,
+            p_image_id: state.imageId!,
+            p_category: 'PRODUCT',
+            p_storage_path: state.objectPath!,
+          });
+          if (registration.error || !['CREATED', 'REPLAYED'].includes(registration.data?.status)) {
+            // Retry reads are safe; the registration may have committed before
+            // the HTTP response was lost. Never register a different path.
+            if (!await registeredImage())
+              throw new Error('QA_PRIVATE_IMAGE_SERVER_REGISTRATION_FAILED');
+          }
+        }
+        save('REGISTERED', '已确认图片登记在原订单上；正在核对办公室齐套');
       }
 
       if (state.stage === 'REGISTERED') {
-        const readiness = await client.rpc('wos_confirm_office_completeness', {
-          p_order_id: state.orderId!,
-          p_expected_revision: 1,
-          p_expected_label: draft.versionLabel,
-          p_note: note.trim(),
-        });
-        if (readiness.error || !readiness.data)
-          throw new Error('QA_OFFICE_READINESS_FAILED');
-        save('READY', '资料齐套已确认；正在通过同源 HTTP API 提交');
+        const hasReadiness = async () => {
+          const r = await client.from('wos_office_readiness_receipts')
+            .select('id').eq('order_id', state!.orderId!)
+            .eq('source_revision', 1).eq('source_version_label', draft.versionLabel)
+            .limit(1).maybeSingle();
+          if (r.error) throw new Error('QA_READINESS_RECEIPT_LOOKUP_FAILED');
+          return !!r.data?.id;
+        };
+        if (!await hasReadiness()) {
+          const readiness = await client.rpc('wos_confirm_office_completeness', {
+            p_order_id: state.orderId!,
+            p_expected_revision: 1,
+            p_expected_label: draft.versionLabel,
+            p_note: note.trim(),
+          });
+          if ((readiness.error || !readiness.data) && !await hasReadiness())
+            throw new Error('QA_OFFICE_READINESS_FAILED');
+        }
+        save('READY', '办公室资料齐套已验证；正在通过同源 HTTP API 提交');
       }
 
       if (state.stage === 'READY') {
@@ -249,6 +340,7 @@ export default function LiveQaProductionSubmit({ draft, valid, onFillQaSample }:
         save('SUBMITTED', '真实 HTTP 提交成功；车间账号可刷新 Inbox');
         setSuccessOrderId(state.orderId!);
         setDone(true);
+        clearQaRecovery();
       }
     } catch (err) {
       // Show only our fixed allowlisted error codes. Never expose raw server
