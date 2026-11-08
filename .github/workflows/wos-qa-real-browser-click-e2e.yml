@@ -79,7 +79,13 @@ jobs:
           REVIEW_DEV_FOREIGN_PASSWORD: ${{ secrets.REVIEW_DEV_FOREIGN_PASSWORD }}
         run: |
           set -euo pipefail
-          (pnpm exec next start --hostname 127.0.0.1 -p 3000 >/tmp/hongda-qa-next.log 2>&1 & echo $! > /tmp/hongda-qa-next.pid)
+          # The Next.js server does NOT need credentials for other QA users.
+          # Keep protected passwords only in the direct Playwright node process.
+          (env -u REVIEW_DEV_ADMIN_EMAIL -u REVIEW_DEV_ADMIN_PASSWORD \
+             -u REVIEW_DEV_VIEWER_EMAIL -u REVIEW_DEV_VIEWER_PASSWORD \
+             -u REVIEW_DEV_OPERATOR_EMAIL -u REVIEW_DEV_OPERATOR_PASSWORD \
+             -u REVIEW_DEV_FOREIGN_EMAIL -u REVIEW_DEV_FOREIGN_PASSWORD \
+             pnpm exec next start --hostname 127.0.0.1 -p 3000 >/tmp/hongda-qa-next.log 2>&1 & echo $! > /tmp/hongda-qa-next.pid)
           for attempt in $(seq 1 100); do
             if curl -fsS http://localhost:3000/login >/dev/null 2>&1; then break; fi
             sleep 2
