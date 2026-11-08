@@ -9,6 +9,8 @@ on:
       - "docs/workshop-order-system/nonproduction-only/wos_p8_production_migration_lineage_20261109.json"
       - "scripts/check_wos_p8_production_lineage.py"
       - "scripts/wos_p8_schema_drift_report.py"
+      - "scripts/wos_p8_drift_details.py"
+      - "docs/workshop-order-system/nonproduction-only/wos_p8_production_drift_details_20261109.json"
       - "docs/workshop-order-system/nonproduction-only/wos_p8_production_public_table_inventory_20261109.json"
       - "scripts/wos_p8_replay_minimal_lineage.sh"
       - "scripts/wos_p8_replay_registered_candidates.py"
@@ -107,3 +109,5 @@ jobs:
           sudo apt-get install -y postgresql-client
       - name: Execute all 29 mapped Production SQL bodies after candidate legacy bootstrap
         run: python3 scripts/wos_p8_replay_registered_candidates.py
+      - name: Report detailed column and policy-name differences on disposable PG17
+        run: python3 scripts/wos_p8_drift_details.py
