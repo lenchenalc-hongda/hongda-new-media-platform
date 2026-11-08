@@ -1,0 +1,37 @@
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+
+const read=(p:string)=>readFileSync(p,'utf8');
+const lease=read('docs/workshop-order-system/nonproduction-only/wos_p7_qa_orphan_claims_20261108.sql');
+const inventory=read('docs/workshop-order-system/nonproduction-only/wos_p7_qa_orphan_inventory_parity_20261108.sql');
+const race=read('docs/workshop-order-system/nonproduction-only/wos_p7_qa_cleanup_race_guards_20261108.sql');
+const edge=read('supabase/functions/wos-p7-orphan-cleanup/index.ts');
+const browser=read('.github/workflows/wos-qa-real-browser-click-e2e.yml');
+
+assert(lease.includes('ENABLE ROW LEVEL SECURITY'));
+assert(lease.includes('REVOKE ALL ON public.wos_qa_orphan_cleanup_claims FROM PUBLIC,anon,authenticated'));
+assert(lease.includes('FOR UPDATE OF so,po SKIP LOCKED'));
+assert(lease.includes("state IN ('CLAIMED','REMOVED','RELEASED')"));
+assert(lease.includes("p_min_age_hours<24"));
+assert(lease.includes("wos_qa_predelete_orphan"));
+assert(lease.includes('STORAGE_BINARY_METADATA_STILL_PRESENT'));
+assert(lease.includes('wos_qa_trusted_proof_guard'));
+assert(lease.includes('obj.owner_id IS DISTINCT FROM NEW.actor_user_id::text'));
+assert(lease.includes('wos_qa_orphan_cleanup_claims c'));
+assert(inventory.includes("po.workflow_status IN ('DRAFT','SUBMITTED')"));
+assert(inventory.includes('wos_qa_orphan_cleanup_claims claim'));
+assert(race.includes('QA_ORPHAN_CLEANUP_IN_PROGRESS'));
+assert((race.match(/QA_ORPHAN_CLEANUP_IN_PROGRESS/g)||[]).length>=3);
+assert(edge.includes("QA_URL='https://xulmpqaknlwqqculbsek.supabase.co'"));
+assert(edge.includes("profile.role!=='admin'"));
+assert(edge.includes("const mode=body.mode??'dry_run'"));
+assert(edge.includes("WOS_P7_QA_ORPHAN_DELETE_ENABLED"));
+assert(edge.includes("WOS_QA_SYNTHETIC_ORPHAN_DELETE_ONLY"));
+assert(edge.includes("admin.rpc('wos_qa_predelete_orphan'"));
+assert(edge.includes("admin.storage.from('wos-private').remove([claim.path])"));
+assert(edge.includes("admin.rpc('wos_qa_finish_orphan_claim'"));
+assert(!/\.from\(['"]objects['"]\)\.delete\(/.test(edge));
+assert(browser.includes('workflow_dispatch:'));
+assert(browser.includes('environment: hongda-review-dev'));
+assert(!/^\s*push:\s*$/m.test(browser));
+console.log('WOS_P7_QA_ORPHAN_CLAIM_CLEANUP_SECURITY_CONTRACT=PASS');
