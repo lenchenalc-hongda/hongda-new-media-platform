@@ -407,6 +407,79 @@ jobs:
           echo 'WOS_P8_P7_STORAGE_EDGE_FUNCTIONS=NOT_RUN'
           echo 'WOS_P8_PRODUCTION_MIGRATION=NOT_RUN'
 
+  wos-p8-pinned-qa-p7-sql:
+    name: wos-p8-pinned-qa-p7-sql
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: wos-p8-disposable-ci-only
+          POSTGRES_DB: wos_p8_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d wos_p8_ci"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      PGHOST: localhost
+      PGPORT: "5432"
+      PGUSER: postgres
+      PGPASSWORD: wos-p8-disposable-ci-only
+      PGDATABASE: wos_p8_ci
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Checkout exact P7 QA source for SQL-only disposable replay
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: 29f908a0b32b530d551886e3ce4b6a0762f86cdc
+          path: .wos-p7-pinned
+          persist-credentials: false
+      - name: Verify immutable P7 source
+        run: |
+          test "$(git -C .wos-p7-pinned rev-parse HEAD)" = "29f908a0b32b530d551886e3ce4b6a0762f86cdc"
+      - name: Install disposable PG17 test client
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y postgresql-client
+      - name: Bootstrap synthetic foundation and Storage fixture
+        run: |
+          set -euo pipefail
+          psql -X -q -v ON_ERROR_STOP=1 -f tests/sql/wos_p8_ephemeral_foundation_fixture.sql
+          psql -X -q -v ON_ERROR_STOP=1 -f supabase/migrations/20261014102000_workshop_order_system_foundation.sql
+          psql -X -q -v ON_ERROR_STOP=1 -f tests/sql/wos_p8_qa_replay_storage_fixture.sql
+      - name: Execute P7 SQL and test direct-RPC rejection, role isolation and receipt replay
+        run: |
+          set -euo pipefail
+          src=".wos-p7-pinned/docs/workshop-order-system/nonproduction-only"
+          psql -X -q -v ON_ERROR_STOP=1 -f "$src/wos_p7_atomic_submission.sql"
+          psql -X -q -v ON_ERROR_STOP=1 -f "$src/wos_p7_security_hardening_20261108.sql"
+          psql -X -q -v ON_ERROR_STOP=1 -f "$src/wos_p7_trusted_binary_proof_20261108.sql"
+          psql -X -q -v ON_ERROR_STOP=1 -f "$src/wos_p7_qa_orphan_claims_20261108.sql"
+          psql -X -q -v ON_ERROR_STOP=1 -f "$src/wos_p7_reader_role_hardening.sql"
+          psql -X -q -v ON_ERROR_STOP=1 -f "$src/wos_p7_qa_storage_identity_reader_20261108.sql"
+          psql -X -q -v ON_ERROR_STOP=1 -f tests/sql/wos_p8_qa_replay_smoke.sql
+          echo "WOS_P8_PINNED_QA_P7_POSTGRES_REPLAY=PASS"
+      - name: Reproduce unaffected baseline in second disposable database
+        run: |
+          set -euo pipefail
+          createdb wos_p8_recovered
+          export PGDATABASE=wos_p8_recovered
+          psql -X -q -v ON_ERROR_STOP=1 -f tests/sql/wos_p8_ephemeral_foundation_fixture.sql
+          psql -X -q -v ON_ERROR_STOP=1 -f supabase/migrations/20261014102000_workshop_order_system_foundation.sql
+          psql -X -tA -v ON_ERROR_STOP=1 -c "SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_name LIKE 'wos_%';" | grep -qx 10
+          psql -X -tA -v ON_ERROR_STOP=1 -c "SELECT count(*) FROM pg_policies WHERE schemaname='public' AND tablename LIKE 'wos_%';" | grep -qx 13
+          echo "WOS_P8_EPHEMERAL_BASELINE_REPRODUCED=PASS"
+          echo "WOS_P8_TRUE_PRODUCTION_SCHEMA_CLONE_AND_ROLLBACK=NOT_RUN"
+
+
   wos-p8-postgres-foundation-rehearsal:
     name: wos-p8-postgres-foundation-rehearsal
     runs-on: ubuntu-latest
