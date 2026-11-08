@@ -438,9 +438,9 @@ export default function LiveQaProductionSubmit({ draft, valid, onFillQaSample }:
         {authRefreshStatus && <span role="status" className="text-xs text-blue-950">{authRefreshStatus}</span>}
       </div>
       <label className="block text-xs font-medium text-blue-950">
-        对应版本的产品基准图片（必选，PNG / JPEG / WEBP，不超过 20MB）
+        对应版本的产品基准图片（本轮安全验收仅限 PNG，不超过 20MB）
         <input aria-label="QA 私有图片" className="mt-1 block w-full text-xs" type="file"
-          accept="image/png,image/jpeg,image/webp" disabled={busy || !!stateRef.current && !['NEW','DRAFT'].includes(stateRef.current.stage)}
+          accept="image/png" disabled={busy || !!stateRef.current && !['NEW','DRAFT'].includes(stateRef.current.stage)}
           onChange={selectFile} />
       </label>
       <label className="block text-xs font-medium text-blue-950">
