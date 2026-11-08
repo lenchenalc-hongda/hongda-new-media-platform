@@ -22,7 +22,11 @@ export interface QaRecovery {
   stage: QaRecoveryStage;
   fileSha256: string | null;
 }
-export const WOS_QA_RECOVERY_KEY = 'hongda:wos-qa:synthetic-recovery:v1';
+// Persistent across a closed/reopened browser, but scoped to an authenticated
+// synthetic QA actor + organization. Contains identifiers only, never tokens.
+export const WOS_QA_RECOVERY_KEY = 'hongda:wos-qa:synthetic-recovery:v2:';
+const LEGACY_SESSION_KEY = 'hongda:wos-qa:synthetic-recovery:v1';
+const scopedKey = (userId: string, orgId: string) => WOS_QA_RECOVERY_KEY + userId + ':' + orgId;
 const MAX_AGE_MS = 24 * 60 * 60 * 1000;
 const UUID = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
 const ORDER = /^QA-NONPROD-[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
@@ -62,10 +66,21 @@ export function isValidQaRecovery(input: unknown, userId: string, orgId: string,
 
 export function readQaRecovery(userId: string, orgId: string): QaRecovery | null {
   try {
-    const raw = window.sessionStorage.getItem(WOS_QA_RECOVERY_KEY);
-    if (!raw) return null;
-    const parsed: unknown = JSON.parse(raw);
+    const key = scopedKey(userId, orgId);
+    const raw = window.localStorage.getItem(key);
+    if (raw) {
+      const parsed: unknown = JSON.parse(raw);
+      if (!isValidQaRecovery(parsed, userId, orgId, Date.now())) return null;
+      return parsed;
+    }
+    // Only migrate a legacy same-tab QA recovery after matching current
+    // actor and org. Other actors' local data is never returned or copied.
+    const legacy = window.sessionStorage.getItem(LEGACY_SESSION_KEY);
+    if (!legacy) return null;
+    const parsed: unknown = JSON.parse(legacy);
     if (!isValidQaRecovery(parsed, userId, orgId, Date.now())) return null;
+    window.localStorage.setItem(key, legacy);
+    window.sessionStorage.removeItem(LEGACY_SESSION_KEY);
     return parsed;
   } catch { return null; }
 }
@@ -75,12 +90,13 @@ export function saveQaRecovery(recovery: QaRecovery): void {
     throw new Error('QA_RECOVERY_STATE_INVALID');
   }
   try {
-    window.sessionStorage.setItem(WOS_QA_RECOVERY_KEY, JSON.stringify(recovery));
-  } catch { throw new Error('QA_SESSION_STORAGE_UNAVAILABLE'); }
+    window.localStorage.setItem(scopedKey(recovery.userId, recovery.orgId), JSON.stringify(recovery));
+  } catch { throw new Error('QA_LOCAL_STORAGE_UNAVAILABLE'); }
 }
 
-export function clearQaRecovery(): void {
-  try { window.sessionStorage.removeItem(WOS_QA_RECOVERY_KEY); } catch { /* no-op */ }
+export function clearQaRecovery(userId: string, orgId: string): void {
+  try { window.localStorage.removeItem(scopedKey(userId, orgId)); } catch { /* no-op */ }
+  try { window.sessionStorage.removeItem(LEGACY_SESSION_KEY); } catch { /* no-op */ }
 }
 
 export async function verifyQaImageSignature(file: Blob): Promise<boolean> {
