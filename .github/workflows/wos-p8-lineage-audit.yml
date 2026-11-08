@@ -11,6 +11,7 @@ on:
       - "scripts/wos_p8_schema_drift_report.py"
       - "docs/workshop-order-system/nonproduction-only/wos_p8_production_public_table_inventory_20261109.json"
       - "scripts/wos_p8_replay_minimal_lineage.sh"
+      - "scripts/wos_p8_replay_registered_candidates.py"
       - "tests/sql/wos_p8_lineage_ephemeral_auth_fixture.sql"
       - "supabase/migrations/**"
 
@@ -69,3 +70,40 @@ jobs:
         run: bash scripts/wos_p8_replay_minimal_lineage.sh
       - name: Report real schema parity gaps (diagnostic, non-deploying)
         run: python3 scripts/wos_p8_schema_drift_report.py
+
+  pg17-recorded-candidate-replay:
+    name: pg17-recorded-candidate-replay
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    permissions:
+      contents: read
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: wos-p8-local-ephemeral-only
+          POSTGRES_DB: wos_p8_lineage_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d wos_p8_lineage_ci"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      PGHOST: localhost
+      PGPORT: "5432"
+      PGUSER: postgres
+      PGPASSWORD: wos-p8-local-ephemeral-only
+      PGDATABASE: wos_p8_lineage_ci
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Install PostgreSQL 17 test client
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y postgresql-client
+      - name: Execute all 29 mapped Production SQL bodies after candidate legacy bootstrap
+        run: python3 scripts/wos_p8_replay_registered_candidates.py
