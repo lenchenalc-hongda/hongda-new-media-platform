@@ -14,8 +14,11 @@
     "do_not_apply_to_production": true,
     "do_not_copy_customer_data": true,
     "do_not_rewrite_applied_migration_history": true,
-    "production_sql_text_identity_unverified": true,
-    "mapping_is_investigative_not_approval": true
+    "production_sql_text_identity_unverified": false,
+    "mapping_is_investigative_not_approval": true,
+    "production_migration_sql_identity_attested": true,
+    "full_public_schema_parity_not_verified": true,
+    "historical_untracked_bootstrap_not_verified": true
   },
   "historical_baseline": {
     "oldest_untracked_repo_bootstrap": "supabase/migrations/001_initial_schema.sql",
@@ -170,7 +173,10 @@
       "repo_path": "supabase/migrations/20261001143000_customer_project_center_phase5a_core_foundation.sql",
       "repo_blob_sha": "9a564550836e6a3d57978fe5177321b8ab39b791",
       "mapping_basis": "exact_version",
-      "sql_identity_verified": false
+      "sql_identity_verified": true,
+      "applied_statement_count": 72,
+      "sql_identity_method": "ordered_exact_statements_with_trivia_gaps",
+      "applied_single_statement_git_blob_sha": null
     },
     {
       "applied_version": "20261002024500",
@@ -178,7 +184,10 @@
       "repo_path": "supabase/migrations/20261002024500_customer_project_center_phase5b_mutation_rpcs.sql",
       "repo_blob_sha": "e3bf4075532a6d27084b6642cad03ea4fc420404",
       "mapping_basis": "exact_version",
-      "sql_identity_verified": false
+      "sql_identity_verified": true,
+      "applied_statement_count": 40,
+      "sql_identity_method": "ordered_exact_statements_with_trivia_gaps",
+      "applied_single_statement_git_blob_sha": null
     },
     {
       "applied_version": "20261002033500",
@@ -186,7 +195,10 @@
       "repo_path": "supabase/migrations/20261002033500_customer_project_center_phase5d_progress_waiting_event.sql",
       "repo_blob_sha": "f7e5f97a6d28bc4f0241d649862c9977f87cf37d",
       "mapping_basis": "exact_version",
-      "sql_identity_verified": false
+      "sql_identity_verified": true,
+      "applied_statement_count": 1,
+      "sql_identity_method": "terminator_separator_only",
+      "applied_single_statement_git_blob_sha": "10b881ef5ff4e14f4fa9cf1f168998647f11e8ae"
     },
     {
       "applied_version": "20261002050000",
@@ -194,7 +206,10 @@
       "repo_path": "supabase/migrations/20261002050000_customer_project_center_phase5f_customer_followup.sql",
       "repo_blob_sha": "ca48610311bb06d8adc3dc7252398565cb9d5e17",
       "mapping_basis": "exact_version",
-      "sql_identity_verified": false
+      "sql_identity_verified": true,
+      "applied_statement_count": 8,
+      "sql_identity_method": "ordered_exact_statements_with_trivia_gaps",
+      "applied_single_statement_git_blob_sha": null
     },
     {
       "applied_version": "20261002065000",
@@ -202,7 +217,10 @@
       "repo_path": "supabase/migrations/20261002065000_customer_project_center_phase6b_reschedule_rpc.sql",
       "repo_blob_sha": "af33ebdf7f8847846243b68e79cd0cbe3135ee48",
       "mapping_basis": "exact_version",
-      "sql_identity_verified": false
+      "sql_identity_verified": true,
+      "applied_statement_count": 5,
+      "sql_identity_method": "ordered_exact_statements_with_trivia_gaps",
+      "applied_single_statement_git_blob_sha": null
     },
     {
       "applied_version": "20261002073000",
@@ -210,7 +228,10 @@
       "repo_path": "supabase/migrations/20261002073000_customer_project_center_phase6c_ai_drafts.sql",
       "repo_blob_sha": "31f525111c01f12bf250eaa9a7134975fd7d987a",
       "mapping_basis": "exact_version",
-      "sql_identity_verified": false
+      "sql_identity_verified": true,
+      "applied_statement_count": 25,
+      "sql_identity_method": "ordered_exact_statements_with_trivia_gaps",
+      "applied_single_statement_git_blob_sha": null
     },
     {
       "applied_version": "20261002090000",
@@ -218,7 +239,10 @@
       "repo_path": "supabase/migrations/20261002090000_customer_project_center_phase7a_reports.sql",
       "repo_blob_sha": "96ce47615ed013934f70e9b439064e0aecf762c2",
       "mapping_basis": "exact_version",
-      "sql_identity_verified": false
+      "sql_identity_verified": true,
+      "applied_statement_count": 26,
+      "sql_identity_method": "ordered_exact_statements_with_trivia_gaps",
+      "applied_single_statement_git_blob_sha": null
     },
     {
       "applied_version": "20261006140000",
@@ -226,7 +250,10 @@
       "repo_path": "supabase/migrations/20261006140000_customer_project_center_pilot_env_hardening.sql",
       "repo_blob_sha": "740b4149717a34b62aef96d3ecfdae1b05d8990c",
       "mapping_basis": "exact_version",
-      "sql_identity_verified": false
+      "sql_identity_verified": true,
+      "applied_statement_count": 12,
+      "sql_identity_method": "ordered_exact_statements_with_trivia_gaps",
+      "applied_single_statement_git_blob_sha": null
     },
     {
       "applied_version": "20261007020000",
@@ -234,7 +261,10 @@
       "repo_path": "supabase/migrations/20261007020000_customer_project_center_project_create_replay_guard.sql",
       "repo_blob_sha": "0ab44fb7bf63d4e23d36fcebdb2506d910e4fd4d",
       "mapping_basis": "exact_version",
-      "sql_identity_verified": false
+      "sql_identity_verified": true,
+      "applied_statement_count": 7,
+      "sql_identity_method": "ordered_exact_statements_with_trivia_gaps",
+      "applied_single_statement_git_blob_sha": null
     },
     {
       "applied_version": "20261024053736",
@@ -242,7 +272,10 @@
       "repo_path": "supabase/migrations/20261009181000_global_lead_hub_phase1_foundation.sql",
       "repo_blob_sha": "bd1752d7e050e1e8ec506954f339dd80dd4e7ac5",
       "mapping_basis": "name_only_candidate",
-      "sql_identity_verified": false
+      "sql_identity_verified": true,
+      "applied_statement_count": 1,
+      "sql_identity_method": "exact_git_blob_sha1",
+      "applied_single_statement_git_blob_sha": "bd1752d7e050e1e8ec506954f339dd80dd4e7ac5"
     },
     {
       "applied_version": "20261024054519",
@@ -250,7 +283,10 @@
       "repo_path": "supabase/migrations/20261010074500_global_lead_hub_phase2_core_human_ui.sql",
       "repo_blob_sha": "639fe794e1dcfc270fe6812dd4728b692d72aa26",
       "mapping_basis": "name_only_candidate",
-      "sql_identity_verified": false
+      "sql_identity_verified": true,
+      "applied_statement_count": 1,
+      "sql_identity_method": "exact_git_blob_sha1",
+      "applied_single_statement_git_blob_sha": "639fe794e1dcfc270fe6812dd4728b692d72aa26"
     },
     {
       "applied_version": "20261024054523",
@@ -258,7 +294,10 @@
       "repo_path": "supabase/migrations/20261010182400_global_lead_hub_phase3_whatsapp_inbound.sql",
       "repo_blob_sha": "6309aaf67c1e7a72951196066a3c04443b854009",
       "mapping_basis": "name_only_candidate",
-      "sql_identity_verified": false
+      "sql_identity_verified": true,
+      "applied_statement_count": 1,
+      "sql_identity_method": "exact_git_blob_sha1",
+      "applied_single_statement_git_blob_sha": "6309aaf67c1e7a72951196066a3c04443b854009"
     },
     {
       "applied_version": "20261024054529",
@@ -266,7 +305,10 @@
       "repo_path": "supabase/migrations/20261011181500_global_lead_hub_phase5_handoff_persistence.sql",
       "repo_blob_sha": "cd07731bb1caea360bcf2f785a948fe0a00969a1",
       "mapping_basis": "name_only_candidate",
-      "sql_identity_verified": false
+      "sql_identity_verified": true,
+      "applied_statement_count": 1,
+      "sql_identity_method": "exact_git_blob_sha1",
+      "applied_single_statement_git_blob_sha": "cd07731bb1caea360bcf2f785a948fe0a00969a1"
     },
     {
       "applied_version": "20261024054533",
@@ -274,7 +316,10 @@
       "repo_path": "supabase/migrations/20261021120000_global_lead_hub_stage1_manual_production_intake.sql",
       "repo_blob_sha": "a26561dd571250b17d47578d0dd5fd57f0731fba",
       "mapping_basis": "name_only_candidate",
-      "sql_identity_verified": false
+      "sql_identity_verified": true,
+      "applied_statement_count": 1,
+      "sql_identity_method": "exact_git_blob_sha1",
+      "applied_single_statement_git_blob_sha": "a26561dd571250b17d47578d0dd5fd57f0731fba"
     },
     {
       "applied_version": "20261024054538",
@@ -282,7 +327,10 @@
       "repo_path": "supabase/migrations/20261021135000_global_lead_hub_stage1_human_workflow.sql",
       "repo_blob_sha": "7104bc923b47119807fee3c3fc4ce63f8f43a828",
       "mapping_basis": "name_only_candidate",
-      "sql_identity_verified": false
+      "sql_identity_verified": true,
+      "applied_statement_count": 1,
+      "sql_identity_method": "exact_git_blob_sha1",
+      "applied_single_statement_git_blob_sha": "7104bc923b47119807fee3c3fc4ce63f8f43a828"
     },
     {
       "applied_version": "20261024145344",
@@ -290,7 +338,10 @@
       "repo_path": "supabase/migrations/20261024210000_commercial_payment_methods_review.sql",
       "repo_blob_sha": "157a63f0573225482617b3afba6d43d6c2278282",
       "mapping_basis": "name_only_candidate",
-      "sql_identity_verified": false
+      "sql_identity_verified": true,
+      "applied_statement_count": 1,
+      "sql_identity_method": "exact_git_blob_sha1",
+      "applied_single_statement_git_blob_sha": "157a63f0573225482617b3afba6d43d6c2278282"
     },
     {
       "applied_version": "20261025132114",
@@ -298,7 +349,10 @@
       "repo_path": "supabase/migrations/20261025140500_customer_project_center_dual_rating_foundation.sql",
       "repo_blob_sha": "cafc1ee08cd5c5288ecd7c10ca9e1eac2c688140",
       "mapping_basis": "explicit_name_alias",
-      "sql_identity_verified": false
+      "sql_identity_verified": true,
+      "applied_statement_count": 1,
+      "sql_identity_method": "exact_git_blob_sha1",
+      "applied_single_statement_git_blob_sha": "cafc1ee08cd5c5288ecd7c10ca9e1eac2c688140"
     },
     {
       "applied_version": "20261025135913",
@@ -306,7 +360,10 @@
       "repo_path": "supabase/migrations/20261025161000_cpc_customer_notes_and_development_plan.sql",
       "repo_blob_sha": "1bb913814b6ca1b3e83ddd35111af9c1e132f3c6",
       "mapping_basis": "name_only_candidate",
-      "sql_identity_verified": false
+      "sql_identity_verified": true,
+      "applied_statement_count": 1,
+      "sql_identity_method": "exact_git_blob_sha1",
+      "applied_single_statement_git_blob_sha": "1bb913814b6ca1b3e83ddd35111af9c1e132f3c6"
     },
     {
       "applied_version": "20261025141549",
@@ -314,7 +371,10 @@
       "repo_path": "supabase/migrations/20261025183000_cpc_potential_owner_self_publish.sql",
       "repo_blob_sha": "072ab0641a607f28b2daf241ef85497de47bc382",
       "mapping_basis": "name_only_candidate",
-      "sql_identity_verified": false
+      "sql_identity_verified": true,
+      "applied_statement_count": 1,
+      "sql_identity_method": "exact_git_blob_sha1",
+      "applied_single_statement_git_blob_sha": "072ab0641a607f28b2daf241ef85497de47bc382"
     },
     {
       "applied_version": "20261027005218",
@@ -322,7 +382,10 @@
       "repo_path": "supabase/migrations/20261027073000_commercial_quotation_drafts.sql",
       "repo_blob_sha": "9cdda990156055b66b6f116c98ea728b144b30b2",
       "mapping_basis": "name_only_candidate",
-      "sql_identity_verified": false
+      "sql_identity_verified": true,
+      "applied_statement_count": 1,
+      "sql_identity_method": "exact_git_blob_sha1",
+      "applied_single_statement_git_blob_sha": "9cdda990156055b66b6f116c98ea728b144b30b2"
     },
     {
       "applied_version": "20261027005229",
@@ -330,7 +393,10 @@
       "repo_path": "supabase/migrations/20261027080000_commercial_quotation_draft_revisions.sql",
       "repo_blob_sha": "c4b440a69bbbdce81333dc3e74e80564d437a2f1",
       "mapping_basis": "name_only_candidate",
-      "sql_identity_verified": false
+      "sql_identity_verified": true,
+      "applied_statement_count": 1,
+      "sql_identity_method": "exact_git_blob_sha1",
+      "applied_single_statement_git_blob_sha": "c4b440a69bbbdce81333dc3e74e80564d437a2f1"
     },
     {
       "applied_version": "20261027020101",
@@ -338,7 +404,10 @@
       "repo_path": "supabase/migrations/20261027095000_commercial_confirmed_quotes.sql",
       "repo_blob_sha": "64641a3b78ce804ce7c45dd421b1d436ecc0a6bc",
       "mapping_basis": "explicit_name_alias",
-      "sql_identity_verified": false
+      "sql_identity_verified": true,
+      "applied_statement_count": 1,
+      "sql_identity_method": "exact_git_blob_sha1",
+      "applied_single_statement_git_blob_sha": "64641a3b78ce804ce7c45dd421b1d436ecc0a6bc"
     },
     {
       "applied_version": "20261027020110",
@@ -346,7 +415,10 @@
       "repo_path": "supabase/migrations/20261027100000_commercial_confirmed_guard.sql",
       "repo_blob_sha": "bf3341811ec5bee887a9e36e1f0c7624cbcacf2b",
       "mapping_basis": "explicit_name_alias",
-      "sql_identity_verified": false
+      "sql_identity_verified": true,
+      "applied_statement_count": 1,
+      "sql_identity_method": "exact_git_blob_sha1",
+      "applied_single_statement_git_blob_sha": "bf3341811ec5bee887a9e36e1f0c7624cbcacf2b"
     },
     {
       "applied_version": "20261027020118",
@@ -354,7 +426,10 @@
       "repo_path": "supabase/migrations/20261027101000_commercial_confirmed_payment_snapshot.sql",
       "repo_blob_sha": "e39a07eba1144a7a27937a16810832b064ee51bd",
       "mapping_basis": "explicit_name_alias",
-      "sql_identity_verified": false
+      "sql_identity_verified": true,
+      "applied_statement_count": 1,
+      "sql_identity_method": "exact_git_blob_sha1",
+      "applied_single_statement_git_blob_sha": "e39a07eba1144a7a27937a16810832b064ee51bd"
     },
     {
       "applied_version": "20261027100912",
@@ -362,7 +437,10 @@
       "repo_path": "supabase/migrations/20261027175500_cpc_provisional_source_channel_separation.sql",
       "repo_blob_sha": "35341f524334bf1e6a678fad865cc62cf6b34b5e",
       "mapping_basis": "name_only_candidate",
-      "sql_identity_verified": false
+      "sql_identity_verified": true,
+      "applied_statement_count": 1,
+      "sql_identity_method": "exact_git_blob_sha1",
+      "applied_single_statement_git_blob_sha": "35341f524334bf1e6a678fad865cc62cf6b34b5e"
     },
     {
       "applied_version": "20261030030750",
@@ -370,7 +448,10 @@
       "repo_path": "supabase/migrations/20261030113000_cpc_project_owner_name_for_visible_projects.sql",
       "repo_blob_sha": "6be0aecb8a1f46a9e32883ac091450d41d1f8200",
       "mapping_basis": "name_only_candidate",
-      "sql_identity_verified": false
+      "sql_identity_verified": true,
+      "applied_statement_count": 1,
+      "sql_identity_method": "exact_git_blob_sha1",
+      "applied_single_statement_git_blob_sha": "6be0aecb8a1f46a9e32883ac091450d41d1f8200"
     },
     {
       "applied_version": "20261030060630",
@@ -378,7 +459,10 @@
       "repo_path": "supabase/migrations/20261030135500_cpc_project_archived_visibility.sql",
       "repo_blob_sha": "0cee36bdca2f759493472287341cae7109b3d1f2",
       "mapping_basis": "name_only_candidate",
-      "sql_identity_verified": false
+      "sql_identity_verified": true,
+      "applied_statement_count": 1,
+      "sql_identity_method": "exact_git_blob_sha1",
+      "applied_single_statement_git_blob_sha": "0cee36bdca2f759493472287341cae7109b3d1f2"
     },
     {
       "applied_version": "20261103070727",
@@ -386,7 +470,10 @@
       "repo_path": "supabase/migrations/20261103065800_commercial_quote_unit_price_four_decimals.sql",
       "repo_blob_sha": "b4040b2925f50c0ee3d04a90b54d60c1ff0830e8",
       "mapping_basis": "explicit_name_alias",
-      "sql_identity_verified": false
+      "sql_identity_verified": true,
+      "applied_statement_count": 1,
+      "sql_identity_method": "exact_git_blob_sha1",
+      "applied_single_statement_git_blob_sha": "b4040b2925f50c0ee3d04a90b54d60c1ff0830e8"
     },
     {
       "applied_version": "20261107063851",
@@ -394,7 +481,21 @@
       "repo_path": "supabase/migrations/20261107142700_commercial_quotation_item_images.sql",
       "repo_blob_sha": "a20c9ca0e38ef286dc9874f7514aa5c28713a732",
       "mapping_basis": "explicit_name_alias",
-      "sql_identity_verified": false
+      "sql_identity_verified": true,
+      "applied_statement_count": 1,
+      "sql_identity_method": "exact_git_blob_sha1",
+      "applied_single_statement_git_blob_sha": "a20c9ca0e38ef286dc9874f7514aa5c28713a732"
     }
-  ]
+  ],
+  "attestation": {
+    "observed_utc": "2026-11-09",
+    "method": "Read-only Production schema_migrations statements compared to pinned GitHub SQL: 20 exact Git Blob SHA1, one trailing terminator-only gap, eight all statements found verbatim in order with only whitespace/comments/delimiters between. SQL-body verification performed independently before this manifest update.",
+    "distribution": {
+      "ordered_exact_statements_with_trivia_gaps": 8,
+      "terminator_separator_only": 1,
+      "exact_git_blob_sha1": 20
+    },
+    "scope": "29 recorded migrations only; 67-table schema replay, older untracked bootstrap, Storage/Edge and rollback remain unverified",
+    "contains_business_rows": false
+  }
 }
