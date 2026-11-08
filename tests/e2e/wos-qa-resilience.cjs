@@ -138,6 +138,45 @@ async function main() {
     await card.getByRole('link',{name:'打开已验证的私有图片'}).waitFor({timeout:50000});
     console.log('WOS_QA_REOPEN_SINGLE_INBOX_ITEM_AND_PRIVATE_BINARY=PASS');
     console.log('WOS_QA_NEW_BROWSER_RESTORES_ORIGINAL_ORDER_AND_IMAGE=PASS');
+
+    // The opposite upload failure: stop network BEFORE Storage ever sees the
+    // POST. The same local draft + image id must be retried, not recreated.
+    stage='UPLOAD_PRECOMMIT_INTERRUPT_SETUP';
+    await fresh.page.goto(origin+'/workshop-orders/production/new',{waitUntil:'domcontentloaded'});
+    await fresh.page.getByRole('heading',{name:'QA Preview · 真实 HTTP 提交验收'}).waitFor({timeout:30000});
+    await fresh.page.getByRole('button',{name:'自动填入全套合成 QA 测试资料'}).click();
+    const secondNumber = await fresh.page.locator('input#orderNumber').inputValue();
+    assert(secondNumber !== orderNumber);
+    await fresh.page.locator('input[type=file]').setInputFiles(qaFile());
+    await fresh.page.getByRole('button',{name:'检查资料完整性'}).click();
+    await fresh.page.getByText('本地字段完整性检查通过',{exact:false}).waitFor({timeout:15000});
+    let blockedBeforeWrite=false;
+    await fresh.page.route('**/storage/v1/object/wos-private/**',async route=>{
+      if (!blockedBeforeWrite && route.request().method()==='POST') {
+        blockedBeforeWrite=true;
+        await route.abort('failed');
+      } else await route.continue();
+    });
+    stage='UPLOAD_BLOCKED_BEFORE_SERVER_COMMIT';
+    await fresh.page.getByRole('button',{name:'上传图片并提交 QA 订单'}).click();
+    await fresh.page.getByText('QA_PRIVATE_IMAGE_UPLOAD_UNVERIFIED',{exact:false})
+      .waitFor({timeout:60000});
+    assert(blockedBeforeWrite);
+    await fresh.page.unroute('**/storage/v1/object/wos-private/**');
+    stage='UPLOAD_ORIGINAL_REQUEST_RETRY';
+    await fresh.page.getByRole('button',{name:'使用同一订单和幂等键继续验证'}).click();
+    await fresh.page.getByText('已由真实 HTTP API 提交',{exact:false}).waitFor({timeout:110000});
+    await fresh.page.goto(origin+'/workshop-orders/inbox',{waitUntil:'domcontentloaded'});
+    await fresh.page.getByRole('button',{name:'刷新真实车间任务'}).waitFor({timeout:30000});
+    const secondWait = fresh.page.waitForResponse(r=>r.url()===origin+'/api/workshop-orders/inbox'
+      && r.request().method()==='GET',{timeout:50000});
+    await fresh.page.getByRole('button',{name:'刷新真实车间任务'}).click();
+    const secondResponse=await secondWait;
+    const secondData=await secondResponse.json();
+    assert.equal(secondResponse.status(),200);
+    assert.equal(secondData?.data?.items?.filter(i=>i.entityType==='PRODUCTION_ORDER'
+      && i.orderNumber===secondNumber)?.length,1);
+    console.log('WOS_QA_PRECOMMIT_ABORT_SAFE_RETRY_SINGLE_ORDER=PASS');
     console.log('WOS_QA_RESILIENCE_E2E=PASS');
   } finally {
     if (fresh) await fresh.ctx.close().catch(()=>{});
