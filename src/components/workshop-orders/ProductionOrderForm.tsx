@@ -236,7 +236,7 @@ export default function ProductionOrderForm({ qaLive = false }: { qaLive?: boole
         <LiveQaProductionSubmit
           draft={validation.normalized}
           valid={validation.ok}
-          onFillQaSample={() => {
+          onFillQaSample={(reuseOrderNumber) => {
             const planned = new Date();
             planned.setUTCDate(planned.getUTCDate() + 7);
             const plannedDate = planned.toISOString().slice(0, 10);
@@ -244,7 +244,7 @@ export default function ProductionOrderForm({ qaLive = false }: { qaLive?: boole
               ...createEmptyProductionOrderDraft(),
               customerName: 'QA NONPRODUCTION ONLY',
               projectName: 'WOS Preview Browser Acceptance',
-              orderNumber: 'QA-NONPROD-' + crypto.randomUUID(),
+              orderNumber: reuseOrderNumber ?? ('QA-NONPROD-' + crypto.randomUUID()),
               productName: 'QA printed plastic cup',
               priority: 'MEDIUM',
               versionLabel: 'V1',
@@ -267,7 +267,7 @@ export default function ProductionOrderForm({ qaLive = false }: { qaLive?: boole
       )}
       <div className="sticky bottom-0 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-gray-200 bg-white/95 p-3 shadow-sm backdrop-blur">
         <p className="text-xs text-gray-500">
-          {qaLive ? 'QA 提交只写入隔离数据库；中途刷新将失去页面进度，请通过车间 Inbox 对账。' : '校验结果只保留在当前页面，刷新后不会恢复，也不会写入浏览器存储。'}
+          {qaLive ? 'QA 提交只写入隔离数据库；同标签页刷新可恢复合成订单编号与原幂等键，网络结果未知时先到车间 Inbox 对账。' : '校验结果只保留在当前页面，刷新后不会恢复，也不会写入浏览器存储。'}
         </p>
         <button
           type="submit"
