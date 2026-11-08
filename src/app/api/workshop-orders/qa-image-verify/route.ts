@@ -63,6 +63,17 @@ export async function POST(req:NextRequest) {
       ||downloaded.data.size>20*1024*1024)return fail('IMAGE_BINARY_UNAVAILABLE',409);
     const binary=new Uint8Array(await downloaded.data.arrayBuffer());
     if(!verifyWosSyntheticPngBinary(binary,x.sha256))return fail('IMAGE_BINARY_INVALID',422);
+    // The Next.js check alone cannot authenticate a database READY image.
+    // A *separate, pinned QA Edge Function* independently downloads the
+    // private binary under the caller JWT and writes a non-client-mintable,
+    // expiring DB proof. Direct PostgREST registration requires that proof.
+    const attested=await client.functions.invoke('wos-p7-verify-image',{
+      body:{orderId:x.orderId,imageId:x.imageId,
+        storagePath:x.storagePath,sha256:x.sha256},
+    });
+    if(attested.error||attested.data?.code!=='QA_TRUSTED_IMAGE_PROOF_ISSUED'
+      ||attested.data?.data?.sha256!==x.sha256)
+      return fail('TRUSTED_EDGE_ATTESTATION_REQUIRED',503);
     return NextResponse.json({ok:true,code:'QA_IMAGE_VERIFIED',
       data:{sha256:x.sha256}},{status:200,headers:noCache});
   } catch {return fail('QA_IMAGE_VERIFY_UNAVAILABLE',503);}
