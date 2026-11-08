@@ -52,9 +52,12 @@ export default function LiveQaProductionSubmit({ draft, valid, onFillQaSample }:
   }
 
   function guard(): string | null {
-    if (typeof window === 'undefined' ||
-        !window.location.hostname.endsWith('.vercel.app') ||
-        process.env.NEXT_PUBLIC_SUPABASE_URL !== qaUrl) return 'QA_ENVIRONMENT_NOT_PINNED';
+    const allowedHost = typeof window !== 'undefined' && (
+      window.location.hostname.endsWith('.vercel.app') ||
+      (window.location.hostname === 'localhost' && process.env.NEXT_PUBLIC_WOS_QA_LOCAL_TEST === 'true')
+    );
+    if (!allowedHost || process.env.NEXT_PUBLIC_SUPABASE_URL !== qaUrl)
+      return 'QA_ENVIRONMENT_NOT_PINNED';
     if (!valid || !draft.priority || !draft.requestedQuantity || !draft.currentBatchQuantity)
       return 'ORDER_FIELDS_INCOMPLETE';
     if (!draft.orderNumber.startsWith('QA-NONPROD-') ||
