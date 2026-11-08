@@ -92,3 +92,12 @@ SIGNED BY: <GitHub account and submitted review link>
 - [原有 WOS 发布安全门文件](./wos_p7_preview_http_release_gate_20261108.md)。
 
 **审计任务仍未完成：必须等待不同真实人员的正式独立签收 + 其后单独生产授权。**
+
+
+## 7. P0：共享 CI 当前仍使用高权限构建密钥（2026-11-08 排查新增）
+
+当前 `master` 的 `.github/workflows/ci.yml` 在 `pull_request` 事件运行的 `pnpm next build` 中配置了服务器级/第三方高权限 Secrets（`SUPABASE_SERVICE_ROLE_KEY`、`OPENAI_API_KEY`、微信/抖音服务凭据等）。这**不证明**已经泄露，但在给任何外部 Write 权限前属于无法接受的潜在暴露面。
+
+**已另开独立 [Draft PR #218](https://github.com/lenchenalc-hongda/hongda-new-media-platform/pull/218)**，仅移除 PR 构建阶段这些特权密钥；暂未合并，故主分支风险尚未被消除。不得用 QA 分支已经通过的 secretless 检查来代替正式 CI 修复。
+
+执行规则：顾问可以**立即开始公开源码的只读审计**，不需要 GitHub 成员邀请。若要正式计入 required approvals，必须先（1）完成并经过管理员授权部署 #218（注意 master 可能触发 Vercel Production，必须单独授权），（2）保护 `master` 和 WOS QA 分支，（3）核实 `hongda-review-dev` Environment 限制与审核规则，才能短期授予 Write。否则只接收独立书面报告和 PR COMMENT，不得冒称 GitHub APPROVED。
