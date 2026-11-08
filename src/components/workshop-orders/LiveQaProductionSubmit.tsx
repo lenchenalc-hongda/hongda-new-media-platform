@@ -116,6 +116,13 @@ export default function LiveQaProductionSubmit({ draft, valid, onFillQaSample }:
     setErrorCode('');
     const denied = guard();
     if (denied) { setErrorCode(denied); return; }
+    // Reject spoofed image bytes BEFORE creating any draft, to avoid
+    // accumulating incomplete QA orders due to invalid uploads.
+    if ((!stateRef.current || ['NEW','DRAFT'].includes(stateRef.current.stage)) &&
+        file && !await verifyQaImageSignature(file)) {
+      setErrorCode('QA_PRIVATE_IMAGE_MAGIC_BYTES_INVALID');
+      return;
+    }
     setBusy(true);
     const client = createClient();
     let state: Progress | null = stateRef.current;
