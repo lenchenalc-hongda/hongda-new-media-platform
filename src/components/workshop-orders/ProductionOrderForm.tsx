@@ -237,8 +237,9 @@ export default function ProductionOrderForm({ qaLive = false }: { qaLive?: boole
           draft={validation.normalized}
           valid={validation.ok}
           onFillQaSample={() => {
-            const plannedDate = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
-              .toISOString().slice(0, 10);
+            const planned = new Date();
+            planned.setUTCDate(planned.getUTCDate() + 7);
+            const plannedDate = planned.toISOString().slice(0, 10);
             setDraft({
               ...createEmptyProductionOrderDraft(),
               customerName: 'QA NONPRODUCTION ONLY',
