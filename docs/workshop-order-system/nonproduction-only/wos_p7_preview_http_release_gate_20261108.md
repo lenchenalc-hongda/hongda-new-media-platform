@@ -2,6 +2,14 @@
 
 日期：2026-11-08 · 状态：**NOT READY FOR PRODUCTION — HUMAN/BROWSER GATE OPEN**
 
+
+## 2026-11-08 Owner sign-off: real Vercel Preview Office → Workshop → Private Image
+
+- **User explicitly confirms** the SSO-protected Vercel Preview human flow **Admin office order submission → Workshop Inbox receipt → opening the private reference image** is PASS. This is an **owner-reported acceptance**, not an independently captured browser video/Network trace.
+- Grounded record: QA production order `QA-NONPROD-4477d824-f1ce-4364-a12a-1bd9fdacd5b9`, database ID `0198528d-05e2-4cc5-b40e-304ad5ef73bb`, status `SUBMITTED`, 1 receipt, 1 Inbox row, 1 READY image registry row as verified with read-only SQL; user screenshot had matching Inbox row.
+- Protected Vercel QA Preview branch was READY; initial user-supplied screenshot alone demonstrated the Inbox, then the user explicitly confirmed the image-viewing step.
+- **This approval is limited to QA UX acceptance**, not PR merge, a second-person independent code review, 10-cycle reliability pass, Production DB migration, Production feature flags or manufacturing authorization.
+
 ## 0. 执行范围与证据
 
 - 业务仓库：`lenchenalc-hongda/hongda-new-media-platform`；Draft [PR #213](https://github.com/lenchenalc-hongda/hongda-new-media-platform/pull/213) （WOS P7 QA Preview）。
@@ -52,7 +60,7 @@
 
 ### 3B. 尚未完成——精确 Vercel SSO 部署的有人值守/受保护浏览器验收
 
-- [ ] 使用有权进入 Vercel SSO 的浏览器，打开固定部署 [b1ab5e38 QA Preview](https://hongda-new-media-platform-6m9039vye-lens-projects-3fc386bd.vercel.app/login)，登入真实 QA Admin。
+- [x] Owner confirmed SSO-protected Vercel QA Preview flow after browsing; original fixed code-URL preserved for traceability: 使用有权进入 Vercel SSO 的浏览器，打开固定部署 [b1ab5e38 QA Preview](https://hongda-new-media-platform-6m9039vye-lens-projects-3fc386bd.vercel.app/login)，登入真实 QA Admin。
 - [ ] 在该 Vercel 域名完成一次同样的办公室点击提交；网络请求必须留在同源 Preview，实际 Storage 项目必须仍为 `hongda-review-dev`，POST 回执需与订单一致。
 - [ ] 在独立浏览器上下文切换 QA Operator，刷新相同 Vercel Preview Inbox，找到相同订单并下载私有图片。
 - [ ] 按实际环境核验 Viewer/Foreign 角色拒绝访问；保留 **不含密码/Token/Cookie** 的 HTTP 状态证据、浏览器版本和精确部署 SHA。
