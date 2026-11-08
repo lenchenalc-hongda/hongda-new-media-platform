@@ -60,6 +60,8 @@ GRANT USAGE ON SCHEMA storage TO authenticated;
 GRANT SELECT,INSERT ON storage.objects TO authenticated;
 GRANT EXECUTE ON FUNCTION storage.foldername(text) TO authenticated;
 
-CREATE EXTENSION IF NOT EXISTS pgcrypto;
+-- Match Supabase: extension functions live in extensions, not public.
+CREATE SCHEMA IF NOT EXISTS extensions;
+CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA extensions;
 
 SELECT 'WOS_P8_LOCAL_AUTH_CONTRACT_FIXTURE_ONLY=PASS' AS check_name;
