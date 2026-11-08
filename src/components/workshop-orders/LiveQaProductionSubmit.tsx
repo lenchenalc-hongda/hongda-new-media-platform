@@ -80,12 +80,11 @@ export default function LiveQaProductionSubmit({ draft, valid, onFillQaSample }:
       state.stage = stage;
       setStageLabel(label);
     };
-    const reject = (code: string): never => { throw new Error(code); };
     const client = createClient();
     try {
-      if (!client) reject('QA_SUPABASE_CLIENT_UNAVAILABLE');
+      if (!client) throw new Error('QA_SUPABASE_CLIENT_UNAVAILABLE');
       const auth = await client.auth.getUser();
-      if (auth.error || !auth.data.user?.id) reject('PLEASE_LOGIN_TO_QA_FIRST');
+      if (auth.error || !auth.data.user?.id) throw new Error('PLEASE_LOGIN_TO_QA_FIRST');
       const profile = await client.from('profiles')
         .select('id,org_id,role,is_active')
         .eq('user_id', auth.data.user!.id)
@@ -93,7 +92,7 @@ export default function LiveQaProductionSubmit({ draft, valid, onFillQaSample }:
         .single();
       if (profile.error || !profile.data ||
           !['admin','manager','sales'].includes(profile.data.role))
-        reject('OFFICE_SUBMIT_ROLE_REQUIRED');
+        throw new Error('OFFICE_SUBMIT_ROLE_REQUIRED');
       const { id: profileId, org_id: orgId } = profile.data!;
 
       if (!state.orderId) {
@@ -127,7 +126,7 @@ export default function LiveQaProductionSubmit({ draft, valid, onFillQaSample }:
         if (creation.error || !creation.data?.id ||
             creation.data.version !== 1 ||
             creation.data.workflow_status !== 'DRAFT')
-          reject('QA_DRAFT_CREATION_NOT_VERIFIED');
+          throw new Error('QA_DRAFT_CREATION_NOT_VERIFIED');
         state.orderId = creation.data.id;
         save('DRAFT', '草稿已存入隔离库；准备上传私有图片');
       }
@@ -145,7 +144,7 @@ export default function LiveQaProductionSubmit({ draft, valid, onFillQaSample }:
         const upload = await client.storage.from('wos-private').upload(
           path, file!, { contentType: file!.type, cacheControl: '0', upsert: false },
         );
-        if (upload.error) reject('QA_PRIVATE_IMAGE_UPLOAD_FAILED');
+        if (upload.error) throw new Error('QA_PRIVATE_IMAGE_UPLOAD_FAILED');
         save('UPLOADED', '图片已上传到私有 Storage；正在登记校验');
       }
 
@@ -157,7 +156,7 @@ export default function LiveQaProductionSubmit({ draft, valid, onFillQaSample }:
           p_storage_path: state.objectPath!,
         });
         if (registered.error || registered.data?.status !== 'CREATED')
-          reject('QA_PRIVATE_IMAGE_SERVER_REGISTRATION_FAILED');
+          throw new Error('QA_PRIVATE_IMAGE_SERVER_REGISTRATION_FAILED');
         save('REGISTERED', '图片已通过服务器登记；正在确认办公室资料');
       }
 
@@ -169,7 +168,7 @@ export default function LiveQaProductionSubmit({ draft, valid, onFillQaSample }:
           p_note: note.trim(),
         });
         if (readiness.error || !readiness.data)
-          reject('QA_OFFICE_READINESS_FAILED');
+          throw new Error('QA_OFFICE_READINESS_FAILED');
         save('READY', '资料齐套已确认；正在通过同源 HTTP API 提交');
       }
 
@@ -194,7 +193,7 @@ export default function LiveQaProductionSubmit({ draft, valid, onFillQaSample }:
         if (!body || typeof body !== 'object' || !('data' in body)
           || !body.data || typeof body.data !== 'object'
           || !('orderId' in body.data) || body.data.orderId !== state.orderId)
-          reject('QA_HTTP_RECEIPT_MISMATCH');
+          throw new Error('QA_HTTP_RECEIPT_MISMATCH');
         save('SUBMITTED', '真实 HTTP 提交成功；车间账号可刷新 Inbox');
         setSuccessOrderId(state.orderId!);
         setDone(true);
