@@ -100,12 +100,9 @@ jobs:
           done
           curl -fsS http://localhost:3000/login >/dev/null
           case "${WOS_QA_SOAK_ROUNDS:-1}" in 1|10) ;; *) exit 1 ;; esac
-          for round in $(seq 1 "$WOS_QA_SOAK_ROUNDS"); do
-            echo "WOS_QA_SOAK_ROUND_START=$round"
-            node tests/e2e/wos-qa-real-browser.cjs
-            echo "WOS_QA_SOAK_ROUND_${round}=PASS"
-            if [ "$round" -lt "$WOS_QA_SOAK_ROUNDS" ]; then sleep 3; fi
-          done
-          echo "WOS_QA_SOAK_SUCCESS_COUNT=$WOS_QA_SOAK_ROUNDS"
+          # Real shop staff keep authenticated browser sessions open across
+          # multiple orders. Repeat office-to-workshop operations with the
+          # SAME four verified sessions, not forty rapid login attempts.
+          node tests/e2e/wos-qa-real-browser.cjs
 
 # WOS_QA_SOAK_INVOCATION_2026_11_08: 10 sequential synthetic Auth/HTTP/image tests.
