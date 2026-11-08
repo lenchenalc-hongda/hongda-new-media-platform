@@ -370,18 +370,18 @@ export default function LiveQaProductionSubmit({ draft, valid, onFillQaSample }:
         <h2 className="text-sm font-semibold text-blue-950">QA Preview · 真实 HTTP 提交验收</h2>
         <p className="mt-1 text-xs leading-5 text-blue-800">
           仅在独立测试数据库开放，生成真正的测试草稿、私有图片和提交回执。
-          不创建正式客户订单，不执行生产开工。刷新后不会保留未完成步骤，请勿用于真实业务。
+          不创建正式客户订单，不执行生产开工。仅保存本标签页的合成订单编号与幂等键，可在刷新后重新确认并继续；不保存密码、Token 或图片内容。
         </p>
       </div>
       <button type="button" disabled={busy || !!stateRef.current?.orderId}
-        onClick={onFillQaSample}
+        onClick={() => onFillQaSample()}
         className="rounded-md border border-blue-400 bg-white px-3 py-2 text-xs font-medium text-blue-950 disabled:opacity-40">
         自动填入全套合成 QA 测试资料
       </button>
       <label className="block text-xs font-medium text-blue-950">
         对应版本的产品基准图片（必选，PNG / JPEG / WEBP，不超过 20MB）
         <input aria-label="QA 私有图片" className="mt-1 block w-full text-xs" type="file"
-          accept="image/png,image/jpeg,image/webp" disabled={busy || !!stateRef.current?.orderId}
+          accept="image/png,image/jpeg,image/webp" disabled={busy || !!stateRef.current && !['NEW','DRAFT'].includes(stateRef.current.stage)}
           onChange={selectFile} />
       </label>
       <label className="block text-xs font-medium text-blue-950">
@@ -391,6 +391,9 @@ export default function LiveQaProductionSubmit({ draft, valid, onFillQaSample }:
           onChange={event => setNote(event.target.value)} rows={2} />
       </label>
       <p role="status" className="text-xs font-medium text-blue-950">执行阶段：{stageLabel}</p>
+      {recovered && <p className="text-xs font-semibold text-blue-900">
+        检测到同一用户上次中断的合成订单。请选择原图片（如需要），先点击下方“检查资料完整性”，再继续同一请求；不会重新生成幂等键。
+      </p>}
       {errorCode && <p role="alert" className="rounded-md border border-red-200 bg-red-50 p-2 text-xs text-red-700">
         {errorCode}。请继续使用本页面恢复的同一订单/幂等键，切勿重新新建生产单。
       </p>}
@@ -400,7 +403,7 @@ export default function LiveQaProductionSubmit({ draft, valid, onFillQaSample }:
       <button type="button" disabled={busy || done}
         onClick={() => { void submit(); }}
         className="min-h-11 rounded-md bg-blue-800 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
-        {busy ? '提交中...' : done ? '已提交' : stateRef.current?.orderId ? '使用同一请求继续验证' : '上传图片并提交 QA 订单'}
+        {busy ? '提交中...' : done ? '已提交' : stateRef.current ? '使用同一订单和幂等键继续验证' : '上传图片并提交 QA 订单'}
       </button>
       {done && <div className="rounded-md border border-emerald-300 bg-emerald-50 p-3 text-xs text-emerald-900">
         <p className="font-semibold">已由真实 HTTP API 提交（生产尚未开工）。</p>
