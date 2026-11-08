@@ -12,6 +12,13 @@ on:
       - "scripts/wos_p8_drift_details.py"
       - "scripts/wos_p8_reconcile_legacy_ci_only.py"
       - "scripts/wos_p8_compare_public_catalog_signatures.py"
+      - "scripts/wos_p8_compare_function_trigger_grants.py"
+      - "docs/workshop-order-system/nonproduction-only/wos_p8_production_public_function_signatures_20261109.json"
+      - "docs/workshop-order-system/nonproduction-only/wos_p8_production_public_trigger_signatures_20261109.json"
+      - "docs/workshop-order-system/nonproduction-only/wos_p8_production_public_table_grants_20261109.json"
+      - "tests/sql/wos_p8_public_function_signatures.sql"
+      - "tests/sql/wos_p8_public_trigger_signatures.sql"
+      - "tests/sql/wos_p8_public_table_grant_signatures.sql"
       - "docs/workshop-order-system/nonproduction-only/wos_p8_public_catalog_signatures_20261109.json"
       - "tests/sql/wos_p8_public_catalog_signatures.sql"
       - "docs/workshop-order-system/nonproduction-only/wos_p8_production_drift_details_20261109.json"
@@ -121,3 +128,5 @@ jobs:
         run: python3 scripts/wos_p8_drift_details.py
       - name: Compare detailed public schema signatures against no-data Production hash inventory
         run: python3 scripts/wos_p8_compare_public_catalog_signatures.py
+      - name: Compare security function, trigger and public table privilege signatures
+        run: python3 scripts/wos_p8_compare_function_trigger_grants.py
