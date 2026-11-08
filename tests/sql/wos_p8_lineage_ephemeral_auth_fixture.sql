@@ -36,8 +36,7 @@ CREATE FUNCTION auth.jwt() RETURNS jsonb
 LANGUAGE sql STABLE AS $$
   SELECT '{}'::jsonb
 $$;
--- Commercial image migration depends on the Supabase Storage schema.
--- This is metadata-only: NO Storage service, binary upload or real bucket.
+-- Synthetic Supabase Storage metadata ONLY, no real file service or binary.
 CREATE SCHEMA storage;
 CREATE TABLE storage.buckets (
  id text PRIMARY KEY,
@@ -56,10 +55,7 @@ CREATE TABLE storage.objects (
 ALTER TABLE storage.objects ENABLE ROW LEVEL SECURITY;
 CREATE FUNCTION storage.foldername(path text) RETURNS text[]
 LANGUAGE sql IMMUTABLE STRICT
-AS $ SELECT string_to_array(regexp_replace(path,'/[^/]+
-
-SELECT 'WOS_P8_LOCAL_AUTH_CONTRACT_FIXTURE_ONLY=PASS' AS check_name;
-,''),'/') $;
+AS $$ SELECT string_to_array(regexp_replace(path,'/[^/]+$',''),'/') $$;
 GRANT USAGE ON SCHEMA storage TO authenticated;
 GRANT SELECT,INSERT ON storage.objects TO authenticated;
 GRANT EXECUTE ON FUNCTION storage.foldername(text) TO authenticated;
