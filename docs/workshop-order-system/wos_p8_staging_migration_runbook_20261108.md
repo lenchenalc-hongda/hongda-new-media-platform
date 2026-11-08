@@ -89,9 +89,26 @@ Run:
 This only parses the existing 10-table foundation and checks that each
 WOS table retains RLS and grant revocation, that the profile prerequisite
 exists in SQL, and that the QA-specific P7 SQL has not been copied to
-master. It has three fail-closed negative tests. It cannot validate actual
-Postgres migration execution, real RLS behaviour, Storage APIs, rollback,
-or live Production readiness. Those gates stay **OPEN**.
+master. It has three fail-closed negative tests. It does not access a database.
+
+## Actual disposable PostgreSQL 17 foundation rehearsal (CI, no cloud secrets)
+
+The independent GitHub Actions job `wos-p8-postgres-foundation-rehearsal` uses
+an ephemeral `postgres:17` service container. It boots disposable `auth.uid()`
+and `public.profiles` schema fixtures, then loads the EXACT ten-table
+foundation SQL inside `BEGIN; ... ROLLBACK;`; it MUST prove zero WOS tables
+remain. It then applies the exact foundation a second time to the temporary
+DB, asserting ten tables, ten RLS enablements, thirteen policies, no
+UPDATE/DELETE grants to client roles, same-org read allowed and cross-org
+read denied. The service container is discarded when CI exits.
+
+This is stronger than a static check but only tests foundation DDL and
+its baseline RLS in a synthetic database. It is NOT a clone of the
+Production database, has no real Supabase Storage/Auth services, and
+does not rehearse the remaining five P7 incremental tables, trusted image
+proofs, Storage bucket/policies, Edge Functions, or complete Production
+rollback. Those gates remain **OPEN**. The real QA Viewer-role hardening
+policy is a separate P7 layer; Foundation alone is insufficient for go-live.
 
 ## Live, read-only consistency check (illustrative)
 
