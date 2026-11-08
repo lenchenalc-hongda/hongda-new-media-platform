@@ -45,6 +45,7 @@ export default function LiveQaProductionSubmit({ draft, valid, onFillQaSample }:
   const [done, setDone] = useState(false);
   const [successOrderId, setSuccessOrderId] = useState('');
   const [recovered, setRecovered] = useState(false);
+  const [authRefreshStatus, setAuthRefreshStatus] = useState('');
   const stateRef = useRef<Progress | null>(null);
 
   useEffect(() => {
@@ -83,6 +84,27 @@ export default function LiveQaProductionSubmit({ draft, valid, onFillQaSample }:
   // restores a synthetic order number into the local form.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // QA-only control to exercise real Supabase refresh-token rotation without
+  // exposing JWT, refresh token, cookie, or session contents to test logs.
+  async function verifySessionRefresh() {
+    if (busy || officeAuthorized !== true) return;
+    setAuthRefreshStatus('QA_AUTH_REFRESH_RUNNING');
+    try {
+      const client = createClient();
+      if (!client) throw new Error('QA_AUTH_CLIENT_UNAVAILABLE');
+      const before = await client.auth.getUser();
+      if (before.error || !before.data.user?.id) throw new Error('QA_AUTH_NOT_SIGNED_IN');
+      const rotated = await client.auth.refreshSession();
+      if (rotated.error || !rotated.data.session ||
+          rotated.data.user?.id !== before.data.user.id)
+        throw new Error('QA_AUTH_REFRESH_FAILED');
+      const after = await client.auth.getUser();
+      if (after.error || after.data.user?.id !== before.data.user.id)
+        throw new Error('QA_AUTH_REFRESH_IDENTITY_MISMATCH');
+      setAuthRefreshStatus('QA_AUTH_REFRESH_VERIFIED');
+    } catch { setAuthRefreshStatus('QA_AUTH_REFRESH_FAILED'); }
+  }
 
   function selectFile(event: ChangeEvent<HTMLInputElement>) {
     if (stateRef.current && !['NEW', 'DRAFT'].includes(stateRef.current.stage)) return;
@@ -190,7 +212,7 @@ export default function LiveQaProductionSubmit({ draft, valid, onFillQaSample }:
           save('SUBMITTED', '数据库确认原请求已提交；无需再写一次');
           setSuccessOrderId(state.orderId);
           setDone(true);
-          clearQaRecovery();
+          clearQaRecovery(state.userId, state.orgId);
           return;
         }
         if (canonical.data.workflow_status !== 'DRAFT' || canonical.data.version !== 1)
@@ -347,7 +369,7 @@ export default function LiveQaProductionSubmit({ draft, valid, onFillQaSample }:
         save('SUBMITTED', '真实 HTTP 提交成功；车间账号可刷新 Inbox');
         setSuccessOrderId(state.orderId!);
         setDone(true);
-        clearQaRecovery();
+        clearQaRecovery(state.userId, state.orgId);
       }
     } catch (err) {
       // Show only our fixed allowlisted error codes. Never expose raw server
@@ -377,7 +399,7 @@ export default function LiveQaProductionSubmit({ draft, valid, onFillQaSample }:
         <h2 className="text-sm font-semibold text-blue-950">QA Preview · 真实 HTTP 提交验收</h2>
         <p className="mt-1 text-xs leading-5 text-blue-800">
           仅在独立测试数据库开放，生成真正的测试草稿、私有图片和提交回执。
-          不创建正式客户订单，不执行生产开工。仅保存本标签页的合成订单编号与幂等键，可在刷新后重新确认并继续；不保存密码、Token 或图片内容。
+          不创建正式客户订单，不执行生产开工。只在本设备浏览器保存限时 24 小时的合成订单标识与幂等键（按 QA 用户和组织隔离），关闭并重新打开浏览器后可核对恢复；不保存密码、Token 或图片内容。
         </p>
       </div>
       <button type="button" disabled={busy || !!stateRef.current?.orderId}
@@ -385,6 +407,14 @@ export default function LiveQaProductionSubmit({ draft, valid, onFillQaSample }:
         className="rounded-md border border-blue-400 bg-white px-3 py-2 text-xs font-medium text-blue-950 disabled:opacity-40">
         自动填入全套合成 QA 测试资料
       </button>
+      <div className="flex flex-wrap items-center gap-2">
+        <button type="button" onClick={() => { void verifySessionRefresh(); }}
+          disabled={busy || authRefreshStatus === 'QA_AUTH_REFRESH_RUNNING'}
+          className="rounded-md border border-blue-400 bg-white px-3 py-2 text-xs font-medium text-blue-950 disabled:opacity-40">
+          QA 强制刷新登录会话
+        </button>
+        {authRefreshStatus && <span role="status" className="text-xs text-blue-950">{authRefreshStatus}</span>}
+      </div>
       <label className="block text-xs font-medium text-blue-950">
         对应版本的产品基准图片（必选，PNG / JPEG / WEBP，不超过 20MB）
         <input aria-label="QA 私有图片" className="mt-1 block w-full text-xs" type="file"
