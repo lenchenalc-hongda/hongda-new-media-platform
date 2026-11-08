@@ -52,8 +52,8 @@ Deno.serve(async (req:Request)=>{
    if(profileError||!profile||profile.role!=='admin')return answer(403,'FORBIDDEN');
    const admin=createClient(QA_URL,adminKey,{auth:{autoRefreshToken:false,persistSession:false}});
    if(mode==='dry_run'){
-     const {data,error}=await admin.rpc('wos_qa_list_stale_orphans',
-       {p_min_age_hours:age,p_limit:100});
+     const {data,error}=await admin.rpc('wos_qa_list_stale_orphans_for_org',
+       {p_organization_id:profile.org_id,p_min_age_hours:age,p_limit:100});
      if(error||!Array.isArray(data))return answer(503,'INVENTORY_UNAVAILABLE');
      // Return counts only, not organization IDs or private Storage paths.
      const mine=data.filter(x=>x.organization_id===profile.org_id);
