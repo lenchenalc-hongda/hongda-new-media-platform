@@ -118,7 +118,25 @@ async function main() {
     stage = 'RECONCILE_ORIGINAL_IMAGE_AND_ORDER';
     await fresh.page.getByRole('button',{name:'使用同一订单和幂等键继续验证'}).click();
     await fresh.page.getByText('已由真实 HTTP API 提交',{exact:false}).waitFor({timeout:110000});
-    await checkInbox(fresh.page);
+    stage = 'RESTORED_INBOX_AND_PRIVATE_IMAGE';
+    await fresh.page.goto(origin+'/workshop-orders/inbox',{waitUntil:'domcontentloaded'});
+    await fresh.page.getByRole('button',{name:'刷新真实车间任务'}).waitFor({timeout:30000});
+    const inboxResponseWait = fresh.page.waitForResponse(r =>
+      r.url() === origin+'/api/workshop-orders/inbox' && r.request().method()==='GET',
+      {timeout:50000});
+    await fresh.page.getByRole('button',{name:'刷新真实车间任务'}).click();
+    const inboxResponse = await inboxResponseWait;
+    const inboxData = await inboxResponse.json();
+    const matching = inboxData?.data?.items?.filter(i =>
+      i.entityType === 'PRODUCTION_ORDER' && i.orderNumber === orderNumber);
+    assert.equal(inboxResponse.status(),200);
+    assert.equal(inboxData?.code,'OK');
+    assert.equal(matching?.length,1,'restored order must exist exactly once in workshop Inbox');
+    assert.equal(matching[0].workflowStatus,'SUBMITTED');
+    const card = fresh.page.locator('article').filter({hasText:orderNumber});
+    await card.getByRole('button',{name:'用当前车间身份读取私有图片'}).click();
+    await card.getByRole('link',{name:'打开已验证的私有图片'}).waitFor({timeout:50000});
+    console.log('WOS_QA_REOPEN_SINGLE_INBOX_ITEM_AND_PRIVATE_BINARY=PASS');
     console.log('WOS_QA_NEW_BROWSER_RESTORES_ORIGINAL_ORDER_AND_IMAGE=PASS');
     console.log('WOS_QA_RESILIENCE_E2E=PASS');
   } finally {
