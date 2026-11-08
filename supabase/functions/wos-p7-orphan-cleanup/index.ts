@@ -64,8 +64,8 @@ Deno.serve(async (req:Request)=>{
      return answer(423,'QA_ORPHAN_DELETE_DISABLED');
    if(body.ack!=='WOS_QA_SYNTHETIC_ORPHAN_DELETE_ONLY')
      return answer(400,'EXPLICIT_QA_DELETE_ACK_REQUIRED');
-   const {data:claim,error:claimError}=await admin.rpc('wos_qa_claim_one_stale_orphan',
-     {p_min_age_hours:age});
+   const {data:claim,error:claimError}=await admin.rpc('wos_qa_claim_stale_orphan_for_org',
+     {p_organization_id:profile.org_id,p_min_age_hours:age});
    if(claimError||!claim)return answer(503,'CLEANUP_CLAIM_FAILED');
    if(claim.status==='NO_ELIGIBLE_ORPHAN')return answer(200,'NO_ELIGIBLE_ORPHAN',{deleted:0});
    if(claim.status!=='CLAIMED'||!claim.claimToken||!claim.objectId||!claim.path)
