@@ -18,7 +18,8 @@ function u32(v:Uint8Array,i:number) {
 async function pngValid(bytes:Uint8Array,expectedSha:string):Promise<boolean>{
   if(bytes.length<60||bytes.length>MAX_FILE) return false;
   if(!MAGIC.every((v,i)=>bytes[i]===v))return false;
-  const digest=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes)))
+  const safeCopy=new Uint8Array(bytes.length);safeCopy.set(bytes);
+  const digest=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',safeCopy.buffer)))
     .map(b=>b.toString(16).padStart(2,'0')).join('');
   if(digest!==expectedSha)return false;
   let off=8,chunks=0,header=false,seenData=false,ended=false,idatEnded=false;
@@ -63,7 +64,7 @@ async function pngValid(bytes:Uint8Array,expectedSha:string):Promise<boolean>{
   let at=0;for(const chunk of compressed){input.set(chunk,at);at+=chunk.length;}
   try{
     // Streaming inflation with an exact maximum, to avoid zip bombs.
-    const stream=new ReadableStream<Uint8Array>({start(c){c.enqueue(input);c.close();}})
+    const stream=new ReadableStream<BufferSource>({start(c){c.enqueue(input.buffer);c.close();}})
       .pipeThrough(new DecompressionStream('deflate'));
     const reader=stream.getReader();let produced=0;
     const raw=new Uint8Array(expected);
