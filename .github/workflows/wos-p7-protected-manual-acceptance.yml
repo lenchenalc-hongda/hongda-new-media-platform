@@ -22,7 +22,7 @@ concurrency:
 
 jobs:
   preflight:
-    name: Validate pinned, reviewed QA commit and green CI (no QA secrets)
+    name: Validate pinned reviewed SHA and its green CI (no QA secrets)
     permissions:
       contents: read
       pull-requests: read
@@ -42,7 +42,8 @@ jobs:
         run: |
           set -euo pipefail
           [ "$GITHUB_REF" = 'refs/heads/master' ]
-          printf '%s' "$REQUESTED_SHA" | grep -Eq '^[0-9a-f]{40}
+          printf '%s' "$REQUESTED_SHA" | grep -Eq '^[0-9a-f]{40}$'
+          [ "$REQUESTED_SHA" = "$APPROVED_QA_SHA" ]
           PR_META=$(curl --fail --silent --show-error --max-time 25 \
             -H "Authorization: Bearer $GH_TOKEN" \
             -H 'Accept: application/vnd.github+json' \
@@ -74,104 +75,6 @@ jobs:
   real-browser-qa:
     permissions:
       contents: read
-    needs: [preflight]
-    if: needs.preflight.result == 'success' && github.ref == 'refs/heads/master'
-    name: Protected isolated Next Preview-mode browser HTTP workflow
-    runs-on: ubuntu-latest
-    timeout-minutes: 75
-    environment: hongda-review-dev
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
-        with:
-          ref: ${{ needs.preflight.outputs.reviewed_sha }}
-          persist-credentials: false
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
-        with:
-          node-version: '22'
-      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1
-        with:
-          version: 10
-      - run: pnpm install --frozen-lockfile
-
-      - name: Assert synthetic session recovery and magic byte guards
-        run: node node_modules/tsx/dist/cli.mjs tests/unit/wos-qa-recovery.test.ts
-
-      - name: Install pinned Chromium automation runtime
-        run: |
-          npm install --prefix /tmp/hongda-qa-browser --no-audit --no-fund --silent playwright@1.56.1
-          /tmp/hongda-qa-browser/node_modules/.bin/playwright install --with-deps chromium
-
-      - name: Build pinned isolated QA Preview-mode app
-        env:
-          AUTH_MODE: supabase
-          VERCEL_ENV: preview
-          NEXT_PUBLIC_SUPABASE_URL: https://xulmpqaknlwqqculbsek.supabase.co
-          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.REVIEW_DEV_SUPABASE_ANON_KEY }}
-          WOS_P5C_NONPROD_API_ENABLED: 'true'
-          WOS_P7_NONPROD_SUBMIT_ENABLED: 'true'
-          NEXT_PUBLIC_WOS_QA_LOCAL_TEST: 'true'
-        run: |
-          node -e "if (process.env.NEXT_PUBLIC_SUPABASE_URL !== 'https://xulmpqaknlwqqculbsek.supabase.co' || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) process.exit(1)"
-          pnpm build
-
-      - name: Run real browser with isolated QA logins and assert same-origin HTTP
-        env:
-          AUTH_MODE: supabase
-          VERCEL_ENV: preview
-          NEXT_PUBLIC_SUPABASE_URL: https://xulmpqaknlwqqculbsek.supabase.co
-          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.REVIEW_DEV_SUPABASE_ANON_KEY }}
-          WOS_P5C_NONPROD_API_ENABLED: 'true'
-          WOS_P7_NONPROD_SUBMIT_ENABLED: 'true'
-          NEXT_PUBLIC_WOS_QA_LOCAL_TEST: 'true'
-          WOS_QA_BROWSER_ACK_TEST_WRITES: 'true'
-          # Manual protected exact-HEAD verification runs ten sequential QA business cycles.
-          WOS_QA_SOAK_ROUNDS: '10'
-          REVIEW_DEV_ADMIN_EMAIL: ${{ secrets.REVIEW_DEV_ADMIN_EMAIL }}
-          REVIEW_DEV_ADMIN_PASSWORD: ${{ secrets.REVIEW_DEV_ADMIN_PASSWORD }}
-          REVIEW_DEV_VIEWER_EMAIL: ${{ secrets.REVIEW_DEV_VIEWER_EMAIL }}
-          REVIEW_DEV_VIEWER_PASSWORD: ${{ secrets.REVIEW_DEV_VIEWER_PASSWORD }}
-          REVIEW_DEV_OPERATOR_EMAIL: ${{ secrets.REVIEW_DEV_OPERATOR_EMAIL }}
-          REVIEW_DEV_OPERATOR_PASSWORD: ${{ secrets.REVIEW_DEV_OPERATOR_PASSWORD }}
-          REVIEW_DEV_FOREIGN_EMAIL: ${{ secrets.REVIEW_DEV_FOREIGN_EMAIL }}
-          REVIEW_DEV_FOREIGN_PASSWORD: ${{ secrets.REVIEW_DEV_FOREIGN_PASSWORD }}
-        run: |
-          set -euo pipefail
-          # The Next.js server does NOT need credentials for other QA users.
-          # Keep protected passwords only in the direct Playwright node process.
-          (env -u REVIEW_DEV_ADMIN_EMAIL -u REVIEW_DEV_ADMIN_PASSWORD \
-             -u REVIEW_DEV_VIEWER_EMAIL -u REVIEW_DEV_VIEWER_PASSWORD \
-             -u REVIEW_DEV_OPERATOR_EMAIL -u REVIEW_DEV_OPERATOR_PASSWORD \
-             -u REVIEW_DEV_FOREIGN_EMAIL -u REVIEW_DEV_FOREIGN_PASSWORD \
-             pnpm exec next start --hostname 127.0.0.1 -p 3000 >/tmp/hongda-qa-next.log 2>&1 & echo $! > /tmp/hongda-qa-next.pid)
-          for attempt in $(seq 1 100); do
-            if curl -fsS http://localhost:3000/login >/dev/null 2>&1; then break; fi
-            sleep 2
-          done
-          curl -fsS http://localhost:3000/login >/dev/null
-          case "${WOS_QA_SOAK_ROUNDS:-1}" in 1|10) ;; *) exit 1 ;; esac
-          # Real shop staff keep authenticated browser sessions open across
-          # multiple orders. Repeat office-to-workshop operations with the
-          # SAME four verified sessions, not forty rapid login attempts.
-          node tests/e2e/wos-qa-real-browser.cjs
-          # Separate browser process + fresh Auth login/refresh and upload
-          # interruption QA. All secrets remain in the Playwright process.
-          node tests/e2e/wos-qa-resilience.cjs
-
-
-          [ "$REQUESTED_SHA" = "$APPROVED_QA_SHA" ]
-          PR_META=$(curl --fail --silent --show-error --max-time 25 \
-            -H "Authorization: Bearer $GH_TOKEN" \
-            -H 'Accept: application/vnd.github+json' \
-            "https://api.github.com/repos/$GITHUB_REPOSITORY/pulls/213")
-          LIVE_HEAD=$(printf '%s' "$PR_META" | jq -r '.head.sha')
-          LIVE_BRANCH=$(printf '%s' "$PR_META" | jq -r '.head.ref')
-          LIVE_BASE=$(printf '%s' "$PR_META" | jq -r '.base.ref')
-          [ "$LIVE_HEAD" = "$REQUESTED_SHA" ]
-          [ "$LIVE_BRANCH" = 'qa/wos-nonprod-atomic-storage-20261107' ]
-          [ "$LIVE_BASE" = 'master' ]
-          echo "sha=$REQUESTED_SHA" >> "$GITHUB_OUTPUT"
-          echo 'WOS_P7_MASTER_PROTECTED_QA_SHA_GATE=PASS'
-  real-browser-qa:
     needs: [preflight]
     if: needs.preflight.result == 'success' && github.ref == 'refs/heads/master'
     name: Protected isolated Next Preview-mode browser HTTP workflow
