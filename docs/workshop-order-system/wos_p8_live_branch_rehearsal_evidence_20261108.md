@@ -47,3 +47,12 @@ Rollback is by **branch reset / deletion only**, after capturing branch schema c
 After reset, verify the branch returned to **0 public WOS tables/functions, 0 WOS policies/buckets, 0 migration history**, and then delete the disposable branch to stop hourly charges. Recheck Production still has 0 WOS tables/bucket and its original 29 recorded migrations.
 
 **Hard gates still open:** (1) reproduce full Production 67-table schema/migrations in a clean no-data branch (Issue #225); (2) independently reviewed production-compatible migrations and Storage/Edge/cleanup code; (3) actual staging Auth-JWT + private binary Edge tests; (4) 24h orphan retention & separately approved deletion test; (5) operator UX, monitoring/latency, exact-SHA owner Production database and app rollout authorization. WOS #213 and P8 #224 remain unmerged until independently authorized.
+
+
+## Actual completed rollback and cleanup (2026-11-08 15:22 UTC)
+
+- `reset_branch` on the **isolated** P8 branch was accepted, and a subsequent SQL query confirmed **0 WOS tables / 0 migration-history rows**. However the private `wos-private` Bucket metadata **remained present (1)**, and branch status again became `MIGRATIONS_FAILED`. **Do not count reset alone as full rollback**.
+- Called `delete_branch` for **only** branch ID `276fb802-0b8c-4ce5-9d1b-08c2d67b6b0d` and received `success:true`. Immediately verified `list_branches` now contains only the parent `main`; the nonproduction `fzlqdmxtwajhoidtzchf` branch is absent. The disposable project is no longer running; this stops ongoing branch compute billing subject to Supabase's billing rules.
+- Post-deletion Production read-only check at 15:22:35Z: **67** public tables, **29** registered migrations, **0** WOS tables, **0** WOS functions, **0** WOS table policies, **0** `wos-private` buckets. No Production DDL or Storage changes.
+- Original independent QA read-only check at 15:22:37Z: private `wos-private` bucket intact, **78** Storage objects, **77** registered image references. No QA data or file deletion.
+- Status: **all temporary tests and the temporary branch disposed**, but the full 67-table schema-clone gate (Issue #225) remains open. No Production go-live authorized.
