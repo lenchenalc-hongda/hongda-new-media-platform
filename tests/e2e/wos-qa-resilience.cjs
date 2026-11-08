@@ -5,7 +5,7 @@ const assert = require('node:assert/strict');
 const {chromium} = require('/tmp/hongda-qa-browser/node_modules/playwright');
 const origin = 'http://localhost:3000';
 const projectRef = 'xulmpqaknlwqqculbsek';
-const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jGZ0AAAAASUVORK5CYII=','base64');
+const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII=','base64');
 const qaFile = () => ({name:'qa-resilience-proof.png',mimeType:'image/png',buffer:png});
 function allowed() {
   return process.env.WOS_QA_BROWSER_ACK_TEST_WRITES === 'true'
