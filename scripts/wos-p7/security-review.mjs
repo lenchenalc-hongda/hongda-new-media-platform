@@ -142,6 +142,7 @@ gate('EDGE_ATTESTATION_PINNED_AND_CHECKED',
   &&nextVerify.includes("client.functions.invoke('wos-p7-verify-image'"));
 
 const orphanClaims=read('docs/workshop-order-system/nonproduction-only/wos_p7_qa_orphan_claims_20261108.sql');
+const orphanReconcile=read('docs/workshop-order-system/nonproduction-only/wos_p7_qa_cleanup_reconciliation_20261108.sql');
 const orphanRace=read('docs/workshop-order-system/nonproduction-only/wos_p7_qa_cleanup_race_guards_20261108.sql');
 const orphanParity=read('docs/workshop-order-system/nonproduction-only/wos_p7_qa_orphan_inventory_parity_20261108.sql');
 const orphanScoped=read('docs/workshop-order-system/nonproduction-only/wos_p7_qa_scoped_cleanup_claim_20261108.sql');
@@ -163,6 +164,11 @@ gate('ORPHAN_ORGANIZATION_SCOPE',
   && orphanScopedInventory.includes('po.organization_id=p_organization_id')
   && orphanEdge.includes("admin.rpc('wos_qa_claim_stale_orphan_for_org'")
   && orphanEdge.includes("admin.rpc('wos_qa_list_stale_orphans_for_org'"));
+gate('ORPHAN_LEASE_RECOVERY_FAIL_CLOSED',
+  orphanReconcile.includes('wos_qa_reconcile_expired_cleanup_claims')
+  && orphanReconcile.includes('RECONCILED_METADATA_ABSENT_AFTER_LEASE')
+  && orphanReconcile.includes('RECONCILED_METADATA_PRESENT_AFTER_LEASE')
+  && orphanEdge.includes("admin.rpc('wos_qa_reconcile_expired_cleanup_claims'"));
 gate('ORPHAN_DRY_RUN_MATCHES_CLAIM',
   orphanParity.includes("po.workflow_status IN ('DRAFT','SUBMITTED')")
   && orphanParity.includes('wos_qa_orphan_cleanup_claims')
