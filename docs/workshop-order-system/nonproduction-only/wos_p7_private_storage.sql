@@ -40,10 +40,10 @@ WITH CHECK (
   SELECT 1 FROM public.profiles p JOIN public.wos_production_orders po
    ON po.organization_id=p.org_id
   WHERE p.user_id=auth.uid() AND p.is_active
-    AND p.role IN ('admin','manager','sales','operator')
+    AND p.role IN ('admin','manager','sales')
     AND p.org_id::text=(storage.foldername(name))[2]
     AND po.id::text=(storage.foldername(name))[5]
-    AND po.workflow_status IN ('DRAFT','SUBMITTED')
+    AND po.workflow_status='DRAFT'
     AND po.version_label=(storage.foldername(name))[9]
     AND (p.role<>'sales' OR p.id IN
          (po.created_by_profile_id,po.sales_owner_profile_id))
@@ -63,6 +63,9 @@ USING (
   WHERE p.user_id=auth.uid() AND p.is_active
     AND p.org_id::text=(storage.foldername(name))[2]
     AND po.id::text=(storage.foldername(name))[5]
+     AND (p.role IN ('admin','manager') OR
+          (p.role='sales' AND p.id IN (po.created_by_profile_id,po.sales_owner_profile_id)) OR
+          (p.role IN ('operator','workshop','technician') AND po.workflow_status='SUBMITTED'))
  )
 );
 
@@ -85,7 +88,7 @@ DECLARE
 BEGIN
  SELECT * INTO v_actor FROM public.profiles
  WHERE user_id=auth.uid() AND is_active=true
- AND role IN ('admin','manager','sales','operator') LIMIT 1;
+ AND role IN ('admin','manager','sales') LIMIT 1;
  IF NOT FOUND THEN RAISE EXCEPTION 'NOT_AUTHORIZED' USING ERRCODE='42501';END IF;
  IF p_order_id IS NULL OR p_image_id IS NULL OR p_storage_path IS NULL
  OR length(p_storage_path)>1024
@@ -99,7 +102,7 @@ BEGIN
     AND v_actor.id<>v_order.created_by_profile_id
     AND v_actor.id<>v_order.sales_owner_profile_id)
  THEN RAISE EXCEPTION 'NOT_AUTHORIZED' USING ERRCODE='42501';END IF;
- IF v_order.workflow_status NOT IN ('DRAFT','SUBMITTED')
+ IF v_order.workflow_status <> 'DRAFT'
  OR v_order.version_label !~ '^V[1-9][0-9]{0,20}$'
  THEN RAISE EXCEPTION 'UNSUPPORTED_ORDER_VERSION' USING ERRCODE='23514';END IF;
  v_prefix:='organizations/'||v_order.organization_id::text||
