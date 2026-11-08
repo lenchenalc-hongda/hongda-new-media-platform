@@ -189,7 +189,7 @@ export default function LiveQaProductionSubmit({ draft, valid, onFillQaSample }:
           && 'code' in body && typeof body.code === 'string' ? body.code : '';
         if (!res.ok || message !== 'SUBMISSION_VERIFIED'
           && message !== 'SUBMISSION_REPLAY_VERIFIED')
-          reject('QA_HTTP_SUBMISSION_' + (message || 'UNVERIFIED'));
+          throw new Error('QA_HTTP_SUBMISSION_' + (message || 'UNVERIFIED'));
         if (!body || typeof body !== 'object' || !('data' in body)
           || !body.data || typeof body.data !== 'object'
           || !('orderId' in body.data) || body.data.orderId !== state.orderId)
