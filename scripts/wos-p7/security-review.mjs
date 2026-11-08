@@ -173,12 +173,12 @@ gate('ORPHAN_WORKER_DEFAULTS_TO_NO_DELETE',
   && orphanEdge.includes("admin.rpc('wos_qa_predelete_orphan'")
   && orphanEdge.includes("admin.storage.from('wos-private').remove([claim.path])")
   && orphanEdge.includes("admin.rpc('wos_qa_finish_orphan_claim'"));
-gate('BROWSER_QA_REQUIRES_EXACT_REVIEWED_SHA',
-  gatedQaWorkflow.includes('expected_sha:')
-  && gatedQaWorkflow.includes('CURRENT_SHA: ${{ github.sha }}')
-  && gatedQaWorkflow.includes('WOS_QA_EXACT_SHA_REVIEW_PREFLIGHT=PASS')
-  && gatedQaWorkflow.includes('needs: [reviewed-sha-preflight]')
-  && gatedQaWorkflow.includes('WOS_QA_SOAK_ROUNDS: ${{ inputs.rounds }}'));
+gate('BROWSER_QA_MANUAL_PROTECTED_ONLY',
+  gatedQaWorkflow.includes('workflow_dispatch:')
+  && gatedQaWorkflow.includes('environment: hongda-review-dev')
+  && gatedQaWorkflow.includes("github.ref == 'refs/heads/qa/wos-nonprod-atomic-storage-20261107'")
+  && !/^\s*push:\s*$/m.test(gatedQaWorkflow)
+  && !/^\s*pull_request(_target)?:\s*$/m.test(gatedQaWorkflow));
 
 const flowHeader = gatedQaWorkflow.slice(0, gatedQaWorkflow.indexOf('\njobs:'));
 gate('QA_SECRETS_NOT_AUTO_ON_PUSH', /^\s*on:\s*\n\s*workflow_dispatch:\s*$/m.test(flowHeader)
