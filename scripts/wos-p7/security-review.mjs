@@ -96,7 +96,7 @@ gate('QA_SECRETS_NOT_AUTO_ON_PUSH', /^\s*on:\s*\n\s*workflow_dispatch:\s*$/m.tes
   && gatedQaWorkflow.includes('permissions:\n  contents: read')
   && gatedQaWorkflow.includes("github.ref == 'refs/heads/qa/wos-nonprod-atomic-storage-20261107'"));
 gate('RELEASE_REMAINS_BLOCKED', releaseGate.includes('NOT READY FOR PRODUCTION')
-  && releaseGate.includes('independent') || releaseGate.includes('独立 Reviewer'));
+  && (releaseGate.includes('independent') || releaseGate.includes('独立 Reviewer')));
 gate('NO_PRODUCTION_DEPLOY_STEPS', !/\bvercel\s+--prod\b|\bvercel\s+promote\b|\bsupabase\s+db\s+push\b/.test(gatedQaWorkflow));
 if (failures) {
   console.error('WOS_P7_STATIC_SECURITY_AUDIT=FAIL');
