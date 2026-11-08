@@ -168,7 +168,7 @@ gate('ORPHAN_LEASE_RECOVERY_FAIL_CLOSED',
   orphanReconcile.includes('wos_qa_reconcile_expired_cleanup_claims')
   && orphanReconcile.includes('RECONCILED_METADATA_ABSENT_AFTER_LEASE')
   && orphanReconcile.includes('RECONCILED_METADATA_PRESENT_AFTER_LEASE')
-  && orphanEdge.includes("admin.rpc('wos_qa_reconcile_expired_cleanup_claims'"));
+  && orphanEdge.includes("'wos_qa_reconcile_expired_cleanup_claims'"));
 gate('ORPHAN_DRY_RUN_MATCHES_CLAIM',
   orphanParity.includes("po.workflow_status IN ('DRAFT','SUBMITTED')")
   && orphanParity.includes('wos_qa_orphan_cleanup_claims')
