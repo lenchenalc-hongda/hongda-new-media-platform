@@ -29,7 +29,7 @@ jobs:
     if: github.ref == 'refs/heads/qa/wos-nonprod-atomic-storage-20261107'
     name: Protected isolated Next Preview-mode browser HTTP workflow
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 75
     environment: hongda-review-dev
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
@@ -74,6 +74,9 @@ jobs:
           WOS_P7_NONPROD_SUBMIT_ENABLED: 'true'
           NEXT_PUBLIC_WOS_QA_LOCAL_TEST: 'true'
           WOS_QA_BROWSER_ACK_TEST_WRITES: 'true'
+          # A deliberate reviewed [wos-qa-soak-10] commit runs ten serial
+          # browser/Auth/Storage cycles; routine QA pushes run once.
+          WOS_QA_SOAK_ROUNDS: ${{ contains(github.event.head_commit.message, '[wos-qa-soak-10]') && '10' || '1' }}
           REVIEW_DEV_ADMIN_EMAIL: ${{ secrets.REVIEW_DEV_ADMIN_EMAIL }}
           REVIEW_DEV_ADMIN_PASSWORD: ${{ secrets.REVIEW_DEV_ADMIN_PASSWORD }}
           REVIEW_DEV_VIEWER_EMAIL: ${{ secrets.REVIEW_DEV_VIEWER_EMAIL }}
@@ -96,4 +99,11 @@ jobs:
             sleep 2
           done
           curl -fsS http://localhost:3000/login >/dev/null
-          node tests/e2e/wos-qa-real-browser.cjs
+          case "${WOS_QA_SOAK_ROUNDS:-1}" in 1|10) ;; *) exit 1 ;; esac
+          for round in $(seq 1 "$WOS_QA_SOAK_ROUNDS"); do
+            echo "WOS_QA_SOAK_ROUND_START=$round"
+            node tests/e2e/wos-qa-real-browser.cjs
+            echo "WOS_QA_SOAK_ROUND_${round}=PASS"
+            if [ "$round" -lt "$WOS_QA_SOAK_ROUNDS" ]; then sleep 3; fi
+          done
+          echo "WOS_QA_SOAK_SUCCESS_COUNT=$WOS_QA_SOAK_ROUNDS"
