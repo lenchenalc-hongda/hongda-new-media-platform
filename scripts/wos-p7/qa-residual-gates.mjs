@@ -81,6 +81,28 @@ async function bearerStatus(token) {
   return response.status; // Never read/log the user response body.
 }
 
+async function verifyViewerWosRls(token) {
+  // WOS UI/API role denials are not enough: test direct PostgREST bypass too.
+  for (const table of ['wos_production_orders','wos_reference_images',
+    'wos_submission_receipts','wos_workshop_inbox']) {
+    const response = await fetch(QA_URL + '/rest/v1/' + table + '?select=id&limit=1', {
+      method:'GET', cache:'no-store',
+      headers:{
+        apikey:process.env.REVIEW_DEV_SUPABASE_ANON_KEY,
+        Authorization:'Bearer ' + token
+      },
+      signal:AbortSignal.timeout(25000)
+    });
+    if(response.status===200) {
+      const rows=await response.json();
+      assert(Array.isArray(rows) && rows.length===0,'VIEWER_DIRECT_WOS_TABLE_READABLE');
+    } else {
+      assert([401,403].includes(response.status),'WOS_RLS_UNEXPECTED_RESPONSE');
+    }
+  }
+  console.log('WOS_P7_VIEWER_DIRECT_POSTGREST_RLS_DENIED=PASS');
+}
+
 async function runNaturalJwtExpiry() {
   stage='JWT_REAL_LOGIN';
   const {c,session,user} = await login('VIEWER');
@@ -89,6 +111,10 @@ async function runNaturalJwtExpiry() {
   assert(Number.isFinite(expiresAt) && remaining > 120000, 'JWT_EXPIRY_METADATA_INVALID');
   assert(remaining < 110 * 60 * 1000, 'JWT_LIFETIME_EXCEEDS_PROTECTED_JOB_BUDGET');
   assert.equal(await bearerStatus(session.access_token), 200, 'FRESH_JWT_MUST_WORK');
+  const profile=await c.from('profiles').select('role,is_active').eq('user_id',user.id).single();
+  assert(!profile.error && profile.data?.role==='viewer' && profile.data?.is_active===true,
+    'EXPECTED_ISOLATED_VIEWER_REQUIRED');
+  await verifyViewerWosRls(session.access_token);
   console.log('WOS_P7_REAL_JWT_PRE_EXPIRY_AUTH=PASS');
   console.log('WOS_P7_REAL_JWT_TTL_SECONDS=' + Math.floor(remaining/1000));
   stage='JWT_NATURAL_TIME_PASSAGE';
@@ -108,6 +134,7 @@ async function runNaturalJwtExpiry() {
   assert(!refreshError && refreshed?.session?.access_token && refreshed?.user?.id===user.id,'POST_EXPIRY_REFRESH_FAILED');
   assert.notEqual(refreshed.session.access_token,session.access_token,'OLD_JWT_REUSED');
   assert.equal(await bearerStatus(refreshed.session.access_token),200,'REFRESHED_JWT_NOT_ACCEPTED');
+  await verifyViewerWosRls(refreshed.session.access_token);
   assert([401,403].includes(await bearerStatus(session.access_token)),'EXPIRED_JWT_RESURRECTED');
   console.log('WOS_P7_REAL_JWT_REFRESH_AFTER_EXPIRY=PASS');
   console.log('WOS_P7_REAL_JWT_NATURAL_EXPIRY_GATE=PASS');
