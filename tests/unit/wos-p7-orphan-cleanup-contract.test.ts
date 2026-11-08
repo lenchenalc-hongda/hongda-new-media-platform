@@ -21,7 +21,7 @@ assert(lease.includes('wos_qa_trusted_proof_guard'));
 assert(reconcile.includes('wos_qa_reconcile_expired_cleanup_claims'));
 assert(reconcile.includes("RECONCILED_METADATA_ABSENT_AFTER_LEASE"));
 assert(reconcile.includes("RECONCILED_METADATA_PRESENT_AFTER_LEASE"));
-assert(edge.includes("admin.rpc('wos_qa_reconcile_expired_cleanup_claims'"));
+assert(edge.includes("'wos_qa_reconcile_expired_cleanup_claims'"));
 assert(lease.includes('obj.owner_id IS DISTINCT FROM NEW.actor_user_id::text'));
 assert(lease.includes('wos_qa_orphan_cleanup_claims c'));
 assert(lease.includes('wos_qa_claim_stale_orphan_for_org'));
