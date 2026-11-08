@@ -1,0 +1,345 @@
+{
+  "schema_version": 1,
+  "project_ref": "amqpvxrurenevniilhtl",
+  "observed_utc": "2026-11-09",
+  "table_count": 67,
+  "contains_business_rows": false,
+  "scope": "Effective public table grants for anon/authenticated/service_role only, hashed",
+  "tables": [
+    {
+      "table_name": "account_rules",
+      "grants": 9,
+      "grant_sig": "ba300b7344819380a5c36a2371d3e3f6"
+    },
+    {
+      "table_name": "accounts",
+      "grants": 9,
+      "grant_sig": "ba300b7344819380a5c36a2371d3e3f6"
+    },
+    {
+      "table_name": "ai_runs",
+      "grants": 9,
+      "grant_sig": "ba300b7344819380a5c36a2371d3e3f6"
+    },
+    {
+      "table_name": "commercial_confirmed_quote_versions",
+      "grants": 4,
+      "grant_sig": "ca0e7eedbb1b3a0916890b7ec8b849da"
+    },
+    {
+      "table_name": "commercial_confirmed_quotes",
+      "grants": 4,
+      "grant_sig": "ca0e7eedbb1b3a0916890b7ec8b849da"
+    },
+    {
+      "table_name": "commercial_payment_methods",
+      "grants": 6,
+      "grant_sig": "4a20492d7097252b611c5f5a70b11802"
+    },
+    {
+      "table_name": "commercial_quotation_draft_revisions",
+      "grants": 4,
+      "grant_sig": "ca0e7eedbb1b3a0916890b7ec8b849da"
+    },
+    {
+      "table_name": "commercial_quotation_drafts",
+      "grants": 6,
+      "grant_sig": "4a20492d7097252b611c5f5a70b11802"
+    },
+    {
+      "table_name": "cpc_ai_drafts",
+      "grants": 4,
+      "grant_sig": "ca0e7eedbb1b3a0916890b7ec8b849da"
+    },
+    {
+      "table_name": "cpc_audit_log",
+      "grants": 4,
+      "grant_sig": "ca0e7eedbb1b3a0916890b7ec8b849da"
+    },
+    {
+      "table_name": "cpc_customer_potential_assessments",
+      "grants": 4,
+      "grant_sig": "ca0e7eedbb1b3a0916890b7ec8b849da"
+    },
+    {
+      "table_name": "cpc_customer_references",
+      "grants": 4,
+      "grant_sig": "ca0e7eedbb1b3a0916890b7ec8b849da"
+    },
+    {
+      "table_name": "cpc_customer_workspaces",
+      "grants": 4,
+      "grant_sig": "ca0e7eedbb1b3a0916890b7ec8b849da"
+    },
+    {
+      "table_name": "cpc_external_profile_mappings",
+      "grants": 4,
+      "grant_sig": "ca0e7eedbb1b3a0916890b7ec8b849da"
+    },
+    {
+      "table_name": "cpc_project_events",
+      "grants": 4,
+      "grant_sig": "ca0e7eedbb1b3a0916890b7ec8b849da"
+    },
+    {
+      "table_name": "cpc_project_members",
+      "grants": 4,
+      "grant_sig": "ca0e7eedbb1b3a0916890b7ec8b849da"
+    },
+    {
+      "table_name": "cpc_projects",
+      "grants": 4,
+      "grant_sig": "ca0e7eedbb1b3a0916890b7ec8b849da"
+    },
+    {
+      "table_name": "cpc_reports",
+      "grants": 4,
+      "grant_sig": "ca0e7eedbb1b3a0916890b7ec8b849da"
+    },
+    {
+      "table_name": "cpc_work_items",
+      "grants": 4,
+      "grant_sig": "ca0e7eedbb1b3a0916890b7ec8b849da"
+    },
+    {
+      "table_name": "glh_activity_events",
+      "grants": 4,
+      "grant_sig": "ca0e7eedbb1b3a0916890b7ec8b849da"
+    },
+    {
+      "table_name": "glh_ad_campaigns",
+      "grants": 4,
+      "grant_sig": "ca0e7eedbb1b3a0916890b7ec8b849da"
+    },
+    {
+      "table_name": "glh_ad_creatives",
+      "grants": 4,
+      "grant_sig": "ca0e7eedbb1b3a0916890b7ec8b849da"
+    },
+    {
+      "table_name": "glh_ai_actions",
+      "grants": 4,
+      "grant_sig": "ca0e7eedbb1b3a0916890b7ec8b849da"
+    },
+    {
+      "table_name": "glh_assignments",
+      "grants": 4,
+      "grant_sig": "ca0e7eedbb1b3a0916890b7ec8b849da"
+    },
+    {
+      "table_name": "glh_audit_events",
+      "grants": 4,
+      "grant_sig": "ca0e7eedbb1b3a0916890b7ec8b849da"
+    },
+    {
+      "table_name": "glh_automation_runs",
+      "grants": 4,
+      "grant_sig": "ca0e7eedbb1b3a0916890b7ec8b849da"
+    },
+    {
+      "table_name": "glh_channel_accounts",
+      "grants": 4,
+      "grant_sig": "ca0e7eedbb1b3a0916890b7ec8b849da"
+    },
+    {
+      "table_name": "glh_contacts",
+      "grants": 4,
+      "grant_sig": "ca0e7eedbb1b3a0916890b7ec8b849da"
+    },
+    {
+      "table_name": "glh_conversations",
+      "grants": 4,
+      "grant_sig": "ca0e7eedbb1b3a0916890b7ec8b849da"
+    },
+    {
+      "table_name": "glh_followups",
+      "grants": 4,
+      "grant_sig": "ca0e7eedbb1b3a0916890b7ec8b849da"
+    },
+    {
+      "table_name": "glh_lead_profiles",
+      "grants": 4,
+      "grant_sig": "ca0e7eedbb1b3a0916890b7ec8b849da"
+    },
+    {
+      "table_name": "glh_lead_scores",
+      "grants": 4,
+      "grant_sig": "ca0e7eedbb1b3a0916890b7ec8b849da"
+    },
+    {
+      "table_name": "glh_leads",
+      "grants": 4,
+      "grant_sig": "ca0e7eedbb1b3a0916890b7ec8b849da"
+    },
+    {
+      "table_name": "glh_manual_intake_requests",
+      "grants": 3,
+      "grant_sig": "f322feb5b59a384bce91636546ca708f"
+    },
+    {
+      "table_name": "glh_manual_work_updates",
+      "grants": 4,
+      "grant_sig": "ca0e7eedbb1b3a0916890b7ec8b849da"
+    },
+    {
+      "table_name": "glh_messages",
+      "grants": 4,
+      "grant_sig": "ca0e7eedbb1b3a0916890b7ec8b849da"
+    },
+    {
+      "table_name": "glh_role_bindings",
+      "grants": 4,
+      "grant_sig": "ca0e7eedbb1b3a0916890b7ec8b849da"
+    },
+    {
+      "table_name": "glh_tasks",
+      "grants": 4,
+      "grant_sig": "ca0e7eedbb1b3a0916890b7ec8b849da"
+    },
+    {
+      "table_name": "glh_webhook_events",
+      "grants": 4,
+      "grant_sig": "ca0e7eedbb1b3a0916890b7ec8b849da"
+    },
+    {
+      "table_name": "knowledge_cards",
+      "grants": 9,
+      "grant_sig": "ba300b7344819380a5c36a2371d3e3f6"
+    },
+    {
+      "table_name": "lead_interactions",
+      "grants": 9,
+      "grant_sig": "ba300b7344819380a5c36a2371d3e3f6"
+    },
+    {
+      "table_name": "leads",
+      "grants": 9,
+      "grant_sig": "ba300b7344819380a5c36a2371d3e3f6"
+    },
+    {
+      "table_name": "media_assets",
+      "grants": 9,
+      "grant_sig": "ba300b7344819380a5c36a2371d3e3f6"
+    },
+    {
+      "table_name": "organizations",
+      "grants": 9,
+      "grant_sig": "ba300b7344819380a5c36a2371d3e3f6"
+    },
+    {
+      "table_name": "post_metrics",
+      "grants": 9,
+      "grant_sig": "ba300b7344819380a5c36a2371d3e3f6"
+    },
+    {
+      "table_name": "posts",
+      "grants": 9,
+      "grant_sig": "ba300b7344819380a5c36a2371d3e3f6"
+    },
+    {
+      "table_name": "profiles",
+      "grants": 10,
+      "grant_sig": "268cebbda9f685eec1342e1aad5d41ce"
+    },
+    {
+      "table_name": "review_actions",
+      "grants": 4,
+      "grant_sig": "ca0e7eedbb1b3a0916890b7ec8b849da"
+    },
+    {
+      "table_name": "review_audit_logs",
+      "grants": 4,
+      "grant_sig": "ca0e7eedbb1b3a0916890b7ec8b849da"
+    },
+    {
+      "table_name": "review_case_audit_logs",
+      "grants": 3,
+      "grant_sig": "f322feb5b59a384bce91636546ca708f"
+    },
+    {
+      "table_name": "review_case_number_counters",
+      "grants": 3,
+      "grant_sig": "f322feb5b59a384bce91636546ca708f"
+    },
+    {
+      "table_name": "review_cases",
+      "grants": 5,
+      "grant_sig": "78956c42db2665b907bab119eaeb0de3"
+    },
+    {
+      "table_name": "review_dict_items",
+      "grants": 10,
+      "grant_sig": "268cebbda9f685eec1342e1aad5d41ce"
+    },
+    {
+      "table_name": "review_knowledge_case_metadata",
+      "grants": 3,
+      "grant_sig": "f322feb5b59a384bce91636546ca708f"
+    },
+    {
+      "table_name": "review_knowledge_case_metadata_items",
+      "grants": 3,
+      "grant_sig": "f322feb5b59a384bce91636546ca708f"
+    },
+    {
+      "table_name": "review_knowledge_cases",
+      "grants": 3,
+      "grant_sig": "f322feb5b59a384bce91636546ca708f"
+    },
+    {
+      "table_name": "review_members",
+      "grants": 4,
+      "grant_sig": "ca0e7eedbb1b3a0916890b7ec8b849da"
+    },
+    {
+      "table_name": "review_metadata",
+      "grants": 4,
+      "grant_sig": "ca0e7eedbb1b3a0916890b7ec8b849da"
+    },
+    {
+      "table_name": "review_metadata_items",
+      "grants": 4,
+      "grant_sig": "ca0e7eedbb1b3a0916890b7ec8b849da"
+    },
+    {
+      "table_name": "review_timeline_events",
+      "grants": 4,
+      "grant_sig": "ca0e7eedbb1b3a0916890b7ec8b849da"
+    },
+    {
+      "table_name": "review_type_details",
+      "grants": 4,
+      "grant_sig": "ca0e7eedbb1b3a0916890b7ec8b849da"
+    },
+    {
+      "table_name": "reviews",
+      "grants": 9,
+      "grant_sig": "ba300b7344819380a5c36a2371d3e3f6"
+    },
+    {
+      "table_name": "scripts",
+      "grants": 9,
+      "grant_sig": "ba300b7344819380a5c36a2371d3e3f6"
+    },
+    {
+      "table_name": "site_data",
+      "grants": 21,
+      "grant_sig": "5c197bc70495059330d1281f9df9e355"
+    },
+    {
+      "table_name": "tasks",
+      "grants": 9,
+      "grant_sig": "ba300b7344819380a5c36a2371d3e3f6"
+    },
+    {
+      "table_name": "topics",
+      "grants": 9,
+      "grant_sig": "ba300b7344819380a5c36a2371d3e3f6"
+    },
+    {
+      "table_name": "viral_teardowns",
+      "grants": 9,
+      "grant_sig": "ba300b7344819380a5c36a2371d3e3f6"
+    }
+  ]
+}
