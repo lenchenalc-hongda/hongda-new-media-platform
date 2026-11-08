@@ -25,6 +25,9 @@ const PUBLIC_ROUTES = [
 // the same remote auth/profile lookup twice for a single CPC data request.
 const SELF_AUTHENTICATED_API_PREFIXES = [
   '/api/customer-projects',
+  // WOS P7 handlers verify Supabase JWT and scoped active profiles themselves.
+  // Avoid two Auth/profile network hops for each Preview inbox/submit call.
+  '/api/workshop-orders',
 ];
 
 export async function middleware(request: NextRequest) {
