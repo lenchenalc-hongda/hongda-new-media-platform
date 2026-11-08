@@ -64,7 +64,7 @@ async function pngValid(bytes:Uint8Array,expectedSha:string):Promise<boolean>{
   let at=0;for(const chunk of compressed){input.set(chunk,at);at+=chunk.length;}
   try{
     // Streaming inflation with an exact maximum, to avoid zip bombs.
-    const stream=new ReadableStream<BufferSource>({start(c){c.enqueue(input.buffer);c.close();}})
+    const stream=new ReadableStream<BufferSource>({start(c){c.enqueue(input);c.close();}})
       .pipeThrough(new DecompressionStream('deflate'));
     const reader=stream.getReader();let produced=0;
     const raw=new Uint8Array(expected);
