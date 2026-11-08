@@ -337,6 +337,76 @@ jobs:
           psql -X -v ON_ERROR_STOP=1 -f tests/sql/glh_stage1_manual_production_intake_smoke.sql
           psql -X -v ON_ERROR_STOP=1 -f tests/sql/glh_stage1_human_workflow_smoke.sql
 
+  wos-p8-postgres-p7-schema-candidate:
+    name: wos-p8-postgres-p7-schema-candidate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: wos-p8-disposable-ci-only
+          POSTGRES_DB: wos_p8_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d wos_p8_ci"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      PGHOST: localhost
+      PGPORT: "5432"
+      PGUSER: postgres
+      PGPASSWORD: wos-p8-disposable-ci-only
+      PGDATABASE: wos_p8_ci
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Install disposable PostgreSQL client
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y postgresql-client
+      - name: Apply foundation and candidate five P7 schema tables
+        run: |
+          set -euo pipefail
+          psql -X -q -v ON_ERROR_STOP=1 -f tests/sql/wos_p8_ephemeral_foundation_fixture.sql
+          psql -X -q -v ON_ERROR_STOP=1 -f supabase/migrations/20261014102000_workshop_order_system_foundation.sql
+          psql -X -q -v ON_ERROR_STOP=1 -f tests/sql/wos_p8_ephemeral_p7_schema_contract.sql
+          psql -X -q -v ON_ERROR_STOP=1 -f tests/sql/wos_p8_ephemeral_p7_schema_smoke.sql
+      - name: Reset exact five-table candidate and verify residual foundation only
+        run: |
+          set -euo pipefail
+          psql -X -q -v ON_ERROR_STOP=1 <<'SQL'
+          BEGIN;
+          DROP TABLE public.wos_orphan_cleanup_claims;
+          DROP TABLE public.wos_verified_image_proofs;
+          DROP TABLE public.wos_workshop_inbox;
+          DROP TABLE public.wos_submission_receipts;
+          DROP TABLE public.wos_office_readiness_receipts;
+          DROP POLICY wos_p8_orders_reader_roles ON public.wos_production_orders;
+          DROP POLICY wos_p8_images_reader_roles ON public.wos_reference_images;
+          DROP POLICY wos_p8_history_reader_roles ON public.wos_status_history;
+          DROP TABLE public.organizations;
+          COMMIT;
+          DO $check$
+          DECLARE n integer; p integer;
+          BEGIN
+            SELECT count(*) INTO n FROM information_schema.tables
+              WHERE table_schema='public' AND table_name LIKE 'wos_%';
+            IF n<>10 THEN RAISE EXCEPTION 'P7_ROLLBACK_RESIDUAL_TABLE_COUNT_%',n; END IF;
+            SELECT count(*) INTO p FROM pg_policies
+              WHERE schemaname='public' AND tablename LIKE 'wos_%';
+            IF p<>13 THEN RAISE EXCEPTION 'P7_ROLLBACK_RESIDUAL_POLICY_COUNT_%',p; END IF;
+          END $check$;
+          SQL
+          echo 'WOS_P8_P7_EPHEMERAL_SCHEMA_ROLLBACK=PASS'
+          echo 'WOS_P8_P7_STORAGE_EDGE_FUNCTIONS=NOT_RUN'
+          echo 'WOS_P8_PRODUCTION_MIGRATION=NOT_RUN'
+
   wos-p8-postgres-foundation-rehearsal:
     name: wos-p8-postgres-foundation-rehearsal
     runs-on: ubuntu-latest
