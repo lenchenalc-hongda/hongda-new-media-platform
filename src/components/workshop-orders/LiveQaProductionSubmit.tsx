@@ -4,19 +4,14 @@ import { useEffect, useRef, useState, type ChangeEvent } from 'react';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
 import type { NormalizedProductionOrderDraft } from '@/lib/workshop-orders/office-entry';
+import { clearQaRecovery, qaFileSha256, readQaRecovery, saveQaRecovery, verifyQaImageSignature, type QaRecovery, type QaRecoveryStage } from '@/lib/workshop-orders/qa-recovery';
 
-type Stage = 'NEW' | 'DRAFT' | 'UPLOADED' | 'REGISTERED' | 'READY' | 'SUBMITTED';
-interface Progress {
-  orderId: string | null;
-  imageId: string | null;
-  objectPath: string | null;
-  idempotencyKey: string;
-  stage: Stage;
-}
+type Stage = QaRecoveryStage;
+type Progress = QaRecovery;
 interface Props {
   draft: NormalizedProductionOrderDraft;
   valid: boolean;
-  onFillQaSample: () => void;
+  onFillQaSample: (orderNumber?: string) => void;
 }
 const qaUrl = 'https://xulmpqaknlwqqculbsek.supabase.co';
 const maxBytes = 20 * 1024 * 1024;
@@ -26,11 +21,15 @@ const mimeExtensions: Record<string, string> = {
   'image/webp': 'webp',
 };
 
-function newProgress(): Progress {
+function newProgress(userId: string, orgId: string, orderNumber: string, versionLabel: string): Progress {
   return {
+    schema: 1,
+    createdAt: Date.now(),
+    userId, orgId, orderNumber, versionLabel,
     orderId: null,
     imageId: null,
     objectPath: null,
+    fileSha256: null,
     idempotencyKey: crypto.randomUUID(),
     stage: 'NEW',
   };
@@ -45,6 +44,7 @@ export default function LiveQaProductionSubmit({ draft, valid, onFillQaSample }:
   const [errorCode, setErrorCode] = useState('');
   const [done, setDone] = useState(false);
   const [successOrderId, setSuccessOrderId] = useState('');
+  const [recovered, setRecovered] = useState(false);
   const stateRef = useRef<Progress | null>(null);
 
   useEffect(() => {
@@ -59,19 +59,33 @@ export default function LiveQaProductionSubmit({ draft, valid, onFillQaSample }:
           return;
         }
         const { data, error } = await client.from('profiles')
-          .select('role,is_active')
+          .select('role,is_active,org_id')
           .eq('user_id', auth.data.user.id)
           .maybeSingle();
-        if (active) setOfficeAuthorized(!error && data?.is_active === true &&
-          ['admin','manager','sales'].includes(data?.role ?? ''));
+        const allowed = !error && data?.is_active === true &&
+          ['admin','manager','sales'].includes(data?.role ?? '');
+        if (!active) return;
+        setOfficeAuthorized(allowed);
+        if (allowed && data?.org_id) {
+          const previous = readQaRecovery(auth.data.user.id, data.org_id);
+          if (previous && previous.stage !== 'SUBMITTED') {
+            stateRef.current = previous;
+            onFillQaSample(previous.orderNumber);
+            setStageLabel('检测到上次未完成的 QA 订单，请核对后继续原请求');
+            setRecovered(true);
+          }
+        }
       } catch { if (active) setOfficeAuthorized(false); }
     };
     void verifyOfficeRole();
     return () => { active = false; };
+  // The sample restoration callback has no external side effects; it only
+  // restores a synthetic order number into the local form.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   function selectFile(event: ChangeEvent<HTMLInputElement>) {
-    if (stateRef.current?.orderId) return;
+    if (stateRef.current && !['NEW', 'DRAFT'].includes(stateRef.current.stage)) return;
     setFile(event.target.files?.[0] ?? null);
   }
 
@@ -89,7 +103,8 @@ export default function LiveQaProductionSubmit({ draft, valid, onFillQaSample }:
         draft.customerName !== 'QA NONPRODUCTION ONLY' ||
         !/^V[1-9][0-9]{0,20}$/.test(draft.versionLabel))
       return 'SYNTHETIC_QA_ORDER_REQUIRED';
-    if (!file || !mimeExtensions[file.type] || file.size < 1 || file.size > maxBytes)
+    if ((!stateRef.current || ['NEW', 'DRAFT'].includes(stateRef.current.stage)) &&
+        (!file || !mimeExtensions[file.type] || file.size < 12 || file.size > maxBytes))
       return 'PRIVATE_IMAGE_REQUIRED_JPEG_PNG_WEBP_MAX_20MB';
     if (note.trim().length < 10 || note.length > 2000)
       return 'OFFICE_CONFIRMATION_NOTE_INVALID';
@@ -102,13 +117,14 @@ export default function LiveQaProductionSubmit({ draft, valid, onFillQaSample }:
     const denied = guard();
     if (denied) { setErrorCode(denied); return; }
     setBusy(true);
-    const state = stateRef.current ?? newProgress();
-    stateRef.current = state;
+    const client = createClient();
+    let state: Progress | null = stateRef.current;
     const save = (stage: Stage, label: string) => {
+      if (!state) throw new Error('QA_RECOVERY_STATE_UNAVAILABLE');
       state.stage = stage;
+      saveQaRecovery(state);
       setStageLabel(label);
     };
-    const client = createClient();
     try {
       if (!client) throw new Error('QA_SUPABASE_CLIENT_UNAVAILABLE');
       const auth = await client.auth.getUser();
@@ -122,6 +138,14 @@ export default function LiveQaProductionSubmit({ draft, valid, onFillQaSample }:
           !['admin','manager','sales'].includes(profile.data.role))
         throw new Error('OFFICE_SUBMIT_ROLE_REQUIRED');
       const { id: profileId, org_id: orgId } = profile.data!;
+      if (!state) {
+        state = newProgress(auth.data.user!.id, orgId, draft.orderNumber, draft.versionLabel);
+        stateRef.current = state;
+        save('NEW', '已保留原始幂等键；正在核对数据库中是否已有此草稿');
+      }
+      if (state.userId !== auth.data.user!.id || state.orgId !== orgId ||
+          state.orderNumber !== draft.orderNumber || state.versionLabel !== draft.versionLabel)
+        throw new Error('QA_RECOVERY_ACTOR_OR_ORDER_CHANGED');
 
       if (!state.orderId) {
         save('NEW', '正在创建真实非生产草稿...');
@@ -276,7 +300,7 @@ export default function LiveQaProductionSubmit({ draft, valid, onFillQaSample }:
       </label>
       <p role="status" className="text-xs font-medium text-blue-950">执行阶段：{stageLabel}</p>
       {errorCode && <p role="alert" className="rounded-md border border-red-200 bg-red-50 p-2 text-xs text-red-700">
-        {errorCode}。本次不创建新的幂等键；如状态未知，请先在车间 Inbox 核对。
+        {errorCode}。请继续使用本页面恢复的同一订单/幂等键，切勿重新新建生产单。
       </p>}
       {stateRef.current?.orderId && <p className="break-all text-xs text-blue-900">
         QA Order ID：{stateRef.current.orderId}
