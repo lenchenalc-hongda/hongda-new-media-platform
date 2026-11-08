@@ -115,6 +115,35 @@ jobs:
           node -e "if (process.env.NEXT_PUBLIC_SUPABASE_URL !== 'https://xulmpqaknlwqqculbsek.supabase.co' || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) process.exit(1)"
           pnpm build
 
+      - name: Assert checkout is exactly the immutable approved QA commit
+        env:
+          REVIEWED_SHA: ${{ needs.preflight.outputs.reviewed_sha }}
+        run: |
+          set -euo pipefail
+          [ "$(git rev-parse HEAD)" = "$REVIEWED_SHA" ]
+          echo 'WOS_P7_QA_CHECKOUT_PIN_VERIFIED=PASS'
+
+      - name: Start QA Next server without any test-account credentials
+        env:
+          AUTH_MODE: supabase
+          VERCEL_ENV: preview
+          NEXT_PUBLIC_SUPABASE_URL: https://xulmpqaknlwqqculbsek.supabase.co
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.REVIEW_DEV_SUPABASE_ANON_KEY }}
+          WOS_P5C_NONPROD_API_ENABLED: 'true'
+          WOS_P7_NONPROD_SUBMIT_ENABLED: 'true'
+          NEXT_PUBLIC_WOS_QA_LOCAL_TEST: 'true'
+        run: |
+          set -euo pipefail
+          nohup pnpm exec next start --hostname 127.0.0.1 -p 3000 \
+            >/tmp/hongda-qa-next.log 2>&1 </dev/null &
+          echo $! > /tmp/hongda-qa-next.pid
+          for attempt in $(seq 1 100); do
+            if curl -fsS http://localhost:3000/login >/dev/null 2>&1; then break; fi
+            sleep 2
+          done
+          curl -fsS http://localhost:3000/login >/dev/null
+          echo 'WOS_P7_QA_SERVER_NO_USER_PASSWORDS=PASS'
+
       - name: Run real browser with isolated QA logins and assert same-origin HTTP
         env:
           AUTH_MODE: supabase
@@ -137,19 +166,9 @@ jobs:
           REVIEW_DEV_FOREIGN_PASSWORD: ${{ secrets.REVIEW_DEV_FOREIGN_PASSWORD }}
         run: |
           set -euo pipefail
-          # The Next.js server does NOT need credentials for other QA users.
-          # Keep protected passwords only in the direct Playwright node process.
-          (env -u REVIEW_DEV_ADMIN_EMAIL -u REVIEW_DEV_ADMIN_PASSWORD \
-             -u REVIEW_DEV_VIEWER_EMAIL -u REVIEW_DEV_VIEWER_PASSWORD \
-             -u REVIEW_DEV_OPERATOR_EMAIL -u REVIEW_DEV_OPERATOR_PASSWORD \
-             -u REVIEW_DEV_FOREIGN_EMAIL -u REVIEW_DEV_FOREIGN_PASSWORD \
-             pnpm exec next start --hostname 127.0.0.1 -p 3000 >/tmp/hongda-qa-next.log 2>&1 & echo $! > /tmp/hongda-qa-next.pid)
-          for attempt in $(seq 1 100); do
-            if curl -fsS http://localhost:3000/login >/dev/null 2>&1; then break; fi
-            sleep 2
-          done
-          curl -fsS http://localhost:3000/login >/dev/null
-          case "${WOS_QA_SOAK_ROUNDS:-1}" in 1|10) ;; *) exit 1 ;; esac
+          # Only the immutable reviewed Playwright harness sees QA user logins.
+          # The Next server started in a different step without these secrets.
+          case "${WOS_QA_SOAK_ROUNDS:-1}" in 10) ;; *) exit 1 ;; esac
           # Real shop staff keep authenticated browser sessions open across
           # multiple orders. Repeat office-to-workshop operations with the
           # SAME four verified sessions, not forty rapid login attempts.
