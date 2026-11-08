@@ -36,6 +36,34 @@ CREATE FUNCTION auth.jwt() RETURNS jsonb
 LANGUAGE sql STABLE AS $$
   SELECT '{}'::jsonb
 $$;
+-- Commercial image migration depends on the Supabase Storage schema.
+-- This is metadata-only: NO Storage service, binary upload or real bucket.
+CREATE SCHEMA storage;
+CREATE TABLE storage.buckets (
+ id text PRIMARY KEY,
+ name text NOT NULL,
+ public boolean NOT NULL DEFAULT false,
+ file_size_limit bigint,
+ allowed_mime_types text[]
+);
+CREATE TABLE storage.objects (
+ id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+ bucket_id text NOT NULL REFERENCES storage.buckets(id),
+ name text NOT NULL,
+ owner_id text,
+ metadata jsonb NOT NULL DEFAULT '{}'::jsonb
+);
+ALTER TABLE storage.objects ENABLE ROW LEVEL SECURITY;
+CREATE FUNCTION storage.foldername(path text) RETURNS text[]
+LANGUAGE sql IMMUTABLE STRICT
+AS $ SELECT string_to_array(regexp_replace(path,'/[^/]+
+
+SELECT 'WOS_P8_LOCAL_AUTH_CONTRACT_FIXTURE_ONLY=PASS' AS check_name;
+,''),'/') $;
+GRANT USAGE ON SCHEMA storage TO authenticated;
+GRANT SELECT,INSERT ON storage.objects TO authenticated;
+GRANT EXECUTE ON FUNCTION storage.foldername(text) TO authenticated;
+
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 SELECT 'WOS_P8_LOCAL_AUTH_CONTRACT_FIXTURE_ONLY=PASS' AS check_name;
