@@ -30,6 +30,8 @@ CREATE TABLE storage.objects (
  metadata jsonb DEFAULT '{}'::jsonb,
  created_at timestamptz DEFAULT now(),
  updated_at timestamptz DEFAULT now(),
+ archived_at timestamptz,
+ is_delete_marker boolean NOT NULL DEFAULT false,
  version text, UNIQUE(bucket_id,name)
 );
 CREATE OR REPLACE FUNCTION storage.foldername(object_name text) RETURNS text[]
