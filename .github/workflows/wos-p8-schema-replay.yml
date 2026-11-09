@@ -112,6 +112,15 @@ jobs:
           psql -X -q -v ON_ERROR_STOP=1 -f tests/sql/wos_p8_p7_service_proof_and_cleanup.sql
           test "$(psql -X -A -t -v ON_ERROR_STOP=1 -c "SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_name LIKE 'wos_%'")" = 15
           echo 'WOS_P8_P07_FIFTEEN_WOS_TABLES=PASS'
+      - name: Deny production-only test ACL on wrong PostgreSQL database
+        run: |
+          set -euo pipefail
+          if psql -X -q -v ON_ERROR_STOP=1 -f tests/sql/wos_p8_branch_only_synthetic_seed_acl.sql >/tmp/wos-p8-acl-negative.txt 2>&1; then
+            echo 'Unsafe branch-only service privileges accepted on CI database'
+            exit 1
+          fi
+          grep -q 'WOS_P8_APPROVED_BRANCH_REQUIRED' /tmp/wos-p8-acl-negative.txt
+          echo 'WOS_P8_SYNTHETIC_SEED_GRANTED_ONLY_ON_APPROVED_BRANCH=PASS'
       - name: Execute synthetic multi-role transaction, image-proof and rollback smoke
         run: |
           set -euo pipefail
