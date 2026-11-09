@@ -1,0 +1,85 @@
+name: WOS P8 Schema-Only Replay (No Cloud Credentials)
+on:
+  pull_request:
+    branches: [master, main]
+    paths:
+      - 'scripts/wos-p8/**'
+      - 'tests/sql/wos_p8_*'
+      - '.github/workflows/wos-p8-schema-replay.yml'
+      - 'supabase/migrations/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: wos-p8-schema-replay-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  reproducible-history:
+    name: wos-p8-p06-replay-67-table-history
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: wos_p8_replay_ci
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: wos-p8-only-disposable
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d wos_p8_replay_ci"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 8
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: '5432'
+      PGUSER: postgres
+      PGDATABASE: wos_p8_replay_ci
+      PGPASSWORD: wos-p8-only-disposable
+    steps:
+      - name: Checkout untrusted code with no privileged credentials
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Setup Node 22
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+      - name: Install psql client
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y postgresql-client
+      - name: Static manifest and parser validation
+        run: |
+          set -euo pipefail
+          node --check scripts/wos-p8/replay-history.mjs
+          node scripts/wos-p8/replay-history.mjs --plan > /tmp/wos-p8-replay-plan.txt
+          test "$(grep -c -- ' -> supabase/migrations/' /tmp/wos-p8-replay-plan.txt)" = 29
+          grep -q WOS_P8_NO_SQL_EXECUTED /tmp/wos-p8-replay-plan.txt
+      - name: Enforce negative branch gate without credentials
+        run: |
+          set -euo pipefail
+          if node scripts/wos-p8/replay-history.mjs --branch >/dev/null 2>&1; then
+            echo 'ERROR: unauthorized branch replay was accepted'
+            exit 1
+          fi
+          echo 'WOS_P8_PRODUCTION_BRANCH_GUARD=PASS'
+      - name: Replay history from original version mapping in real PostgreSQL 17
+        run: |
+          set -euo pipefail
+          node scripts/wos-p8/replay-history.mjs --ci
+      - name: Independently confirm table inventory and zero business rows
+        run: |
+          set -euo pipefail
+          test "$(psql -X -At -v ON_ERROR_STOP=1 -c "SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_type='BASE TABLE'")" = 67
+          test "$(psql -X -At -v ON_ERROR_STOP=1 -c "SELECT count(*) FROM public.organizations")" = 0
+          test "$(psql -X -At -v ON_ERROR_STOP=1 -c "SELECT count(*) FROM public.profiles")" = 0
+          test "$(psql -X -At -v ON_ERROR_STOP=1 -c "SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_name LIKE 'wos_%'")" = 0
+          echo 'WOS_P8_P06_REAL_PG17_ZERO_BUSINESS_DATA=PASS'
+          echo 'WOS_P8_SUPABASE_BRANCH_NATIVE_REPLAY=NOT_TESTED'
+          echo 'WOS_P8_STORAGE_AND_EDGE_BINARY=NOT_TESTED'
