@@ -41,7 +41,7 @@ BEGIN
  v_prefix:='organizations/'||v_actor.org_id||'/wos/production-order/'||p_order_id||
   '/images/product/versions/'||v_order.version_label||'/'||p_image_id||'/';
  IF left(p_storage_path,length(v_prefix))<>v_prefix
- OR substring(p_storage_path FROM length(v_prefix)+1) <> 'qa-preview-proof.png'
+ OR (storage.filename(p_storage_path) !~ '^[A-Za-z0-9][A-Za-z0-9._-]{0,199}[.]png$' OR position('..' in storage.filename(p_storage_path))>0)
  THEN RAISE EXCEPTION 'PROOF_IMAGE_PATH_MISMATCH' USING ERRCODE='23514'; END IF;
  SELECT * INTO v_obj FROM storage.objects
  WHERE bucket_id='wos-private' AND name=p_storage_path
@@ -225,7 +225,7 @@ WITH CHECK (
   AND (storage.foldername(name))[8]='versions'
   AND (storage.foldername(name))[9] ~ '^V[1-9][0-9]{0,20}$'
   AND (storage.foldername(name))[10] ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
-  AND storage.filename(name)='qa-preview-proof.png'
+  AND storage.filename(name) ~ '^[A-Za-z0-9][A-Za-z0-9._-]{0,199}[.]png$'
   AND EXISTS (
     SELECT 1 FROM public.profiles p
     JOIN public.wos_production_orders o ON o.organization_id=p.org_id
