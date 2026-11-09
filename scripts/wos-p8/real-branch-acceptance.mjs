@@ -6,7 +6,7 @@
 import crypto from 'node:crypto';
 import zlib from 'node:zlib';
 import { execFileSync } from 'node:child_process';
-import { createClient } from '@supabase/supabase-js';
+
 
 const mode=process.argv[2] || '--self-test';
 const uuid=()=>crypto.randomUUID();
@@ -47,6 +47,7 @@ if(!/^[a-z0-9]{20}$/.test(ref) || ref==='amqpvxrurenevniilhtl'
 }
 const live=execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).trim();
 if(live!==e.WOS_P8_REVIEWED_SHA)throw new Error('UNREVIEWED_CODE_SHA');
+const { createClient } = await import('@supabase/supabase-js');
 const url=e.WOS_P8_PROJECT_URL;
 const admin=createClient(url,e.WOS_P8_SERVICE_ROLE_KEY,{
  auth:{autoRefreshToken:false,persistSession:false}
@@ -156,13 +157,27 @@ async function main(){
   p_idempotency_key:key
  }),'IDEMPOTENCY_REPLAY');
  assert(replay.status==='REPLAYED','IDEMPOTENCY_REPLAY_FAILED');
- const count=await required(admin.from('wos_workshop_inbox')
-   .select('*',{count:'exact',head:true}).eq('order_id',orderId),'CHECK_INBOX');
- assert(count===null || typeof count==='object','UNEXPECTED_POSTGREST_SHAPE');
+ const {count,error:countError}=await admin.from('wos_workshop_inbox')
+   .select('id',{count:'exact',head:true}).eq('order_id',orderId);
+ assert(!countError && count===1,'INBOX_MUST_HAVE_ONE_ROW');
+ // Failure recovery uses a fake lease row only: no Storage object, no byte deletion.
+ const claimId=uuid();
+ const claimedAt=new Date(Date.now()-30*60_000).toISOString();
+ const expiredAt=new Date(Date.now()-25*60_000).toISOString();
+ await required(admin.from('wos_orphan_cleanup_claims').insert({
+  storage_object_id:claimId,storage_path:'synthetic/no-real-storage-object/'+claimId,
+  order_id:orderId,organization_id:orgA,object_updated_at:claimedAt,
+  claim_token:uuid(),state:'CLAIMED',claimed_at:claimedAt,
+  lease_expires_at:expiredAt
+ }),'SYNTHETIC_EXPIRED_LEASE');
+ const released=await required(admin.rpc('wos_p7_release_expired_claims',{p_limit:100}),
+  'RECOVER_EXPIRED_LEASE');
+ assert(released>=1,'EXPIRED_LEASE_NOT_RELEASED');
  console.log('WOS_P8_REAL_STORAGE_UPLOAD_AND_BYTE_SHA256=PASS');
  console.log('WOS_P8_CROSS_ORG_AND_VIEWER_DENIAL=PASS');
  console.log('WOS_P8_REAL_EDGE_ATTESTATION_AND_RETRY=PASS');
  console.log('WOS_P8_ATOMIC_RECEIPT_AND_IDEMPOTENCY=PASS');
+ console.log('WOS_P8_RECOVERY_LEASE_RELEASE_NO_FILE_DELETE=PASS');
  console.log('WOS_P8_BINARY_DELETE=NOT_RUN; REQUIRES SEPARATE AUTHORIZATION');
  console.log('WOS_P8_BRANCH_CLEANUP_REQUIRED=YES');
 }
