@@ -61,6 +61,20 @@ jobs:
           node scripts/wos-p8/replay-history.mjs --plan > /tmp/wos-p8-replay-plan.txt
           test "$(grep -c -- ' -> supabase/migrations/' /tmp/wos-p8-replay-plan.txt)" = 29
           grep -q WOS_P8_NO_SQL_EXECUTED /tmp/wos-p8-replay-plan.txt
+      - name: P8 Edge and protected real-branch harness syntax/security preflight
+        run: |
+          set -euo pipefail
+          node --check scripts/wos-p8/real-branch-acceptance.mjs
+          node scripts/wos-p8/real-branch-acceptance.mjs --self-test
+          grep -q 'WOS_P8_EXACT_BRANCH_REF' scripts/wos-p8/edge-verify-image.ts
+          grep -q 'WOS_P8_EDGE_TEST_ENABLED' scripts/wos-p8/edge-verify-image.ts
+          grep -q 'SERVICE_ROLE_REQUIRED' tests/sql/wos_p8_p7_service_proof_and_cleanup.sql
+          grep -q 'DecompressionStream' scripts/wos-p8/png-validator.ts
+          if grep -Ei 'DELETE[[:space:]]+FROM[[:space:]]+storage\\.objects|TRUNCATE[[:space:]]+storage\\.objects' tests/sql/wos_p8_p7_service_proof_and_cleanup.sql; then
+            echo 'Forbidden direct Storage binary metadata mutation'
+            exit 1
+          fi
+          echo 'WOS_P8_EDGE_FAIL_CLOSED_AND_NO_SQL_STORAGE_DELETE=PASS'
       - name: Enforce negative branch gate without credentials
         run: |
           set -euo pipefail
@@ -89,6 +103,7 @@ jobs:
           set -euo pipefail
           psql -X -q -A -t -v ON_ERROR_STOP=1 -f tests/sql/wos_p8_schema_parity_snapshot.sql > /tmp/wos_p8_baseline.txt
           cat /tmp/wos_p8_baseline.txt
+          grep -q 'non_wos_structure|67|b70315b9a18ca1f92ff4cafcd2c07676' /tmp/wos_p8_baseline.txt
       - name: Apply exact WOS ten-table foundation plus production-structure P7 candidate
         run: |
           set -euo pipefail
