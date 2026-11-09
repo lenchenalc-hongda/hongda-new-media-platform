@@ -120,6 +120,8 @@ try {
     psql(['-q','-f',source(x.file)]);
     console.log('WOS_P8_TRACKED_SOURCE_APPLIED ' + x.applied_version);
   }
+  psql(['-q','-f','tests/sql/wos_p8_historical_profile_acl_parity.sql']);
+  console.log('WOS_P8_HISTORICAL_PROFILE_ACL_RLS_RECONSTRUCTED=PASS');
   const tables = Number(value("SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_type='BASE TABLE'"));
   const wos = Number(value("SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_name LIKE 'wos_%'"));
   if (tables !== manifest.expected_public_tables || wos !== 0) {
