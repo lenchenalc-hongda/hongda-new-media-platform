@@ -18,7 +18,7 @@ concurrency:
 
 jobs:
   reproducible-history:
-    name: wos-p8-p06-replay-67-table-history
+    name: wos-p8-p06-p07-replay-transaction-rollback
     runs-on: ubuntu-latest
     timeout-minutes: 25
     services:
@@ -83,3 +83,29 @@ jobs:
           echo 'WOS_P8_P06_REAL_PG17_ZERO_BUSINESS_DATA=PASS'
           echo 'WOS_P8_SUPABASE_BRANCH_NATIVE_REPLAY=NOT_TESTED'
           echo 'WOS_P8_STORAGE_AND_EDGE_BINARY=NOT_TESTED'
+
+      - name: Capture full schema and private storage pre-WOS baseline
+        run: |
+          set -euo pipefail
+          psql -X -q -A -t -v ON_ERROR_STOP=1 -f tests/sql/wos_p8_schema_parity_snapshot.sql > /tmp/wos_p8_baseline.txt
+          cat /tmp/wos_p8_baseline.txt
+      - name: Apply exact WOS ten-table foundation plus production-structure P7 candidate
+        run: |
+          set -euo pipefail
+          psql -X -q -v ON_ERROR_STOP=1 -f supabase/migrations/20261014102000_workshop_order_system_foundation.sql
+          psql -X -q -v ON_ERROR_STOP=1 -f tests/sql/wos_p8_p7_production_compatible_candidate.sql
+          psql -X -q -v ON_ERROR_STOP=1 -f tests/sql/wos_p8_p7_service_proof_and_cleanup.sql
+          test "$(psql -X -A -t -v ON_ERROR_STOP=1 -c "SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_name LIKE 'wos_%'")" = 15
+          echo 'WOS_P8_P07_FIFTEEN_WOS_TABLES=PASS'
+      - name: Execute synthetic multi-role transaction, image-proof and rollback smoke
+        run: |
+          set -euo pipefail
+          psql -X -q -v ON_ERROR_STOP=1 -f tests/sql/wos_p8_p7_prod_compatible_smoke.sql
+      - name: Teardown WOS without CASCADE and compare exact pre-WOS catalog fingerprint
+        run: |
+          set -euo pipefail
+          psql -X -q -v ON_ERROR_STOP=1 -f tests/sql/wos_p8_p7_disposable_full_rollback.sql
+          psql -X -q -A -t -v ON_ERROR_STOP=1 -f tests/sql/wos_p8_schema_parity_snapshot.sql > /tmp/wos_p8_after.txt
+          diff -u /tmp/wos_p8_baseline.txt /tmp/wos_p8_after.txt
+          echo 'WOS_P8_P07_NO_CPC_GLH_COMMERCIAL_SCHEMA_DRIFT=PASS'
+          echo 'WOS_P8_REAL_AUTHENTICATED_EDGE_BINARY=NOT_RUN'
