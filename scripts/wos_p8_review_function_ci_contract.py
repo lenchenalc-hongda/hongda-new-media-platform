@@ -6,8 +6,10 @@ are formatting-only (separately confirmed by lexical token comparison); this
 script also verifies their whitespace-insensitive source fingerprints.
 """
 from __future__ import annotations
+import hashlib
 import json
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -26,6 +28,7 @@ BASELINE_QUERY = r"""
 SELECT json_agg(row_to_json(v) ORDER BY v.name)::text FROM (
  SELECT p.proname AS name,
   pg_get_function_identity_arguments(p.oid) AS args,
+  p.prosrc AS body,
   md5(regexp_replace(p.prosrc,'[[:space:]]+','','g')) AS normalized_body_md5,
   has_function_privilege('anon',p.oid,'EXECUTE') AS anon_exec,
   has_function_privilege('authenticated',p.oid,'EXECUTE') AS auth_exec,
@@ -35,6 +38,102 @@ SELECT json_agg(row_to_json(v) ORDER BY v.name)::text FROM (
   AND p.proname IN ('review_reopen','review_submit','review_event_actor_directory')
 ) v;
 """
+
+
+
+# SOURCE: independently read-only inspected Production pg_proc bodies (2026-11-09).
+# Tokens retain all quoted literals verbatim, including whitespace. The
+# repository fixture itself never includes Production function source bodies.
+SOURCE_MIGRATIONS = {
+    "review_reopen": "20260916053000_review_center_return_reason_required.sql",
+    "review_submit": "20260916043000_review_center_submit_missing_fields.sql",
+}
+
+
+def lexical_tokens(body: str) -> list[str]:
+    """Lexical audit, not a full PL/pgSQL parser. Reject malformed literals.
+
+    Outside quotes, skip whitespace and SQL comments; case-fold ASCII
+    identifiers. Inside single/double quotes preserve every byte of the
+    Unicode string. This closes the false-equivalence hole in the historical
+    regexp_replace(body, '[[:space:]]+', '') fingerprint.
+    """
+    result = []
+    i = 0
+    while i < len(body):
+        c = body[i]
+        if c.isspace():
+            i += 1
+        elif body.startswith("--", i):
+            end = body.find("\n", i + 2)
+            i = len(body) if end == -1 else end
+        elif body.startswith("/*", i):
+            end = body.find("*/", i + 2)
+            if end == -1:
+                raise ValueError("unterminated block comment")
+            i = end + 2
+        elif c in ("'", '"'):
+            j = i + 1
+            closed = False
+            while j < len(body):
+                if body[j] == c:
+                    if j + 1 < len(body) and body[j + 1] == c:
+                        j += 2
+                        continue
+                    j += 1
+                    closed = True
+                    break
+                j += 1
+            if not closed:
+                raise ValueError("unterminated SQL quoted literal")
+            result.append(body[i:j])
+            i = j
+        elif c.isascii() and (c.isalpha() or c.isdigit() or c == "_"):
+            j = i + 1
+            while j < len(body) and body[j].isascii() and (
+                body[j].isalpha() or body[j].isdigit() or body[j] in "_$"
+            ):
+                j += 1
+            result.append(body[i:j].lower())
+            i = j
+        else:
+            result.append(c)
+            i += 1
+    return result
+
+
+def token_fingerprint(body: str) -> tuple[int, str]:
+    tok = lexical_tokens(body)
+    payload = json.dumps(tok, ensure_ascii=False, separators=(",", ":"))
+    return len(tok), hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def source_body(function_name: str) -> str:
+    filename = SOURCE_MIGRATIONS[function_name]
+    sql = (ROOT / "supabase/migrations" / filename).read_text(encoding="utf-8")
+    match = re.search(r"\bAS\s+\$\$([\s\S]*?)\$\$\s*;", sql, flags=re.I)
+    if not match:
+        raise RuntimeError("WOS_P8_REVIEW_SOURCE_FUNCTION_MISSING: " + function_name)
+    return match.group(1)
+
+
+def lexical_negative_tests():
+    original = "BEGIN -- layout\n SELECT 'quoted space', \"Some Column\" FROM foo; END;"
+    spaced = "begin select 'quoted space', \"Some Column\" from foo; end;"
+    assert token_fingerprint(original) == token_fingerprint(spaced)
+    for mutated in (
+        "begin select 'quotedspace', \"Some Column\" from foo; end;",
+        "begin select 'quoted space', \"SomeColumn\" from foo; end;",
+        "begin delete 'quoted space', \"Some Column\" from foo; end;",
+    ):
+        assert token_fingerprint(original) != token_fingerprint(mutated)
+    for malformed in ("SELECT 'unfinished", "SELECT /* unclosed"):
+        try:
+            lexical_tokens(malformed)
+        except ValueError:
+            continue
+        raise RuntimeError("WOS_P8_MALFORMED_FUNCTION_SOURCE_ACCEPTED")
+    print("WOS_P8_QUOTED_LITERAL_WHITESPACE_NEGATIVE_TESTS=PASS", flush=True)
 
 
 def guard():
@@ -62,6 +161,7 @@ def inspect():
 
 def main():
     guard()
+    lexical_negative_tests()
     manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
     if (
         manifest.get("project_ref") != "amqpvxrurenevniilhtl"
@@ -78,6 +178,24 @@ def main():
         raise RuntimeError("WOS_P8_FUNCTION_TOKEN_EQUALITY_UNATTESTED")
 
     original = inspect()
+    if manifest.get("safety", {}).get("quoted_whitespace_mutation_must_fail") is not True:
+        raise RuntimeError("WOS_P8_QUOTED_WHITESPACE_GUARD_MISSING")
+    for function_name, source in SOURCE_MIGRATIONS.items():
+        record = manifest["verified_token_review"][function_name]
+        expected_sha256 = record["quoted_literal_preserving_token_sha256"]
+        expected_tokens = record["prod_tokens"]
+        if not record.get("lexical_tokens_equal") or expected_tokens != record.get("repo_tokens"):
+            raise RuntimeError("WOS_P8_FUNCTION_LEXICAL_PROVENANCE_UNATTESTED")
+        for label, body in (
+            ("repository_migration", source_body(function_name)),
+            ("ephemeral_pg17_replay", original[function_name]["body"]),
+        ):
+            count, actual_sha256 = token_fingerprint(body)
+            if (count, actual_sha256) != (expected_tokens, expected_sha256):
+                raise RuntimeError("WOS_P8_QUOTE_AWARE_FUNCTION_DRIFT: " + function_name + "/" + label)
+        print("WOS_P8_QUOTE_AWARE_FUNCTION_PARITY=PASS " + function_name +
+              " tokens=" + str(expected_tokens) + " sha256=" + expected_sha256, flush=True)
+
     for n, baseline in expected.items():
         row = original[n]
         if (
