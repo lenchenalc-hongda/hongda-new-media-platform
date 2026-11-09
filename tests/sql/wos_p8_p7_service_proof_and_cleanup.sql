@@ -19,7 +19,7 @@ DECLARE
  v_size bigint;
  v_proof uuid;
 BEGIN
- IF auth.role()<>'service_role' THEN
+ IF current_setting('request.jwt.claim.role',true) IS DISTINCT FROM 'service_role' THEN
    RAISE EXCEPTION 'SERVICE_ROLE_REQUIRED' USING ERRCODE='42501';
  END IF;
  IF p_image_id IS NULL OR p_order_id IS NULL OR p_actor_user_id IS NULL
@@ -95,7 +95,7 @@ DECLARE
  v_claim public.wos_orphan_cleanup_claims%ROWTYPE;
  v_token uuid;
 BEGIN
- IF auth.role()<>'service_role' THEN
+ IF current_setting('request.jwt.claim.role',true) IS DISTINCT FROM 'service_role' THEN
   RAISE EXCEPTION 'SERVICE_ROLE_REQUIRED' USING ERRCODE='42501'; END IF;
  IF p_object_id IS NULL OR p_order_id IS NULL OR p_org_id IS NULL
    OR p_min_age_hours<24 OR p_min_age_hours>720
@@ -143,7 +143,7 @@ RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=''
 AS $fn$
 DECLARE v_claim public.wos_orphan_cleanup_claims%ROWTYPE; v_obj storage.objects%ROWTYPE;
 BEGIN
- IF auth.role()<>'service_role' THEN RAISE EXCEPTION 'SERVICE_ROLE_REQUIRED' USING ERRCODE='42501'; END IF;
+ IF current_setting('request.jwt.claim.role',true) IS DISTINCT FROM 'service_role' THEN RAISE EXCEPTION 'SERVICE_ROLE_REQUIRED' USING ERRCODE='42501'; END IF;
  SELECT * INTO v_claim FROM public.wos_orphan_cleanup_claims
   WHERE storage_object_id=p_object_id AND claim_token=p_claim_token
    AND state='CLAIMED' AND lease_expires_at>clock_timestamp() FOR UPDATE;
@@ -170,7 +170,7 @@ RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=''
 AS $fn$
 DECLARE v_claim public.wos_orphan_cleanup_claims%ROWTYPE;
 BEGIN
- IF auth.role()<>'service_role' THEN RAISE EXCEPTION 'SERVICE_ROLE_REQUIRED' USING ERRCODE='42501'; END IF;
+ IF current_setting('request.jwt.claim.role',true) IS DISTINCT FROM 'service_role' THEN RAISE EXCEPTION 'SERVICE_ROLE_REQUIRED' USING ERRCODE='42501'; END IF;
  IF p_result IS NULL OR length(p_result) NOT BETWEEN 5 AND 200
  THEN RAISE EXCEPTION 'INVALID_CLEANUP_RESULT' USING ERRCODE='22023'; END IF;
  SELECT * INTO v_claim FROM public.wos_orphan_cleanup_claims
@@ -195,7 +195,7 @@ RETURNS integer LANGUAGE plpgsql SECURITY DEFINER SET search_path=''
 AS $fn$
 DECLARE n integer;
 BEGIN
- IF auth.role()<>'service_role' THEN RAISE EXCEPTION 'SERVICE_ROLE_REQUIRED' USING ERRCODE='42501'; END IF;
+ IF current_setting('request.jwt.claim.role',true) IS DISTINCT FROM 'service_role' THEN RAISE EXCEPTION 'SERVICE_ROLE_REQUIRED' USING ERRCODE='42501'; END IF;
  IF p_limit<1 OR p_limit>100 THEN RAISE EXCEPTION 'INVALID_LIMIT' USING ERRCODE='22023'; END IF;
  WITH candidates AS (
    SELECT storage_object_id FROM public.wos_orphan_cleanup_claims
