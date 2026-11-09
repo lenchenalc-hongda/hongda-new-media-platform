@@ -1,24 +1,27 @@
 {
   "schema_version": 1,
-  "source": "Production public function metadata read-only, no source bodies, roles or business rows",
+  "source": "Production public pg_proc read-only semantic token inspection and no-data privilege metadata; no customer rows, secrets or stored function bodies",
   "project_ref": "amqpvxrurenevniilhtl",
   "observed_utc": "2026-11-09",
   "safety": {
     "ci_only": true,
     "production_writes_forbidden": true,
     "no_new_permissions_outside_disposable_ci": true,
-    "normalized_body_hash_not_proof_of_semantic_equivalence": true
+    "normalized_body_hash_not_proof_of_semantic_equivalence": true,
+    "quoted_whitespace_mutation_must_fail": true
   },
   "verified_token_review": {
     "review_reopen": {
       "prod_tokens": 716,
       "repo_tokens": 716,
-      "lexical_tokens_equal": true
+      "lexical_tokens_equal": true,
+      "quoted_literal_preserving_token_sha256": "49dc897b8bab40ba77d31a218eb670141f72ad8027e86ff47ac7a4589959ff0e"
     },
     "review_submit": {
       "prod_tokens": 832,
       "repo_tokens": 832,
-      "lexical_tokens_equal": true
+      "lexical_tokens_equal": true,
+      "quoted_literal_preserving_token_sha256": "0dbca5981ee912d6970c0ffa3c6c78fec9211d65d3301e999fd99ab3834e19c3"
     }
   },
   "functions": [
