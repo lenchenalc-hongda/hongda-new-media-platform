@@ -117,6 +117,50 @@ BEGIN
  END;
  IF NOT failed THEN RAISE EXCEPTION 'FORGED_SHA_ACCEPTED'; END IF;
 END $bad$;
+-- Recoverable cleanup protocol on a separate synthetic unregistered Storage object.
+INSERT INTO storage.objects(id,bucket_id,name,owner_id,metadata,version,updated_at)
+VALUES('99999999-9999-9999-9999-999999999998','wos-private',
+ 'organizations/aaaaaaaa-1111-1111-1111-111111111111/wos/production-order/cccccccc-cccc-cccc-cccc-cccccccccccc/images/product/versions/V1/99999999-9999-9999-9999-999999999997/orphan.png',
+ '11111111-1111-1111-1111-111111111111',
+ '{"mimetype":"image/png","size":"100"}'::jsonb,'orphan-version',now()-interval '49 hours');
+DO $lease$ DECLARE v_claim jsonb; v_pre jsonb; v_finish jsonb;
+BEGIN
+ SELECT public.wos_p7_claim_orphan_cleanup(
+ '99999999-9999-9999-9999-999999999998',
+ 'cccccccc-cccc-cccc-cccc-cccccccccccc',
+ 'aaaaaaaa-1111-1111-1111-111111111111',48) INTO v_claim;
+ IF v_claim->>'status'<>'CLAIMED' THEN RAISE EXCEPTION 'ORPHAN_LEASE_CLAIM_FAILED'; END IF;
+ SELECT public.wos_p7_predelete_orphan(
+ '99999999-9999-9999-9999-999999999998',
+ (v_claim->>'claimToken')::uuid) INTO v_pre;
+ IF v_pre->>'ok'<>'true' THEN RAISE EXCEPTION 'ORPHAN_PREDELETE_RECHECK_FAILED'; END IF;
+ -- Only finish as RELEASED, never call Storage API deletion in CI.
+ SELECT public.wos_p7_finish_orphan_cleanup(
+ '99999999-9999-9999-9999-999999999998',
+ (v_claim->>'claimToken')::uuid,false,
+ 'DRY_RUN_STORAGE_UNTOUCHED') INTO v_finish;
+ IF v_finish->>'status'<>'RELEASED'
+ OR (SELECT count(*) FROM storage.objects
+  WHERE id='99999999-9999-9999-9999-999999999998')<>1
+ THEN RAISE EXCEPTION 'ORPHAN_LEASE_RELEASE_DID_NOT_PRESERVE_BINARY'; END IF;
+END $lease$;
+INSERT INTO public.wos_orphan_cleanup_claims(
+ storage_object_id,storage_path,order_id,organization_id,object_updated_at,
+ claim_token,state,claimed_at,lease_expires_at)
+VALUES(
+ '99999999-9999-9999-9999-999999999996','synthetic/nonexistent-blob',
+ 'cccccccc-cccc-cccc-cccc-cccccccccccc',
+ 'aaaaaaaa-1111-1111-1111-111111111111',now()-interval '30 minutes',
+ '99999999-9999-9999-9999-999999999995','CLAIMED',
+ now()-interval '30 minutes',now()-interval '25 minutes');
+DO $recover$ DECLARE n int;
+BEGIN
+ n:=public.wos_p7_release_expired_claims(10);
+ IF n<1 OR (SELECT state FROM public.wos_orphan_cleanup_claims
+ WHERE storage_object_id='99999999-9999-9999-9999-999999999996')<>'RELEASED'
+ THEN RAISE EXCEPTION 'EXPIRED_CLAIM_NOT_RECOVERED'; END IF;
+END $recover$;
 ROLLBACK;
 \echo WOS_P8_P07_CANDIDATE_SQL_TRANSACTION_AND_RLS=PASS
+\echo WOS_P8_P07_LEASE_CLAIM_RECHECK_RELEASE_RECOVERY=PASS
 \echo WOS_P8_P07_REAL_EDGE_BYTE_VERIFIER=NOT_RUN
