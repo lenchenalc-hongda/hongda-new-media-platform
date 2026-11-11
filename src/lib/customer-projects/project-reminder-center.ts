@@ -1,4 +1,5 @@
 import { getShanghaiBusinessWindow } from './read-models';
+import { projectEventCountsAsEffectiveProgress, type ProjectEventType } from './domain';
 
 // Read-only recommendations until owner approves delivery channels and cadence.
 // No new WorkItems, status mutations, employee scores, or notification sends.
@@ -12,15 +13,13 @@ export const PROJECT_REMINDER_POLICY_V1 = {
 
 export const PROJECT_PROGRESS_EVENT_TYPES = [
   'EFFECTIVE_PROGRESS_RECORDED',
-  'CUSTOMER_RESPONSE_RECEIVED',
-  'CUSTOMER_CONFIRMED',
+  'QUOTE_SENT',
   'SAMPLE_SENT',
+  'CUSTOMER_CONFIRMED',
+  'COMMERCIAL_CONFIRMED',
   'ORDER_CONFIRMED',
-  'STAGE_CHANGED',
-  'WAITING_RESOLVED',
+  'PROJECT_WON',
 ] as const;
-
-type ProgressType = (typeof PROJECT_PROGRESS_EVENT_TYPES)[number];
 type Category = 'formal_due' | 'project_attention' | 'development_gap';
 type Severity = 'urgent' | 'attention' | 'upcoming';
 
@@ -148,7 +147,8 @@ export function buildProjectReminderSnapshot(input: {
   const lastProgressByProject = new Map<string, number>();
   for (const event of input.events) {
     if (!event.project_id || !projectById.has(event.project_id)) continue;
-    if (!PROGRESS_TYPES.has(event.event_type as ProgressType)) continue;
+    if (!PROGRESS_TYPES.has(event.event_type)) continue;
+    if (!projectEventCountsAsEffectiveProgress(event.event_type as ProjectEventType)) continue;
     const ms = timestamp(event.occurred_at);
     if (ms === null || ms > nowMs) continue;
     const prior = lastProgressByProject.get(event.project_id) ?? 0;
