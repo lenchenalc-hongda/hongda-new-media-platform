@@ -36,7 +36,7 @@ begin
      owner_profile_id,created_by_profile_id,status,stage,waiting_on,next_check_at,priority)
   values (v_org,v_customer,'[QA] WeCom only - rolled back',
           'Synthetic test, never contact customer','transfer_film',
-          v_sales,v_admin,'active','requirement_alignment','customer',
+          v_admin,v_admin,'active','requirement_alignment','customer',
           '2026-11-11T02:30:00Z','medium')
   returning id into v_project;
   insert into public.cpc_work_items
@@ -50,7 +50,11 @@ begin
   insert into cpc_wecom_private.member_bindings
     (org_id,profile_id,wecom_user_id,verified_by_profile_id,
      is_active,in_app_visible_scope)
-  values(v_org,v_sales,'qa_p2c_20261111',v_admin,true,true);
+  values(v_org,v_sales,'qa_p2c_sales_20261111',v_admin,true,true);
+  insert into cpc_wecom_private.member_bindings
+    (org_id,profile_id,wecom_user_id,verified_by_profile_id,
+     is_active,in_app_visible_scope)
+  values(v_org,v_admin,'qa_p2c_admin_20261111',v_admin,true,true);
 
   v_result := cpc_wecom_private.stage_cpc_due('2026-11-11T01:07:00Z');
   if (v_result->>'staged')::int<>2 then
@@ -60,6 +64,13 @@ begin
     where org_id=v_org and state='pending'
       and source_id in (v_work,v_project);
   if v_n<>2 then raise exception 'QA_MISSING_DUE_TASK_OR_WAITING_CHECK'; end if;
+  if not exists (
+    select 1 from cpc_wecom_private.notification_outbox
+    where source_id=v_work and recipient_profile_id=v_sales
+  ) or not exists (
+    select 1 from cpc_wecom_private.notification_outbox
+    where source_id=v_project and recipient_profile_id=v_admin
+  ) then raise exception 'QA_TASK_ASSIGNEE_PROJECT_OWNER_ROUTING'; end if;
 
   v_result := cpc_wecom_private.stage_cpc_due('2026-11-11T01:09:00Z');
   if (v_result->>'staged')::int<>0 then
