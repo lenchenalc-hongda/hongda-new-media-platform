@@ -116,12 +116,21 @@ as $fn$
 declare n integer;
 begin
   if p_now is null then return 0; end if;
+  -- Keep an immutable attempt record for crashed/expired workers.
+  -- No retries are issued automatically because a remote send MAY have
+  -- succeeded even when the worker lost the acknowledgement.
   with recovered as (
     update cpc_wecom_private.notification_outbox
     set state='unknown',lease_token=null,lease_expires_at=null,
       last_error_code='LEASE_EXPIRED_UNKNOWN',updated_at=p_now
     where state='leased' and lease_expires_at <= p_now
-    returning id
+    returning id,attempts
+  ), attempt_history as (
+    insert into cpc_wecom_private.notification_attempts
+      (outbox_id,attempt_number,result_state,error_code)
+    select id,attempts,'unknown','LEASE_EXPIRED_UNKNOWN' from recovered
+    on conflict (outbox_id,attempt_number) do nothing
+    returning outbox_id
   )
   select count(*) into n from recovered;
   return n;
