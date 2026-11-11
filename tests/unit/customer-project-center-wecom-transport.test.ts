@@ -48,19 +48,19 @@ for (const change of [
   { recipientVerified: false },
   { sourceCurrent: false },
 ]) {
-  const before = requests;
+  const before: number = requests;
   assert.deepEqual(await sendWecomSandboxMessage({ ...input, ...change }),
     { status: 'blocked', reason: 'NOT_AUTHORIZED' });
   assert.equal(requests, before, 'denied request must never fetch anything');
 }
 for (const recipientWecomUserId of ['@all', 'owner_qa|sales_02', 'wrong_user', 'owner_qa\ncc']) {
-  const before = requests;
+  const before: number = requests;
   const denied = await sendWecomSandboxMessage({ ...input, recipientWecomUserId });
   assert.deepEqual(denied, { status: 'blocked', reason: 'INVALID_TARGET' });
   assert.equal(requests, before);
 }
 for (const corrupt of [{ corpId: 'bad' }, { agentId: 0 }, { appSecret: '' }]) {
-  const before = requests;
+  const before: number = requests;
   assert.deepEqual(await sendWecomSandboxMessage({ ...input, config: { ...config, ...corrupt } }),
     { status: 'blocked', reason: 'INVALID_CONFIG' });
   assert.equal(requests, before);
