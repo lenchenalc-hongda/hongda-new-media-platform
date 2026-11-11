@@ -90,7 +90,29 @@ async function callEdge(token,orderId,imageId,storagePath,sha) {
  });
  return {status:response.status,body:await response.json()};
 }
+// The P8 runner is intentionally one-shot. Reject pre-existing objects and
+// business rows BEFORE any synthetic Auth, organization, order or binary write.
+// A reused QA branch (including hongda-review-dev) is never a cleanroom.
+async function requireEmptyDisposableBranch() {
+ const tables=[
+  'organizations','profiles','wos_production_orders',
+  'wos_reference_images','wos_submission_receipts','wos_workshop_inbox'
+ ];
+ for(const table of tables) {
+  const {count,error}=await admin.from(table)
+   .select('id',{count:'exact',head:true});
+  if(error || count!==0)
+   throw new Error('P8_BRANCH_DIRTY_OR_SCHEMA_MISSING_'+table);
+ }
+ const {data:buckets,error:bucketError}=await admin.storage.listBuckets();
+ if(bucketError || !Array.isArray(buckets))
+  throw new Error('P8_BUCKET_INVENTORY_UNAVAILABLE');
+ if(buckets.some(bucket=>bucket.name==='wos-private'))
+  throw new Error('P8_EXISTING_PRIVATE_BUCKET_REQUIRES_NEW_BRANCH');
+ console.log('WOS_P8_ZERO_DATA_AND_PRIVATE_BUCKET_ABSENT=PASS');
+}
 async function main(){
+ await requireEmptyDisposableBranch();
  const orgA=uuid(),orgB=uuid(),orderId=uuid(),imageId=uuid();
  await required(admin.from('organizations').insert([
   {id:orgA,name:'WOS P8 NONPROD synthetic A'},
