@@ -10,6 +10,7 @@ import './customer-project-center-provisional-source-channels.test';
 import './customer-project-center-project-owner-names.test';
 import './customer-project-center-admin-owner-filter.test';
 import './customer-project-center-project-archive.test';
+import './customer-project-center-wecom-notification-contract.test';
 import './customer-project-center-phase12-qa.test';
 import './customer-project-center-phase11-integration.test';
 import './customer-project-center-phase9-team-board.test';
