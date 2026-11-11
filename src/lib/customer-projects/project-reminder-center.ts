@@ -37,6 +37,7 @@ export interface ReminderWorkItemRow {
   project_id: string | null;
   title: string;
   work_item_type: string;
+  assignee_profile_id: string;
   status: string;
   due_at: string | null;
 }
@@ -69,6 +70,8 @@ export interface ProjectReminderSnapshot {
   generatedAt: string;
   readOnly: true;
   deliveryEnabled: false;
+  /** Team-wide new-project gaps require an authorized staff roster; never imply zero when unavailable. */
+  developmentGapCoverage: 'team' | 'self' | 'unavailable';
   policy: typeof PROJECT_REMINDER_POLICY_V1;
   items: ProjectReminderItem[];
   summary: {
@@ -100,13 +103,14 @@ function timestamp(value: string | null | undefined): number | null {
 function daysSince(nowMs: number, lastMs: number): number {
   return Math.max(0, Math.floor((nowMs - lastMs) / DAY_MS));
 }
-function dueSeverity(dueMs: number, shanghaiStartMs: number, shanghaiEndMs: number): Severity {
-  if (dueMs < shanghaiStartMs) return 'urgent';
+function dueSeverity(dueMs: number, nowMs: number, shanghaiEndMs: number): Severity {
+  // A task due earlier TODAY is already late; midnight-only checks hid urgent work.
+  if (dueMs < nowMs) return 'urgent';
   if (dueMs < shanghaiEndMs) return 'attention';
   return 'upcoming';
 }
-function dueLabel(dueMs: number, shanghaiStartMs: number, shanghaiEndMs: number): string {
-  if (dueMs < shanghaiStartMs) return '已逾期';
+function dueLabel(dueMs: number, nowMs: number, shanghaiEndMs: number): string {
+  if (dueMs < nowMs) return '已逾期';
   if (dueMs < shanghaiEndMs) return '今天到期';
   return '48小时内到期';
 }
@@ -121,14 +125,22 @@ export function buildProjectReminderSnapshot(input: {
   workItems: ReminderWorkItemRow[];
   events: ReminderEventRow[];
   profiles: ReminderProfileRow[];
+  /** Names only for projects the viewer can read, from the existing scoped owner-name RPC. */
+  projectOwnerNames?: Array<{ project_id: string; owner_name: string | null }>;
+  developmentGapCoverage?: 'team' | 'self' | 'unavailable';
 }): ProjectReminderSnapshot {
   const nowMs = input.now.getTime();
-  const { startMs, endMs } = getShanghaiBusinessWindow(input.now);
+  const { endMs } = getShanghaiBusinessWindow(input.now);
+  const developmentGapCoverage = input.developmentGapCoverage ?? 'team';
   const visible = input.projects.filter(project => project.status === 'active');
   const projectById = new Map(visible.map(project => [project.id, project]));
   const profileById = new Map(input.profiles.map(person => [person.id, person]));
+  const projectOwnerNameById = new Map((input.projectOwnerNames ?? [])
+    .filter(row => projectById.has(row.project_id))
+    .map(row => [row.project_id, row.owner_name?.trim() || '姓名待确认']));
   const allOwnerIds = Array.from(new Set([
     ...input.projects.map(project => project.owner_profile_id),
+    ...input.workItems.map(item => item.assignee_profile_id),
     ...input.profiles.filter(p => p.role === 'sales' && p.is_active).map(p => p.id),
   ])).sort();
   // Opaque per-response keys; never send employee profile UUIDs to the browser.
@@ -136,6 +148,8 @@ export function buildProjectReminderSnapshot(input: {
   const personName = (id: string): string =>
     profileById.get(id)?.full_name?.trim() || '姓名待确认';
   const keyOf = (id: string): string => ownerKeyById.get(id) || 'unknown';
+  const projectOwnerName = (project: ReminderProjectRow): string =>
+    projectOwnerNameById.get(project.id) || personName(project.owner_profile_id);
   const items: ProjectReminderItem[] = [];
   const seen = new Set<string>();
   function add(item: ProjectReminderItem): void {
@@ -168,20 +182,21 @@ export function buildProjectReminderSnapshot(input: {
     add({
       id: 'work:' + work.id + ':' + work.due_at,
       kind: 'work_due', category: 'formal_due',
-      severity: dueSeverity(dueMs, startMs, endMs),
+      severity: dueSeverity(dueMs, nowMs, endMs),
       title: work.title,
       detail: (work.work_item_type === 'CUSTOMER_COMMITMENT' ? '客户承诺 · ' : '正式任务 · ')
-        + dueLabel(dueMs, startMs, endMs),
-      ownerName: personName(project.owner_profile_id),
-      ownerKey: keyOf(project.owner_profile_id),
+        + dueLabel(dueMs, nowMs, endMs),
+      // The assignee is accountable for a work item; they may differ from project owner.
+      ownerName: personName(work.assignee_profile_id),
+      ownerKey: keyOf(work.assignee_profile_id),
       projectId: project.id,
       effectiveAt: work.due_at,
-      days: dueMs < startMs ? daysSince(nowMs, dueMs) : null,
+      days: dueMs < nowMs ? daysSince(nowMs, dueMs) : null,
     });
   }
 
   for (const project of visible) {
-    const name = personName(project.owner_profile_id);
+    const name = projectOwnerName(project);
     const ownerKey = keyOf(project.owner_profile_id);
     const checkMs = timestamp(project.next_check_at);
     const isWaiting = project.waiting_on !== 'none';
@@ -191,9 +206,9 @@ export function buildProjectReminderSnapshot(input: {
       add({
         id: 'check:' + project.id + ':' + project.next_check_at,
         kind: 'waiting_check', category: 'formal_due',
-        severity: dueSeverity(checkMs, startMs, endMs),
+        severity: dueSeverity(checkMs, nowMs, endMs),
         title: project.title,
-        detail: '等待检查 · ' + dueLabel(checkMs, startMs, endMs),
+        detail: '等待检查 · ' + dueLabel(checkMs, nowMs, endMs),
         ownerName: name, ownerKey, projectId: project.id,
         effectiveAt: project.next_check_at, days: null,
       });
@@ -241,7 +256,7 @@ export function buildProjectReminderSnapshot(input: {
 
   // Only known, active sales profiles from the authenticated, scoped read.
   // "No new projects" is a coaching signal, not an overdue obligation or KPI.
-  for (const person of input.profiles) {
+  if (developmentGapCoverage !== 'unavailable') for (const person of input.profiles) {
     if (!person.is_active || person.role !== 'sales') continue;
     const date = timestamp(person.created_at);
     if (date === null) continue;
@@ -272,6 +287,7 @@ export function buildProjectReminderSnapshot(input: {
     generatedAt: input.now.toISOString(),
     readOnly: true,
     deliveryEnabled: false,
+    developmentGapCoverage,
     policy: PROJECT_REMINDER_POLICY_V1,
     items,
     summary: {
