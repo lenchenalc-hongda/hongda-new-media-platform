@@ -49,7 +49,7 @@ assert.equal(intent.recipientProfileId, assignee, 'formal task targets assignee,
 assert.equal(intent.recipientWecomUserId, 'sales_01');
 assert.equal(intent.dispatchDateShanghai, '2026-11-11');
 assert.equal(intent.cpcUrl, 'https://www.hongdaprinting.tech/customer-projects/projects/' + project);
-assert.ok(!intent.notificationText.includes('客户') || !intent.notificationText.includes('联系方式'),
+assert.ok(!intent.notificationText.includes('客户姓名') && !intent.notificationText.includes('联系方式'),
   'notification is generic, does not embed customer identity or contact details');
 assert.ok(isWecomOccurrenceCurrent(intent, fact), 'unchanged source still current');
 
