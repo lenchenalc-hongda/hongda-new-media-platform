@@ -136,13 +136,23 @@ export default function ReminderCenterClient({
           <EmptyState title="暂时无法生成推进提醒" />
         ) : (
           <>
+            {snapshot.developmentGapCoverage === 'unavailable' && (
+              <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                当前账号的员工名单读取权限不足，开发空窗统计不可用；这不代表销售人员没有开发空窗。
+              </p>
+            )}
+            {snapshot.developmentGapCoverage === 'self' && (
+              <p className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900">
+                当前仅显示本人新项目开发建议，非全团队统计。
+              </p>
+            )}
             <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
               {[
                 ['已逾期节点', snapshot.summary.formalOverdue],
                 ['正式节点提醒', snapshot.summary.formalDue],
                 ['即将到期', snapshot.summary.upcomingFormal],
                 ['项目关注', snapshot.summary.projectAttention],
-                ['开发空窗建议', snapshot.summary.developmentGaps],
+                ['开发空窗建议', snapshot.developmentGapCoverage === 'unavailable' ? '不可用' : snapshot.summary.developmentGaps],
               ].map(([label, value]) => (
                 <div key={label} className="rounded-lg border border-gray-200 bg-white p-4">
                   <div className="text-xs text-gray-500">{label}</div>
@@ -218,7 +228,7 @@ export default function ReminderCenterClient({
                     </div>
                     <p className="mt-2 text-sm text-gray-700">{item.detail}</p>
                     <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-500">
-                      <span>业务负责人：{item.ownerName}</span>
+                      <span>{item.kind === 'work_due' ? '任务执行人' : '业务负责人'}：{item.ownerName}</span>
                       {item.effectiveAt && <span>记录时间：{beijingTime(item.effectiveAt)}</span>}
                     </div>
                     <div className="mt-3">
