@@ -251,3 +251,292 @@ export function selectCorrelatedDispatchRun({
   if (checkedAtMs - dispatchedAtMs < 15000) return pending;
   return { status: 'CONFIRMED', run };
 }
+
+
+/**
+ * Parse and select one explicitly owner-authored next task after a verified
+ * code-only merge. The watchdog may not invent business requirements or
+ * broaden Production permissions. An owner pre-registers a complete
+ * AGENT_CONTROL_PROJECT_TASK_V1 comment after the last task comment, pinned
+ * to the live master SHA. No next task => WAITING, not invented progress.
+ *
+ * @param {Record<string, any>} input
+ */
+export function selectAuthorizedSuccessorTask({
+  state, comments, project, config, registry, masterSha,
+  trustedOwner = 'lenchenalc-hongda',
+}) {
+  const decision = (status, reason = status) => ({ status, reason, task: null });
+  if (!state || state.status !== 'MERGED') return decision('NO_ACTION');
+  if (state.owner_action_required === true) return decision('HOLD_OWNER');
+  if (state.active_pr !== null || state.active_branch !== null) return decision('CONTROL_HAS_ACTIVE_PR');
+  const permittedRuntime = [
+    'RELEASE_VERIFIED_CODE_ONLY', 'AWAITING_AUTHORIZED_NEXT_TASK',
+    'NEXT_TASK_VALIDATION_BLOCKED',
+  ];
+  if (!permittedRuntime.includes(state.runtime_status)) return decision('WAIT_RELEASE_VERIFICATION');
+  const ci = state.post_merge_ci_status || state.postmerge_ci_status || '';
+  const deployed = state.vercel_production_status || '';
+  if (!String(ci).startsWith('PASS') || !String(deployed).startsWith('READY'))
+    return decision('WAIT_RELEASE_VERIFICATION');
+  if (!Number.isSafeInteger(state.task_comment_id) || state.task_comment_id <= 0)
+    return decision('MISSING_PREVIOUS_TASK_PROVENANCE');
+  if (!/^[a-f0-9]{40}$/.test(String(masterSha || '')) ||
+      !config || !registry || registry.projects?.[project]?.control_issue !== config.control_issue ||
+      state.project !== project || !config.task_prefix || !config.branch_prefix)
+    return decision('PROJECT_REGISTRY_OR_MASTER_MISMATCH');
+
+  const taskComments = (Array.isArray(comments) ? comments : [])
+    .filter(c => Number.isSafeInteger(c?.id) &&
+      c.id > state.task_comment_id &&
+      c.user?.login === trustedOwner &&
+      String(c.body || '').replaceAll('\r\n', '\n').startsWith('AGENT_CONTROL_PROJECT_TASK_V1\n'))
+    .sort((a, b) => b.id - a.id);
+  const candidateComments = taskComments.filter(c =>
+    !String(c.body).split(/\r?\n/).includes('TASK_ID = ' + state.current_task_id));
+  if (candidateComments.length === 0) return decision('AWAITING_AUTHORIZED_NEXT_TASK');
+  // Multiple different successor comments require explicit reconciliation.
+  // Never select the newest by guesswork while a prior task is still pending.
+  if (candidateComments.length !== 1) return decision('AMBIGUOUS_NEXT_TASK_COMMENTS');
+
+  const comment = candidateComments[0];
+  const lines = String(comment.body).replaceAll('\r\n', '\n').trimEnd().split('\n');
+  if (lines[0] !== 'AGENT_CONTROL_PROJECT_TASK_V1') return decision('INVALID_NEXT_TASK');
+  const fields = new Map();
+  for (const line of lines.slice(1)) {
+    const match = /^([A-Z0-9_]+) = (.*)$/.exec(line);
+    if (!match || fields.has(match[1])) return decision('INVALID_NEXT_TASK');
+    fields.set(match[1], match[2]);
+  }
+  const required = [
+    'PROJECT', 'TASK_ID', 'TASK_STATUS', 'BASE_MASTER_SHA',
+    'EXPECTED_HEAD', 'FIX_ROUND', 'ALLOWED_PATHS_JSON', 'CHECKS',
+    'OBJECTIVE_B64', 'SCOPE', 'PRODUCTION_CHANGED', 'AUTO_MERGE',
+    'AUTO_PRODUCTION', 'AUTH_WIDENING', 'DESTRUCTIVE_SOT_CHANGE',
+    'EXTERNAL_SEND',
+  ];
+  if (required.some(key => !fields.has(key))) return decision('INVALID_NEXT_TASK');
+  const taskId = fields.get('TASK_ID');
+  if (fields.get('PROJECT') !== project ||
+      typeof taskId !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(taskId) ||
+      !taskId.startsWith(config.task_prefix) || taskId === state.current_task_id ||
+      fields.get('TASK_STATUS') !== 'READY_FOR_CODEX' ||
+      fields.get('FIX_ROUND') !== '0 / 3')
+    return decision('NEXT_TASK_IDENTITY_MISMATCH');
+  if (fields.get('BASE_MASTER_SHA') !== masterSha ||
+      fields.get('EXPECTED_HEAD') !== masterSha)
+    return decision('NEXT_TASK_BASE_STALE');
+
+  // An owner task comment is a code-only scope claim, not authorization for
+  // unreviewed Production access, widened auth or outbound communications.
+  if (fields.get('SCOPE') !== 'NONPROD_CODE_ONLY' ||
+      fields.get('PRODUCTION_CHANGED') !== 'NO' ||
+      fields.get('AUTO_MERGE') !== 'false' ||
+      fields.get('AUTO_PRODUCTION') !== 'false' ||
+      fields.get('AUTH_WIDENING') !== 'NO' ||
+      fields.get('DESTRUCTIVE_SOT_CHANGE') !== 'NO' ||
+      fields.get('EXTERNAL_SEND') !== 'NO')
+    return decision('NEXT_TASK_REQUIRES_SEPARATE_HUMAN_GATE');
+
+  const encoded = fields.get('OBJECTIVE_B64') || '';
+  if (!/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(encoded))
+    return decision('INVALID_NEXT_TASK_OBJECTIVE');
+  const buffer = Buffer.from(encoded, 'base64');
+  const objective = buffer.toString('utf8');
+  if (!buffer.length || buffer.length > 12000 ||
+      buffer.toString('base64') !== encoded ||
+      !objective.trim() || objective.trim() !== objective)
+    return decision('INVALID_NEXT_TASK_OBJECTIVE');
+
+  // Reject potentially sensitive operations for a fully automatic successor.
+  // A task mentioning them (even as a negation) requires a fresh human-reviewed
+  // scope instead of inferring intent from loosely structured natural language.
+  if (/\b(?:production|prod|live|ddl|sql|rls|database|storage|secret|env|auth|permission|migrat\w*|delete|drop|truncate|overwrite|whatsapp|meta|wechat|customer|supplier|publish|external|payment|financial|salary)\b/i.test(objective))
+    return decision('NEXT_TASK_OBJECTIVE_REQUIRES_HUMAN_GATE');
+
+  let paths;
+  try { paths = JSON.parse(fields.get('ALLOWED_PATHS_JSON')); } catch {
+    return decision('INVALID_NEXT_TASK_PATHS');
+  }
+  if (!Array.isArray(paths) || paths.length < 1 || paths.length > 30 ||
+      new Set(paths).size !== paths.length)
+    return decision('INVALID_NEXT_TASK_PATHS');
+  const ownedRegexes = (config.owned_regexes || []).map(re => new RegExp(re));
+  for (const path of paths) {
+    if (typeof path !== 'string' || path.length < 1 || path.length > 240 ||
+        path.includes('\\') || path.includes('\0') || path.startsWith('/') ||
+        path.split('/').some(segment => !segment || segment === '.' || segment === '..'))
+      return decision('INVALID_NEXT_TASK_PATHS');
+    if ((registry.shared_exact_paths || []).includes(path) ||
+        (registry.shared_prefixes || []).some(prefix => path.startsWith(prefix)) ||
+        path.startsWith('supabase/migrations/'))
+      return decision('SHARED_OR_DATABASE_PATH_REQUIRES_SEPARATE_GATE');
+    if (!(config.owned_prefixes || []).some(prefix => path.startsWith(prefix)) &&
+        !ownedRegexes.some(re => re.test(path)))
+      return decision('NEXT_TASK_PATH_NOT_OWNED');
+  }
+  const checks = String(fields.get('CHECKS') || '').split(',');
+  const mandatoryChecks = ['typecheck', 'build', 'secret-audit', 'smoke'];
+  if (checks.length !== mandatoryChecks.length ||
+      new Set(checks).size !== mandatoryChecks.length ||
+      mandatoryChecks.some(check => !checks.includes(check)))
+    return decision('INVALID_NEXT_TASK_CHECKS');
+
+  return {
+    status: 'READY', reason: 'TRUSTED_OWNER_EXACT_MASTER_SUCCESSOR',
+    task: {
+      taskId, commentId: comment.id, allowedPaths: paths,
+      checks: mandatoryChecks, contractBody: String(comment.body),
+    },
+  };
+}
+
+
+/** Count lanes that consume the registry's bounded parallel-development budget.
+ * A BLOCKED project with a still-open PR counts as occupied; a completed
+ * MERGED/COMPLETE code slice does not. Invalid observations fail closed.
+ * @param {Array<Record<string, any>>} states
+ */
+export function countActiveProjectLanes(states) {
+  if (!Array.isArray(states) || states.some(s => !s || typeof s !== 'object'))
+    return Number.POSITIVE_INFINITY;
+  const active = new Set([
+    'READY_FOR_CODEX', 'DISPATCHING', 'CODING', 'FIX_REQUIRED',
+    'READY_FOR_PM_REVIEW', 'WAITING_REVIEW', 'PM_REVIEW', 'APPROVED_FOR_MERGE',
+  ]);
+  return states.filter(s =>
+    active.has(s.status) ||
+    (Number.isSafeInteger(s.active_pr) && s.active_pr > 0) ||
+    (typeof s.active_branch === 'string' && s.active_branch.length > 0)
+  ).length;
+}
+
+
+/**
+ * Fail closed when a successor would overlap an active lane's file allowlist.
+ * Unknown active ownership is unsafe rather than assuming no collision.
+ */
+export function successorPathOverlapBlocker(states, successorPaths) {
+  if (!Array.isArray(states) || !Array.isArray(successorPaths) ||
+      successorPaths.length === 0 || successorPaths.some(p => typeof p !== 'string'))
+    return 'INVALID_CROSS_PROJECT_PATH_EVIDENCE';
+  const active = new Set([
+    'READY_FOR_CODEX', 'DISPATCHING', 'CODING', 'FIX_REQUIRED',
+    'READY_FOR_PM_REVIEW', 'WAITING_REVIEW', 'PM_REVIEW', 'APPROVED_FOR_MERGE',
+  ]);
+  for (const state of states) {
+    if (!state || typeof state !== 'object') return 'INVALID_CROSS_PROJECT_STATE';
+    const busy = active.has(state.status) ||
+      (Number.isSafeInteger(state.active_pr) && state.active_pr > 0) ||
+      (typeof state.active_branch === 'string' && state.active_branch.length > 0);
+    if (!busy) continue;
+    if (!Array.isArray(state.allowed_paths) || state.allowed_paths.length === 0 ||
+        state.allowed_paths.some(p => typeof p !== 'string'))
+      return 'ACTIVE_LANE_OWNED_PATHS_UNVERIFIED';
+    if (successorPaths.some(p => state.allowed_paths.some(q =>
+      p === q || p.startsWith(q.endsWith('/') ? q : q + '/') ||
+      q.startsWith(p.endsWith('/') ? p : p + '/'))))
+      return 'ACTIVE_LANE_PATH_OVERLAP';
+  }
+  return null;
+}
+
+
+/**
+ * Inspect an append-only, task-scoped GitHub issue-comment handoff claim.
+ * Existing claims are recoverable after a crashed HTTP response or state PATCH.
+ * This is NOT a compare-and-swap on the Issue body. The serialized watchdog
+ * still has to re-read state and fail closed on concurrent control changes.
+ */
+export function selectSuccessorCommentClaim({
+  comments, project, taskId, taskCommentId, masterSha, contractSha256,
+  trustedBot = 'github-actions[bot]',
+}) {
+  const invalid = reason => ({ status:'CONFLICT', reason, claim:null });
+  if (!Array.isArray(comments) ||
+      !/^[a-z][a-z0-9-]+$/.test(String(project)) ||
+      !/^[A-Za-z0-9._-]+$/.test(String(taskId)) ||
+      !Number.isSafeInteger(taskCommentId) || taskCommentId < 1 ||
+      !/^[a-f0-9]{40}$/.test(String(masterSha)) ||
+      !/^[a-f0-9]{64}$/.test(String(contractSha256)))
+    return invalid('INVALID_CLAIM_INPUT');
+  const prefix = 'AGENT_CONTROL_NEXT_TASK_CLAIM_V1\n';
+  const claims = comments.filter(c =>
+    String(c?.body || '').replaceAll('\r\n','\n').startsWith(prefix) &&
+    String(c.body).includes('TASK_ID = ' + taskId + '\n'));
+  if (claims.length > 1) return invalid('DUPLICATE_HANDOFF_CLAIMS');
+  if (claims.length === 0) return { status:'CREATE', reason:'NO_EXISTING_CLAIM', claim:null };
+  const comment = claims[0];
+  if (comment?.user?.login !== trustedBot || !Number.isSafeInteger(comment.id) ||
+      comment.id <= taskCommentId) return invalid('UNTRUSTED_HANDOFF_CLAIM');
+  const fields = new Map();
+  const lines = String(comment.body).replaceAll('\r\n','\n').trimEnd().split('\n');
+  for (const line of lines.slice(1)) {
+    const match = /^([A-Z0-9_]+) = (.*)$/.exec(line);
+    if (!match || fields.has(match[1])) return invalid('MALFORMED_HANDOFF_CLAIM');
+    fields.set(match[1],match[2]);
+  }
+  const keys = ['PROJECT','TASK_ID','SOURCE_COMMENT_ID','MASTER_SHA','CONTRACT_SHA256','WATCHDOG_RUN_ID'];
+  if (fields.size !== keys.length || keys.some(k => !fields.has(k)) ||
+      fields.get('PROJECT') !== project ||
+      fields.get('TASK_ID') !== taskId ||
+      fields.get('SOURCE_COMMENT_ID') !== String(taskCommentId) ||
+      fields.get('MASTER_SHA') !== masterSha ||
+      fields.get('CONTRACT_SHA256') !== contractSha256 ||
+      !/^[1-9][0-9]*$/.test(String(fields.get('WATCHDOG_RUN_ID'))))
+    return invalid('HANDOFF_CLAIM_MISMATCH');
+  return {
+    status:'REUSE', reason:'EXISTING_TRUSTED_HANDOFF_CLAIM',
+    claim:{
+      commentId:comment.id,
+      sourceCommentId:taskCommentId,
+      masterSha,
+      contractSha256,
+      watchdogRunId:fields.get('WATCHDOG_RUN_ID'),
+      createdAt:comment.created_at || null,
+    },
+  };
+}
+
+
+/**
+ * Bind a reusable Issue-comment handoff claim to a real watchdog workflow run.
+ * A repository-wide github-actions[bot] author is not workflow provenance.
+ * This rejects claims referring to any other issues:write workflow.
+ *
+ * This is a fail-closed provenance check, NOT a cryptographic attestation.
+ * GitHub does not expose per-comment workflow-run signatures, and a separate
+ * bot-authorized workflow could reference an overlapping genuine watchdog run.
+ */
+export function validateWatchdogClaimRun({
+  run, claim, repository, masterSha,
+  workflowId = 386198615,
+  workflowPath = '.github/workflows/agent-control-reliability-watchdog-v2.yml',
+}) {
+  const fail = reason => ({ status:'BLOCKED', reason });
+  if (!claim || typeof claim !== 'object' ||
+      !/^[1-9][0-9]*$/.test(String(claim.watchdogRunId || '')) ||
+      !/^[a-f0-9]{40}$/.test(String(masterSha || '')) ||
+      typeof repository !== 'string' || !repository.includes('/'))
+    return fail('INVALID_WATCHDOG_RUN_CLAIM');
+  if (!run || !Number.isSafeInteger(run.id) ||
+      run.id !== Number(claim.watchdogRunId) ||
+      run.workflow_id !== workflowId ||
+      run.name !== 'Agent Control Reliability Watchdog V2' ||
+      run.path !== workflowPath ||
+      run.repository?.full_name !== repository)
+    return fail('CLAIM_RUN_NOT_THE_RELIABILITY_WATCHDOG');
+  if (!['schedule','workflow_dispatch'].includes(run.event) ||
+      run.head_branch !== 'master' || run.head_sha !== masterSha ||
+      !['in_progress','completed'].includes(run.status))
+    return fail('CLAIM_RUN_WRONG_EVENT_REF_HEAD_OR_STATUS');
+  const commentTime = Date.parse(String(claim.createdAt || ''));
+  const created = Date.parse(String(run.created_at || ''));
+  const updated = Date.parse(String(run.updated_at || ''));
+  if (!Number.isFinite(created) || !Number.isFinite(commentTime) ||
+      commentTime < created - 30000 || commentTime > Date.now() + 30000 ||
+      (run.status === 'completed' &&
+       (!Number.isFinite(updated) || commentTime > updated + 120000)))
+    return fail('CLAIM_COMMENT_OUTSIDE_WATCHDOG_RUN_WINDOW');
+  return { status:'PASS', reason:'EXACT_WATCHDOG_RUN_PROVENANCE' };
+}
