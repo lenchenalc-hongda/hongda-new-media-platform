@@ -32,6 +32,9 @@ begin
       and q.available_at <= p_now
       and q.attempts < q.max_attempts
       and c.app_enabled and b.is_active and b.in_app_visible_scope
+      -- Recheck authoritative CPC source in the private secured function.
+      -- Never lease stale/closed/reassigned tasks or unverified waiting checks.
+      and cpc_wecom_private.is_cpc_due_current(q.id,p_now)
     order by q.available_at, q.id
     limit 1
     for update of q skip locked
