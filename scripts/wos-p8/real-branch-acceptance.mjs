@@ -26,11 +26,39 @@ function syntheticPng() {
  return Buffer.concat([Buffer.from([137,80,78,71,13,10,26,10]),
   chunk('IHDR',ihdr),chunk('IDAT',zlib.deflateSync(rgbaRow)),chunk('IEND')]);
 }
+// Pure, testable safety gate; no credentials or network calls required.
+const CLEANROOM_TABLES=[
+ 'organizations','profiles','wos_production_orders',
+ 'wos_reference_images','wos_submission_receipts','wos_workshop_inbox'
+];
+function requireCleanroomSnapshot(rowCounts,bucketNames){
+ for(const table of CLEANROOM_TABLES) {
+  if(rowCounts?.[table]!==0)
+   throw new Error('P8_BRANCH_DIRTY_OR_SCHEMA_MISSING_'+table);
+ }
+ if(!Array.isArray(bucketNames))
+  throw new Error('P8_BUCKET_INVENTORY_UNAVAILABLE');
+ if(bucketNames.includes('wos-private'))
+  throw new Error('P8_EXISTING_PRIVATE_BUCKET_REQUIRES_NEW_BRANCH');
+}
 const image=syntheticPng();
 const sha256=crypto.createHash('sha256').update(image).digest('hex');
 if(image.length<60 || image.length>1024 || !/^[a-f0-9]{64}$/.test(sha256))
  throw new Error('SYNTHETIC_PNG_SELF_TEST_FAILED');
 if(mode==='--self-test'){
+ const empty=Object.fromEntries(CLEANROOM_TABLES.map(table=>[table,0]));
+ requireCleanroomSnapshot(empty,[]);
+ let rejected=0;
+ for(const [counts,buckets] of [
+  [{...empty,profiles:1},[]],
+  [{...empty,wos_workshop_inbox:null},[]],
+  [empty,['wos-private']]
+ ]){
+  try{requireCleanroomSnapshot(counts,buckets);}
+  catch{rejected++;}
+ }
+ if(rejected!==3)throw new Error('P8_DIRTY_BRANCH_FAIL_CLOSED_REGRESSION');
+ console.log('WOS_P8_DIRTY_QA_OR_EXISTING_BUCKET_REFUSED=PASS');
  console.log('WOS_P8_REAL_BROWSER_BRANCH_HARNESS_STATIC_PNG=PASS');
  console.log('WOS_P8_REMOTE_STORAGE_AND_EDGE=NOT_RUN');
  process.exit(0);
@@ -94,21 +122,16 @@ async function callEdge(token,orderId,imageId,storagePath,sha) {
 // business rows BEFORE any synthetic Auth, organization, order or binary write.
 // A reused QA branch (including hongda-review-dev) is never a cleanroom.
 async function requireEmptyDisposableBranch() {
- const tables=[
-  'organizations','profiles','wos_production_orders',
-  'wos_reference_images','wos_submission_receipts','wos_workshop_inbox'
- ];
- for(const table of tables) {
+ const counts={};
+ for(const table of CLEANROOM_TABLES) {
   const {count,error}=await admin.from(table)
    .select('id',{count:'exact',head:true});
-  if(error || count!==0)
-   throw new Error('P8_BRANCH_DIRTY_OR_SCHEMA_MISSING_'+table);
+  if(error)throw new Error('P8_BRANCH_SCHEMA_QUERY_FAILED_'+table);
+  counts[table]=count;
  }
  const {data:buckets,error:bucketError}=await admin.storage.listBuckets();
- if(bucketError || !Array.isArray(buckets))
-  throw new Error('P8_BUCKET_INVENTORY_UNAVAILABLE');
- if(buckets.some(bucket=>bucket.name==='wos-private'))
-  throw new Error('P8_EXISTING_PRIVATE_BUCKET_REQUIRES_NEW_BRANCH');
+ if(bucketError)throw new Error('P8_BUCKET_INVENTORY_UNAVAILABLE');
+ requireCleanroomSnapshot(counts,buckets?.map(bucket=>bucket.name));
  console.log('WOS_P8_ZERO_DATA_AND_PRIVATE_BUCKET_ABSENT=PASS');
 }
 async function main(){
