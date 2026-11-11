@@ -116,13 +116,26 @@ export async function sendWecomSandboxMessage(input: {
       return { status: 'finished', outcome: redactedError('unknown', 'SEND_UNCONFIRMED') };
     }
     const errcode = value.errcode;
-    // Provider can report errcode=0 while listing invalid recipients.
-    if (errcode === 0 && (typeof value.invaliduser !== 'string'
-      || value.invaliduser.length === 0)) {
+    // errcode=0 is not sufficient: WeCom can accept a request while
+    // returning recipients outside the app scope or lacking API licenses.
+    // Never claim success when the requested single recipient was rejected.
+    if (errcode === 0) {
+      const rejected: Array<[string, string]> = [
+        ['invaliduser', 'INVALID_USER'],
+        ['unlicenseduser', 'UNLICENSED_USER'],
+        ['invalidparty', 'INVALID_PARTY'],
+        ['invalidtag', 'INVALID_TAG'],
+      ];
+      for (const [field, code] of rejected) {
+        const valueField = value[field];
+        if (valueField !== undefined && valueField !== null && typeof valueField !== 'string') {
+          return { status: 'finished', outcome: redactedError('unknown', 'RESPONSE_MALFORMED') };
+        }
+        if (typeof valueField === 'string' && valueField.trim().length > 0) {
+          return { status: 'finished', outcome: redactedError('permanent_rejected', code) };
+        }
+      }
       return { status: 'finished', outcome: { kind: 'accepted' } };
-    }
-    if (errcode === 0 && typeof value.invaliduser === 'string') {
-      return { status: 'finished', outcome: redactedError('permanent_rejected', 'INVALID_USER') };
     }
     // Explicit provider rejection (not network error): safe to retry after backoff.
     if ([40014, 42001, 45009].includes(errcode)) {
