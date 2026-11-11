@@ -41,3 +41,14 @@ P2-D：P2-C 证据齐全后，另行获取 Owner 对 **Production database migra
 - 不影响 P1 Draft PR #231 的独立上线门槛。
 - 不新建第二套客户、项目或业务事实系统。
 - 与 Agent Control Coding Runner 解耦；企业提醒不能依赖个人 Mac 开机。
+
+## P2-B 实际执行状态（2026-11-11）
+
+- 企业微信自建应用已由 Owner 创建，但 CorpID/AgentID/Secret 尚未由应用发送服务核验；此处不记录任何真实凭据。
+- Draft PR #234 新增纯函数队列、可注入 mock HTTP 的发送端，并在 **hongda-review-dev** 独立创建私有 `cpc_wecom_private` 4 表和 3 个 Worker 操作函数。
+- 私有 schema 对 `authenticated` 不授予 USAGE/SELECT/EXECUTE；`cpc_wecom_worker` 为 NOLOGIN 角色。当前数据库未配置 Worker 登录身份。
+- 已执行只读 ACL 核查及事务回滚数据校验：重复入队、租约领取与错误 token 拒绝、投递历史已记录；回滚后 0 项绑定、0 个 outbox、0 次投递、0 个 app config。
+- 未部署定时调度、未配置 Secret、未校验固定出口 IP、未真实调用企业微信；不应将非生产 DB 有表误认为已上线提醒。
+- 上线前还需真实多连接并发（SQL `SKIP LOCKED` 两会话）、收件人 RLS/员工停用后重检、真实沙盒收件人、UNKNOWN 异常人工核实、全套 exact-head CI 与独立安全复核。
+
+**权限边界：仅已授权非生产 QA。正式库与真实员工推送仍需单独批准。**
