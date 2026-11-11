@@ -56,7 +56,7 @@ const tasks: ReminderWorkItemRow[] = [
   work('closed-step', 'closed', '2026-11-10T00:00:00Z'),
   work('completed-step', 'future-wait', '2026-11-10T00:00:00Z', { status: 'completed' }),
   work('irrelevant-follow-up', 'stale-with-task', '2026-11-10T00:00:00Z', { work_item_type: 'FOLLOW_UP' }),
-  work('far-future', 'contact-only', '2026-11-16T00:00:00Z'),
+  work('far-future', 'contact-only', '2026-11-16T00:00:00Z', { work_item_type: 'INTERNAL_COLLABORATION' }),
 ];
 const events: ReminderEventRow[] = [
   { project_id: 'stale-with-task', event_type: 'EFFECTIVE_PROGRESS_RECORDED', occurred_at: '2026-11-01T02:00:00Z' },
