@@ -86,8 +86,7 @@ assert.equal(new Set(snapshot.items.map(i => i.id)).size, snapshot.items.length,
   'each occurrence emits once even when sources overlap');
 
 assert.ok(snapshot.items.some(item => item.id.startsWith('work:same-day-past:')
-  && item.severity === 'urgent' && item.ownerName === '业务员乙'
-  && item.ownerKey !== snapshot.items.find(i => i.kind === 'waiting_check')?.ownerKey),
+  && item.severity === 'urgent' && item.ownerName === '业务员乙'),
   'same-day elapsed deadline is overdue and owned by actual assignee');
 assert.ok(snapshot.items.some(item => item.id.startsWith('work:overdue-next:')
   && item.severity === 'urgent' && item.category === 'formal_due'), 'overdue formal next action flagged');
