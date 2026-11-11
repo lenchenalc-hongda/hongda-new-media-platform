@@ -24,7 +24,7 @@ function project(id: string, owner: string, created: string, extras: Partial<Rem
 function work(id: string, projectId: string, due: string | null, overrides: Partial<ReminderWorkItemRow> = {}): ReminderWorkItemRow {
   return {
     id, project_id: projectId, title: id,
-    work_item_type: 'NEXT_ACTION', status: 'pending', due_at: due,
+    work_item_type: 'NEXT_ACTION', assignee_profile_id: 'person-a', status: 'pending', due_at: due,
     ...overrides,
   };
 }
@@ -53,6 +53,8 @@ const tasks: ReminderWorkItemRow[] = [
   work('customer-promise', 'stale-with-task', '2026-11-11T05:00:00Z',
     { work_item_type: 'CUSTOMER_COMMITMENT' }),
   work('recent-step', 'recent', '2026-11-13T01:00:00Z'),
+  work('same-day-past', 'stale-with-task', '2026-11-11T01:00:00Z',
+    { assignee_profile_id: 'person-b' }),
   work('closed-step', 'closed', '2026-11-10T00:00:00Z'),
   work('completed-step', 'future-wait', '2026-11-10T00:00:00Z', { status: 'completed' }),
   work('irrelevant-follow-up', 'stale-with-task', '2026-11-10T00:00:00Z', { work_item_type: 'FOLLOW_UP' }),
@@ -83,6 +85,10 @@ assert.ok(snapshot.items.every(i => !('ownerProfileId' in i) && !('owner_profile
 assert.equal(new Set(snapshot.items.map(i => i.id)).size, snapshot.items.length,
   'each occurrence emits once even when sources overlap');
 
+assert.ok(snapshot.items.some(item => item.id.startsWith('work:same-day-past:')
+  && item.severity === 'urgent' && item.ownerName === '业务员乙'
+  && item.ownerKey !== snapshot.items.find(i => i.kind === 'waiting_check')?.ownerKey),
+  'same-day elapsed deadline is overdue and owned by actual assignee');
 assert.ok(snapshot.items.some(item => item.id.startsWith('work:overdue-next:')
   && item.severity === 'urgent' && item.category === 'formal_due'), 'overdue formal next action flagged');
 assert.ok(snapshot.items.some(item => item.id.startsWith('work:customer-promise:')
@@ -138,6 +144,8 @@ assert.ok(server.includes('resolveCpcProfile(supabase)'), 'server checks authent
 for (const tbl of ['cpc_projects', 'cpc_work_items', 'cpc_project_events', 'profiles']) {
   assert.ok(server.includes(".from('" + tbl + "')"), 'source is existing CPC table ' + tbl);
 }
+assert.ok(server.includes("supabase.rpc('cpc_project_owner_names'")
+  && server.includes('developmentGapCoverage'), 'owner names use scoped RPC and roster coverage is explicit');
 assert.ok(server.includes('MAX_PROJECT_ROWS') && server.includes('MAX_EVENT_ROWS')
   && server.includes('reminder data read failed'), 'fail closed on incomplete evidence or errors');
 assert.ok(!server.includes('service_role'), 'no privileged service-role access');
@@ -148,6 +156,9 @@ assert.ok(!server.includes('cron.schedule') && !server.includes('net.http_post')
 assert.ok(model.includes('projectEventCountsAsEffectiveProgress'), 'reuse approved effective progress domain semantics');
 assert.ok(ui.includes('当前阶段：站内提醒预览，不会主动发送消息'),
   'UI explicitly tells users no external push is enabled');
+assert.ok(ui.includes("item.kind === 'work_due' ? '任务执行人'")
+  && ui.includes("snapshot.developmentGapCoverage === 'unavailable'"),
+  'UI does not confuse work assignee with owner or unavailable staff data with zero');
 assert.ok(ui.includes('按提醒责任业务员筛选') && ui.includes('全部业务员'),
   'manager can filter alerts by owner without seeing profile ID');
 assert.ok(ui.includes("item.projectId ?"), 'each project alert links to the real project');
