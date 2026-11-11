@@ -51,10 +51,10 @@ export async function readProjectReminderSnapshot(): Promise<ProjectReminderRead
     const projectIds = projects.filter(project => project.status === 'active')
       .map(project => project.id);
 
-    const [workResult, eventsResult, profilesResult] = await Promise.all([
+    const [workResult, eventsResult, profilesResult, ownerNamesResult] = await Promise.all([
       projectIds.length === 0 ? Promise.resolve({ data: [], error: null }) :
         supabase.from('cpc_work_items')
-          .select('id,project_id,title,work_item_type,status,due_at')
+          .select('id,project_id,title,work_item_type,assignee_profile_id,status,due_at')
           .eq('org_id', profile.orgId)
           .in('project_id', projectIds)
           .in('status', ['pending', 'in_progress', 'blocked'])
@@ -67,15 +67,19 @@ export async function readProjectReminderSnapshot(): Promise<ProjectReminderRead
           .in('event_type', [...PROJECT_PROGRESS_EVENT_TYPES])
           .order('event_seq', { ascending: false })
           .range(0, MAX_EVENT_ROWS - 1),
+      // Managers have organization roster RLS. Sales/admin may only see their own
+      // profile, so do not silently pretend the team-wide roster is complete.
       supabase.from('profiles')
         .select('id,full_name,created_at,role,is_active')
         .eq('org_id', profile.orgId)
         .in('role', ['admin', 'manager', 'sales'])
         .eq('is_active', true)
         .range(0, MAX_PROFILE_ROWS - 1),
+      projectIds.length === 0 ? Promise.resolve({ data: [], error: null }) :
+        supabase.rpc('cpc_project_owner_names', { p_project_ids: projectIds }),
     ]);
 
-    if (workResult.error || eventsResult.error || profilesResult.error) {
+    if (workResult.error || eventsResult.error || profilesResult.error || ownerNamesResult.error) {
       throw new Error('reminder data read failed');
     }
     if ((workResult.data?.length ?? 0) >= MAX_WORK_ROWS
@@ -84,12 +88,24 @@ export async function readProjectReminderSnapshot(): Promise<ProjectReminderRead
       return { ok: false, status: 409, message: '提醒数据超过安全上限，已停止计算以避免漏报。' };
     }
 
+    const profiles = (profilesResult.data ?? []) as ReminderProfileRow[];
+    const self = profiles.find(person => person.id === profile.id);
+    // Existing production RLS grants org-wide profiles to managers, not admins.
+    // Owner-name RPC provides only project-linked display names. Never infer
+    // the absence of development gaps from an incomplete roster.
+    const developmentGapCoverage = profile.role === 'manager'
+      ? 'team' as const
+      : self?.role === 'sales' ? 'self' as const : 'unavailable' as const;
+    const safeProfiles = profile.role === 'manager'
+      ? profiles : profiles.filter(person => person.id === profile.id);
     const result = buildProjectReminderSnapshot({
       now: new Date(),
       projects,
       workItems: (workResult.data ?? []) as ReminderWorkItemRow[],
       events: (eventsResult.data ?? []) as ReminderEventRow[],
-      profiles: (profilesResult.data ?? []) as ReminderProfileRow[],
+      profiles: safeProfiles,
+      projectOwnerNames: ownerNamesResult.data ?? [],
+      developmentGapCoverage,
     });
 
     return { ok: true, data: result, isManagement: profile.role === 'admin' || profile.role === 'manager' };
