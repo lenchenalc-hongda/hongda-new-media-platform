@@ -89,6 +89,30 @@ const sendError = async (code: number, invaliduser?: string) => {
 assert.deepEqual(await sendError(0, 'owner_qa'), {
   status: 'finished', outcome: { kind: 'permanent_rejected', code: 'INVALID_USER' },
 });
+// WeCom errcode 0 can still contain rejected/unlicensed recipients. Never
+// mark those accepted, even though the top-level provider call succeeded.
+for (const partial of [
+  { field: 'unlicenseduser', code: 'UNLICENSED_USER' },
+  { field: 'invalidparty', code: 'INVALID_PARTY' },
+  { field: 'invalidtag', code: 'INVALID_TAG' },
+]) {
+  const mock: WecomFetch = async (url) => new Response(JSON.stringify(
+    url.includes('/gettoken?')
+      ? { errcode: 0, access_token: 'mock' }
+      : { errcode: 0, [partial.field]: 'owner_qa' }
+  ), { status: 200 });
+  assert.deepEqual(await sendWecomSandboxMessage({ ...input, fetcher: mock }), {
+    status: 'finished', outcome: { kind: 'permanent_rejected', code: partial.code },
+  });
+}
+const malformed: WecomFetch = async (url) => new Response(JSON.stringify(
+  url.includes('/gettoken?')
+    ? { errcode: 0, access_token: 'mock' }
+    : { errcode: 0, unlicenseduser: ['owner_qa'] }
+), { status: 200 });
+assert.deepEqual(await sendWecomSandboxMessage({ ...input, fetcher: malformed }), {
+  status: 'finished', outcome: { kind: 'unknown', code: 'RESPONSE_MALFORMED' },
+});
 assert.ok(attemptedSend, 'mock sends were invoked');
 assert.deepEqual(await sendError(45009), {
   status: 'finished', outcome: { kind: 'retryable_rejected', code: '45009' },
