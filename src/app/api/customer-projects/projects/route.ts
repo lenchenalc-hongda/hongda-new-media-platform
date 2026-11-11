@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { runCpcMutation, resolveCpcProfile } from '@/lib/customer-projects/api';
 import { createClient } from '@/lib/supabase/server';
+import { buildProjectOwnerFilterKeys } from '@/lib/customer-projects/project-owner-filter';
 import {
   buildProjectList,
   type ListCustomerRow,
@@ -90,12 +91,17 @@ export async function GET(_req: NextRequest) {
       })(),
     ]);
 
+    const hydrated = buildProjectList({ projects, workItems, customers, owners });
+    const ownerFilterKeys = profile.role === 'admin'
+      ? buildProjectOwnerFilterKeys(hydrated)
+      : null;
+
     return NextResponse.json({
       ok: true,
       code: 'OK',
       message: 'success',
       data: {
-        projects: buildProjectList({ projects, workItems, customers, owners }).map(project => ({
+        projects: hydrated.map(project => ({
           id: project.id,
           customerReferenceId: project.customerReferenceId,
           customerDisplayName: project.customerDisplayName,
@@ -114,6 +120,7 @@ export async function GET(_req: NextRequest) {
           needsAction: project.needsAction,
           blocked: project.blocked,
           isOwnedByMe: project.ownerProfileId === profile.id,
+          ...(ownerFilterKeys ? { ownerFilterKey: ownerFilterKeys.get(project.ownerProfileId) } : {}),
         })),
       },
     });
