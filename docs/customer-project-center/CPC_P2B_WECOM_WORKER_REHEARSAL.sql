@@ -26,12 +26,12 @@ begin
     join cpc_wecom_private.member_bindings b
       on b.org_id = q.org_id and b.profile_id = q.recipient_profile_id
     join cpc_wecom_private.app_configs c on c.org_id = q.org_id
-    join public.profiles p on p.id = q.recipient_profile_id
+    -- Runtime identity must be rechecked by the authenticated sender immediately
+    -- before HTTP; this NOLOGIN worker cannot bypass public.profiles RLS.
     where q.state in ('pending','retry')
       and q.available_at <= p_now
       and q.attempts < q.max_attempts
       and c.app_enabled and b.is_active and b.in_app_visible_scope
-      and p.is_active and p.org_id = q.org_id
     order by q.available_at, q.id
     limit 1
     for update of q skip locked
