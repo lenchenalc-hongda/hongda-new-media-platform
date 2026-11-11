@@ -3,6 +3,7 @@ import 'server-only';
 import { createClient } from '@/lib/supabase/server';
 import { resolveCpcProfile } from '@/lib/customer-projects/api';
 import { createCpcReadTiming } from '@/lib/customer-projects/performance';
+import { buildProjectOwnerFilterKeys } from '@/lib/customer-projects/project-owner-filter';
 import {
   buildWorkbenchSnapshot,
   type WorkbenchCustomerRow,
@@ -41,6 +42,8 @@ type ServerReadResult<T> =
 
 export type ProjectListPageItem = Omit<ProjectListItem, 'ownerProfileId'> & {
   isOwnedByMe: boolean;
+  /** Only included for admins; never expose raw employee profile identifiers. */
+  ownerFilterKey?: string;
 };
 
 export async function readWorkbenchSnapshot(): Promise<ServerReadResult<WorkbenchSnapshot>> {
@@ -228,10 +231,16 @@ export async function readProjectList(): Promise<ServerReadResult<ProjectListPag
     ]);
 
     timing.mark('relations', relationsStartedAt);
-    // Keep ownerProfileId server-side: the browser only needs the name and "mine" flag.
-    const list = buildProjectList({ projects, workItems, customers, owners }).map(({ ownerProfileId, ...project }) => ({
+    // Admin-only filtering uses per-page opaque keys derived from actual owner
+    // profile IDs. Do not serialize raw profile IDs or broaden profiles RLS.
+    const hydrated = buildProjectList({ projects, workItems, customers, owners });
+    const ownerFilterKeys = profile.role === 'admin'
+      ? buildProjectOwnerFilterKeys(hydrated)
+      : null;
+    const list = hydrated.map(({ ownerProfileId, ...project }) => ({
       ...project,
       isOwnedByMe: ownerProfileId === profile.id,
+      ...(ownerFilterKeys ? { ownerFilterKey: ownerFilterKeys.get(ownerProfileId) } : {}),
     }));
 
     timing.finish('ok', {

@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import AppLayout from '@/components/layout/AppLayout';
+import { buildProjectOwnerFilterOptions, matchesProjectOwnerFilter } from '@/lib/customer-projects/project-owner-filter';
 import PageHeader from '@/components/layout/PageHeader';
 import EmptyState from '@/components/ui/EmptyState';
 import type {
@@ -30,6 +31,8 @@ interface ProjectListItem {
   customerReferenceId: string;
   customerDisplayName: string | null;
   ownerName: string | null;
+  /** Admin-only per-page key; never a raw employee profile ID. */
+  ownerFilterKey?: string;
   title: string;
   projectType: ProjectType;
   status: ProjectLifecycleStatus;
@@ -77,7 +80,12 @@ export default function ProjectsClient({
   const error = initialError;
   const [filter, setFilter] = useState<FilterKey>('mine');
   const [search, setSearch] = useState('');
+  const [selectedOwnerKey, setSelectedOwnerKey] = useState('all');
 
+  // Only admins receive these opaque keys from the authenticated server read.
+  // Options reflect real project ownership, never project creator or customer owner.
+  const ownerOptions = useMemo(() => buildProjectOwnerFilterOptions(projects), [projects]);
+  const canFilterByOwner = ownerOptions.length > 0;
 
   const visibleProjects = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -88,6 +96,7 @@ export default function ProjectsClient({
       if (filter === 'waiting' && !(project.status === 'active' && project.waitingOn !== 'none')) return false;
       if (filter === 'needs_action' && !(project.needsAction || project.blocked || project.riskLevel === 'high')) return false;
       if (filter === 'recently_closed' && !['won', 'lost', 'cancelled'].includes(project.status)) return false;
+      if (filter === 'all' && !matchesProjectOwnerFilter(project, selectedOwnerKey)) return false;
 
       if (!query) return true;
       return [
@@ -98,7 +107,7 @@ export default function ProjectsClient({
         projectStageLabel(project.projectType, project.stage),
       ].some(value => value.toLowerCase().includes(query));
     });
-  }, [filter, projects, search]);
+  }, [filter, projects, search, selectedOwnerKey]);
 
   return (
     <AppLayout>
@@ -120,7 +129,10 @@ export default function ProjectsClient({
                 <button
                   key={item.key}
                   type="button"
-                  onClick={() => setFilter(item.key)}
+                  onClick={() => {
+                    setFilter(item.key);
+                    if (item.key !== 'all') setSelectedOwnerKey('all');
+                  }}
                   className={
                     'rounded-lg border px-3 py-1.5 text-xs font-medium transition '
                     + (filter === item.key
@@ -132,14 +144,44 @@ export default function ProjectsClient({
                 </button>
               ))}
             </div>
-            <input
-              value={search}
-              onChange={event => setSearch(event.target.value)}
-              placeholder="搜索项目、客户、负责人、业务类型或阶段"
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm lg:w-80"
-            />
+            <div className="flex w-full flex-col gap-2 sm:flex-row sm:items-center lg:w-auto">
+              {filter === 'all' && canFilterByOwner && (
+                <div className="flex items-center gap-2 sm:shrink-0">
+                  <label htmlFor="cpc-project-owner-filter" className="shrink-0 text-xs font-medium text-gray-600">
+                    业务员
+                  </label>
+                  <select
+                    id="cpc-project-owner-filter"
+                    aria-label="按业务负责人筛选项目"
+                    value={selectedOwnerKey}
+                    onChange={event => setSelectedOwnerKey(event.target.value)}
+                    className="min-w-0 flex-1 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 focus:border-cyan-400 focus:outline-none focus:ring-2 focus:ring-cyan-100 sm:w-52"
+                  >
+                    <option value="all">全部业务员（{projects.length}）</option>
+                    {ownerOptions.map(option => (
+                      <option key={option.key} value={option.key}>
+                        {option.label}（{option.count}）
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              <input
+                value={search}
+                onChange={event => setSearch(event.target.value)}
+                placeholder="搜索项目、客户、负责人、业务类型或阶段"
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm sm:flex-1 lg:w-72"
+              />
+            </div>
           </div>
         </div>
+
+        {filter === 'all' && canFilterByOwner && !error && (
+          <p className="text-xs text-gray-500" aria-live="polite">
+            当前显示 {visibleProjects.length} 个项目
+            {selectedOwnerKey !== 'all' ? ' · 已按业务负责人筛选' : ' · 全部业务员'}
+          </p>
+        )}
 
         {loading ? (
           <div className="space-y-3">
