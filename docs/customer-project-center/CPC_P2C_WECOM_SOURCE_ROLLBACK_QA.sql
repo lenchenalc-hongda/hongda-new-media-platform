@@ -130,7 +130,25 @@ begin
       '2026-11-11T01:10:00Z') then
     raise exception 'QA_COMPLETED_TASK_STILL_CURRENT';
   end if;
-  raise notice 'CPC_P2C_PASS: 2 staged, 0 duplicate, 2 cancelled, 1 new waiting';
+  -- Crash after send attempt: expired lease MUST become UNKNOWN and have
+  -- a persisted attempt record; never automatically issue a second send.
+  select * into v_claim from cpc_wecom_private.claim_pending(
+    '55555555-5555-4555-8555-555555555555'::uuid,
+    '2026-11-11T01:10:00Z',60);
+  if v_claim.outbox_id is null or v_claim.source_id<>v_project then
+    raise exception 'QA_NEW_VALID_WAITING_CLAIM_FAILED';
+  end if;
+  v_n := cpc_wecom_private.quarantine_expired('2026-11-11T01:12:00Z');
+  if v_n<>1 then raise exception 'QA_EXPIRED_LEASE_NOT_QUARANTINED'; end if;
+  select count(*) into v_n from cpc_wecom_private.notification_attempts
+    where outbox_id=v_claim.outbox_id and result_state='unknown'
+      and error_code='LEASE_EXPIRED_UNKNOWN';
+  if v_n<>1 then raise exception 'QA_EXPIRED_LEASE_AUDIT_MISSING'; end if;
+  select count(*) into v_n from cpc_wecom_private.claim_pending(
+    '66666666-6666-4666-8666-666666666666'::uuid,
+    '2026-11-11T01:12:00Z',60);
+  if v_n<>0 then raise exception 'QA_UNKNOWN_SEND_REDELIVERED'; end if;
+  raise notice 'CPC_P2C_PASS: dedupe, separated assignee/owner, superseded cancellation, lost-ack audit';
 end
 $qa$;
 rollback;
