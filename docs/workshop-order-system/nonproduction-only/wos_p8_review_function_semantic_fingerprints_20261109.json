@@ -1,0 +1,53 @@
+{
+  "schema_version": 1,
+  "source": "Production public pg_proc read-only semantic token inspection and no-data privilege metadata; no customer rows, secrets or stored function bodies",
+  "project_ref": "amqpvxrurenevniilhtl",
+  "observed_utc": "2026-11-09",
+  "safety": {
+    "ci_only": true,
+    "production_writes_forbidden": true,
+    "no_new_permissions_outside_disposable_ci": true,
+    "normalized_body_hash_not_proof_of_semantic_equivalence": true,
+    "quoted_whitespace_mutation_must_fail": true
+  },
+  "verified_token_review": {
+    "review_reopen": {
+      "prod_tokens": 716,
+      "repo_tokens": 716,
+      "lexical_tokens_equal": true,
+      "quoted_literal_preserving_token_sha256": "49dc897b8bab40ba77d31a218eb670141f72ad8027e86ff47ac7a4589959ff0e"
+    },
+    "review_submit": {
+      "prod_tokens": 832,
+      "repo_tokens": 832,
+      "lexical_tokens_equal": true,
+      "quoted_literal_preserving_token_sha256": "0dbca5981ee912d6970c0ffa3c6c78fec9211d65d3301e999fd99ab3834e19c3"
+    }
+  },
+  "functions": [
+    {
+      "name": "review_event_actor_directory",
+      "args": "p_review_id uuid, p_purpose text",
+      "normalized_body_md5": "bf44ad01d23339bc77fec4aa909bcef2",
+      "anon_exec": false,
+      "auth_exec": true,
+      "service_exec": true
+    },
+    {
+      "name": "review_reopen",
+      "args": "p_review_id uuid, p_expected_version integer, p_reason text",
+      "normalized_body_md5": "44b4d352247b5d67202239a5a7a2c16f",
+      "anon_exec": false,
+      "auth_exec": true,
+      "service_exec": false
+    },
+    {
+      "name": "review_submit",
+      "args": "p_review_id uuid, p_expected_version integer",
+      "normalized_body_md5": "92c49e7a6210179156a4046c60fbc8da",
+      "anon_exec": false,
+      "auth_exec": true,
+      "service_exec": false
+    }
+  ]
+}

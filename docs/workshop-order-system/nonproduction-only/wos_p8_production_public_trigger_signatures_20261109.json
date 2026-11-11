@@ -1,0 +1,202 @@
+{
+  "schema_version": 1,
+  "project_ref": "amqpvxrurenevniilhtl",
+  "observed_utc": "2026-11-09",
+  "trigger_count": 32,
+  "contains_business_rows": false,
+  "source": "Production pg_trigger name/state/definition hash-only metadata",
+  "triggers": [
+    {
+      "table_name": "commercial_confirmed_quote_versions",
+      "trigger_name": "confirmed_quote_payment_snapshot",
+      "definition_sig": "86c94baa199f183613712a02549ebd46",
+      "enabled_state": "O"
+    },
+    {
+      "table_name": "commercial_confirmed_quote_versions",
+      "trigger_name": "confirmed_quote_version_guard",
+      "definition_sig": "f827767c44ba68acd06181bad6060b87",
+      "enabled_state": "O"
+    },
+    {
+      "table_name": "commercial_confirmed_quotes",
+      "trigger_name": "confirmed_quote_header_guard",
+      "definition_sig": "3bdef60d701f4dc933c14de111732abe",
+      "enabled_state": "O"
+    },
+    {
+      "table_name": "commercial_quotation_drafts",
+      "trigger_name": "record_commercial_draft_revision",
+      "definition_sig": "bdf5dc5de1c5e584772542a78a5fe84c",
+      "enabled_state": "O"
+    },
+    {
+      "table_name": "cpc_audit_log",
+      "trigger_name": "trg_cpc_audit_log_append_only",
+      "definition_sig": "116d6721979047d6e29b49544193fae5",
+      "enabled_state": "O"
+    },
+    {
+      "table_name": "cpc_customer_potential_assessments",
+      "trigger_name": "trg_cpc_rating_updated_at",
+      "definition_sig": "44d2b0790855c336aa2465c002f86f7b",
+      "enabled_state": "O"
+    },
+    {
+      "table_name": "cpc_customer_references",
+      "trigger_name": "trg_cpc_customer_references_updated_at",
+      "definition_sig": "9bdbc664c0215200a2ff7b08e64a35e1",
+      "enabled_state": "O"
+    },
+    {
+      "table_name": "cpc_customer_workspaces",
+      "trigger_name": "trg_cpc_workspace_updated_at",
+      "definition_sig": "15bf47aed4bf2015004b17c9a1731568",
+      "enabled_state": "O"
+    },
+    {
+      "table_name": "cpc_external_profile_mappings",
+      "trigger_name": "trg_cpc_external_profile_mappings_updated_at",
+      "definition_sig": "dc02e9953c8c17682298d98f965c51c4",
+      "enabled_state": "O"
+    },
+    {
+      "table_name": "cpc_project_events",
+      "trigger_name": "trg_cpc_project_events_append_only",
+      "definition_sig": "5c7d2b84bdc393cc2d139031672f3bad",
+      "enabled_state": "O"
+    },
+    {
+      "table_name": "cpc_projects",
+      "trigger_name": "cpc_active_project_invariant_project",
+      "definition_sig": "fae1fe088297a6fb00e05495cb7fb290",
+      "enabled_state": "O"
+    },
+    {
+      "table_name": "cpc_projects",
+      "trigger_name": "trg_cpc_projects_updated_at",
+      "definition_sig": "819386d4156f2376934d97cf09a58bc0",
+      "enabled_state": "O"
+    },
+    {
+      "table_name": "cpc_reports",
+      "trigger_name": "trg_cpc_reports_submitted_immutable",
+      "definition_sig": "75684d87c4602d59d1e054c7c8eaac99",
+      "enabled_state": "O"
+    },
+    {
+      "table_name": "cpc_work_items",
+      "trigger_name": "cpc_active_project_invariant_work_items",
+      "definition_sig": "1f0d5f7f83e253d339ab449ec61cc664",
+      "enabled_state": "O"
+    },
+    {
+      "table_name": "cpc_work_items",
+      "trigger_name": "trg_cpc_work_items_updated_at",
+      "definition_sig": "7f4eb4920e1e04d9375491fa2c30cf59",
+      "enabled_state": "O"
+    },
+    {
+      "table_name": "glh_ad_campaigns",
+      "trigger_name": "trg_glh_ad_campaigns_updated_at",
+      "definition_sig": "770c2bb7f24567eb5fd7bcc930664914",
+      "enabled_state": "O"
+    },
+    {
+      "table_name": "glh_ad_creatives",
+      "trigger_name": "trg_glh_ad_creatives_updated_at",
+      "definition_sig": "85123dfd6342b2e8f27e7bc42b246d80",
+      "enabled_state": "O"
+    },
+    {
+      "table_name": "glh_channel_accounts",
+      "trigger_name": "trg_glh_channel_accounts_updated_at",
+      "definition_sig": "c5ae94ebc4006a31637e685316b47835",
+      "enabled_state": "O"
+    },
+    {
+      "table_name": "glh_contacts",
+      "trigger_name": "trg_glh_contacts_updated_at",
+      "definition_sig": "18b6ce853ed8139e0b516061b4f42490",
+      "enabled_state": "O"
+    },
+    {
+      "table_name": "glh_conversations",
+      "trigger_name": "trg_glh_conversations_updated_at",
+      "definition_sig": "025e25c23cf9b1b1f3a88c9d90a57fc0",
+      "enabled_state": "O"
+    },
+    {
+      "table_name": "glh_followups",
+      "trigger_name": "trg_glh_followups_updated_at",
+      "definition_sig": "d4fb0d5dcf70f76c56294c0491f4ff96",
+      "enabled_state": "O"
+    },
+    {
+      "table_name": "glh_lead_profiles",
+      "trigger_name": "trg_glh_lead_profiles_updated_at",
+      "definition_sig": "4665d5ed7d1455740acb8dc9547f40a7",
+      "enabled_state": "O"
+    },
+    {
+      "table_name": "glh_leads",
+      "trigger_name": "trg_glh_leads_updated_at",
+      "definition_sig": "e2753a780cf0dd7f661da87f7431f80a",
+      "enabled_state": "O"
+    },
+    {
+      "table_name": "glh_tasks",
+      "trigger_name": "trg_glh_tasks_updated_at",
+      "definition_sig": "ecceba8a1c8f981577c690c95c38f5b7",
+      "enabled_state": "O"
+    },
+    {
+      "table_name": "organizations",
+      "trigger_name": "trg_organizations_protect_immutable",
+      "definition_sig": "cb107946620a6b4e05aad2e3ce0f4da7",
+      "enabled_state": "O"
+    },
+    {
+      "table_name": "organizations",
+      "trigger_name": "trg_organizations_set_updated_at",
+      "definition_sig": "6dc05d7befddc355f2d7302e88e62a75",
+      "enabled_state": "O"
+    },
+    {
+      "table_name": "review_cases",
+      "trigger_name": "trg_review_cases_create_audit",
+      "definition_sig": "07de78c8139f61f7b6b462d4560b6222",
+      "enabled_state": "O"
+    },
+    {
+      "table_name": "review_cases",
+      "trigger_name": "trg_review_cases_set_updated_at",
+      "definition_sig": "c0f954d59e1e7f289c43e3622378ac81",
+      "enabled_state": "O"
+    },
+    {
+      "table_name": "review_dict_items",
+      "trigger_name": "trg_review_dict_items_set_updated_at",
+      "definition_sig": "ac37cc8468652cf223b7fd915f4ae6f5",
+      "enabled_state": "O"
+    },
+    {
+      "table_name": "review_knowledge_cases",
+      "trigger_name": "trg_review_knowledge_cases_set_updated_at",
+      "definition_sig": "5a1e2762460666bb6f0c7a1560c7f5b7",
+      "enabled_state": "O"
+    },
+    {
+      "table_name": "review_type_details",
+      "trigger_name": "trg_review_type_details_set_updated_at",
+      "definition_sig": "b759f9a1ed5b2932db199d59bdb79bec",
+      "enabled_state": "O"
+    },
+    {
+      "table_name": "site_data",
+      "trigger_name": "set_site_data_timestamp",
+      "definition_sig": "8eeb39b07f1e7a71fd75af438d6d8cca",
+      "enabled_state": "O"
+    }
+  ]
+}
