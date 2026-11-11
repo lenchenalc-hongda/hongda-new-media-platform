@@ -47,6 +47,9 @@ jobs:
       - name: WOS P7 residual QA-only JWT/orphan safety contracts (no credentials)
         run: node scripts/wos-p7/qa-residual-gates.mjs self-test
 
+      - name: WOS P8 migration foundation preflight and rollback gate (no secrets)
+        run: node scripts/wos-p8/verify-staging-migration-preflight.mjs
+
       - name: Commercial document template tests
         run: pnpm exec tsx tests/unit/commercial-document-template.test.ts
 
@@ -333,3 +336,59 @@ jobs:
           psql -X -v ON_ERROR_STOP=1 -f tests/sql/glh_stage1_synthetic_rls_smoke.sql
           psql -X -v ON_ERROR_STOP=1 -f tests/sql/glh_stage1_manual_production_intake_smoke.sql
           psql -X -v ON_ERROR_STOP=1 -f tests/sql/glh_stage1_human_workflow_smoke.sql
+
+  wos-p8-postgres-foundation-rehearsal:
+    name: wos-p8-postgres-foundation-rehearsal
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: wos-p8-disposable-ci-only
+          POSTGRES_DB: wos_p8_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d wos_p8_ci"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      PGHOST: localhost
+      PGPORT: "5432"
+      PGUSER: postgres
+      PGPASSWORD: wos-p8-disposable-ci-only
+      PGDATABASE: wos_p8_ci
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Install ephemeral PostgreSQL client without deployment credentials
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y postgresql-client
+      - name: Bootstrap isolated auth/profile fixture
+        run: |
+          set -euo pipefail
+          psql -X -q -v ON_ERROR_STOP=1 -f tests/sql/wos_p8_ephemeral_foundation_fixture.sql
+      - name: Transactional real foundation migration rollback
+        run: |
+          set -euo pipefail
+          {
+            printf 'BEGIN;\n'
+            cat supabase/migrations/20261014102000_workshop_order_system_foundation.sql
+            printf '\nROLLBACK;\n'
+          } | psql -X -q -v ON_ERROR_STOP=1
+          count=$(psql -X -tA -v ON_ERROR_STOP=1 -c "SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_name LIKE 'wos_%';")
+          [ "$count" = "0" ]
+          echo 'WOS_P8_PG17_TRANSACTIONAL_ROLLBACK_ZERO_WOS_TABLES=PASS'
+      - name: Replay foundation and assert RLS, grants and cross-org isolation
+        run: |
+          set -euo pipefail
+          psql -X -q -v ON_ERROR_STOP=1 -f supabase/migrations/20261014102000_workshop_order_system_foundation.sql
+          psql -X -q -v ON_ERROR_STOP=1 -f tests/sql/wos_p8_ephemeral_foundation_smoke.sql
+          echo 'WOS_P8_REAL_DISPOSABLE_PG17_FOUNDATION_REHEARSAL=PASS'
+          echo 'WOS_P8_FULL_P7_AND_PRODUCTION_MIGRATION_REHEARSAL=NOT_RUN'
