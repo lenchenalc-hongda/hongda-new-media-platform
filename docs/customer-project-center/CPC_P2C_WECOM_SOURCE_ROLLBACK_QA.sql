@@ -12,6 +12,8 @@ declare
   v_work uuid;
   v_result jsonb;
   v_n int;
+  v_claim record;
+  v_claim_two record;
 begin
   select a.org_id,a.id into v_org,v_admin
   from public.profiles a
@@ -64,6 +66,27 @@ begin
     raise exception 'QA_DUPLICATE_ENQUEUED got %',v_result;
   end if;
 
+  -- Only current CPC business facts may receive leases. Two due facts can
+  -- be claimed separately; a third claim cannot fetch the same rows twice.
+  select * into v_claim from cpc_wecom_private.claim_pending(
+    '11111111-1111-4111-8111-111111111111'::uuid,
+    '2026-11-11T01:09:00Z',60);
+  select * into v_claim_two from cpc_wecom_private.claim_pending(
+    '22222222-2222-4222-8222-222222222222'::uuid,
+    '2026-11-11T01:09:00Z',60);
+  if v_claim.outbox_id is null or v_claim_two.outbox_id is null
+    or v_claim.outbox_id=v_claim_two.outbox_id then
+    raise exception 'QA_SOURCE_AWARE_CLAIMS_FAILED';
+  end if;
+  select count(*) into v_n from cpc_wecom_private.claim_pending(
+    '33333333-3333-4333-8333-333333333333'::uuid,
+    '2026-11-11T01:09:00Z',60);
+  if v_n<>0 then raise exception 'QA_DUPLICATE_CLAIM'; end if;
+  -- Reset synthetic leases within the still-uncommitted QA transaction.
+  update cpc_wecom_private.notification_outbox
+    set state='pending',lease_token=null,lease_expires_at=null,attempts=0
+    where org_id=v_org and source_id in (v_project,v_work);
+
   update public.cpc_work_items
     set status='completed',completed_at=now(),
       completed_by_profile_id=v_sales,version=version+1,updated_at=now()
@@ -72,6 +95,12 @@ begin
     set next_check_at='2026-11-11T03:10:00Z',
         version=version+1,updated_at=now()
     where id=v_project;
+  -- Even BEFORE reconciliation, claim must re-read the real task and
+  -- refuse old pending reminders after status/deadline changes.
+  select count(*) into v_n from cpc_wecom_private.claim_pending(
+    '44444444-4444-4444-8444-444444444444'::uuid,
+    '2026-11-11T01:10:00Z',60);
+  if v_n<>0 then raise exception 'QA_STALE_CPC_FACT_WAS_LEASED'; end if;
   v_result := cpc_wecom_private.stage_cpc_due('2026-11-11T01:10:00Z');
   if (v_result->>'cancelled')::int<>2 or (v_result->>'staged')::int<>1 then
     raise exception 'QA_SOURCE_CHANGE_BAD got %',v_result;
