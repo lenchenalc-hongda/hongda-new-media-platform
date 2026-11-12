@@ -543,5 +543,20 @@ for (const conversationMode of GLH_V2F_CONVERSATION_MODES) {
   }
 }
 
+// An interrupted AI-active conversation with a whitespace-only draft still
+// requires human handoff and exposes no suggestion object.
+const blankDraftHandoffPlan = planGlhV2FHandoffSafety({
+  conversationMode: 'AI_ACTIVE',
+  handoffInterrupted: true,
+  aiSuggestionText: '   ',
+});
+assert.equal(blankDraftHandoffPlan.aiSuggestion, null);
+assert.equal(blankDraftHandoffPlan.handoffRequired, true);
+assert.equal(blankDraftHandoffPlan.humanReviewRequired, true);
+assert.equal(blankDraftHandoffPlan.preserveOriginalEvent, true);
+assert.equal(blankDraftHandoffPlan.customerFacingAutoSendAllowed, false);
+assert.equal(blankDraftHandoffPlan.providerSendAllowed, false);
+assert.equal(blankDraftHandoffPlan.providerCallsPerformed, 0);
+
 assert.equal(GLH_V2F_PROVIDER_CALLS_ENABLED, false);
 console.log('global-lead-hub-v2-multichannel-sim.test.ts: PASS');
