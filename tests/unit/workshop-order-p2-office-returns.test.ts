@@ -24,8 +24,17 @@ for(const invalid of ['.insert(','.update(','.delete(','.upsert(','.rpc(','servi
 }
 assert(office.includes("fetch('/api/workshop-orders/p2/returns'"));
 assert(office.includes('setItems([])'),'stale returned data must be cleared on error');
-assert(office.includes('再次提交正在开发'),'never offer nonexistent rework submission');
+for (const expected of [
+  'NEXT_PUBLIC_WOS_P2_QA_OFFICE_REVISION_ENABLED',
+  "fetch('/api/workshop-orders/p2/office-revisions'",
+  "'SAVE_CORRECTION'",
+  "'RESUBMIT_CORRECTION'",
+  'crypto.randomUUID()',
+  'onSaved()',
+  'expectedVersion:item.version',
+]) assert(office.includes(expected),'office correction UI missing '+expected);
+assert(office.includes('disabled={!flag||pending}'),'QA must keep write buttons disabled by default');
 assert(!office.includes('localStorage'),'return reasons must come from real QA server');
 assert(page.includes('{qaLive && <LiveQaReturnedOrders />}'),'must be isolated to QA Preview');
 console.log('workshop-order-p2-office-returns.test.ts: PASS');
-console.log('WOS_P2_OFFICE_RETURN_READ_ONLY_AND_SCOPE_TEST=PASS');
+console.log('WOS_P2_OFFICE_RETURN_READ_AND_SAFE_REVISION_UI=PASS');
