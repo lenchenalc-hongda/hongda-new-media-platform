@@ -121,12 +121,12 @@ function audit(source: string): void {
 
 audit(workflow);
 const negative: Array<[string,string]> = [
-  ['BUSINESS_SHA',workflow.replace(authorizedBusinessHead,'f'.repeat(40))],
+  ['BUSINESS_SHA',workflow.replaceAll(authorizedBusinessHead,'f'.repeat(40))],
   ['AUTO_PR_EVENT',workflow.replace('  workflow_dispatch:', '  pull_request:\n  workflow_dispatch:')],
   ['WRONG_ISSUE',workflow.replace('github.event.issue.number == 104','github.event.issue.number == 10')],
   ['WRONG_COMMENT_ACTOR',workflow.replace('github.event.sender.login == \'lenchenalc-hongda\'',
     'github.event.sender.login == \'anyone\'')],
-  ['WRONG_COMMENT_MARKER',workflow.replace('WOS_P1_SINGLE_QA_ACCEPTANCE_20261117_SHA=6a72b446ccc517a5ff14e531b8a6663b4a70a77e','WOS_UNVERIFIED_COMMENT_TRIGGER')],
+  ['WRONG_COMMENT_MARKER',workflow.replaceAll('WOS_P1_SINGLE_QA_ACCEPTANCE_20261117_SHA=6a72b446ccc517a5ff14e531b8a6663b4a70a77e','WOS_UNVERIFIED_COMMENT_TRIGGER')],
   ['NO_EVENT_JSON_RECHECK',workflow.replace('.comment.body==$body','.comment.body!=null')],
   ['BYPASS_ON_PR_COMMENTS',workflow.replace('github.event.issue.pull_request == null','true')],
 
