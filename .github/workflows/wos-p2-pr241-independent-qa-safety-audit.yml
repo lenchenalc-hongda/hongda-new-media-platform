@@ -1,0 +1,59 @@
+name: WOS P2 independent exact-SHA nonproduction security audit
+
+on:
+  push:
+    branches:
+      - audit/wos-p2-pr241-exact-20261117
+
+permissions:
+  contents: read
+  actions: read
+  pull-requests: read
+
+jobs:
+  independent-github-hosted-review:
+    if: >-
+      github.repository == 'lenchenalc-hongda/hongda-new-media-platform' &&
+      github.ref == 'refs/heads/audit/wos-p2-pr241-exact-20261117'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    env:
+      GH_READ_TOKEN: ${{ github.token }}
+      WOS_AUDITED_EXACT_HEAD: 'd75a39f7bfea212edcb2fd9ba5645f83d7aff184'
+    steps:
+      - name: Checkout independent auditor code from this master-based branch
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.sha }}
+          path: reviewer
+          persist-credentials: false
+      - name: Checkout WOS P2 PR #241 exact head as NON-EXECUTABLE input data
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: d75a39f7bfea212edcb2fd9ba5645f83d7aff184
+          path: candidate
+          persist-credentials: false
+      - name: Validate reviewer and untrusted-candidate git heads
+        run: |
+          set -euo pipefail
+          test "$(git -C reviewer rev-parse HEAD)" = "$GITHUB_SHA"
+          test "$(git -C candidate rev-parse HEAD)" = "$WOS_AUDITED_EXACT_HEAD"
+          test "$GITHUB_REF" = "refs/heads/audit/wos-p2-pr241-exact-20261117"
+          echo WOS_P2_INDEPENDENT_REVIEWER_CODE_ISOLATED_FROM_BUSINESS_PR=PASS
+      - name: Independent static security audit, live GitHub SHA/CI, negative mutation battery
+        run: |
+          set -euo pipefail
+          python3 reviewer/audits/wos-p2-pr241/independent_audit.py candidate
+          echo WOS_P2_INDEPENDENT_GITHUB_HOSTED_TECHNICAL_AUDIT=PASS
+      - name: Read-only QA installation and fail-close rollback instructions retained
+        run: |
+          set -euo pipefail
+          test -s reviewer/audits/wos-p2-pr241/QA_ONLY_INSTALL_ROLLBACK_RUNBOOK.md
+          test -s reviewer/audits/wos-p2-pr241/qa-p2-fail-close-only.sql
+          grep -Fq "NOT EXECUTED" reviewer/audits/wos-p2-pr241/qa-p2-fail-close-only.sql
+          grep -Fq "No SQL has been installed" reviewer/audits/wos-p2-pr241/QA_ONLY_INSTALL_ROLLBACK_RUNBOOK.md
+          grep -Fq "enabled=false" reviewer/audits/wos-p2-pr241/QA_ONLY_INSTALL_ROLLBACK_RUNBOOK.md
+          test -z "$SUPABASE_URL"
+          test -z "$SUPABASE_SERVICE_ROLE_KEY"
+          echo WOS_P2_QA_INSTALL_ROLLBACK_RUNBOOK_RETAINED=PASS
+          echo WOS_P2_INDEPENDENT_QA_SECRET_COUNT=0
