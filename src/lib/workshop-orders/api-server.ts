@@ -13,10 +13,12 @@ import {
   isWosNonproductionApiEnabled,
   isApprovedWosSandboxUrl,
   resolveWosApiActor,
+  parseWosProductionSubmitEnvelope,
   validateWosPostEnvelope,
   type WosApiActor,
 } from './api-contract';
 import type { WosEntityType } from './domain';
+import { submitWosProductionNonproduction } from './p7-nonprod-submit';
 
 const headers = { 'Cache-Control': 'no-store, private' } as const;
 
@@ -85,6 +87,44 @@ export async function readWosWorkshopInbox() {
     ]);
 
     if (production.error || sampling.error) return response('DATABASE_READ_UNAVAILABLE', 503);
+    // Source-of-truth gate: a submitted production order is a workshop task
+    // only when the same atomic transaction produced its receipt and Inbox row.
+    // Never fabricate the workshop queue from an order snapshot alone.
+    const submittedRows = (production.data ?? []).filter(row => row.workflow_status === 'SUBMITTED');
+    if (submittedRows.length > 0) {
+      const ids = submittedRows.map(row => row.id);
+      const [taskRows, receiptRows] = await Promise.all([
+        client.from('wos_workshop_inbox')
+          .select('id,organization_id,order_id,submission_id,source_revision,source_version_label,workflow_status')
+          .eq('organization_id', actor.orgId).in('order_id', ids).limit(WOS_INBOX_LIMIT_PER_TYPE + 1),
+        client.from('wos_submission_receipts')
+          .select('id,organization_id,order_id,source_revision,source_version_label')
+          .eq('organization_id', actor.orgId).in('order_id', ids).limit(WOS_INBOX_LIMIT_PER_TYPE + 1),
+      ]);
+      if (taskRows.error || receiptRows.error) return response('DATABASE_READ_UNAVAILABLE', 503);
+      const tasks = taskRows.data ?? [];
+      const receipts = receiptRows.data ?? [];
+      if (tasks.length !== submittedRows.length || receipts.length !== submittedRows.length)
+        return response('WORKSHOP_TRANSACTION_MISMATCH', 409);
+      const taskByOrder = new Map(tasks.map(task => [task.order_id, task]));
+      const receiptById = new Map(receipts.map(receipt => [receipt.id, receipt]));
+      if (taskByOrder.size !== tasks.length || receiptById.size !== receipts.length)
+        return response('WORKSHOP_TRANSACTION_MISMATCH', 409);
+      for (const order of submittedRows) {
+        const task = taskByOrder.get(order.id);
+        const receipt = task && receiptById.get(task.submission_id);
+        if (!task || !receipt
+          || task.organization_id !== actor.orgId || receipt.organization_id !== actor.orgId
+          || task.order_id !== order.id || receipt.order_id !== order.id
+          || task.workflow_status !== 'SUBMITTED'
+          || task.source_revision + 1 !== order.version
+          || receipt.source_revision !== task.source_revision
+          || receipt.source_version_label !== task.source_version_label
+          || task.source_version_label !== order.version_label) {
+          return response('WORKSHOP_TRANSACTION_MISMATCH', 409);
+        }
+      }
+    }
     const productionRows = production.data ?? [];
     const samplingRows = sampling.data ?? [];
     if (productionRows.length > WOS_INBOX_LIMIT_PER_TYPE
@@ -96,28 +136,21 @@ export async function readWosWorkshopInbox() {
       ...productionRows.map(row => row.project_owner_profile_id),
       ...samplingRows.map(row => row.product_owner_profile_id),
     ]));
-    let owners: string[] = [];
-    if (ownerIds.length > 0) {
-      if (ownerIds.some(id => typeof id !== 'string' || !id)) {
-        return response('UNTRUSTED_DB_ROW', 409);
-      }
-      const ownerResult = await client.from('profiles')
-        .select('id,org_id,is_active')
-        .eq('org_id', actor.orgId)
-        .eq('is_active', true)
-        .in('id', ownerIds)
-        .limit(WOS_INBOX_LIMIT_PER_TYPE * 2 + 1);
-      if (ownerResult.error) return response('DATABASE_READ_UNAVAILABLE', 503);
-      const found = ownerResult.data ?? [];
-      if (found.length !== ownerIds.length
-        || found.some(row => row.org_id !== actor.orgId || row.is_active !== true)) {
-        return response('UNTRUSTED_DB_ROW', 409);
-      }
-      owners = found.map(row => row.id);
+    if (ownerIds.some(id => typeof id !== 'string' || !id)) {
+      return response('UNTRUSTED_DB_ROW', 409);
     }
-
+    // The inbox is a read-only projection of trusted WOS rows already filtered
+    // by the caller's JWT, RLS and organization_id. An Operator may view an
+    // assigned order but is intentionally NOT allowed to enumerate the Admin
+    // or Sales profiles that own it. Requerying 'profiles' here causes false
+    // 409/503 for legitimate Operator users even though the same order is
+    // readable from WOS. Do not weaken profiles RLS or elevate this endpoint.
+    //
+    // WOS owner UUIDs are FK-backed source references, not authorization
+    // claims. Actual reassignment / start gates must separately validate
+    // owner active state via their own authorized transaction paths.
     const projection = buildWosLiveInbox({
-      actor, productionRows, samplingRows, activeOwnerProfileIds: owners,
+      actor, productionRows, samplingRows, activeOwnerProfileIds: ownerIds,
     });
     if (!projection.ok) return response(projection.code, 409);
     return response('OK', 200, {
@@ -151,6 +184,16 @@ export async function rejectUnsafeWosOfficePost(req: NextRequest, entityType: Wo
     return response('INVALID_INPUT', 400);
   }
   if (!validateWosPostEnvelope(value)) return response('INVALID_INPUT', 400);
+
+  // Only a separately enabled, exact-project-pinned Preview can submit a
+  // previously-created production DRAFT. Sampling remains 409 fail-closed.
+  if (entityType === 'PRODUCTION_ORDER'
+    && process.env.WOS_P7_NONPROD_SUBMIT_ENABLED === 'true') {
+    const input = parseWosProductionSubmitEnvelope(value);
+    if (!input) return response('INVALID_INPUT', 400);
+    const result = await submitWosProductionNonproduction(auth.client, auth.actor, input);
+    return response(result.code, result.status, result.data ?? null);
+  }
 
   // Existing Phase 1 tables only permit independent DRAFT INSERTs; they do
   // not atomically create a SUBMITTED record, immutable audit trail and

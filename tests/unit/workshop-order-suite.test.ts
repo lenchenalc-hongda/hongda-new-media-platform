@@ -8,6 +8,12 @@ import './workshop-order-nonproduction-persistence.test';
 import './workshop-order-api.test';
 import './workshop-order-p6-atomic-submission.test';
 import './workshop-order-p6-private-image-contract.test';
+import './workshop-order-p7-nonprod-contract.test';
+import './workshop-order-p1-inbox-integrity.test';
+import './workshop-order-p1-cpc-draft-contract.test';
+import './workshop-order-p1-qa-revision-sql-contract.test';
+import './wos-qa-image-validation.test';
+import './wos-p7-edge-png.test';
 
 // WOS project-owned test aggregator. Each new WOS test is imported here,
 // so the existing shared CI invokes it without modifying shared workflows.

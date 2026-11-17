@@ -5,7 +5,7 @@ import { PRODUCTION_TRANSITIONS, SAMPLING_TRANSITIONS, type WosEntityType } from
 // are permitted until a reviewed atomic submission RPC and audit gate exist.
 export const WOS_INBOX_LIMIT_PER_TYPE = 200;
 export const WOS_API_INPUT_LIMIT_CHARS = 32768;
-export const WOS_READ_ROLES = ['admin', 'manager', 'sales', 'workshop', 'technician'] as const;
+export const WOS_READ_ROLES = ['admin', 'manager', 'sales', 'operator', 'workshop', 'technician'] as const;
 export const WOS_SUBMIT_ROLES = ['admin', 'manager', 'sales'] as const;
 export const WOS_ACTIVE_PRODUCTION_STATUSES = Object.keys(PRODUCTION_TRANSITIONS)
   .filter(value => !['DRAFT', 'CANCELLED', 'CLOSED'].includes(value));
@@ -141,6 +141,35 @@ export function validateWosPostEnvelope(value: unknown): boolean {
   const parsed = postSchema.safeParse(value);
   if (!parsed.success || Object.keys(parsed.data.payload).length === 0) return false;
   return !Object.keys(parsed.data.payload).some(key => clientControlled.has(key));
+}
+
+
+export interface WosProductionSubmitEnvelope {
+  readonly idempotencyKey: string;
+  readonly expectedVersion: number;
+  readonly orderId: string;
+  readonly versionLabel: string;
+}
+
+// The P7 API submits a *previously created* DRAFT. It cannot accept direct
+// client-written org, actor, owner, status, receipt, image or audit fields.
+const productionSubmitPayloadSchema = z.object({
+  orderId: z.string().uuid(),
+  versionLabel: z.string().regex(/^V[1-9][0-9]{0,20}$/),
+}).strict();
+
+export function parseWosProductionSubmitEnvelope(value: unknown): WosProductionSubmitEnvelope | null {
+  if (!validateWosPostEnvelope(value)) return null;
+  const envelope = postSchema.safeParse(value);
+  if (!envelope.success) return null;
+  const payload = productionSubmitPayloadSchema.safeParse(envelope.data.payload);
+  if (!payload.success) return null;
+  return {
+    idempotencyKey: envelope.data.idempotencyKey,
+    expectedVersion: envelope.data.expectedVersion,
+    orderId: payload.data.orderId,
+    versionLabel: payload.data.versionLabel,
+  };
 }
 
 function mapInboxRow(type: WosEntityType, raw: unknown, actor: WosApiActor): WosInboxItem | null {
