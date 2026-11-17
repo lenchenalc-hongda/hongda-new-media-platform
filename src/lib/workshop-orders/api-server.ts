@@ -87,12 +87,13 @@ export async function readWosWorkshopInbox() {
     ]);
 
     if (production.error || sampling.error) return response('DATABASE_READ_UNAVAILABLE', 503);
-    // Source-of-truth gate: a submitted production order is a workshop task
-    // only when the same atomic transaction produced its receipt and Inbox row.
-    // Never fabricate the workshop queue from an order snapshot alone.
-    const submittedRows = (production.data ?? []).filter(row => row.workflow_status === 'SUBMITTED');
-    if (submittedRows.length > 0) {
-      const ids = submittedRows.map(row => row.id);
+    // A P2 workshop state is always linked to the exact immutable P1
+    // submission receipt and original Inbox. P2 never creates a second Inbox,
+    // and the Inbox table's CHECK constraint allows only SUBMITTED.
+    // Never fabricate a queue item from an order row without its receipt.
+    const persistedRows = production.data ?? [];
+    if (persistedRows.length > 0) {
+      const ids = persistedRows.map(row => row.id);
       const [taskRows, receiptRows] = await Promise.all([
         client.from('wos_workshop_inbox')
           .select('id,organization_id,order_id,submission_id,source_revision,source_version_label,workflow_status')
@@ -104,20 +105,23 @@ export async function readWosWorkshopInbox() {
       if (taskRows.error || receiptRows.error) return response('DATABASE_READ_UNAVAILABLE', 503);
       const tasks = taskRows.data ?? [];
       const receipts = receiptRows.data ?? [];
-      if (tasks.length !== submittedRows.length || receipts.length !== submittedRows.length)
+      if (tasks.length !== persistedRows.length || receipts.length !== persistedRows.length)
         return response('WORKSHOP_TRANSACTION_MISMATCH', 409);
       const taskByOrder = new Map(tasks.map(task => [task.order_id, task]));
       const receiptById = new Map(receipts.map(receipt => [receipt.id, receipt]));
       if (taskByOrder.size !== tasks.length || receiptById.size !== receipts.length)
         return response('WORKSHOP_TRANSACTION_MISMATCH', 409);
-      for (const order of submittedRows) {
+      for (const order of persistedRows) {
         const task = taskByOrder.get(order.id);
         const receipt = task && receiptById.get(task.submission_id);
         if (!task || !receipt
           || task.organization_id !== actor.orgId || receipt.organization_id !== actor.orgId
           || task.order_id !== order.id || receipt.order_id !== order.id
+          // Inbox always records original submission, never current P2 state.
           || task.workflow_status !== 'SUBMITTED'
-          || task.source_revision + 1 !== order.version
+          || task.source_revision + 1 > order.version
+          || (order.workflow_status === 'SUBMITTED'
+              && task.source_revision + 1 !== order.version)
           || receipt.source_revision !== task.source_revision
           || receipt.source_version_label !== task.source_version_label
           || task.source_version_label !== order.version_label) {
