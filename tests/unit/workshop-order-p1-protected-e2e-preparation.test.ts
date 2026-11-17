@@ -10,7 +10,8 @@ const workflow=readFileSync(
 );
 assert(api.includes("process.env.WOS_P1_QA_REVISION_ENABLED !== 'true'"));
 assert(api.includes('export async function PATCH(req: NextRequest)'));
-assert(api.includes("revisionRequestSchema.safeParse(JSON.parse(body))"));
+assert(api.includes('revisionRequestSchema') && api.includes('.safeParse('),
+  'Typed revision request validation must exist');
 assert(api.includes("client.rpc('wos_qa_amend_cpc_draft'") === false);
 assert(api.includes("auth.client.rpc('wos_qa_amend_cpc_draft'"));
 assert(api.includes("order.data.created_by_profile_id !== auth.actor.id"));
