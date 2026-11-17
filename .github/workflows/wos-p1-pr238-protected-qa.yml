@@ -37,7 +37,7 @@ jobs:
         shell: bash
         env:
           REQUESTED_SHA: ${{ inputs.reviewed_sha }}
-          APPROVED_SHA: 0722a53a49753e6d42c6ad36fda3ab61fca1e74b
+          APPROVED_SHA: 6a72b446ccc517a5ff14e531b8a6663b4a70a77e
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
