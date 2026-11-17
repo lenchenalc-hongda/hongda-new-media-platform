@@ -87,6 +87,44 @@ export async function readWosWorkshopInbox() {
     ]);
 
     if (production.error || sampling.error) return response('DATABASE_READ_UNAVAILABLE', 503);
+    // Source-of-truth gate: a submitted production order is a workshop task
+    // only when the same atomic transaction produced its receipt and Inbox row.
+    // Never fabricate the workshop queue from an order snapshot alone.
+    const submittedRows = (production.data ?? []).filter(row => row.workflow_status === 'SUBMITTED');
+    if (submittedRows.length > 0) {
+      const ids = submittedRows.map(row => row.id);
+      const [taskRows, receiptRows] = await Promise.all([
+        client.from('wos_workshop_inbox')
+          .select('id,organization_id,order_id,submission_id,source_revision,source_version_label,workflow_status')
+          .eq('organization_id', actor.orgId).in('order_id', ids).limit(WOS_INBOX_LIMIT_PER_TYPE + 1),
+        client.from('wos_submission_receipts')
+          .select('id,organization_id,order_id,source_revision,source_version_label')
+          .eq('organization_id', actor.orgId).in('order_id', ids).limit(WOS_INBOX_LIMIT_PER_TYPE + 1),
+      ]);
+      if (taskRows.error || receiptRows.error) return response('DATABASE_READ_UNAVAILABLE', 503);
+      const tasks = taskRows.data ?? [];
+      const receipts = receiptRows.data ?? [];
+      if (tasks.length !== submittedRows.length || receipts.length !== submittedRows.length)
+        return response('WORKSHOP_TRANSACTION_MISMATCH', 409);
+      const taskByOrder = new Map(tasks.map(task => [task.order_id, task]));
+      const receiptById = new Map(receipts.map(receipt => [receipt.id, receipt]));
+      if (taskByOrder.size !== tasks.length || receiptById.size !== receipts.length)
+        return response('WORKSHOP_TRANSACTION_MISMATCH', 409);
+      for (const order of submittedRows) {
+        const task = taskByOrder.get(order.id);
+        const receipt = task && receiptById.get(task.submission_id);
+        if (!task || !receipt
+          || task.organization_id !== actor.orgId || receipt.organization_id !== actor.orgId
+          || task.order_id !== order.id || receipt.order_id !== order.id
+          || task.workflow_status !== 'SUBMITTED'
+          || task.source_revision + 1 !== order.version
+          || receipt.source_revision !== task.source_revision
+          || receipt.source_version_label !== task.source_version_label
+          || task.source_version_label !== order.version_label) {
+          return response('WORKSHOP_TRANSACTION_MISMATCH', 409);
+        }
+      }
+    }
     const productionRows = production.data ?? [];
     const samplingRows = sampling.data ?? [];
     if (productionRows.length > WOS_INBOX_LIMIT_PER_TYPE
