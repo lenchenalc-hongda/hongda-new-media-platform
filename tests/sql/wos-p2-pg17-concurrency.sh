@@ -5,6 +5,9 @@ test "$PGDATABASE" = "wos_p2_synthetic"
 test "$WOS_P2_QA_MUTATIONS_ENABLED" = "false"
 ORDER_ID="99999999-9999-4999-8999-999999999999"
 REQUEST_ID="abababab-abab-4bab-8bab-abababababab"
+# The prior test deliberately revokes the synthetic database gate. A separate
+# ephemeral approval is required for this independent concurrency scenario.
+psql -X -v ON_ERROR_STOP=1 -q -c "UPDATE public.wos_qa_p2_execution_gate SET enabled=true,enabled_until=pg_catalog.clock_timestamp()+INTERVAL '5 minutes',approval_reference='SYNTHETIC_CONCURRENCY_PG17_ONLY',updated_at=pg_catalog.clock_timestamp() WHERE gate_name='OPERATOR_WRITES'"
 psql -X -v ON_ERROR_STOP=1 -q <<'SQL'
 INSERT INTO public.wos_production_orders
  (id,organization_id,order_number,workflow_status,version,version_label,current_batch_quantity)
@@ -68,3 +71,5 @@ test "$state" = "WORKSHOP_REVIEW:3"
 test "$task" = "SUBMITTED"
 echo WOS_P2_PG17_TWO_SESSION_CAS_AND_IDEMPOTENT_REPLAY=PASS
 echo WOS_P2_PG17_SINGLE_HISTORY_SINGLE_RECEIPT=PASS
+psql -X -v ON_ERROR_STOP=1 -q -c "UPDATE public.wos_qa_p2_execution_gate SET enabled=false,enabled_until=NULL,approval_reference='NOT_AUTHORIZED',updated_at=pg_catalog.clock_timestamp() WHERE gate_name='OPERATOR_WRITES'"
+echo WOS_P2_PG17_CONCURRENCY_GATE_REVOKED_AFTER_TEST=PASS
