@@ -246,7 +246,10 @@ def inspect(contents: dict[str,str]) -> list[str]:
     if re.search(r"(?im)^\s*(?:DROP|TRUNCATE|DELETE)\s+",sql):
         faults.append("destructive SQL")
     # Anonymous access and unexpected privilege expansion forbidden.
-    if re.search(r"(?i)\b(?:service_role|SUPABASE_SERVICE_ROLE_KEY)\b", contents["api"]):
+    # Comments saying "do not use service_role" are not credential access.
+    # Detect active code references only; independently reject real env reads.
+    api_executable = "\n".join(line.split("//",1)[0] for line in contents["api"].splitlines())
+    if re.search(r"(?i)\b(?:service_role|SUPABASE_SERVICE_ROLE_KEY)\b", api_executable):
         faults.append("service-role reference in operator API")
     if re.search(r"(?i)pull_request_target|secrets\s*\.|supabase\s+db\s+push|vercel\s+--prod",
                  contents["workflow"]):
@@ -282,7 +285,7 @@ def negative_mutations(original:dict[str,str]) -> int:
         ("sql","\nGRANT UPDATE ON public.wos_production_orders TO authenticated;\n"),
         ("sql","\nGRANT EXECUTE ON FUNCTION public.wos_qa_p2_operator_action(uuid,integer,uuid,text,text,text,integer,integer,text) TO anon;\n"),
         ("sql","\nDROP TABLE public.wos_workshop_inbox;\n"),
-        ("api","\n// SUPABASE_SERVICE_ROLE_KEY is forbidden here\n"),
+        ("api","\nconst leaked = process.env.SUPABASE_SERVICE_ROLE_KEY;\n"),
         ("workflow","\n# pull_request_target is forbidden\n"),
         ("return_api","\n// do not call db.rpc('x')\n"),
     ]
