@@ -39,6 +39,7 @@ assert.equal(ready.issues.length, 0);
 const failures: Array<[string,WosP2ReadinessInput]> = [
   ['RLS denied', {...good,readVerified:false}],
   ['missing film', {...good,resources: good.resources.filter(r => r.resource_type !== 'FILM')}],
+  ['unknown resource category', {...good,resources:[...good.resources,{...good.resources[0],resource_type:'UNKNOWN_QA_MATERIAL'}]}],
   ['duplicated fixture', {...good,resources:[...good.resources,good.resources[1]]}],
   ['stale film', {...good,resources:good.resources.map(r => r.resource_type === 'FILM' ? {...r,version_label:'V1'} : r)}],
   ['unverified film', {...good,resources:good.resources.map(r => r.resource_type === 'FILM' ? {...r,status:'ARRIVED'} : r)}],
