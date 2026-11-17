@@ -75,7 +75,7 @@ export default function LiveQaWorkshopInbox() {
           .select('id,organization_id,order_number,workflow_status,version,version_label,customer_name_snapshot,project_name_snapshot,product_name,product_material,requested_quantity,current_batch_quantity,planned_ship_date,priority,surface_treatment,pattern_scope,seam_tolerance,position_reference,customer_acceptance_standard,packaging_method,carton_quantity,label_marking_rule,submitted_at')
           .eq('id', item.id).eq('organization_id', item.organizationId).maybeSingle(),
         client.from('wos_workshop_inbox')
-          .select('id,order_id,organization_id,source_revision,source_version_label,submission_id')
+          .select('id,order_id,organization_id,workflow_status,source_revision,source_version_label,submission_id')
           .eq('order_id', item.id).eq('organization_id', item.organizationId).limit(2),
         client.from('wos_reference_images')
           .select('id,category,version_label,image_status,file_name,storage_path,uploaded_at')
@@ -85,10 +85,14 @@ export default function LiveQaWorkshopInbox() {
       ]);
       const task=tasks.data?.[0];
       if (order.error || tasks.error || images.error || !order.data
-        || order.data.workflow_status !== 'SUBMITTED'
+        || order.data.workflow_status !== item.workflowStatus
         || order.data.id !== item.id || order.data.organization_id !== item.organizationId
         || order.data.version !== item.version || order.data.version_label !== item.versionLabel
-        || tasks.data?.length !== 1 || (task?.source_revision ?? -100) + 1 !== item.version
+        // Inbox holds the original SUBMITTED receipt, not a mutable status.
+        // A later P2 transition advances order.version without rewriting
+        // source_revision or the immutable submission/receipt identity.
+        || tasks.data?.length !== 1 || task?.workflow_status !== 'SUBMITTED'
+        || (task?.source_revision ?? -100) + 1 > item.version
         || task?.source_version_label !== item.versionLabel) {
         throw new Error('QA_ORDER_TRANSACTION_DETAILS_UNVERIFIED');
       }
@@ -243,6 +247,12 @@ export default function LiveQaWorkshopInbox() {
                 organizationId={item.organizationId}
                 versionLabel={item.versionLabel}
                 currentBatchQuantity={Number(details[item.id].current_batch_quantity)}
+                expectedVersion={item.version}
+                workflowStatus={item.workflowStatus}
+                onAfterAction={() => {
+                  setExpanded({}); setDetails({}); setImageVersions({});
+                  void refresh();
+                }}
               />
             </section>
           )}
