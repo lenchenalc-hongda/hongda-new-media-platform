@@ -53,7 +53,7 @@ jobs:
           grep -Fq "NOT EXECUTED" reviewer/audits/wos-p2-pr241/qa-p2-fail-close-only.sql
           grep -Fq "No SQL has been installed" reviewer/audits/wos-p2-pr241/QA_ONLY_INSTALL_ROLLBACK_RUNBOOK.md
           grep -Fq "enabled=false" reviewer/audits/wos-p2-pr241/QA_ONLY_INSTALL_ROLLBACK_RUNBOOK.md
-          test -z "$SUPABASE_URL"
-          test -z "$SUPABASE_SERVICE_ROLE_KEY"
+          test -z "${SUPABASE_URL:-}"
+          test -z "${SUPABASE_SERVICE_ROLE_KEY:-}"
           echo WOS_P2_QA_INSTALL_ROLLBACK_RUNBOOK_RETAINED=PASS
           echo WOS_P2_INDEPENDENT_QA_SECRET_COUNT=0
