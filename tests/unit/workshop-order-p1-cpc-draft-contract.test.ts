@@ -33,5 +33,13 @@ assert(component.includes('选择 CPC 客户'));
 assert(component.includes('关联 CPC 项目'));
 assert(component.includes("response.ok"));
 assert(component.includes('QA_CPC_DRAFT_SAVED_TO_DATABASE'));
+assert(route.includes('actorProfileId: auth.actor.id'), 'No authenticated-actor scoping for recovery');
+assert(component.includes('window.localStorage.setItem(recoveryStorageKey.current, orderNumber.current)'), 'Idempotency number must persist before POST');
+assert(component.includes('window.localStorage.getItem(key)'), 'Same QA order number must survive browser reload');
+assert(component.includes('window.localStorage.removeItem(recoveryStorageKey.current)'), 'Fresh draft must be a deliberate new operation');
+assert(component.includes('QA_CPC_DRAFT_RETRY_SAME_NUMBER_AFTER_RELOAD'), 'Lost-response recovery must be explicit');
+assert(component.includes('QA_CPC_RECOVERY_STORAGE_UNAVAILABLE'), 'Fail closed on missing durable idempotency storage');
+assert(!component.includes('localStorage.setItem(\'password'), 'Never cache account password');
+
 assert(form.includes('<LiveQaCpcDraft draft={validation.normalized} valid={validation.ok} />'));
 console.log('workshop-order-p1-cpc-draft-contract.test.ts: PASS');
