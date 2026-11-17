@@ -18,6 +18,10 @@ export default function LiveQaWorkshopInbox() {
   const [lastFetchedAt, setLastFetchedAt] = useState('');
   const [imageLinks, setImageLinks] = useState<Record<string,string>>({});
   const [imageStatus, setImageStatus] = useState<Record<string,string>>({});
+  const [expanded, setExpanded] = useState<Record<string,boolean>>({});
+  const [details, setDetails] = useState<Record<string,Record<string,unknown>>>({});
+  const [detailErrors, setDetailErrors] = useState<Record<string,string>>({});
+  const [imageVersions, setImageVersions] = useState<Record<string,Array<{id:string;category:string;version_label:string;image_status:string;file_name:string;storage_path:string;uploaded_at:string}>>>({});
   const objectUrls = useRef<Map<string,string>>(new Map());
 
   const refresh = useCallback(async () => {
@@ -54,6 +58,46 @@ export default function LiveQaWorkshopInbox() {
     const registry = objectUrls.current;
     return () => { for (const url of registry.values()) URL.revokeObjectURL(url); registry.clear(); };
   }, [refresh]);
+
+  async function showDetails(item: WosInboxItem) {
+    if (expanded[item.id]) {
+      setExpanded(prev => ({ ...prev, [item.id]: false }));
+      return;
+    }
+    if (item.entityType !== 'PRODUCTION_ORDER') return;
+    setDetailErrors(prev => ({ ...prev, [item.id]: '' }));
+    try {
+      const client = createClient();
+      if (!client) throw new Error('QA_DATABASE_UNAVAILABLE');
+      const [order, tasks, images] = await Promise.all([
+        client.from('wos_production_orders')
+          .select('id,organization_id,order_number,workflow_status,version,version_label,customer_name_snapshot,project_name_snapshot,product_name,product_material,requested_quantity,current_batch_quantity,planned_ship_date,priority,surface_treatment,pattern_scope,seam_tolerance,position_reference,customer_acceptance_standard,packaging_method,carton_quantity,label_marking_rule,submitted_at')
+          .eq('id', item.id).eq('organization_id', item.organizationId).maybeSingle(),
+        client.from('wos_workshop_inbox')
+          .select('id,order_id,organization_id,source_revision,source_version_label,submission_id')
+          .eq('order_id', item.id).eq('organization_id', item.organizationId).limit(2),
+        client.from('wos_reference_images')
+          .select('id,category,version_label,image_status,file_name,storage_path,uploaded_at')
+          .eq('entity_type','PRODUCTION_ORDER').eq('entity_id',item.id)
+          .eq('organization_id',item.organizationId)
+          .order('uploaded_at',{ ascending:false }).limit(100),
+      ]);
+      const task=tasks.data?.[0];
+      if (order.error || tasks.error || images.error || !order.data
+        || order.data.workflow_status !== 'SUBMITTED'
+        || order.data.id !== item.id || order.data.organization_id !== item.organizationId
+        || order.data.version !== item.version || order.data.version_label !== item.versionLabel
+        || tasks.data?.length !== 1 || task?.source_revision + 1 !== item.version
+        || task?.source_version_label !== item.versionLabel) {
+        throw new Error('QA_ORDER_TRANSACTION_DETAILS_UNVERIFIED');
+      }
+      setDetails(prev => ({ ...prev, [item.id]: order.data as Record<string,unknown> }));
+      setImageVersions(prev => ({ ...prev, [item.id]: images.data ?? [] }));
+      setExpanded(prev => ({ ...prev, [item.id]: true }));
+    } catch {
+      setDetailErrors(prev => ({ ...prev, [item.id]: 'QA_ORDER_DETAILS_DENIED_OR_UNVERIFIED' }));
+    }
+  }
 
   async function openImage(item: WosInboxItem) {
     if (item.entityType !== 'PRODUCTION_ORDER' || imageStatus[item.id] === 'LOADING') return;
@@ -143,6 +187,12 @@ export default function LiveQaWorkshopInbox() {
           </p>
           <div className="mt-3 flex flex-wrap items-center gap-3">
             {item.entityType === 'PRODUCTION_ORDER' && (
+              <button type="button" onClick={() => { void showDetails(item); }}
+                className="min-h-11 rounded-md border border-gray-300 bg-white px-3 py-2 text-xs font-medium text-gray-800">
+                {expanded[item.id] ? '收起生产要求' : '查看真实生产要求与图片版本'}
+              </button>
+            )}
+            {item.entityType === 'PRODUCTION_ORDER' && (
               <button type="button" onClick={() => { void openImage(item); }}
                 disabled={imageStatus[item.id] === 'LOADING'}
                 className="min-h-11 rounded-md border border-gray-300 bg-gray-50 px-3 py-2 text-xs font-medium text-gray-800 disabled:opacity-50">
@@ -157,6 +207,38 @@ export default function LiveQaWorkshopInbox() {
               <span role="alert" className="text-xs text-red-700">{imageStatus[item.id]}</span>
             )}
           </div>
+          {detailErrors[item.id] && <p role="alert" className="mt-2 text-xs text-red-700">{detailErrors[item.id]}</p>}
+          {expanded[item.id] && details[item.id] && (
+            <section className="mt-4 space-y-3 border-t pt-3" aria-label="订单生产详情">
+              <dl className="grid gap-2 text-xs sm:grid-cols-2">
+                {([
+                  ['客户', 'customer_name_snapshot'], ['关联项目', 'project_name_snapshot'],
+                  ['产品', 'product_name'], ['材质', 'product_material'],
+                  ['订单数量', 'requested_quantity'], ['本批数量', 'current_batch_quantity'],
+                  ['交货日期', 'planned_ship_date'], ['工艺与表面处理', 'surface_treatment'],
+                  ['图案范围', 'pattern_scope'], ['接缝要求', 'seam_tolerance'],
+                  ['印刷位置', 'position_reference'], ['客户验收标准', 'customer_acceptance_standard'],
+                  ['包装方式', 'packaging_method'], ['每箱数量', 'carton_quantity'],
+                  ['标签要求', 'label_marking_rule'], ['生产资料版本', 'version_label'],
+                ] as const).map(([label, field]) => (
+                  <div key={field} className="rounded border border-gray-100 p-2">
+                    <dt className="text-gray-500">{label}</dt>
+                    <dd className="mt-1 break-words font-medium text-gray-900">{String(details[item.id][field] ?? '未填写')}</dd>
+                  </div>
+                ))}
+              </dl>
+              <h4 className="text-xs font-semibold">参考图片与历史版本（仅展示元数据，图片下载仍受 Storage RLS 控制）</h4>
+              <ul className="space-y-1 text-xs">
+                {(imageVersions[item.id] ?? []).map(img => (
+                  <li key={img.id} className="rounded bg-gray-50 p-2">
+                    {img.category} · {img.version_label} · {img.image_status} · {img.file_name}
+                    {img.version_label === item.versionLabel && img.image_status === 'READY'
+                      ? ' · 当前订单版本（不代表已完成签样确认）' : ' · 历史或非就绪记录'}
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
         </article>
       ))}
     </section>
