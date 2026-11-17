@@ -13,9 +13,7 @@ export const wosP2OfficeRevisionPatchSchema = z.object({
   currentBatchQuantity: z.number().int().positive().max(2147483647).optional(),
   customerAcceptanceStandard: z.string().trim().min(1).max(2000).optional(),
   positionReference: z.string().trim().min(1).max(2000).optional(),
-}).strict().refine(p => Object.keys(p).length > 0, {
-  message: 'AT_LEAST_ONE_CORRECTION_REQUIRED',
-});
+}).strict();
 export const wosP2OfficeRevisionRequestSchema=z.object({
   orderId: uuid,
   expectedVersion: z.number().int().min(2).max(2147483646),
@@ -24,6 +22,11 @@ export const wosP2OfficeRevisionRequestSchema=z.object({
   reason: z.string().trim().min(10).max(500),
   patch: wosP2OfficeRevisionPatchSchema,
 }).strict().superRefine((p,ctx)=>{
+  if (p.action==='SAVE_CORRECTION' && Object.keys(p.patch).length===0) {
+    ctx.addIssue({code:'custom',path:['patch'],message:'AT_LEAST_ONE_CORRECTION_REQUIRED'});
+  }
+  // Empty RESUBMIT_CORRECTION is allowed only when the database confirms a
+  // previously saved correction on this exact current order version.
   if (p.patch.requestedQuantity!==undefined
     && p.patch.currentBatchQuantity!==undefined
     && p.patch.currentBatchQuantity>p.patch.requestedQuantity) {
