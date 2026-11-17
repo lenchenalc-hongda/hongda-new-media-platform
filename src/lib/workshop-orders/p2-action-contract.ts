@@ -44,8 +44,9 @@ const confirmed = z.object({
 });
 const accept = z.object({ ...identity, action: z.literal('ACCEPT') }).strict();
 const reject = z.object({ ...identity, action: z.literal('RETURN_FOR_INFORMATION') }).strict();
+const review = z.object({ ...identity, action: z.literal('REVIEW_CORRECTION') }).strict();
 
-export type WosP2Action = z.infer<typeof accept> | z.infer<typeof reject> | z.infer<typeof confirmed>;
+export type WosP2Action = z.infer<typeof accept> | z.infer<typeof reject> | z.infer<typeof confirmed> | z.infer<typeof review>;
 
 export function parseWosP2Action(raw: unknown): WosP2Action | null {
   if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) return null;
@@ -53,6 +54,7 @@ export function parseWosP2Action(raw: unknown): WosP2Action | null {
   const result = action === 'ACCEPT' ? accept.safeParse(raw)
     : action === 'RETURN_FOR_INFORMATION' ? reject.safeParse(raw)
     : action === 'CONFIRM_MATERIAL' ? confirmed.safeParse(raw)
+    : action === 'REVIEW_CORRECTION' ? review.safeParse(raw)
     : null;
   return result?.success ? result.data : null;
 }
@@ -93,18 +95,30 @@ export function wosP2RpcArgs(action: WosP2Action) {
   } as const;
 }
 
+export function wosP2ReviewRpcArgs(action: Extract<WosP2Action,{action:'REVIEW_CORRECTION'}>) {
+  return {
+    p_order_id:action.orderId,
+    p_expected_version:action.expectedVersion,
+    p_request_id:action.requestId,
+    p_note:action.note,
+  } as const;
+}
+
 export function isWosP2RpcResult(value: unknown, action: WosP2Action): value is {
-  status: 'APPLIED' | 'REPLAYED'; orderId: string; version: number;
+  status: 'APPLIED' | 'REVIEWED' | 'REPLAYED'; orderId: string; version: number;
   workflowStatus: string; requestId: string;
 } {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
   const v=value as Record<string,unknown>;
-  return (v.status === 'APPLIED' || v.status === 'REPLAYED')
+  return (v.status === 'APPLIED' || v.status === 'REPLAYED' || (action.action==='REVIEW_CORRECTION' && v.status==='REVIEWED'))
     && v.orderId === action.orderId && v.requestId === action.requestId
     && typeof v.version === 'number' && Number.isInteger(v.version)
     && v.version === action.expectedVersion + 1
     && typeof v.workflowStatus === 'string'
-    && (action.action === 'ACCEPT'
+    && (action.action === 'REVIEW_CORRECTION'
+      ? v.workflowStatus === 'WAITING_MATERIAL' && typeof v.resolvedBlockers==='number'
+        && Number.isInteger(v.resolvedBlockers) && v.resolvedBlockers>0
+      : action.action === 'ACCEPT'
       ? v.workflowStatus === 'WORKSHOP_REVIEW'
       : action.action === 'RETURN_FOR_INFORMATION'
         ? v.workflowStatus === 'NEEDS_INFORMATION'
