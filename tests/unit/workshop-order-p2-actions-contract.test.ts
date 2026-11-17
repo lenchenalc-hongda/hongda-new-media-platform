@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
   canActOnWosP2, isWosP2QaMutationEnabled, isWosP2RpcResult,
-  parseWosP2Action, wosP2RpcArgs,
+  parseWosP2Action, wosP2RpcArgs, wosP2ReviewRpcArgs,
 } from '../../src/lib/workshop-orders/p2-action-contract';
 
 const orderId='11111111-1111-4111-8111-111111111111';
@@ -17,6 +17,16 @@ assert.equal(wosP2RpcArgs(accept).p_order_id,orderId);
 assert.equal(wosP2RpcArgs(accept).p_resource_type,null);
 const returned=parseWosP2Action({...valid,action:'RETURN_FOR_INFORMATION'});
 assert(returned&&returned.action==='RETURN_FOR_INFORMATION');
+const review=parseWosP2Action({...valid,expectedVersion:6,action:'REVIEW_CORRECTION'});
+assert(review && review.action==='REVIEW_CORRECTION');
+assert.equal(wosP2ReviewRpcArgs(review).p_order_id,orderId);
+assert.equal(isWosP2RpcResult({
+  status:'REVIEWED',orderId,version:7,requestId,workflowStatus:'WAITING_MATERIAL',resolvedBlockers:1,
+},review),true);
+assert.equal(isWosP2RpcResult({
+  status:'REVIEWED',orderId,version:7,requestId,workflowStatus:'READINESS_CHECK',resolvedBlockers:1,
+},review),false,'review must never reach ready/start');
+assert.equal(parseWosP2Action({...valid,action:'REVIEW_CORRECTION',approved:true}),null);
 const material=parseWosP2Action({
   ...valid,action:'CONFIRM_MATERIAL',
   resourceType:'INCOMING_MATERIAL',
@@ -125,6 +135,8 @@ assert(!route.includes("order.data.version!==request.expectedVersion"),
 assert(ui.includes("NEXT_PUBLIC_WOS_P2_QA_MUTATIONS_ENABLED"));
 assert(ui.includes("disabled={!canAttempt||!legal||sending}"));
 assert(ui.includes('crypto.randomUUID()'));
+assert(ui.includes('REVIEW_CORRECTION'));
+assert(route.includes("client.rpc('wos_qa_p2_review_correction'"));
 assert(ui.includes('pendingRef.current?.key===key'));
 assert(ui.includes("status:'IN_PRODUCTION'")===false);
 assert(server.includes("for (const order of persistedRows)"));
