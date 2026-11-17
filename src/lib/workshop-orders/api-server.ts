@@ -107,6 +107,21 @@ export async function readWosWorkshopInbox() {
       const receipts = receiptRows.data ?? [];
       if (tasks.length !== persistedRows.length || receipts.length !== persistedRows.length)
         return response('WORKSHOP_TRANSACTION_MISMATCH', 409);
+      // A corrected order keeps its immutable P1 Inbox/receipt, while the
+      // current revision label advances. Verify every advanced label against
+      // an append-only, RLS-scoped Office revision history record.
+      const revised = persistedRows.filter(order =>
+        !tasks.some(task => task.order_id===order.id &&
+          task.source_version_label===order.version_label));
+      const revisionIds = revised.map(order=>order.id);
+      const amendments = revisionIds.length ? await client.from('wos_status_history')
+        .select('organization_id,entity_type,entity_id,reason_code,metadata')
+        .eq('organization_id',actor.orgId).eq('entity_type','PRODUCTION_ORDER')
+        .in('entity_id',revisionIds)
+        .in('reason_code',['QA_P2_OFFICE_SAVE_CORRECTION','QA_P2_OFFICE_RESUBMIT_CORRECTION'])
+        .limit(401) : null;
+      if (amendments && (amendments.error || !Array.isArray(amendments.data)
+        || amendments.data.length>=401)) return response('WORKSHOP_REVISION_UNVERIFIED',409);
       const taskByOrder = new Map(tasks.map(task => [task.order_id, task]));
       const receiptById = new Map(receipts.map(receipt => [receipt.id, receipt]));
       if (taskByOrder.size !== tasks.length || receiptById.size !== receipts.length)
@@ -124,7 +139,17 @@ export async function readWosWorkshopInbox() {
               && task.source_revision + 1 !== order.version)
           || receipt.source_revision !== task.source_revision
           || receipt.source_version_label !== task.source_version_label
-          || task.source_version_label !== order.version_label) {
+          || (task.source_version_label !== order.version_label && !(
+            /^QA-R[1-9][0-9]*$/.test(order.version_label) &&
+            (amendments?.data??[]).some(revision=>
+              revision.organization_id===actor.orgId
+              && revision.entity_type==='PRODUCTION_ORDER'
+              && revision.entity_id===order.id
+              && revision.metadata?.newVersionLabel===order.version_label
+              && Number.isInteger(revision.metadata?.newVersion)
+              && revision.metadata.newVersion<=order.version
+            )
+          ))) {
           return response('WORKSHOP_TRANSACTION_MISMATCH', 409);
         }
       }
