@@ -59,6 +59,13 @@ jobs:
           [ "$(jq -r '.head.ref' <<<"$pr")" = feature/wos-p1-qa-transaction-inbox-20261117 ]
           [ "$(jq -r '.head.repo.full_name' <<<"$pr")" = "$GITHUB_REPOSITORY" ]
           author=$(jq -r '.user.login' <<<"$pr")
+          # Guard against same-name GitHub checks from a changed CI workflow.
+          # Both PR and protected master must have the exact same trusted CI blob.
+          master_ci=$(api "$base/contents/.github/workflows/ci.yml?ref=master" | jq -r .sha)
+          reviewed_ci=$(api "$base/contents/.github/workflows/ci.yml?ref=$REQUESTED_SHA" | jq -r .sha)
+          [ -n "$master_ci" ] && [ "$master_ci" = "$reviewed_ci" ]
+          files=$(api "$base/pulls/238/files?per_page=100")
+          jq -e '[.[] | select(.filename | startswith(".github/workflows/"))] | length==0' <<<"$files" >/dev/null
 
           # Fail closed unless an independent reviewer approved THIS exact SHA.
           # Review of any prior commit is insufficient.
@@ -117,7 +124,7 @@ jobs:
   protected-real-qa:
     runs-on: ubuntu-latest
     needs: [independent-gate, secretless-source-review]
-    if: needs.secretless-source-review.result == 'success' && github.ref == 'refs/heads/master'
+    if: ${{ needs['secretless-source-review'].result == 'success' && github.ref == 'refs/heads/master' }}
     timeout-minutes: 65
     environment: hongda-review-dev
     permissions:
