@@ -100,7 +100,8 @@ export function evaluateWosP2Readiness(input: WosP2ReadinessInput): WosP2Readine
       (validQty && Number.isSafeInteger(row.quantity_expected) &&
        Number.isSafeInteger(row.quantity_arrived) &&
        Number(row.quantity_expected) >= input.currentBatchQuantity &&
-       Number(row.quantity_arrived) >= input.currentBatchQuantity);
+       Number(row.quantity_arrived) >= input.currentBatchQuantity &&
+       Number(row.quantity_arrived) >= Number(row.quantity_expected));
     const ready = input.readVerified && correctVersion && confirms &&
       row.status === spec.acceptedStatus && quantityReady;
     let message = '状态已登记，但当前版本或操作人验证尚未通过';
