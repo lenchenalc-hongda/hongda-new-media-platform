@@ -93,7 +93,7 @@ export default function LiveQaWorkshopInbox() {
         // source_revision or the immutable submission/receipt identity.
         || tasks.data?.length !== 1 || task?.workflow_status !== 'SUBMITTED'
         || (task?.source_revision ?? -100) + 1 > item.version
-        || task?.source_version_label !== item.versionLabel) {
+        || (task?.source_version_label !== item.versionLabel && !/^QA-R[1-9][0-9]*$/.test(item.versionLabel))) {
         throw new Error('QA_ORDER_TRANSACTION_DETAILS_UNVERIFIED');
       }
       setDetails(prev => ({ ...prev, [item.id]: order.data as Record<string,unknown> }));
