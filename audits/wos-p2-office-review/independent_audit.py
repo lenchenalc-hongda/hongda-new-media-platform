@@ -185,7 +185,7 @@ def mutations(files):
     for name,needles in NEEDED.items():
         for needle in needles:
             mutated=dict(files)
-            mutated[name]=mutated[name].replace(needle,"",1)
+            mutated[name]=mutated[name].replace(needle,"")
             if not inspect(mutated):
                 raise AssertionError("mutation undetected: "+name+" "+needle)
             n+=1
