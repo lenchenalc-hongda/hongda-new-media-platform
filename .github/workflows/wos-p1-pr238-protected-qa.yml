@@ -36,7 +36,7 @@ jobs:
           github.event.issue.pull_request == null &&
           github.event.sender.login == 'lenchenalc-hongda' &&
           github.event.comment.user.login == 'lenchenalc-hongda' &&
-          github.event.comment.body == 'WOS_P1_SINGLE_QA_ACCEPTANCE_20261117_SHA=6a72b446ccc517a5ff14e531b8a6663b4a70a77e'
+          github.event.comment.body == 'WOS_P1_SINGLE_QA_ACCEPTANCE_RETRY1_20261117_SHA=6a72b446ccc517a5ff14e531b8a6663b4a70a77e'
         )
       )
     permissions:
@@ -63,7 +63,7 @@ jobs:
           set -euo pipefail
           [ "$GITHUB_REF" = refs/heads/master ]
           if [ "$GITHUB_EVENT_NAME" = issue_comment ]; then
-            jq -e --arg body "WOS_P1_SINGLE_QA_ACCEPTANCE_20261117_SHA=6a72b446ccc517a5ff14e531b8a6663b4a70a77e" '
+            jq -e --arg body "WOS_P1_SINGLE_QA_ACCEPTANCE_RETRY1_20261117_SHA=6a72b446ccc517a5ff14e531b8a6663b4a70a77e" '
               .action=="created" and .issue.number==104 and
               (.issue | has("pull_request") | not) and
               .sender.login=="lenchenalc-hongda" and
@@ -188,7 +188,7 @@ jobs:
                      .name=="TypeScript check" or .name=="Build" or
                      .name=="Audit bundle for secret leakage")] |
               length==4 and all(.[]; .conclusion=="success")' <<<"$jobs" >/dev/null
-            if [ "$is_audit" = yes ]; then
+            if [ "$is_audit" != no ]; then
               job_id=$(jq -r '.jobs[]|select(.name=="lint-and-audit")|.id' <<<"$jobs")
               [[ "$job_id" =~ ^[0-9]+$ ]]
               log_file=$(mktemp)
@@ -204,15 +204,21 @@ jobs:
               [[ "$count" =~ ^[0-9]+$ ]] && [ "$count" -ge 12 ]
               rm -f "$log_file"
               trap - RETURN
-              echo "audit_run=$run" >> "$GITHUB_OUTPUT"
+              if [ "$is_audit" = fix ]; then
+                echo "fix_run=$run" >> "$GITHUB_OUTPUT"
+              else
+                echo "audit_run=$run" >> "$GITHUB_OUTPUT"
+              fi
             else
               echo "business_run=$run" >> "$GITHUB_OUTPUT"
             fi
           }
           verify_ci "$REQUESTED_SHA" no
           verify_ci "$workflow_head" yes
+          verify_ci "$fix_head" fix
           echo "sha=$REQUESTED_SHA" >> "$GITHUB_OUTPUT"
           echo "workflow_head=$workflow_head" >> "$GITHUB_OUTPUT"
+          echo "fix_head=$fix_head" >> "$GITHUB_OUTPUT"
           echo WOS_P1_OWNER_AUTHORIZED_GITHUB_HOSTED_AUDIT=PASS
 
   secretless-source-review:
@@ -296,6 +302,8 @@ jobs:
           WORKFLOW_HEAD: ${{ needs.independent-gate.outputs.workflow_head }}
           BUSINESS_RUN: ${{ needs.independent-gate.outputs.business_run }}
           AUDIT_RUN: ${{ needs.independent-gate.outputs.audit_run }}
+          FIX_HEAD: ${{ needs.independent-gate.outputs.fix_head }}
+          FIX_RUN: ${{ needs.independent-gate.outputs.fix_run }}
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
@@ -303,6 +311,8 @@ jobs:
           [[ "$WORKFLOW_HEAD" =~ ^[0-9a-f]{40}$ ]]
           [[ "$BUSINESS_RUN" =~ ^[0-9]+$ ]]
           [[ "$AUDIT_RUN" =~ ^[0-9]+$ ]]
+          [[ "$FIX_HEAD" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$FIX_RUN" =~ ^[0-9]+$ ]]
           base="https://api.github.com/repos/$GITHUB_REPOSITORY"
           api() {
             curl --fail --silent --show-error --max-time 25 \
@@ -317,15 +327,23 @@ jobs:
           pr239=$(api "$base/pulls/239")
           [ "$(jq -r '.merged' <<<"$pr239")" = true ]
           [ "$(jq -r '.head.sha' <<<"$pr239")" = "$WORKFLOW_HEAD" ]
-          [ "$(jq -r '.merge_commit_sha' <<<"$pr239")" = "$GITHUB_SHA" ]
+          [ "$(jq -r '.merge_commit_sha' <<<"$pr239")" = 5d794a5f5be0821c37df0bbf99005137a1f8197e ]
+          fix_pr=$(api "$base/pulls/240")
+          [ "$(jq -r '.merged' <<<"$fix_pr")" = true ]
+          [ "$(jq -r '.head.sha' <<<"$fix_pr")" = "$FIX_HEAD" ]
+          [ "$(jq -r '.merge_commit_sha' <<<"$fix_pr")" = "$GITHUB_SHA" ]
           ci1=$(api "$base/actions/runs/$BUSINESS_RUN")
           ci2=$(api "$base/actions/runs/$AUDIT_RUN")
+          ci3=$(api "$base/actions/runs/$FIX_RUN")
           jq -e --arg sha "$REVIEWED_SHA" \
             '.head_sha==$sha and .event=="pull_request" and .conclusion=="success" and
               .path==".github/workflows/ci.yml"' <<<"$ci1" >/dev/null
           jq -e --arg sha "$WORKFLOW_HEAD" \
             '.head_sha==$sha and .event=="pull_request" and .conclusion=="success" and
               .path==".github/workflows/ci.yml"' <<<"$ci2" >/dev/null
+          jq -e --arg sha "$FIX_HEAD" \
+            '.head_sha==$sha and .event=="pull_request" and .conclusion=="success" and
+              .path==".github/workflows/ci.yml"' <<<"$ci3" >/dev/null
           echo WOS_P1_BEFORE_QA_CREDENTIALS_AUDIT_RECHECK=PASS
       - name: Real two-account HTTP/PNG/Inbox/Storage E2E (credentials scoped to this step)
         env:
