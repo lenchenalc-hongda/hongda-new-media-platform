@@ -2,6 +2,7 @@
 
 import React, { useState, type ChangeEvent } from 'react';
 import LiveQaProductionSubmit from './LiveQaProductionSubmit';
+import LiveQaCpcDraft from './LiveQaCpcDraft';
 import {
   PRODUCTION_ORDER_ENTRY_SECTIONS,
   createEmptyProductionOrderDraft,
@@ -231,6 +232,10 @@ export default function ProductionOrderForm({ qaLive = false }: { qaLive?: boole
           </div>
         </section>
       ))}
+
+      {qaLive && (
+        <LiveQaCpcDraft draft={validation.normalized} valid={validation.ok} />
+      )}
 
       {qaLive && (
         <LiveQaProductionSubmit
