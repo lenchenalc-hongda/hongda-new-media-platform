@@ -158,11 +158,16 @@ BEGIN
    IF v_order.workflow_status<>'SUBMITTED' THEN
      RAISE EXCEPTION 'INVALID_TRANSITION' USING ERRCODE='PT409'; END IF;
    v_next:='WORKSHOP_REVIEW';
-   INSERT INTO public.wos_confirmations(
-     organization_id,entity_type,entity_id,confirmation_type,decision,
-     profile_id,role_snapshot,note)
-   VALUES (v_actor.org_id,'PRODUCTION_ORDER',p_order_id,'WORKSHOP_SUPERVISOR',
-      'CONFIRMED',v_actor.id,v_actor.role,pg_catalog.btrim(p_note));
+   -- An authorized operator can receive a task, but must not be falsely
+   -- recorded as a WORKSHOP_SUPERVISOR. Operator actions are always in
+   -- wos_status_history, while this confirmation is manager/admin only.
+   IF v_actor.role IN ('manager','admin') THEN
+     INSERT INTO public.wos_confirmations(
+       organization_id,entity_type,entity_id,confirmation_type,decision,
+       profile_id,role_snapshot,note)
+     VALUES (v_actor.org_id,'PRODUCTION_ORDER',p_order_id,'WORKSHOP_SUPERVISOR',
+        'CONFIRMED',v_actor.id,v_actor.role,pg_catalog.btrim(p_note));
+   END IF;
 
  ELSIF p_action='RETURN_FOR_INFORMATION' THEN
    IF v_order.workflow_status NOT IN ('SUBMITTED','WORKSHOP_REVIEW') THEN
@@ -173,11 +178,13 @@ BEGIN
      description,status,opened_by_profile_id)
    VALUES (v_actor.org_id,'PRODUCTION_ORDER',p_order_id,
      'P2_DOCUMENTS_INCOMPLETE','DOCUMENT',pg_catalog.btrim(p_note),'OPEN',v_actor.id);
-   INSERT INTO public.wos_confirmations(
-     organization_id,entity_type,entity_id,confirmation_type,decision,
-     profile_id,role_snapshot,note)
-   VALUES (v_actor.org_id,'PRODUCTION_ORDER',p_order_id,'WORKSHOP_SUPERVISOR',
-     'REJECTED',v_actor.id,v_actor.role,pg_catalog.btrim(p_note));
+   IF v_actor.role IN ('manager','admin') THEN
+     INSERT INTO public.wos_confirmations(
+       organization_id,entity_type,entity_id,confirmation_type,decision,
+       profile_id,role_snapshot,note)
+     VALUES (v_actor.org_id,'PRODUCTION_ORDER',p_order_id,'WORKSHOP_SUPERVISOR',
+       'REJECTED',v_actor.id,v_actor.role,pg_catalog.btrim(p_note));
+   END IF;
 
  ELSIF p_action='CONFIRM_MATERIAL' THEN
    IF v_order.workflow_status NOT IN
