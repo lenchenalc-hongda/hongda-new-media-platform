@@ -252,5 +252,53 @@ BEGIN
     AND version=2 AND workflow_status='SUBMITTED';
  IF n<>1 THEN RAISE EXCEPTION 'FAIL_CROSS_TENANT_ORDER_MODIFIED'; END IF;
 END $$;
+-- The gate expiry must terminate *direct* RPC access even after legitimate
+-- successful writes. The test intentionally executes after all other cases.
+UPDATE public.wos_qa_p2_execution_gate
+ SET enabled=true,enabled_until=pg_catalog.clock_timestamp()-INTERVAL '1 second',
+     approval_reference='SYNTHETIC_EXPIRED_WINDOW',
+     updated_at=pg_catalog.clock_timestamp()
+ WHERE gate_name='OPERATOR_WRITES';
+SELECT pg_catalog.set_config('request.jwt.claim.sub','11111111-1111-4111-8111-111111111111',false);
+SET ROLE authenticated;
+DO $
+BEGIN
+  BEGIN
+    PERFORM public.wos_qa_p2_operator_action(
+      'cccccccc-cccc-4ccc-8ccc-cccccccccccc',4,
+      '26262626-2626-4626-8626-262626262626',
+      'ACCEPT',NULL,NULL,NULL,NULL,'expired gate must deny even existing operator');
+    RAISE EXCEPTION 'FAIL_EXPIRED_GATE_ALLOWED_DIRECT_RPC';
+  EXCEPTION WHEN SQLSTATE '42501' THEN NULL;
+  END;
+END $;
+RESET ROLE;
+UPDATE public.wos_qa_p2_execution_gate
+ SET enabled=false,enabled_until=NULL,
+     approval_reference='NOT_AUTHORIZED',
+     updated_at=pg_catalog.clock_timestamp()
+ WHERE gate_name='OPERATOR_WRITES';
+SELECT pg_catalog.set_config('request.jwt.claim.sub','11111111-1111-4111-8111-111111111111',false);
+SET ROLE authenticated;
+DO $
+BEGIN
+  BEGIN
+    PERFORM public.wos_qa_p2_operator_action(
+      'cccccccc-cccc-4ccc-8ccc-cccccccccccc',4,
+      '27272727-2727-4727-8727-272727272727',
+      'ACCEPT',NULL,NULL,NULL,NULL,'disabled gate must deny after prior transactions');
+    RAISE EXCEPTION 'FAIL_DISABLED_GATE_ALLOWED_DIRECT_RPC';
+  EXCEPTION WHEN SQLSTATE '42501' THEN NULL;
+  END;
+END $;
+RESET ROLE;
+DO $
+BEGIN
+  IF (SELECT count(*) FROM public.wos_qa_p2_action_receipts)<>4 THEN
+    RAISE EXCEPTION 'FAIL_GATE_TEST_CREATED_UNAUTHORIZED_RECEIPTS';
+  END IF;
+END $;
+\echo WOS_P2_PG17_EXPIRED_AND_REVOKED_DB_GATE=PASS
+
 \echo WOS_P2_PG17_SYNTHETIC_TRANSACTION_AUDIT=PASS
 \echo WOS_P2_PG17_ZERO_QA_DB_CONNECTIONS=PASS
