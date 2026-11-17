@@ -15,11 +15,9 @@ interface Props {
 }
 const qaUrl = 'https://xulmpqaknlwqqculbsek.supabase.co';
 const maxBytes = 20 * 1024 * 1024;
-const mimeExtensions: Record<string, string> = {
-  'image/png': 'png',
-  'image/jpeg': 'jpg',
-  'image/webp': 'webp',
-};
+// The trusted QA binary proof currently verifies PNG only. JPEG/WEBP are
+// allowed by the bucket but must NOT be offered as supported by this UI.
+const mimeExtensions: Record<string, string> = { 'image/png': 'png' };
 
 function newProgress(userId: string, orgId: string, orderNumber: string, versionLabel: string): Progress {
   return {
@@ -127,7 +125,7 @@ export default function LiveQaProductionSubmit({ draft, valid, onFillQaSample }:
       return 'SYNTHETIC_QA_ORDER_REQUIRED';
     if ((!stateRef.current || ['NEW', 'DRAFT'].includes(stateRef.current.stage)) &&
         (!file || !mimeExtensions[file.type] || file.size < 12 || file.size > maxBytes))
-      return 'PRIVATE_IMAGE_REQUIRED_JPEG_PNG_WEBP_MAX_20MB';
+      return 'QA_PRIVATE_IMAGE_PNG_ONLY_MAX_20MB';
     if (note.trim().length < 10 || note.length > 2000)
       return 'OFFICE_CONFIRMATION_NOTE_INVALID';
     return null;
