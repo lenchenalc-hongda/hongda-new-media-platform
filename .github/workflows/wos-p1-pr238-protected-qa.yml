@@ -49,6 +49,8 @@ jobs:
       workflow_head: ${{ steps.pin.outputs.workflow_head }}
       business_run: ${{ steps.pin.outputs.business_run }}
       audit_run: ${{ steps.pin.outputs.audit_run }}
+      fix_head: ${{ steps.pin.outputs.fix_head }}
+      fix_run: ${{ steps.pin.outputs.fix_run }}
     steps:
       - id: pin
         name: Validate both PR HEADs and independent Github-hosted CI technical audit
@@ -109,13 +111,34 @@ jobs:
           [ "$(jq -r '.base.ref' <<<"$pr239")" = master ]
           [ "$(jq -r '.head.repo.full_name' <<<"$pr239")" = "$GITHUB_REPOSITORY" ]
           [ "$(jq -r '.head.ref' <<<"$pr239")" = qa/wos-pr238-protected-e2e-20261117 ]
-          [ "$(jq -r '.merge_commit_sha' <<<"$pr239")" = "$GITHUB_SHA" ]
+          # The already-audited #239 workflow merge is the immutable parent
+          # of the one-time Playwright OS-compatibility fix in PR #240.
+          [ "$(jq -r '.merge_commit_sha' <<<"$pr239")" = 5d794a5f5be0821c37df0bbf99005137a1f8197e ]
           workflow_head=$(jq -r '.head.sha' <<<"$pr239")
-          [[ "$workflow_head" =~ ^[0-9a-f]{40}$ ]]
+          [ "$workflow_head" = 848c32e02c829f2e1cafaf4a609420803ddc9762 ]
+          pr240=$(api "$base/pulls/240")
+          [ "$(jq -r '.state' <<<"$pr240")" = closed ]
+          [ "$(jq -r '.merged' <<<"$pr240")" = true ]
+          [ "$(jq -r '.base.ref' <<<"$pr240")" = master ]
+          [ "$(jq -r '.head.ref' <<<"$pr240")" = qa/wos-pr238-playwright-ubuntu24-20261117 ]
+          [ "$(jq -r '.head.repo.full_name' <<<"$pr240")" = "$GITHUB_REPOSITORY" ]
+          [ "$(jq -r '.merge_commit_sha' <<<"$pr240")" = "$GITHUB_SHA" ]
+          fix_head=$(jq -r '.head.sha' <<<"$pr240")
+          [[ "$fix_head" =~ ^[0-9a-f]{40}$ ]]
           [ "$(api "$base/branches/master" | jq -r '.commit.sha')" = "$GITHUB_SHA" ]
           merge_commit=$(api "$base/commits/$GITHUB_SHA")
-          jq -e --arg sha "$workflow_head" \
-            '(.parents | length)==2 and .parents[1].sha==$sha' <<<"$merge_commit" >/dev/null
+          jq -e --arg sha "$fix_head" \
+            '(.parents | length)==2 and
+             .parents[0].sha=="5d794a5f5be0821c37df0bbf99005137a1f8197e" and
+             .parents[1].sha==$sha' <<<"$merge_commit" >/dev/null
+          # Fix PR is restricted to this QA workflow and its static auditor:
+          # no business pages, RLS, migrations, CI definition or other workflows.
+          [ "$(jq -r '.changed_files' <<<"$pr240")" = 2 ]
+          f240=$(api "$base/pulls/240/files?per_page=100")
+          jq -e 'length==2 and
+             ([.[].filename]|sort)==
+             ([".github/workflows/wos-p1-pr238-protected-qa.yml",
+               "tests/unit/workshop-order-p1-qa-workflow-security.test.ts"]|sort)' <<<"$f240" >/dev/null
           # One new shared-workflow path, and only two independent test paths.
           [ "$(jq -r '.changed_files' <<<"$pr239")" = 3 ]
           f239=$(api "$base/pulls/239/files?per_page=100")
@@ -139,8 +162,11 @@ jobs:
               "scripts/agent-control/reliability-watchdog.mjs",
               "tests/unit/agent-control-reliability-v2.test.ts"]|sort)' <<<"$f202" >/dev/null
           installed_workflow=$(api "$base/contents/.github/workflows/wos-p1-pr238-protected-qa.yml?ref=master" | jq -r '.sha')
-          [ -n "$audited_workflow" ] && [ "$audited_workflow" = "$installed_workflow" ]
+          fix_workflow=$(api "$base/contents/.github/workflows/wos-p1-pr238-protected-qa.yml?ref=$fix_head" | jq -r '.sha')
+          [ -n "$audited_workflow" ] && [ -n "$fix_workflow" ]
+          [ "$installed_workflow" = "$fix_workflow" ]
           [ "$master_ci" = "$(api "$base/contents/.github/workflows/ci.yml?ref=$workflow_head" | jq -r '.sha')" ]
+          [ "$master_ci" = "$(api "$base/contents/.github/workflows/ci.yml?ref=$fix_head" | jq -r '.sha')" ]
           verify_ci() {
             local target="$1" is_audit="$2" response run jobs log_file job_id count
             response=$(api "$base/actions/runs?head_sha=$target&event=pull_request&per_page=100")
