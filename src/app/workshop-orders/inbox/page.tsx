@@ -3,6 +3,8 @@ import Link from 'next/link';
 import AppLayout from '@/components/layout/AppLayout';
 import PageHeader from '@/components/layout/PageHeader';
 import WorkshopInbox from '@/components/workshop-orders/WorkshopInbox';
+import LiveQaWorkshopInbox from '@/components/workshop-orders/LiveQaWorkshopInbox';
+import { isApprovedWosSandboxUrl, isWosNonproductionApiEnabled } from '@/lib/workshop-orders/api-contract';
 import { EMPTY_WORKSHOP_QUEUE } from '@/lib/workshop-orders/readiness';
 
 export const metadata: Metadata = {
@@ -11,6 +13,14 @@ export const metadata: Metadata = {
 };
 
 export default function WorkshopInboxPage() {
+  const qaLive = process.env.VERCEL_ENV === 'preview'
+    && isWosNonproductionApiEnabled({
+      vercelEnv: process.env.VERCEL_ENV,
+      nodeEnv: process.env.NODE_ENV,
+      enabled: process.env.WOS_P5C_NONPROD_API_ENABLED,
+    })
+    && process.env.WOS_P7_NONPROD_SUBMIT_ENABLED === 'true'
+    && isApprovedWosSandboxUrl(process.env.NEXT_PUBLIC_SUPABASE_URL);
   return (
     <AppLayout>
       <PageHeader
@@ -26,7 +36,9 @@ export default function WorkshopInboxPage() {
         }
       />
 
-      <WorkshopInbox queue={EMPTY_WORKSHOP_QUEUE} />
+      {qaLive
+        ? <LiveQaWorkshopInbox />
+        : <WorkshopInbox queue={EMPTY_WORKSHOP_QUEUE} />}
     </AppLayout>
   );
 }
