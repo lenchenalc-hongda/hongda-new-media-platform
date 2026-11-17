@@ -49,8 +49,10 @@ export default function LiveQaWorkshopActions({orderId,expectedVersion,workflowS
       ...(action==='CONFIRM_MATERIAL' ? {
         resourceType:resource,
         resourceStatus:status,
-        quantityExpected:resource==='INCOMING_MATERIAL' ? Number(quantityExpected) : null,
-        quantityArrived:resource==='INCOMING_MATERIAL' ? Number(quantityArrived) : null,
+        quantityExpected:resource==='INCOMING_MATERIAL'
+          ? (quantityExpected.trim()==='' ? Number.NaN : Number(quantityExpected)) : null,
+        quantityArrived:resource==='INCOMING_MATERIAL'
+          ? (quantityArrived.trim()==='' ? Number.NaN : Number(quantityArrived)) : null,
       } : {}),
     };
     const key=JSON.stringify(core);
