@@ -101,6 +101,41 @@ async function main() {
     await office.page.getByText('已由真实 HTTP API 提交', { exact: false }).waitFor();
     const orderId = postBody.data.orderId;
 
+    // This is a second business path: real CPC customer/project association
+    // written to an isolated QA DRAFT via an authenticated same-origin API.
+    // The fixture is same-organization and intentionally marked NONPRODUCTION.
+    stage = 'OFFICE_CPC_QA_DRAFT';
+    await office.page.getByRole('combobox', { name: '选择 CPC 客户' })
+      .selectOption({ label: 'QA NONPRODUCTION ONLY - WOS CPC TEST CUSTOMER' });
+    await office.page.getByRole('combobox', { name: '关联 CPC 项目' })
+      .selectOption({ label: 'QA NONPRODUCTION ONLY - WOS P1 TEST PROJECT' });
+    const draftPostWait = office.page.waitForResponse(response =>
+      response.url() === origin + '/api/workshop-orders/production/cpc-drafts'
+      && response.request().method() === 'POST', { timeout: 50000 });
+    await office.page.getByRole('button', { name: '保存 CPC 关联 QA 草稿' }).click();
+    const draftPost = await draftPostWait;
+    const draftBody = await draftPost.json();
+    const cpcSaved = draftPost.status() === 200
+      && draftBody?.ok === true && draftBody?.code === 'QA_CPC_DRAFT_SAVED'
+      && draftBody.data?.persisted === true && draftBody.data?.submitted === false
+      && draftBody.data?.version === 1
+      && /^QA-CPC-NONPROD-[0-9a-f-]{36}$/i.test(draftBody.data?.orderNumber || '');
+    trace('OFFICE_CPC_SAME_ORG_DB_DRAFT', cpcSaved);
+    assert(cpcSaved, 'OFFICE_CPC_DRAFT_NOT_PERSISTED');
+    const replay = await office.page.evaluate(async requestJson => {
+      const response = await fetch('/api/workshop-orders/production/cpc-drafts',{
+        method: 'POST', credentials: 'same-origin', cache: 'no-store',
+        headers: {'Content-Type':'application/json'},body:requestJson,
+      });
+      const body = await response.json().catch(()=>null);
+      return { status:response.status, code:body?.code, id:body?.data?.orderId };
+    }, draftPost.request().postData());
+    const replayOk = replay.status === 200
+      && replay.code === 'QA_CPC_DRAFT_REPLAY_VERIFIED'
+      && replay.id === draftBody.data.orderId;
+    trace('OFFICE_CPC_DRAFT_IDEMPOTENT_REPLAY', replayOk);
+    assert(replayOk, 'OFFICE_CPC_DRAFT_REPLAY_FAILED');
+
     // Simulate the hardest crash: the server commits the submission but the
     // browser never sees the HTTP response. Reload in the *same tab* and
     // prove the original order and idempotency key are recovered, not remade.
