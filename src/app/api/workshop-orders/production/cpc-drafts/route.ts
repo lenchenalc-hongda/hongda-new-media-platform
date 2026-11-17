@@ -93,7 +93,9 @@ export async function GET() {
         id: row.id, customerId: row.customer_reference_id,
         name: row.title, ownerProfileId: row.owner_profile_id,
       }));
-    return answer(200, 'CPC_OPTIONS_VERIFIED', { customers, projects });
+    return answer(200, 'CPC_OPTIONS_VERIFIED', {
+      customers, projects, actorProfileId: auth.actor.id,
+    });
   } catch {
     return answer(503, 'CPC_READ_UNAVAILABLE');
   }
