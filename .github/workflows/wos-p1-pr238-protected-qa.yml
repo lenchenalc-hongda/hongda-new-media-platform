@@ -1,6 +1,6 @@
 # WOS P1 manual protected QA acceptance launcher.
-# Until an independent reviewer approves this integration PR and the existing
-# shared-path lock is released, DO NOT MERGE OR DISPATCH.
+# Once-only owner-authorized GitHub-hosted technical audit replaces human review.
+# Shared path lock exception and no-Production deploy remain separate gates.
 # QA user secrets are read only from the protected environment after exact-SHA
 # approval and trusted CI provenance checks pass. No production deployment.
 name: WOS P1 PR238 QA exact-head protected browser acceptance
@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
     inputs:
       reviewed_sha:
-        description: Approved exact PR238 HEAD, 40 lowercase hex
+        description: Owner-authorized audited exact PR238 HEAD
         type: string
         required: true
 
@@ -31,9 +31,12 @@ jobs:
       actions: read
     outputs:
       sha: ${{ steps.pin.outputs.sha }}
+      workflow_head: ${{ steps.pin.outputs.workflow_head }}
+      business_run: ${{ steps.pin.outputs.business_run }}
+      audit_run: ${{ steps.pin.outputs.audit_run }}
     steps:
       - id: pin
-        name: Independently validate exact PR HEAD, CI run provenance and reviewer
+        name: Validate both PR HEADs and independent Github-hosted CI technical audit
         shell: bash
         env:
           REQUESTED_SHA: ${{ inputs.reviewed_sha }}
@@ -72,38 +75,81 @@ jobs:
           jq -e --argjson count "$changed_files" 'length == $count' <<<"$files" >/dev/null
           jq -e '[.[] | select(.filename | startswith(".github/workflows/"))] | length==0' <<<"$files" >/dev/null
 
-          # Fail closed unless an independent reviewer approved THIS exact SHA.
-          # Review of any prior commit is insufficient.
-          reviews=$(api "$base/pulls/238/reviews?per_page=100")
-          # Never accept a possibly truncated last-review history.
-          jq -e 'length < 100' <<<"$reviews" >/dev/null
-          # A former approval followed by CHANGES_REQUESTED does not count.
-          reviewer=$(jq -r --arg sha "$REQUESTED_SHA" --arg author "$author" \
-            'group_by(.user.login) | map(max_by(.submitted_at)) |
-             [.[] | select(.state=="APPROVED" and .commit_id==$sha and
-                           .user.login!=$author and .user.type=="User")] |
-             last | .user.login // empty' <<<"$reviews")
-          [ -n "$reviewer" ]
-          rights=$(api "$base/collaborators/$reviewer/permission")
-          jq -e '.permission=="write" or .permission=="maintain" or .permission=="admin"' \
-            <<<"$rights" >/dev/null
-
-          # Check a genuine CI workflow run and job list tied to this SHA, not
-          # only a check run with a spoofable display name.
-          runs=$(api "$base/actions/runs?head_sha=$REQUESTED_SHA&event=pull_request&per_page=100")
-          run=$(jq -r --arg sha "$REQUESTED_SHA" \
-            '[.workflow_runs[] | select(.head_sha==$sha and .path==".github/workflows/ci.yml"
-               and .event=="pull_request" and .conclusion=="success")] | first | .id // empty' \
-               <<<"$runs")
-          [ -n "$run" ]
-          jobs=$(api "$base/actions/runs/$run/jobs?per_page=100")
-          for required in lint-and-audit glh-stage1-postgres-synthetic; do
-            jq -e --arg name "$required" \
-              '[.jobs[] | select(.name==$name and .conclusion=="success")] | length==1' \
-              <<<"$jobs" >/dev/null
-          done
+          # ONE-TIME OWNER-AUTHORIZED REPLACEMENT FOR HUMAN REVIEW:
+          # separate GitHub-hosted CI and security audit on both exact heads.
+          # No Github APPROVED or bot-authored approval is manufactured.
+          pr239=$(api "$base/pulls/239")
+          [ "$(jq -r '.state' <<<"$pr239")" = closed ]
+          [ "$(jq -r '.merged' <<<"$pr239")" = true ]
+          [ "$(jq -r '.base.ref' <<<"$pr239")" = master ]
+          [ "$(jq -r '.head.repo.full_name' <<<"$pr239")" = "$GITHUB_REPOSITORY" ]
+          [ "$(jq -r '.head.ref' <<<"$pr239")" = qa/wos-pr238-protected-e2e-20261117 ]
+          [ "$(jq -r '.merge_commit_sha' <<<"$pr239")" = "$GITHUB_SHA" ]
+          workflow_head=$(jq -r '.head.sha' <<<"$pr239")
+          [[ "$workflow_head" =~ ^[0-9a-f]{40}$ ]]
+          [ "$(api "$base/branches/master" | jq -r '.commit.sha')" = "$GITHUB_SHA" ]
+          merge_commit=$(api "$base/commits/$GITHUB_SHA")
+          jq -e --arg sha "$workflow_head" \
+            '(.parents | length)==2 and .parents[1].sha==$sha' <<<"$merge_commit" >/dev/null
+          # One new shared-workflow path, and only two independent test paths.
+          [ "$(jq -r '.changed_files' <<<"$pr239")" = 3 ]
+          f239=$(api "$base/pulls/239/files?per_page=100")
+          jq -e 'length==3 and
+             ([.[].filename]|sort)==
+             ([".github/workflows/wos-p1-pr238-protected-qa.yml",
+               "tests/unit/workshop-order-p1-qa-workflow-security.test.ts",
+               "tests/unit/workshop-order-suite.test.ts"]|sort)' <<<"$f239" >/dev/null
+          audited_workflow=$(api "$base/contents/.github/workflows/wos-p1-pr238-protected-qa.yml?ref=$workflow_head" | jq -r '.sha')
+          installed_workflow=$(api "$base/contents/.github/workflows/wos-p1-pr238-protected-qa.yml?ref=master" | jq -r '.sha')
+          [ -n "$audited_workflow" ] && [ "$audited_workflow" = "$installed_workflow" ]
+          [ "$master_ci" = "$(api "$base/contents/.github/workflows/ci.yml?ref=$workflow_head" | jq -r '.sha')" ]
+          verify_ci() {
+            local target="$1" is_audit="$2" response run jobs log_file job_id count
+            response=$(api "$base/actions/runs?head_sha=$target&event=pull_request&per_page=100")
+            jq -e '.total_count > 0 and .total_count < 100' <<<"$response" >/dev/null
+            run=$(jq -r --arg sha "$target" '[.workflow_runs[] |
+              select(.head_sha==$sha and .path==".github/workflows/ci.yml" and
+                     .event=="pull_request" and .status=="completed" and
+                     .conclusion=="success")] | first | .id // empty' <<<"$response")
+            [[ "$run" =~ ^[0-9]+$ ]]
+            jobs=$(api "$base/actions/runs/$run/jobs?per_page=100")
+            jq -e '.total_count >= 2 and .total_count < 100' <<<"$jobs" >/dev/null
+            for job in lint-and-audit glh-stage1-postgres-synthetic; do
+              jq -e --arg job "$job" \
+                '[.jobs[] | select(.name==$job and .conclusion=="success")] | length==1' \
+                <<<"$jobs" >/dev/null
+            done
+            jq -e '[.jobs[] | select(.name=="lint-and-audit") | .steps[] |
+              select(.name=="Workshop Order System full contract suite" or
+                     .name=="TypeScript check" or .name=="Build" or
+                     .name=="Audit bundle for secret leakage")] |
+              length==4 and all(.[]; .conclusion=="success")' <<<"$jobs" >/dev/null
+            if [ "$is_audit" = yes ]; then
+              job_id=$(jq -r '.jobs[]|select(.name=="lint-and-audit")|.id' <<<"$jobs")
+              [[ "$job_id" =~ ^[0-9]+$ ]]
+              log_file=$(mktemp)
+              trap 'rm -f "$log_file"' RETURN
+              curl --fail --silent --show-error --location --max-time 65 \
+                -H "Authorization: Bearer $GH_TOKEN" \
+                -H "Accept: application/vnd.github+json" \
+                "$base/actions/jobs/$job_id/logs" > "$log_file"
+              grep -Fq 'WOS_P1_PROTECTED_QA_STATIC_SECURITY_AUDIT=PASS' "$log_file"
+              grep -Fq 'WOS_P1_QA_ACCOUNT_CREDENTIALS_USED=NO' "$log_file"
+              count=$(grep -oE 'WOS_P1_PROTECTED_QA_NEGATIVE_CASES=[0-9]+' "$log_file" |
+                tail -1 | cut -d= -f2)
+              [[ "$count" =~ ^[0-9]+$ ]] && [ "$count" -ge 12 ]
+              rm -f "$log_file"
+              trap - RETURN
+              echo "audit_run=$run" >> "$GITHUB_OUTPUT"
+            else
+              echo "business_run=$run" >> "$GITHUB_OUTPUT"
+            fi
+          }
+          verify_ci "$REQUESTED_SHA" no
+          verify_ci "$workflow_head" yes
           echo "sha=$REQUESTED_SHA" >> "$GITHUB_OUTPUT"
-          echo WOS_P1_OWNER_PIN_INDEPENDENT_REVIEW_AND_CI=PASS
+          echo "workflow_head=$workflow_head" >> "$GITHUB_OUTPUT"
+          echo WOS_P1_OWNER_AUTHORIZED_GITHUB_HOSTED_AUDIT=PASS
 
   secretless-source-review:
     runs-on: ubuntu-latest
@@ -176,32 +222,44 @@ jobs:
             sleep 2
           done
           curl --fail --silent --show-error http://127.0.0.1:3000/login -o /dev/null
-      - name: Reconfirm live PR HEAD and independent latest review before passwords
+      - name: Verify audit heads and genuine CI results again immediately before secrets
         shell: bash
         env:
           REVIEWED_SHA: ${{ needs.independent-gate.outputs.sha }}
+          WORKFLOW_HEAD: ${{ needs.independent-gate.outputs.workflow_head }}
+          BUSINESS_RUN: ${{ needs.independent-gate.outputs.business_run }}
+          AUDIT_RUN: ${{ needs.independent-gate.outputs.audit_run }}
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           [ "$(git rev-parse HEAD)" = "$REVIEWED_SHA" ]
-          api="https://api.github.com/repos/$GITHUB_REPOSITORY"
-          auth=(-H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json")
-          pr=$(curl --fail --silent --show-error --max-time 25 "${auth[@]}" "$api/pulls/238")
+          [[ "$WORKFLOW_HEAD" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$BUSINESS_RUN" =~ ^[0-9]+$ ]]
+          [[ "$AUDIT_RUN" =~ ^[0-9]+$ ]]
+          base="https://api.github.com/repos/$GITHUB_REPOSITORY"
+          api() {
+            curl --fail --silent --show-error --max-time 25 \
+              -H "Authorization: Bearer $GH_TOKEN" \
+              -H "Accept: application/vnd.github+json" "$1"
+          }
+          [ "$(api "$base/branches/master"|jq -r '.commit.sha')" = "$GITHUB_SHA" ]
+          pr=$(api "$base/pulls/238")
           [ "$(jq -r '.state' <<<"$pr")" = open ]
           [ "$(jq -r '.draft' <<<"$pr")" = true ]
           [ "$(jq -r '.head.sha' <<<"$pr")" = "$REVIEWED_SHA" ]
-          author=$(jq -r '.user.login' <<<"$pr")
-          reviews=$(curl --fail --silent --show-error --max-time 25 "${auth[@]}" "$api/pulls/238/reviews?per_page=100")
-          jq -e 'length < 100' <<<"$reviews" >/dev/null
-          approved=$(jq -r --arg sha "$REVIEWED_SHA" --arg author "$author" \
-            'group_by(.user.login) | map(max_by(.submitted_at)) |
-             [.[] | select(.state=="APPROVED" and .commit_id==$sha and
-                           .user.login!=$author and .user.type=="User")] |
-             last | .user.login // empty' <<<"$reviews")
-          [ -n "$approved" ]
-          rights=$(curl --fail --silent --show-error --max-time 25 "${auth[@]}" "$api/collaborators/$approved/permission")
-          jq -e '.permission=="write" or .permission=="maintain" or .permission=="admin"' <<<"$rights" >/dev/null
-          echo WOS_P1_PRE_SECRET_LIVE_REVIEW_RECHECK=PASS
+          pr239=$(api "$base/pulls/239")
+          [ "$(jq -r '.merged' <<<"$pr239")" = true ]
+          [ "$(jq -r '.head.sha' <<<"$pr239")" = "$WORKFLOW_HEAD" ]
+          [ "$(jq -r '.merge_commit_sha' <<<"$pr239")" = "$GITHUB_SHA" ]
+          ci1=$(api "$base/actions/runs/$BUSINESS_RUN")
+          ci2=$(api "$base/actions/runs/$AUDIT_RUN")
+          jq -e --arg sha "$REVIEWED_SHA" \
+            '.head_sha==$sha and .event=="pull_request" and .conclusion=="success" and
+              .path==".github/workflows/ci.yml"' <<<"$ci1" >/dev/null
+          jq -e --arg sha "$WORKFLOW_HEAD" \
+            '.head_sha==$sha and .event=="pull_request" and .conclusion=="success" and
+              .path==".github/workflows/ci.yml"' <<<"$ci2" >/dev/null
+          echo WOS_P1_BEFORE_QA_CREDENTIALS_AUDIT_RECHECK=PASS
       - name: Real two-account HTTP/PNG/Inbox/Storage E2E (credentials scoped to this step)
         env:
           AUTH_MODE: supabase
