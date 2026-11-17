@@ -149,7 +149,10 @@ BEGIN
      AND r.source_revision=i.source_revision
      AND r.source_version_label=i.source_version_label
      AND i.source_version_label=v_order.version_label
-     AND i.source_revision+1 <= v_order.version
+     AND ((v_order.workflow_status='SUBMITTED'
+           AND i.source_revision+1 = v_order.version)
+       OR (v_order.workflow_status<>'SUBMITTED'
+           AND i.source_revision+1 < v_order.version))
  ) THEN RAISE EXCEPTION 'SOURCE_RECEIPT_MISMATCH' USING ERRCODE='PT409'; END IF;
  IF v_order.version<>p_expected_version THEN
    RAISE EXCEPTION 'VERSION_CONFLICT' USING ERRCODE='PT409'; END IF;
