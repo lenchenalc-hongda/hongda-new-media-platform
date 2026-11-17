@@ -57,10 +57,17 @@ export default function LiveQaWorkshopReadiness({
       if (batches.some(row => row.error || !Array.isArray(row.data) || (row.data?.length ?? 100) >= 100)) {
         throw new Error('QA_READINESS_RLS_READ_FAILED_OR_TRUNCATED');
       }
-      const all = batches.flatMap(row => row.data ?? []);
-      if (all.some(row => row.organization_id !== organizationId ||
-          row.entity_id !== orderId || row.entity_type !== 'PRODUCTION_ORDER')) {
-        throw new Error('QA_READINESS_SCOPE_MISMATCH');
+      // Distinct Supabase table projections have different row shapes.
+      // Check their common scope fields without coalescing into a false
+      // homogeneous array or weakening any RLS scope condition.
+      for (const batch of batches) {
+        for (const row of batch.data ?? []) {
+          if (row.organization_id !== organizationId ||
+              row.entity_id !== orderId ||
+              row.entity_type !== 'PRODUCTION_ORDER') {
+            throw new Error('QA_READINESS_SCOPE_MISMATCH');
+          }
+        }
       }
       const result = evaluateWosP2Readiness({
         versionLabel, currentBatchQuantity,
