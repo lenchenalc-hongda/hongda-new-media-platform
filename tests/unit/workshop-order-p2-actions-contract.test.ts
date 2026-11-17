@@ -104,6 +104,8 @@ for (const required of [
   "AND i.workflow_status='SUBMITTED'",
   'version=version+1','SIGNED_SAMPLE','FILM_PATTERN','READY',
   'REQUIRED_VERIFIED_IMAGE_MISSING',
+  'wos_qa_p2_execution_gate','gate.enabled=true',
+  'QA_P2_DB_EXECUTION_NOT_AUTHORIZED','INTERVAL \'24 hours\'',
 ])assert(sql.includes(required),'SQL missing '+required);
 assert(!/GRANT\s+(UPDATE|INSERT|DELETE)\s+ON\s+public\.wos_/i.test(sql),
   'no blanket table write grants');
