@@ -58,7 +58,7 @@ const cases: Array<[string,string]> = [
   ['PRODUCTION_ENV',wf.replace('environment: hongda-review-dev','environment: production')],
   ['STALE_APPROVAL',wf.replace('max_by(.submitted_at)','last')],
   ['MISSING_LIVE_RECHECK',wf.replace('WOS_P1_PRE_SECRET_LIVE_REVIEW_RECHECK=PASS','BYPASS')],
-  ['CHECKOUT_BRANCH',wf.replace(checkout,'ref: master')],
+  ['CHECKOUT_BRANCH',wf.replaceAll(checkout,'ref: master')],
   ['PRODUCTION_SUPABASE',wf.replace('https://xulmpqaknlwqqculbsek.supabase.co','https://amqpvxrurenevniilhtl.supabase.co')],
   ['SECRET_IN_BUILD',wf.replace('      - name: Build and start isolated QA Preview-mode app WITHOUT user passwords', '      - name: Build and start isolated QA Preview-mode app WITHOUT user passwords\n        env:\n          REVIEW_DEV_ADMIN_PASSWORD: leaked')],
   ['ARTIFACT_EXFIL',wf+'\n      - uses: actions/upload-artifact@v4'],
