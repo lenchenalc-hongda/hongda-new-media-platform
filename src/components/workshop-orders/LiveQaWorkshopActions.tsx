@@ -25,7 +25,7 @@ export default function LiveQaWorkshopActions({orderId,expectedVersion,workflowS
   // IMPORTANT: This opt-in must remain off until the QA-only SQL has been
   // independently approved and installed. The server has its OWN check.
   const canAttempt = process.env.NEXT_PUBLIC_WOS_P2_QA_MUTATIONS_ENABLED === 'true';
-  const [action,setAction] = useState<'ACCEPT'|'RETURN_FOR_INFORMATION'|'CONFIRM_MATERIAL'>('ACCEPT');
+  const [action,setAction] = useState<'ACCEPT'|'RETURN_FOR_INFORMATION'|'CONFIRM_MATERIAL'|'REVIEW_CORRECTION'>('ACCEPT');
   const [resource,setResource] = useState<Resource>('FILM');
   const [status,setStatus] = useState('NOT_ARRIVED');
   const [quantityExpected,setQuantityExpected] = useState('');
@@ -39,7 +39,9 @@ export default function LiveQaWorkshopActions({orderId,expectedVersion,workflowS
       ? workflowStatus==='SUBMITTED'
       : action==='RETURN_FOR_INFORMATION'
         ? ['SUBMITTED','WORKSHOP_REVIEW'].includes(workflowStatus)
-        : ['WORKSHOP_REVIEW','WAITING_MATERIAL','READINESS_CHECK'].includes(workflowStatus);
+        : action==='REVIEW_CORRECTION'
+          ? workflowStatus==='WORKSHOP_REVIEW'
+          : ['WORKSHOP_REVIEW','WAITING_MATERIAL','READINESS_CHECK'].includes(workflowStatus);
   const choices=resourceChoices.find(x=>x.code===resource)!;
 
   async function submit() {
@@ -91,7 +93,7 @@ export default function LiveQaWorkshopActions({orderId,expectedVersion,workflowS
 
   return (
     <section className="mt-4 space-y-3 rounded-md border border-slate-300 bg-slate-50 p-3" aria-label="车间受控操作">
-      <h4 className="text-sm font-semibold text-gray-900">车间接单、资料退回与物料核对</h4>
+      <h4 className="text-sm font-semibold text-gray-900">车间接单、资料退回、修订复核与物料核对</h4>
       {!canAttempt && <p role="status" className="rounded border border-amber-200 p-2 text-xs text-amber-900">
         当前只读。QA 事务 RPC 尚未单独授权安装，不能执行真实接单、退回或物料确认。
       </p>}
@@ -103,6 +105,7 @@ export default function LiveQaWorkshopActions({orderId,expectedVersion,workflowS
           <option value="ACCEPT">确认接单（仅进入车间审阅，不代表开工）</option>
           <option value="RETURN_FOR_INFORMATION">资料不完整，退回办公室</option>
           <option value="CONFIRM_MATERIAL">登记花膜 / 夹具 / 来料 / 签样的实际状态</option>
+          <option value="REVIEW_CORRECTION">复核办公室的最新修订并解除对应资料阻塞（不准许开工）</option>
         </select>
       </label>
       {action==='CONFIRM_MATERIAL' && (
@@ -136,6 +139,9 @@ export default function LiveQaWorkshopActions({orderId,expectedVersion,workflowS
           )}
         </div>
       )}
+      {action==='REVIEW_CORRECTION' && <p className="rounded border border-amber-300 bg-white p-2 text-xs text-amber-950">
+        请先核对订单最新字段与对应图片版本；审核仅解除资料退回阻塞，不会继承旧签样、花膜确认或放行生产。
+      </p>}
       <label className="block text-xs font-medium">操作依据 / 不齐套原因（10–500 字）
         <textarea value={note} maxLength={500} rows={3} disabled={sending} className="mt-1 w-full rounded border p-2"
           placeholder="请写明实际核对结果；退回时写清需补齐的资料"
