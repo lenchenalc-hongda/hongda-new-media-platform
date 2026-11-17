@@ -14,6 +14,40 @@ BEGIN
   END IF;
 END $$;
 
+-- The default-off database gate must reject direct authenticated RPC calls
+-- even if the Preview route were accidentally enabled.
+SELECT pg_catalog.set_config('request.jwt.claim.sub','11111111-1111-4111-8111-111111111111',false);
+SET ROLE authenticated;
+DO $$
+BEGIN
+  BEGIN
+    PERFORM public.wos_qa_p2_operator_action(
+      'cccccccc-cccc-4ccc-8ccc-cccccccccccc',2,
+      '16161616-1616-4616-8616-161616161616',
+      'ACCEPT',NULL,NULL,NULL,NULL,'database gate must default deny even real operator');
+    RAISE EXCEPTION 'FAIL_DEFAULT_OFF_DB_GATE';
+  EXCEPTION WHEN SQLSTATE '42501' THEN NULL;
+  END;
+END $$;
+RESET ROLE;
+
+DO $$
+BEGIN
+  IF pg_catalog.has_table_privilege('authenticated',
+    'public.wos_qa_p2_execution_gate','UPDATE')
+    OR pg_catalog.has_table_privilege('authenticated',
+    'public.wos_qa_p2_execution_gate','SELECT') THEN
+     RAISE EXCEPTION 'FAIL_PUBLIC_FEATURE_GATE_GRANT';
+  END IF;
+END $$;
+-- QA-only installation NEVER flips this gate on. Here we enable only a short
+-- synthetic transaction-test window in an isolated throwaway PG17 database.
+UPDATE public.wos_qa_p2_execution_gate
+ SET enabled=true,enabled_until=pg_catalog.clock_timestamp()+INTERVAL '15 minutes',
+     approval_reference='SYNTHETIC_GITHUB_PG17_ONLY',
+     updated_at=pg_catalog.clock_timestamp()
+ WHERE gate_name='OPERATOR_WRITES';
+
 -- viewer cannot invoke as an operator even when same-org.
 SELECT pg_catalog.set_config('request.jwt.claim.sub','33333333-3333-4333-8333-333333333333',false);
 SET ROLE authenticated;
