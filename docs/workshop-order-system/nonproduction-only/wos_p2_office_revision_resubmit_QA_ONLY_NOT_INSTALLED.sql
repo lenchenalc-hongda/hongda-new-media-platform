@@ -105,8 +105,10 @@ BEGIN
     ELSE
       IF pg_catalog.jsonb_typeof(p_patch->v_key)<>'string'
         OR pg_catalog.length(pg_catalog.btrim(p_patch->>v_key))<1
-        OR pg_catalog.length(p_patch->>v_key)>CASE
-          WHEN v_key IN ('productName','productMaterial') THEN 200 ELSE 2000 END
+        OR (v_key IN ('productName','productMaterial') AND
+          pg_catalog.length(p_patch->>v_key)>200)
+        OR (v_key NOT IN ('productName','productMaterial') AND
+          pg_catalog.length(p_patch->>v_key)>2000)
       THEN RAISE EXCEPTION 'TEXT_REQUIRED' USING ERRCODE='22023'; END IF;
     END IF;
   END LOOP;
