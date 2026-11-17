@@ -35,10 +35,10 @@ PATHS = {
 }
 NEEDED = {
     "office_sql": ["QA-ONLY DESIGN", "NOT INSTALLED", "SECURITY DEFINER SET search_path = ''",
-                   "wos_qa_p2_office_execution_gate", "enabled=false", "auth.uid()",
+                   "wos_qa_p2_office_execution_gate", "enabled boolean NOT NULL DEFAULT false", "auth.uid()",
                    "wos_qa_p2_office_revisions", "before_snapshot", "after_snapshot",
                    "wos_qa_p2_review_receipts", "wos_qa_p2_review_correction",
-                   "office_revision_request_id", "v_revision.new_version",
+                   "office_revision_request_id", "r.new_version=v_order.version",
                    "P2_DOCUMENTS_INCOMPLETE", "resolved_by_profile_id",
                    "AND opened_at<=v_revision.created_at", "status='RESOLVED'",
                    "v_order.version_label LIKE 'QA-R%'", "i.workflow_status='SUBMITTED'",
