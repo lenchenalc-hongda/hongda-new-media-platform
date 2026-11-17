@@ -11,6 +11,24 @@
 
 BEGIN;
 
+-- Independent database-side hard gate, OFF by default. Installing this file
+-- does NOT activate any WOS P2 writes, even when a signed-in user calls RPC
+-- directly (bypassing the Preview UI and route).
+CREATE TABLE IF NOT EXISTS public.wos_qa_p2_execution_gate (
+  gate_name text PRIMARY KEY CHECK (gate_name='OPERATOR_WRITES'),
+  enabled boolean NOT NULL DEFAULT false,
+  enabled_until timestamptz,
+  approval_reference text NOT NULL DEFAULT 'NOT_AUTHORIZED',
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  CHECK (NOT enabled OR (enabled_until IS NOT NULL
+    AND length(btrim(approval_reference))>=12))
+);
+INSERT INTO public.wos_qa_p2_execution_gate(gate_name,enabled,approval_reference)
+VALUES('OPERATOR_WRITES',false,'NOT_AUTHORIZED')
+ON CONFLICT (gate_name) DO NOTHING;
+ALTER TABLE public.wos_qa_p2_execution_gate ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON public.wos_qa_p2_execution_gate FROM PUBLIC, anon, authenticated;
+
 -- The only durable replay ledger. No client read or direct DML rights.
 CREATE TABLE IF NOT EXISTS public.wos_qa_p2_action_receipts (
     request_id uuid PRIMARY KEY,
@@ -60,6 +78,18 @@ DECLARE
  v_resource_final boolean;
  v_required_img text;
 BEGIN
+ -- A stored DBA gate is mandatory because authenticated users could invoke
+ -- a publicly exposed SECURITY DEFINER RPC directly without the Next.js flag.
+ -- The limited expiry must be independently authorized at activation time.
+ IF NOT EXISTS (
+   SELECT 1 FROM public.wos_qa_p2_execution_gate gate
+   WHERE gate.gate_name='OPERATOR_WRITES'
+     AND gate.enabled=true
+     AND gate.enabled_until>pg_catalog.clock_timestamp()
+     AND gate.enabled_until<=pg_catalog.clock_timestamp()+INTERVAL '24 hours'
+     AND gate.approval_reference<>'NOT_AUTHORIZED'
+ ) THEN RAISE EXCEPTION 'QA_P2_DB_EXECUTION_NOT_AUTHORIZED'
+        USING ERRCODE='42501'; END IF;
  IF auth.uid() IS NULL OR p_order_id IS NULL OR p_request_id IS NULL
     OR p_expected_version IS NULL OR p_expected_version < 1
     OR p_action IS NULL OR p_action NOT IN
@@ -321,6 +351,12 @@ GRANT EXECUTE ON FUNCTION public.wos_qa_p2_operator_action(
 
 COMMIT;
 
+-- IMPORTANT: This file installs the database gate with enabled=false.
+-- After separate approval, a project-specific DBA may activate it with
+-- enabled_until <= now() + interval '24 hours' and a concrete review reference.
+-- NEVER grant UPDATE on the gate table to authenticated, anon or PUBLIC.
+-- On failure: SET enabled=false using the privileged DBA connection, REVOKE
+-- EXECUTE on the RPC, and keep history/receipts intact for investigation.
 -- Do NOT enable WOS_P2_QA_MUTATIONS_ENABLED until:
 -- (1) independent safety review of this exact file HEAD and PG17 offline test,
 -- (2) separate owner QA-only DDL/function/grant approval, and
