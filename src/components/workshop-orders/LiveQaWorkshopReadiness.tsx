@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
+import LiveQaWorkshopActions from './LiveQaWorkshopActions';
 import {
   evaluateWosP2Readiness,
   type WosP2ReadinessResult,
@@ -15,11 +16,22 @@ type Props = {
   organizationId: string;
   versionLabel: string;
   currentBatchQuantity: number;
+  expectedVersion: number;
+  workflowStatus: string;
+  onAfterAction: () => void;
 };
 
-type ReadState = { result: WosP2ReadinessResult; lastRead: string };
+type ReadState = {
+  result: WosP2ReadinessResult;
+  lastRead: string;
+  confirmations: Array<{
+    confirmation_type:string; decision:string; profile_id:string;
+    role_snapshot:string; note:string|null; confirmed_at:string;
+  }>;
+};
 export default function LiveQaWorkshopReadiness({
   orderId, organizationId, versionLabel, currentBatchQuantity,
+  expectedVersion, workflowStatus, onAfterAction,
 }: Props) {
   const [readState, setReadState] = useState<ReadState | null>(null);
   const [loading, setLoading] = useState(true);
@@ -49,7 +61,7 @@ export default function LiveQaWorkshopReadiness({
           .eq('organization_id',organizationId).eq('entity_id',orderId)
           .eq('entity_type','PRODUCTION_ORDER').limit(100),
         db.from('wos_confirmations')
-          .select('organization_id,entity_id,entity_type,confirmation_type,decision,confirmed_at')
+          .select('organization_id,entity_id,entity_type,confirmation_type,decision,profile_id,role_snapshot,note,confirmed_at')
           .eq('organization_id',organizationId).eq('entity_id',orderId)
           .eq('entity_type','PRODUCTION_ORDER').limit(100),
       ]);
@@ -76,7 +88,17 @@ export default function LiveQaWorkshopReadiness({
         baselines: baselines.data as WosP2BaselineRow[],
         readVerified: true,
       });
-      setReadState({ result, lastRead: new Date().toLocaleString('zh-CN') });
+      setReadState({
+        result, lastRead: new Date().toLocaleString('zh-CN'),
+        confirmations: (confirmations.data ?? []).map(row => ({
+          confirmation_type:row.confirmation_type,
+          decision:row.decision,
+          profile_id:row.profile_id,
+          role_snapshot:row.role_snapshot,
+          note:row.note,
+          confirmed_at:row.confirmed_at,
+        })),
+      });
     } catch {
       // Never render a stale green readiness result on RLS/network failure.
       setReadState(null);
@@ -132,12 +154,29 @@ export default function LiveQaWorkshopReadiness({
           <p role="status" className="rounded border border-amber-400 bg-white p-3 text-xs font-medium text-amber-950">
             {readState.result.materialsVerified ? '物料资料可提交人工齐套审核；尚未放行开工。' : '资料或物料尚未核实，禁止开工。'}
           </p>
+          {readState.confirmations.length > 0 && (
+            <section className="rounded border border-amber-200 bg-white p-3">
+              <h5 className="text-xs font-semibold">真实车间确认与退回操作记录</h5>
+              <ul className="mt-1 list-disc space-y-1 pl-4 text-xs">
+                {readState.confirmations.map((c,i) => <li key={i}>
+                  {c.confirmation_type} · {c.decision} · {c.role_snapshot} ·
+                  {c.profile_id} · {c.confirmed_at} · {c.note ?? '无备注'}
+                </li>)}
+              </ul>
+            </section>
+          )}
         </>
       )}
       {!readState && !error && <p role="status" className="text-xs text-amber-900">正在读取真实车间齐套记录...</p>}
+      <LiveQaWorkshopActions
+        orderId={orderId}
+        expectedVersion={expectedVersion}
+        workflowStatus={workflowStatus}
+        onSuccess={onAfterAction}
+      />
       <p className="text-xs font-medium text-amber-900">
-        当前仅提供受限数据核对。车间接单、退回资料、填写到货和确认开工的写入功能，
-        必须通过独立审核并安装最小权限 QA 事务 RPC 后才能启用；本页面不会伪造已保存操作。
+        在 QA SQL 与权限单独审核安装前，操作按钮保持关闭。
+        确认开工不属于本阶段授权，本页面不会伪造已保存操作。
       </p>
     </section>
   );
