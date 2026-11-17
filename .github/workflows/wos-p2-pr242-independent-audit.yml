@@ -1,0 +1,44 @@
+name: WOS P2 PR242 independent protected launcher audit
+on:
+  push:
+    branches:
+      - audit/wos-p2-pr242-protected-runner-20261118
+permissions:
+  contents: read
+  actions: read
+  pull-requests: read
+jobs:
+  reviewer-owned-static-security:
+    if: >-
+      github.repository == 'lenchenalc-hongda/hongda-new-media-platform' &&
+      github.ref == 'refs/heads/audit/wos-p2-pr242-protected-runner-20261118'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    env:
+      GH_READ_TOKEN: ${{ github.token }}
+    steps:
+      - name: Checkout reviewer owned independent source from master baseline
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.sha }}
+          path: reviewer
+          persist-credentials: false
+      - name: Checkout PR242 pinned source as untrusted data only
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: f7ab0127670d363d5e51cff23e323d7edda0b831
+          path: candidate
+          persist-credentials: false
+      - name: Validate separate SHA provenance and no QA secrets
+        run: |
+          set -euo pipefail
+          test "$(git -C reviewer rev-parse HEAD)" = "$GITHUB_SHA"
+          test "$(git -C candidate rev-parse HEAD)" = "f7ab0127670d363d5e51cff23e323d7edda0b831"
+          test -z "$(printenv SUPABASE_SERVICE_ROLE_KEY || true)"
+          test -z "$(printenv REVIEW_DEV_ADMIN_PASSWORD || true)"
+          echo WOS_P2_REVIEWER_INDEPENDENT_RUNNER_IDENTITY=PASS
+      - name: Independent GitHub-source / CI verification / negative tests
+        run: |
+          set -euo pipefail
+          python3 reviewer/audits/wos-p2-pr242/independent_audit.py candidate
+          echo WOS_P2_PR242_INDEPENDENT_QA_LAUNCHER_TECHNICAL_REVIEW=PASS
