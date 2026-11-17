@@ -261,7 +261,7 @@ UPDATE public.wos_qa_p2_execution_gate
  WHERE gate_name='OPERATOR_WRITES';
 SELECT pg_catalog.set_config('request.jwt.claim.sub','11111111-1111-4111-8111-111111111111',false);
 SET ROLE authenticated;
-DO $
+DO $gate$
 BEGIN
   BEGIN
     PERFORM public.wos_qa_p2_operator_action(
@@ -271,7 +271,7 @@ BEGIN
     RAISE EXCEPTION 'FAIL_EXPIRED_GATE_ALLOWED_DIRECT_RPC';
   EXCEPTION WHEN SQLSTATE '42501' THEN NULL;
   END;
-END $;
+END $gate$;
 RESET ROLE;
 UPDATE public.wos_qa_p2_execution_gate
  SET enabled=false,enabled_until=NULL,
@@ -280,7 +280,7 @@ UPDATE public.wos_qa_p2_execution_gate
  WHERE gate_name='OPERATOR_WRITES';
 SELECT pg_catalog.set_config('request.jwt.claim.sub','11111111-1111-4111-8111-111111111111',false);
 SET ROLE authenticated;
-DO $
+DO $gate$
 BEGIN
   BEGIN
     PERFORM public.wos_qa_p2_operator_action(
@@ -290,14 +290,14 @@ BEGIN
     RAISE EXCEPTION 'FAIL_DISABLED_GATE_ALLOWED_DIRECT_RPC';
   EXCEPTION WHEN SQLSTATE '42501' THEN NULL;
   END;
-END $;
+END $gate$;
 RESET ROLE;
-DO $
+DO $gate$
 BEGIN
   IF (SELECT count(*) FROM public.wos_qa_p2_action_receipts)<>4 THEN
     RAISE EXCEPTION 'FAIL_GATE_TEST_CREATED_UNAUTHORIZED_RECEIPTS';
   END IF;
-END $;
+END $gate$;
 \echo WOS_P2_PG17_EXPIRED_AND_REVOKED_DB_GATE=PASS
 
 \echo WOS_P2_PG17_SYNTHETIC_TRANSACTION_AUDIT=PASS
