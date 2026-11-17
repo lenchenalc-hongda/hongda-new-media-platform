@@ -70,9 +70,12 @@ jobs:
           # Fail closed unless an independent reviewer approved THIS exact SHA.
           # Review of any prior commit is insufficient.
           reviews=$(api "$base/pulls/238/reviews?per_page=100")
+          # A former approval followed by CHANGES_REQUESTED does not count.
           reviewer=$(jq -r --arg sha "$REQUESTED_SHA" --arg author "$author" \
-            '[.[] | select(.state=="APPROVED" and .commit_id==$sha and
-                            .user.login!=$author)] | last | .user.login // empty' <<<"$reviews")
+            'group_by(.user.login) | map(max_by(.submitted_at)) |
+             [.[] | select(.state=="APPROVED" and .commit_id==$sha and
+                           .user.login!=$author and .user.type=="User")] |
+             last | .user.login // empty' <<<"$reviews")
           [ -n "$reviewer" ]
           rights=$(api "$base/collaborators/$reviewer/permission")
           jq -e '.permission=="write" or .permission=="maintain" or .permission=="admin"' \
@@ -129,6 +132,7 @@ jobs:
     environment: hongda-review-dev
     permissions:
       contents: read
+      pull-requests: read
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
@@ -165,6 +169,29 @@ jobs:
             sleep 2
           done
           curl --fail --silent --show-error http://127.0.0.1:3000/login -o /dev/null
+      - name: Reconfirm live PR HEAD and independent latest review before passwords
+        shell: bash
+        env:
+          REVIEWED_SHA: ${{ needs.independent-gate.outputs.sha }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          [ "$(git rev-parse HEAD)" = "$REVIEWED_SHA" ]
+          api="https://api.github.com/repos/$GITHUB_REPOSITORY"
+          auth=(-H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json")
+          pr=$(curl --fail --silent --show-error --max-time 25 "${auth[@]}" "$api/pulls/238")
+          [ "$(jq -r '.state' <<<"$pr")" = open ]
+          [ "$(jq -r '.draft' <<<"$pr")" = true ]
+          [ "$(jq -r '.head.sha' <<<"$pr")" = "$REVIEWED_SHA" ]
+          author=$(jq -r '.user.login' <<<"$pr")
+          reviews=$(curl --fail --silent --show-error --max-time 25 "${auth[@]}" "$api/pulls/238/reviews?per_page=100")
+          approved=$(jq -r --arg sha "$REVIEWED_SHA" --arg author "$author" \
+            'group_by(.user.login) | map(max_by(.submitted_at)) |
+             [.[] | select(.state=="APPROVED" and .commit_id==$sha and
+                           .user.login!=$author and .user.type=="User")] |
+             last | .user.login // empty' <<<"$reviews")
+          [ -n "$approved" ]
+          echo WOS_P1_PRE_SECRET_LIVE_REVIEW_RECHECK=PASS
       - name: Real two-account HTTP/PNG/Inbox/Storage E2E (credentials scoped to this step)
         env:
           AUTH_MODE: supabase
