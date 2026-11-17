@@ -174,7 +174,7 @@ export async function POST(req: NextRequest) {
     };
     const matchExisting = async () => {
       const existing = await client.from('wos_production_orders')
-        .select('id,organization_id,customer_id,project_id,order_number,created_by_profile_id,project_owner_profile_id,workflow_status,version,product_name,requested_quantity,current_batch_quantity,version_label')
+        .select('id,organization_id,customer_id,customer_name_snapshot,project_id,project_name_snapshot,order_number,created_by_profile_id,sales_owner_profile_id,project_owner_profile_id,workflow_status,version,product_name,product_material,requested_quantity,current_batch_quantity,priority,is_urgent,version_label,planned_ship_date,split_delivery,surface_treatment,pattern_scope,seam_tolerance,position_reference,customer_acceptance_standard,packaging_method,carton_quantity,label_marking_rule')
         .eq('organization_id', actor.org_id)
         .eq('order_number', parsed.orderNumber).maybeSingle();
       if (existing.error) return answer(503, 'QA_DRAFT_READ_UNAVAILABLE');
@@ -183,10 +183,26 @@ export async function POST(req: NextRequest) {
       if (row.organization_id !== actor.org_id || row.created_by_profile_id !== actor.id
         || row.customer_id !== expected.customer_id || row.project_id !== expected.project_id
         || row.project_owner_profile_id !== expected.project_owner_profile_id
+        || row.sales_owner_profile_id !== expected.sales_owner_profile_id
+        || row.customer_name_snapshot !== expected.customer_name_snapshot
+        || row.project_name_snapshot !== expected.project_name_snapshot
         || row.product_name !== expected.product_name
+        || row.product_material !== expected.product_material
         || row.requested_quantity !== expected.requested_quantity
         || row.current_batch_quantity !== expected.current_batch_quantity
+        || row.priority !== expected.priority
+        || row.is_urgent !== expected.is_urgent
         || row.version_label !== expected.version_label
+        || row.planned_ship_date !== expected.planned_ship_date
+        || row.split_delivery !== expected.split_delivery
+        || row.surface_treatment !== expected.surface_treatment
+        || row.pattern_scope !== expected.pattern_scope
+        || row.seam_tolerance !== expected.seam_tolerance
+        || row.position_reference !== expected.position_reference
+        || row.customer_acceptance_standard !== expected.customer_acceptance_standard
+        || row.packaging_method !== expected.packaging_method
+        || row.carton_quantity !== expected.carton_quantity
+        || row.label_marking_rule !== expected.label_marking_rule
         || row.workflow_status !== 'DRAFT' || row.version !== 1)
         return answer(409, 'QA_DRAFT_REPLAY_CONFLICT');
       return answer(200, 'QA_CPC_DRAFT_REPLAY_VERIFIED', {
