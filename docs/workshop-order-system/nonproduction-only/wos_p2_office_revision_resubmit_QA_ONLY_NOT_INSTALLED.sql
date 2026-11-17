@@ -265,9 +265,7 @@ CREATE TABLE public.wos_qa_p2_review_receipts (
   actor_profile_id uuid NOT NULL REFERENCES public.profiles(id),
   office_revision_request_id uuid NOT NULL REFERENCES public.wos_qa_p2_office_revisions(request_id),
   expected_version integer NOT NULL CHECK (expected_version>=3),
-  payload_fingerprint text NOT NULL CHECK (payload_fingerprint ~ '^[a-f0-9]{64} / NO ACTIVATION until separate SHA-bound independent review and
--- owner approval. The P2 operator gate remains independent and OFF.
-),
+  payload_fingerprint text NOT NULL CHECK (payload_fingerprint ~ '^[a-f0-9]{64}$'),
   response_json jsonb NOT NULL,
   created_at timestamptz NOT NULL DEFAULT now()
 );
