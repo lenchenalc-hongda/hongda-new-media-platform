@@ -47,6 +47,12 @@ function audit(source: string): void {
   guard(gate.includes('.changed_files') && gate.includes('= 3 ]') &&
         gate.includes('tests/unit/workshop-order-p1-qa-workflow-security.test.ts'),
     'WORKFLOW_ONLY_SCOPE');
+  guard(gate.includes('pr202=$(api "$base/pulls/202")') &&
+        gate.includes('b3f382976049eacabefc7965cbb90312fd6903cc') &&
+        gate.includes('scripts/agent-control/reliability-core.mjs') &&
+        gate.includes('scripts/agent-control/reliability-watchdog.mjs') &&
+        gate.includes('tests/unit/agent-control-reliability-v2.test.ts'),
+    'PRESERVED_PR202_ONE_PATH_LOCK_EXCEPTION');
   guard(gate.includes('"$audited_workflow"') && gate.includes('"$installed_workflow"'),
     'LIVE_WORKFLOW_BLOB_MATCH');
   guard(gate.includes('actions/runs?head_sha=$target&event=pull_request&per_page=100'),
@@ -111,6 +117,7 @@ const negative: Array<[string,string]> = [
   ['INCOMPLETE_BUSINESS_FILES',workflow.replace('changed_files" -lt 100 ]','changed_files" -lt 1000 ]')],
   ['WORKFLOW_SCOPE',workflow.replace('tests/unit/workshop-order-p1-qa-workflow-security.test.ts',
     'tests/unit/silent-bypass.test.ts')],
+  ['PR202_LOCK_HEAD_CHANGED',workflow.replace('b3f382976049eacabefc7965cbb90312fd6903cc','0'.repeat(40))],
   ['MISSING_AUDIT_LOG_PROOF',workflow.replace('WOS_P1_PROTECTED_QA_STATIC_SECURITY_AUDIT=PASS','SKIPPED')],
   ['MISSING_PASSWORD_SAFETY',workflow.replace('WOS_P1_QA_ACCOUNT_CREDENTIALS_USED=NO','UNVERIFIED')],
   ['MISSING_SECOND_CI',workflow.replace('verify_ci "$workflow_head" yes','verify_ci "$workflow_head" no')],
