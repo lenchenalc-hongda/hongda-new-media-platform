@@ -177,7 +177,39 @@ async function main() {
     await card.getByRole('button', { name: '用当前车间身份读取私有图片' }).click();
     await card.getByRole('link', { name: '打开已验证的私有图片' })
       .waitFor({ timeout: 50000 });
-    trace('OPERATOR_PRIVATE_IMAGE_BINARY_READ',true);
+    // Validate the actual private Storage download bytes, not just that the
+    // component displayed a blob: link after catching an exception.
+    const verifiedBinary = await card.getByRole('link', {
+      name: '打开已验证的私有图片',
+    }).evaluate(async link => {
+      const url = link.getAttribute('href');
+      if (!url || !url.startsWith('blob:')) return { size: 0, png: false };
+      const response = await fetch(url);
+      if (!response.ok) return { size: 0, png: false };
+      const bytes = new Uint8Array(await response.arrayBuffer());
+      return {
+        size: bytes.length,
+        png: bytes.length >= 8
+          && [137,80,78,71,13,10,26,10].every((n,i) => bytes[i] === n),
+      };
+    });
+    const binaryOk = verifiedBinary.png && verifiedBinary.size >= 12;
+    trace('OPERATOR_PRIVATE_IMAGE_BINARY_READ', binaryOk);
+    assert(binaryOk, 'OPERATOR_PRIVATE_IMAGE_BYTES_UNVERIFIED');
+
+    stage = 'OPERATOR_ORDER_DETAILS';
+    await card.getByRole('button', {
+      name: '查看真实生产要求与图片版本',
+    }).click();
+    const detail = card.getByRole('region', { name: '订单生产详情' });
+    await detail.waitFor({ timeout: 20000 });
+    const requirementsVisible = (await detail.getByText('客户验收标准').count()) === 1
+      && (await detail.getByText('产品材质').count()) === 0
+      && (await detail.getByText('材质', { exact: true }).count()) === 1
+      && (await detail.getByText('生产资料版本').count()) === 1
+      && (await detail.getByText('参考图片与历史版本', { exact: false }).count()) >= 1;
+    trace('OPERATOR_ORDER_DETAILS_AND_VERSION', requirementsVisible);
+    assert(requirementsVisible, 'OPERATOR_ORDER_DETAILS_UNVERIFIED');
 
     stage = 'OPERATOR_FORBIDDEN';
     const operatorForbidden = await workshop.page.evaluate(async () => {
