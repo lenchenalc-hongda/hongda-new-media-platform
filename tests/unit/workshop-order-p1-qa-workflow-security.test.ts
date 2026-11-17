@@ -25,7 +25,7 @@ function audit(src: string) {
   const source=slice(src,'  secretless-source-review:\n','  protected-real-qa:\n');
   const protectedJob=slice(src,'  protected-real-qa:\n');
   check(gate.includes('pulls/238') && gate.includes('feature/wos-p1-qa-transaction-inbox-20261117'), 'PR_IDENTITY');
-  check(gate.includes('master_ci" = "$reviewed_ci') && gate.includes('startsWith(".github/workflows/")'), 'TRUSTED_CI_BLOB');
+  check(gate.includes('master_ci" = "$reviewed_ci') && gate.includes('startswith(".github/workflows/")'), 'TRUSTED_CI_BLOB');
   check(gate.includes('max_by(.submitted_at)') && gate.includes('.state=="APPROVED" and .commit_id==$sha'), 'LIVE_APPROVAL');
   check(gate.includes('.user.login!=$author') && gate.includes('collaborators/$reviewer/permission'), 'INDEPENDENT_REVIEWER');
   check(gate.includes('.path==".github/workflows/ci.yml"') && gate.includes('actions/runs?head_sha=$REQUESTED_SHA&event=pull_request'), 'CI_PROVENANCE');
