@@ -70,13 +70,10 @@ export async function POST(req:NextRequest) {
     .maybeSingle();
   if (order.error) return answer(503,'QA_ORDER_READ_UNAVAILABLE');
   if (!order.data||order.data.organization_id!==actor.org_id) return answer(403,'FORBIDDEN');
-  if (order.data.version!==request.expectedVersion) return answer(409,'VERSION_CONFLICT');
-
-  const legal= (request.action==='ACCEPT'&&order.data.workflow_status==='SUBMITTED')
-    ||(request.action==='RETURN_FOR_INFORMATION'&&['SUBMITTED','WORKSHOP_REVIEW'].includes(order.data.workflow_status))
-    ||(request.action==='CONFIRM_MATERIAL'&&['WORKSHOP_REVIEW','WAITING_MATERIAL','READINESS_CHECK'].includes(order.data.workflow_status));
-  if (!legal) return answer(409,'ILLEGAL_STATUS_TRANSITION');
-
+  // Do not reject stale expectedVersion *before* the SQL idempotency ledger.
+  // A committed request retried after a lost HTTP response must return
+  // REPLAYED rather than a false VERSION_CONFLICT. The atomic RPC verifies
+  // both the ledger fingerprint and every legal state transition.
   const result=await client.rpc('wos_qa_p2_operator_action',wosP2RpcArgs(request));
   if (result.error) {
     // The RPC produces only generic error messages/codes on purpose.
