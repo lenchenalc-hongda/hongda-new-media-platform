@@ -83,7 +83,7 @@ assert(ui.includes('QA_READINESS_UNVERIFIED_OR_DENIED'));
 assert(ui.includes('setReadState(null)'));
 assert(!/\.insert\s*\(|\.update\s*\(|\.delete\s*\(|\.upsert\s*\(|\.rpc\s*\(/.test(ui),
   'readiness panel must never secretly mutate QA data');
-assert(ui.includes('必须通过独立审核并安装最小权限 QA 事务 RPC'));
+assert(ui.includes('在 QA SQL 与权限单独审核安装前，操作按钮保持关闭。'));
 assert(inbox.includes('<LiveQaWorkshopReadiness'));
 assert(inbox.includes('currentBatchQuantity={Number(details[item.id].current_batch_quantity)}'));
 console.log('workshop-order-p2-qa-readiness.test.ts: PASS');
