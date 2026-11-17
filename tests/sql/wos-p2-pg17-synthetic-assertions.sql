@@ -52,7 +52,7 @@ UPDATE public.wos_production_orders SET version=5
  WHERE id='dddddddd-dddd-4ddd-8ddd-dddddddddddd';
 SELECT pg_catalog.set_config('request.jwt.claim.sub','44444444-4444-4444-8444-444444444444',false);
 SET ROLE authenticated;
-DO $
+DO $$
 BEGIN
   BEGIN
     PERFORM public.wos_qa_p2_operator_action(
@@ -62,7 +62,7 @@ BEGIN
     RAISE EXCEPTION 'FAIL_SUBMISSION_SOURCE_REVISION_ACCEPTED';
   EXCEPTION WHEN SQLSTATE 'PT409' THEN NULL;
   END;
-END $;
+END $$;
 RESET ROLE;
 UPDATE public.wos_production_orders SET version=2
  WHERE id='dddddddd-dddd-4ddd-8ddd-dddddddddddd';
