@@ -136,6 +136,31 @@ async function main() {
     trace('OFFICE_CPC_DRAFT_IDEMPOTENT_REPLAY', replayOk);
     assert(replayOk, 'OFFICE_CPC_DRAFT_REPLAY_FAILED');
 
+    // Browser reload must not generate a second CPC order after an uncertain
+    // HTTP result. Local durable idempotency identifier is scoped by QA actor.
+    stage = 'OFFICE_CPC_DRAFT_REPLAY_AFTER_RELOAD';
+    await office.page.reload({ waitUntil: 'domcontentloaded' });
+    await office.page.getByRole('heading', { name: 'QA Preview · 真实 HTTP 提交验收' }).waitFor();
+    await office.page.getByRole('button', { name: '自动填入全套合成 QA 测试资料' }).click();
+    await office.page.getByRole('combobox', { name: '选择 CPC 客户' })
+      .selectOption({ label: 'QA NONPRODUCTION ONLY - WOS CPC TEST CUSTOMER' });
+    await office.page.getByRole('combobox', { name: '关联 CPC 项目' })
+      .selectOption({ label: 'QA NONPRODUCTION ONLY - WOS P1 TEST PROJECT' });
+    await office.page.getByText('QA_CPC_DRAFT_RETRY_SAME_NUMBER_AFTER_RELOAD', { exact: false })
+      .waitFor({ timeout: 20000 });
+    const afterReloadWait = office.page.waitForResponse(response =>
+      response.url() === origin + '/api/workshop-orders/production/cpc-drafts'
+      && response.request().method() === 'POST', { timeout: 50000 });
+    await office.page.getByRole('button', { name: '保存 CPC 关联 QA 草稿' }).click();
+    const afterReload = await afterReloadWait;
+    const reloadedBody = await afterReload.json();
+    const durable = afterReload.status() === 200
+      && reloadedBody?.code === 'QA_CPC_DRAFT_REPLAY_VERIFIED'
+      && reloadedBody.data?.orderId === draftBody.data.orderId
+      && reloadedBody.data?.orderNumber === draftBody.data.orderNumber;
+    trace('OFFICE_CPC_RELOAD_REPLAY_SAME_ORDER_NO_DUPLICATE', durable);
+    assert(durable, 'OFFICE_CPC_RELOAD_CREATED_DUPLICATE_OR_CHANGED_PAYLOAD');
+
     // Simulate the hardest crash: the server commits the submission but the
     // browser never sees the HTTP response. Reload in the *same tab* and
     // prove the original order and idempotency key are recovered, not remade.
