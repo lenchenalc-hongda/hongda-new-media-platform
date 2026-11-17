@@ -15,6 +15,7 @@ import './workshop-order-p1-qa-revision-sql-contract.test';
 import './workshop-order-p2-qa-readiness.test';
 import './workshop-order-p2-actions-contract.test';
 import './workshop-order-p2-office-returns.test';
+import './workshop-order-p2-office-revision-contract.test';
 import './wos-qa-image-validation.test';
 import './wos-p7-edge-png.test';
 
