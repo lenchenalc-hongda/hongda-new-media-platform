@@ -104,5 +104,9 @@ export function isWosP2RpcResult(value: unknown, action: WosP2Action): value is 
     && typeof v.version === 'number' && Number.isInteger(v.version)
     && v.version === action.expectedVersion + 1
     && typeof v.workflowStatus === 'string'
-    && ['WORKSHOP_REVIEW','NEEDS_INFORMATION','WAITING_MATERIAL','READINESS_CHECK'].includes(v.workflowStatus);
+    && (action.action === 'ACCEPT'
+      ? v.workflowStatus === 'WORKSHOP_REVIEW'
+      : action.action === 'RETURN_FOR_INFORMATION'
+        ? v.workflowStatus === 'NEEDS_INFORMATION'
+        : v.workflowStatus === 'WAITING_MATERIAL' || v.workflowStatus === 'READINESS_CHECK');
 }
