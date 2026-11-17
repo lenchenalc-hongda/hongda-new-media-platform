@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
 import type { WosInboxItem } from '@/lib/workshop-orders/api-contract';
+import LiveQaWorkshopReadiness from './LiveQaWorkshopReadiness';
 
 interface ApiResponse {
   ok: boolean;
@@ -237,6 +238,12 @@ export default function LiveQaWorkshopInbox() {
                   </li>
                 ))}
               </ul>
+              <LiveQaWorkshopReadiness
+                orderId={item.id}
+                organizationId={item.organizationId}
+                versionLabel={item.versionLabel}
+                currentBatchQuantity={Number(details[item.id].current_batch_quantity)}
+              />
             </section>
           )}
         </article>
