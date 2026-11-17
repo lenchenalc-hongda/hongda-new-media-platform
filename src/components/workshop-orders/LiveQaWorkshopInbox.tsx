@@ -87,7 +87,7 @@ export default function LiveQaWorkshopInbox() {
         || order.data.workflow_status !== 'SUBMITTED'
         || order.data.id !== item.id || order.data.organization_id !== item.organizationId
         || order.data.version !== item.version || order.data.version_label !== item.versionLabel
-        || tasks.data?.length !== 1 || task?.source_revision + 1 !== item.version
+        || tasks.data?.length !== 1 || (task?.source_revision ?? -100) + 1 !== item.version
         || task?.source_version_label !== item.versionLabel) {
         throw new Error('QA_ORDER_TRANSACTION_DETAILS_UNVERIFIED');
       }
