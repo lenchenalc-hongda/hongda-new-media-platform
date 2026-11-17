@@ -239,6 +239,7 @@ BEGIN
     pg_catalog.jsonb_build_object('requestId',p_request_id,
       'expectedVersion',p_expected_version,
       'newVersion',v_after.version,
+      'newVersionLabel',v_after.version_label,
       'fieldsChanged',p_patch));
   -- Deliberately DO NOT mark OPEN workshop blocker RESOLVED:
   -- Operator must still confirm the new documentation; start remains blocked.
