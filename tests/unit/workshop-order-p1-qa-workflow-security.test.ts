@@ -20,6 +20,13 @@ function audit(source: string): void {
   guard(/^on:\n  workflow_dispatch:\n/m.test(source), 'OWNER_MANUAL_DISPATCH_ONLY');
   guard(!/^  (push|pull_request|pull_request_target|schedule|workflow_run|repository_dispatch):/m.test(source),
     'NO_UNREVIEWED_EVENT_TRIGGER');
+  guard(source.includes('  issue_comment:\n    types: [created]'), 'ONE_OWNER_ISSUE_COMMENT_TRIGGER');
+  guard(source.includes('github.event.issue.number == 104') &&
+        source.includes('github.event.sender.login == \'lenchenalc-hongda\'') &&
+        source.includes('github.event.comment.user.login == \'lenchenalc-hongda\'') &&
+        source.includes('github.event.issue.pull_request == null') &&
+        source.includes('WOS_P1_SINGLE_QA_ACCEPTANCE_20261117_SHA=6a72b446ccc517a5ff14e531b8a6663b4a70a77e'), 'ONE_EXACT_OWNER_AND_ISSUE_COMMENT');
+
   guard(source.includes('APPROVED_SHA: '+authorizedBusinessHead), 'BUSINESS_EXACT_HEAD_PIN');
   guard(source.includes('[ "$REQUESTED_SHA" = "$APPROVED_SHA" ]'), 'BUSINESS_HEAD_MATCH');
   guard(source.includes("github.ref == 'refs/heads/master'"), 'PROTECTED_MASTER_ONLY');
@@ -30,6 +37,12 @@ function audit(source: string): void {
   const qa=between(source,'  protected-real-qa:\n');
 
   guard(gate.includes('pulls/238') && gate.includes('pulls/239'), 'BOTH_PR_IDENTITIES');
+  guard(gate.includes('if [ "$GITHUB_EVENT_NAME" = issue_comment ]; then') &&
+        gate.includes('"$GITHUB_EVENT_PATH"') &&
+        gate.includes('.comment.body==$body') &&
+        gate.includes('.sender.login=="lenchenalc-hongda"'),
+    'SECOND_ISSUE_COMMENT_JSON_VALIDATION');
+
   guard(gate.includes('feature/wos-p1-qa-transaction-inbox-20261117'), 'EXPECTED_BUSINESS_BRANCH');
   guard(gate.includes('qa/wos-pr238-protected-e2e-20261117'), 'EXPECTED_WORKFLOW_BRANCH');
   guard(gate.includes('.merged') && gate.includes('= true ]') && gate.includes('.merge_commit_sha'),
@@ -110,6 +123,13 @@ audit(workflow);
 const negative: Array<[string,string]> = [
   ['BUSINESS_SHA',workflow.replace(authorizedBusinessHead,'f'.repeat(40))],
   ['AUTO_PR_EVENT',workflow.replace('  workflow_dispatch:', '  pull_request:\n  workflow_dispatch:')],
+  ['WRONG_ISSUE',workflow.replace('github.event.issue.number == 104','github.event.issue.number == 10')],
+  ['WRONG_COMMENT_ACTOR',workflow.replace('github.event.sender.login == \'lenchenalc-hongda\'',
+    'github.event.sender.login == \'anyone\'')],
+  ['WRONG_COMMENT_MARKER',workflow.replace('WOS_P1_SINGLE_QA_ACCEPTANCE_20261117_SHA=6a72b446ccc517a5ff14e531b8a6663b4a70a77e','WOS_UNVERIFIED_COMMENT_TRIGGER')],
+  ['NO_EVENT_JSON_RECHECK',workflow.replace('.comment.body==$body','.comment.body!=null')],
+  ['BYPASS_ON_PR_COMMENTS',workflow.replace('github.event.issue.pull_request == null','true')],
+
   ['FORGED_HUMAN_APPROVAL',workflow.replace('WOS_P1_OWNER_AUTHORIZED_GITHUB_HOSTED_AUDIT=PASS',
     'WOS_P1_OWNER_PIN_INDEPENDENT_REVIEW_AND_CI=PASS')],
   ['OMITTED_MERGE_PARENT',workflow.replace('(.parents | length)==2 and .parents[1].sha==$sha','true')],
