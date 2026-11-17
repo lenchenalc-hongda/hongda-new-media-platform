@@ -75,6 +75,20 @@ assert.equal(isWosP2RpcResult({
 assert.equal(isWosP2RpcResult({
   status:'REPLAYED',orderId,version:4,requestId,workflowStatus:'WORKSHOP_REVIEW',
 },accept),false);
+assert.equal(isWosP2RpcResult({
+  status:'APPLIED',orderId,version:3,requestId,workflowStatus:'NEEDS_INFORMATION',
+},accept),false,'accept must never be acknowledged as return');
+assert(returned);
+assert.equal(isWosP2RpcResult({
+  status:'APPLIED',orderId,version:3,requestId,workflowStatus:'WORKSHOP_REVIEW',
+},returned),false,'return must not be acknowledged as accept');
+assert.equal(isWosP2RpcResult({
+  status:'APPLIED',orderId,version:3,requestId,workflowStatus:'NEEDS_INFORMATION',
+},returned),true);
+assert(material);
+assert.equal(isWosP2RpcResult({
+  status:'REPLAYED',orderId,version:3,requestId,workflowStatus:'NEEDS_INFORMATION',
+},material),false,'material confirmation must not masquerade as a return');
 
 const sql=readFileSync('docs/workshop-order-system/nonproduction-only/wos_p2_operator_actions_QA_ONLY_NOT_INSTALLED.sql','utf8');
 const route=readFileSync('src/app/api/workshop-orders/p2/actions/route.ts','utf8');
