@@ -18,7 +18,13 @@ CREATE TABLE public.wos_production_orders (
  id uuid PRIMARY KEY, organization_id uuid NOT NULL,
  order_number text NOT NULL, workflow_status text NOT NULL,
  version integer NOT NULL, version_label text NOT NULL,
- current_batch_quantity integer NOT NULL, updated_at timestamptz NOT NULL DEFAULT now()
+ current_batch_quantity integer NOT NULL, updated_at timestamptz NOT NULL DEFAULT now(),
+ requested_quantity integer NOT NULL DEFAULT 200,
+ product_name text NOT NULL DEFAULT 'QA synthetic product',
+ product_material text NOT NULL DEFAULT 'QA synthetic plastic',
+ customer_acceptance_standard text,
+ position_reference text,
+ created_by_profile_id uuid NOT NULL DEFAULT '50505050-5050-4050-8050-505050505050'
 );
 CREATE TABLE public.wos_submission_receipts (
  id uuid PRIMARY KEY,organization_id uuid NOT NULL,order_id uuid NOT NULL,
@@ -41,7 +47,10 @@ CREATE TABLE public.wos_blockers (
  organization_id uuid NOT NULL,entity_type text NOT NULL,entity_id uuid NOT NULL,
  blocker_code text NOT NULL,blocker_category text NOT NULL,description text NOT NULL,
  status text NOT NULL,opened_by_profile_id uuid NOT NULL,
- opened_at timestamptz NOT NULL DEFAULT now()
+ opened_at timestamptz NOT NULL DEFAULT now(),
+ resolved_by_profile_id uuid,
+ resolved_at timestamptz,
+ resolution_note text
 );
 CREATE TABLE public.wos_resource_readiness (
  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -97,7 +106,8 @@ INSERT INTO public.profiles(id,user_id,org_id,role,is_active) VALUES
  ('10101010-1010-4010-8010-101010101010','11111111-1111-4111-8111-111111111111','aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa','operator',true),
  ('20202020-2020-4020-8020-202020202020','22222222-2222-4222-8222-222222222222','bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb','operator',true),
  ('30303030-3030-4030-8030-303030303030','33333333-3333-4333-8333-333333333333','aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa','viewer',true),
- ('40404040-4040-4040-8040-404040404040','44444444-4444-4444-8444-444444444444','aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa','manager',true);
+ ('40404040-4040-4040-8040-404040404040','44444444-4444-4444-8444-444444444444','aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa','manager',true),
+ ('50505050-5050-4050-8050-505050505050','55555555-5555-4555-8555-555555555555','aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa','sales',true);
 INSERT INTO public.wos_production_orders
  (id,organization_id,order_number,workflow_status,version,version_label,current_batch_quantity)
  VALUES
