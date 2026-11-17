@@ -1,0 +1,325 @@
+# WOS P1 manual protected QA acceptance launcher.
+# Once-only owner-authorized GitHub-hosted technical audit replaces human review.
+# Shared path lock exception and no-Production deploy remain separate gates.
+# QA user secrets are read only from the protected environment after exact-SHA
+# approval and trusted CI provenance checks pass. No production deployment.
+name: WOS P1 PR238 QA exact-head protected browser acceptance
+on:
+  workflow_dispatch:
+    inputs:
+      reviewed_sha:
+        description: Owner-authorized audited exact PR238 HEAD
+        type: string
+        required: true
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: wos-p1-pr238-protected-qa
+  cancel-in-progress: false
+
+jobs:
+  independent-gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    if: >-
+      github.ref == 'refs/heads/master' &&
+      (
+        github.event_name == 'workflow_dispatch' ||
+        (
+          github.event_name == 'issue_comment' &&
+          github.repository == 'lenchenalc-hongda/hongda-new-media-platform' &&
+          github.event.issue.number == 104 &&
+          github.event.issue.pull_request == null &&
+          github.event.sender.login == 'lenchenalc-hongda' &&
+          github.event.comment.user.login == 'lenchenalc-hongda' &&
+          github.event.comment.body == 'WOS_P1_SINGLE_QA_ACCEPTANCE_20261117_SHA=6a72b446ccc517a5ff14e531b8a6663b4a70a77e'
+        )
+      )
+    permissions:
+      contents: read
+      pull-requests: read
+      checks: read
+      actions: read
+    outputs:
+      sha: ${{ steps.pin.outputs.sha }}
+      workflow_head: ${{ steps.pin.outputs.workflow_head }}
+      business_run: ${{ steps.pin.outputs.business_run }}
+      audit_run: ${{ steps.pin.outputs.audit_run }}
+    steps:
+      - id: pin
+        name: Validate both PR HEADs and independent Github-hosted CI technical audit
+        shell: bash
+        env:
+          REQUESTED_SHA: ${{ inputs.reviewed_sha || '6a72b446ccc517a5ff14e531b8a6663b4a70a77e' }}
+          APPROVED_SHA: 6a72b446ccc517a5ff14e531b8a6663b4a70a77e
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          [ "$GITHUB_REF" = refs/heads/master ]
+          if [ "$GITHUB_EVENT_NAME" = issue_comment ]; then
+            jq -e --arg body "WOS_P1_SINGLE_QA_ACCEPTANCE_20261117_SHA=6a72b446ccc517a5ff14e531b8a6663b4a70a77e" '
+              .action=="created" and .issue.number==104 and
+              (.issue | has("pull_request") | not) and
+              .sender.login=="lenchenalc-hongda" and
+              .comment.user.login=="lenchenalc-hongda" and
+              .comment.body==$body
+            ' "$GITHUB_EVENT_PATH" >/dev/null
+          else
+            [ "$GITHUB_EVENT_NAME" = workflow_dispatch ]
+          fi
+          [[ "$REQUESTED_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [ "$REQUESTED_SHA" = "$APPROVED_SHA" ]
+          base="https://api.github.com/repos/$GITHUB_REPOSITORY"
+          api() {
+            curl --fail --silent --show-error --max-time 25 \
+              -H "Authorization: Bearer $GH_TOKEN" \
+              -H "Accept: application/vnd.github+json" "$1"
+          }
+          pr=$(api "$base/pulls/238")
+          [ "$(jq -r '.state' <<<"$pr")" = open ]
+          [ "$(jq -r '.draft' <<<"$pr")" = true ]
+          [ "$(jq -r '.head.sha' <<<"$pr")" = "$REQUESTED_SHA" ]
+          [ "$(jq -r '.base.ref' <<<"$pr")" = master ]
+          [ "$(jq -r '.head.ref' <<<"$pr")" = feature/wos-p1-qa-transaction-inbox-20261117 ]
+          [ "$(jq -r '.head.repo.full_name' <<<"$pr")" = "$GITHUB_REPOSITORY" ]
+          author=$(jq -r '.user.login' <<<"$pr")
+          # Guard against same-name GitHub checks from a changed CI workflow.
+          # Both PR and protected master must have the exact same trusted CI blob.
+          master_ci=$(api "$base/contents/.github/workflows/ci.yml?ref=master" | jq -r .sha)
+          reviewed_ci=$(api "$base/contents/.github/workflows/ci.yml?ref=$REQUESTED_SHA" | jq -r .sha)
+          [ -n "$master_ci" ] && [ "$master_ci" = "$reviewed_ci" ]
+          # Fail closed on incomplete GitHub API pagination: never audit only
+          # page one when a PR grows beyond 100 files.
+          changed_files=$(jq -r '.changed_files' <<<"$pr")
+          [[ "$changed_files" =~ ^[0-9]+$ ]] && [ "$changed_files" -lt 100 ]
+          files=$(api "$base/pulls/238/files?per_page=100")
+          jq -e --argjson count "$changed_files" 'length == $count' <<<"$files" >/dev/null
+          jq -e '[.[] | select(.filename | startswith(".github/workflows/"))] | length==0' <<<"$files" >/dev/null
+
+          # ONE-TIME OWNER-AUTHORIZED REPLACEMENT FOR HUMAN REVIEW:
+          # separate GitHub-hosted CI and security audit on both exact heads.
+          # No Github APPROVED or bot-authored approval is manufactured.
+          pr239=$(api "$base/pulls/239")
+          [ "$(jq -r '.state' <<<"$pr239")" = closed ]
+          [ "$(jq -r '.merged' <<<"$pr239")" = true ]
+          [ "$(jq -r '.base.ref' <<<"$pr239")" = master ]
+          [ "$(jq -r '.head.repo.full_name' <<<"$pr239")" = "$GITHUB_REPOSITORY" ]
+          [ "$(jq -r '.head.ref' <<<"$pr239")" = qa/wos-pr238-protected-e2e-20261117 ]
+          [ "$(jq -r '.merge_commit_sha' <<<"$pr239")" = "$GITHUB_SHA" ]
+          workflow_head=$(jq -r '.head.sha' <<<"$pr239")
+          [[ "$workflow_head" =~ ^[0-9a-f]{40}$ ]]
+          [ "$(api "$base/branches/master" | jq -r '.commit.sha')" = "$GITHUB_SHA" ]
+          merge_commit=$(api "$base/commits/$GITHUB_SHA")
+          jq -e --arg sha "$workflow_head" \
+            '(.parents | length)==2 and .parents[1].sha==$sha' <<<"$merge_commit" >/dev/null
+          # One new shared-workflow path, and only two independent test paths.
+          [ "$(jq -r '.changed_files' <<<"$pr239")" = 3 ]
+          f239=$(api "$base/pulls/239/files?per_page=100")
+          jq -e 'length==3 and
+             ([.[].filename]|sort)==
+             ([".github/workflows/wos-p1-pr238-protected-qa.yml",
+               "tests/unit/workshop-order-p1-qa-workflow-security.test.ts",
+               "tests/unit/workshop-order-suite.test.ts"]|sort)' <<<"$f239" >/dev/null
+          audited_workflow=$(api "$base/contents/.github/workflows/wos-p1-pr238-protected-qa.yml?ref=$workflow_head" | jq -r '.sha')
+          # One-path shared-lock exception: preserve PR202 unchanged. It
+          # remains blocked and retains its three-file machine-state lock.
+          pr202=$(api "$base/pulls/202")
+          [ "$(jq -r '.state' <<<"$pr202")" = open ]
+          [ "$(jq -r '.draft' <<<"$pr202")" = true ]
+          [ "$(jq -r '.head.sha' <<<"$pr202")" = b3f382976049eacabefc7965cbb90312fd6903cc ]
+          [ "$(jq -r '.changed_files' <<<"$pr202")" = 3 ]
+          f202=$(api "$base/pulls/202/files?per_page=100")
+          jq -e 'length==3 and
+            ([.[].filename]|sort)==
+            (["scripts/agent-control/reliability-core.mjs",
+              "scripts/agent-control/reliability-watchdog.mjs",
+              "tests/unit/agent-control-reliability-v2.test.ts"]|sort)' <<<"$f202" >/dev/null
+          installed_workflow=$(api "$base/contents/.github/workflows/wos-p1-pr238-protected-qa.yml?ref=master" | jq -r '.sha')
+          [ -n "$audited_workflow" ] && [ "$audited_workflow" = "$installed_workflow" ]
+          [ "$master_ci" = "$(api "$base/contents/.github/workflows/ci.yml?ref=$workflow_head" | jq -r '.sha')" ]
+          verify_ci() {
+            local target="$1" is_audit="$2" response run jobs log_file job_id count
+            response=$(api "$base/actions/runs?head_sha=$target&event=pull_request&per_page=100")
+            jq -e '.total_count > 0 and .total_count < 100' <<<"$response" >/dev/null
+            run=$(jq -r --arg sha "$target" '[.workflow_runs[] |
+              select(.head_sha==$sha and .path==".github/workflows/ci.yml" and
+                     .event=="pull_request" and .status=="completed" and
+                     .conclusion=="success")] | first | .id // empty' <<<"$response")
+            [[ "$run" =~ ^[0-9]+$ ]]
+            jobs=$(api "$base/actions/runs/$run/jobs?per_page=100")
+            jq -e '.total_count >= 2 and .total_count < 100' <<<"$jobs" >/dev/null
+            for job in lint-and-audit glh-stage1-postgres-synthetic; do
+              jq -e --arg job "$job" \
+                '[.jobs[] | select(.name==$job and .conclusion=="success")] | length==1' \
+                <<<"$jobs" >/dev/null
+            done
+            jq -e '[.jobs[] | select(.name=="lint-and-audit") | .steps[] |
+              select(.name=="Workshop Order System full contract suite" or
+                     .name=="TypeScript check" or .name=="Build" or
+                     .name=="Audit bundle for secret leakage")] |
+              length==4 and all(.[]; .conclusion=="success")' <<<"$jobs" >/dev/null
+            if [ "$is_audit" = yes ]; then
+              job_id=$(jq -r '.jobs[]|select(.name=="lint-and-audit")|.id' <<<"$jobs")
+              [[ "$job_id" =~ ^[0-9]+$ ]]
+              log_file=$(mktemp)
+              trap 'rm -f "$log_file"' RETURN
+              curl --fail --silent --show-error --location --max-time 65 \
+                -H "Authorization: Bearer $GH_TOKEN" \
+                -H "Accept: application/vnd.github+json" \
+                "$base/actions/jobs/$job_id/logs" > "$log_file"
+              grep -Fq 'WOS_P1_PROTECTED_QA_STATIC_SECURITY_AUDIT=PASS' "$log_file"
+              grep -Fq 'WOS_P1_QA_ACCOUNT_CREDENTIALS_USED=NO' "$log_file"
+              count=$(grep -oE 'WOS_P1_PROTECTED_QA_NEGATIVE_CASES=[0-9]+' "$log_file" |
+                tail -1 | cut -d= -f2)
+              [[ "$count" =~ ^[0-9]+$ ]] && [ "$count" -ge 12 ]
+              rm -f "$log_file"
+              trap - RETURN
+              echo "audit_run=$run" >> "$GITHUB_OUTPUT"
+            else
+              echo "business_run=$run" >> "$GITHUB_OUTPUT"
+            fi
+          }
+          verify_ci "$REQUESTED_SHA" no
+          verify_ci "$workflow_head" yes
+          echo "sha=$REQUESTED_SHA" >> "$GITHUB_OUTPUT"
+          echo "workflow_head=$workflow_head" >> "$GITHUB_OUTPUT"
+          echo WOS_P1_OWNER_AUTHORIZED_GITHUB_HOSTED_AUDIT=PASS
+
+  secretless-source-review:
+    runs-on: ubuntu-latest
+    needs: independent-gate
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ needs.independent-gate.outputs.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1
+        with:
+          version: 10
+      - run: |
+          set -euo pipefail
+          [ "$(git rev-parse HEAD)" = "${{ needs.independent-gate.outputs.sha }}" ]
+          pnpm install --frozen-lockfile --ignore-scripts
+          pnpm exec tsc --noEmit
+          pnpm exec tsx tests/unit/workshop-order-suite.test.ts
+          node --check tests/e2e/wos-qa-real-browser.cjs
+          node --check tests/e2e/wos-qa-resilience.cjs
+          echo WOS_P1_SECRETLESS_SOURCE_CHECK=PASS
+
+  protected-real-qa:
+    runs-on: ubuntu-latest
+    needs: [independent-gate, secretless-source-review]
+    if: ${{ needs['secretless-source-review'].result == 'success' && github.ref == 'refs/heads/master' }}
+    timeout-minutes: 65
+    environment: hongda-review-dev
+    permissions:
+      contents: read
+      pull-requests: read
+      actions: read
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ needs.independent-gate.outputs.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1
+        with:
+          version: 10
+      - run: |
+          set -euo pipefail
+          [ "$(git rev-parse HEAD)" = "${{ needs.independent-gate.outputs.sha }}" ]
+          pnpm install --frozen-lockfile --ignore-scripts
+          npm install --prefix /tmp/hongda-qa-browser --no-audit --no-fund --silent playwright@1.56.1
+          /tmp/hongda-qa-browser/node_modules/.bin/playwright install --with-deps chromium
+      - name: Build and start isolated QA Preview-mode app WITHOUT user passwords
+        env:
+          AUTH_MODE: supabase
+          VERCEL_ENV: preview
+          NEXT_PUBLIC_SUPABASE_URL: https://xulmpqaknlwqqculbsek.supabase.co
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.REVIEW_DEV_SUPABASE_ANON_KEY }}
+          WOS_P5C_NONPROD_API_ENABLED: 'true'
+          WOS_P7_NONPROD_SUBMIT_ENABLED: 'true'
+          NEXT_PUBLIC_WOS_QA_LOCAL_TEST: 'true'
+        run: |
+          set -euo pipefail
+          [ -n "$NEXT_PUBLIC_SUPABASE_ANON_KEY" ]
+          pnpm build
+          nohup pnpm exec next start --hostname 127.0.0.1 -p 3000 >/tmp/wos-qa-next.log 2>&1 </dev/null &
+          for n in $(seq 1 100); do
+            if curl -fsS http://127.0.0.1:3000/login >/dev/null 2>&1; then break; fi
+            sleep 2
+          done
+          curl --fail --silent --show-error http://127.0.0.1:3000/login -o /dev/null
+      - name: Verify audit heads and genuine CI results again immediately before secrets
+        shell: bash
+        env:
+          REVIEWED_SHA: ${{ needs.independent-gate.outputs.sha }}
+          WORKFLOW_HEAD: ${{ needs.independent-gate.outputs.workflow_head }}
+          BUSINESS_RUN: ${{ needs.independent-gate.outputs.business_run }}
+          AUDIT_RUN: ${{ needs.independent-gate.outputs.audit_run }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          [ "$(git rev-parse HEAD)" = "$REVIEWED_SHA" ]
+          [[ "$WORKFLOW_HEAD" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$BUSINESS_RUN" =~ ^[0-9]+$ ]]
+          [[ "$AUDIT_RUN" =~ ^[0-9]+$ ]]
+          base="https://api.github.com/repos/$GITHUB_REPOSITORY"
+          api() {
+            curl --fail --silent --show-error --max-time 25 \
+              -H "Authorization: Bearer $GH_TOKEN" \
+              -H "Accept: application/vnd.github+json" "$1"
+          }
+          [ "$(api "$base/branches/master"|jq -r '.commit.sha')" = "$GITHUB_SHA" ]
+          pr=$(api "$base/pulls/238")
+          [ "$(jq -r '.state' <<<"$pr")" = open ]
+          [ "$(jq -r '.draft' <<<"$pr")" = true ]
+          [ "$(jq -r '.head.sha' <<<"$pr")" = "$REVIEWED_SHA" ]
+          pr239=$(api "$base/pulls/239")
+          [ "$(jq -r '.merged' <<<"$pr239")" = true ]
+          [ "$(jq -r '.head.sha' <<<"$pr239")" = "$WORKFLOW_HEAD" ]
+          [ "$(jq -r '.merge_commit_sha' <<<"$pr239")" = "$GITHUB_SHA" ]
+          ci1=$(api "$base/actions/runs/$BUSINESS_RUN")
+          ci2=$(api "$base/actions/runs/$AUDIT_RUN")
+          jq -e --arg sha "$REVIEWED_SHA" \
+            '.head_sha==$sha and .event=="pull_request" and .conclusion=="success" and
+              .path==".github/workflows/ci.yml"' <<<"$ci1" >/dev/null
+          jq -e --arg sha "$WORKFLOW_HEAD" \
+            '.head_sha==$sha and .event=="pull_request" and .conclusion=="success" and
+              .path==".github/workflows/ci.yml"' <<<"$ci2" >/dev/null
+          echo WOS_P1_BEFORE_QA_CREDENTIALS_AUDIT_RECHECK=PASS
+      - name: Real two-account HTTP/PNG/Inbox/Storage E2E (credentials scoped to this step)
+        env:
+          AUTH_MODE: supabase
+          VERCEL_ENV: preview
+          NEXT_PUBLIC_SUPABASE_URL: https://xulmpqaknlwqqculbsek.supabase.co
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.REVIEW_DEV_SUPABASE_ANON_KEY }}
+          WOS_P5C_NONPROD_API_ENABLED: 'true'
+          WOS_P7_NONPROD_SUBMIT_ENABLED: 'true'
+          NEXT_PUBLIC_WOS_QA_LOCAL_TEST: 'true'
+          WOS_QA_BROWSER_ACK_TEST_WRITES: 'true'
+          WOS_QA_SOAK_ROUNDS: '1'
+          REVIEW_DEV_ADMIN_EMAIL: ${{ secrets.REVIEW_DEV_ADMIN_EMAIL }}
+          REVIEW_DEV_ADMIN_PASSWORD: ${{ secrets.REVIEW_DEV_ADMIN_PASSWORD }}
+          REVIEW_DEV_OPERATOR_EMAIL: ${{ secrets.REVIEW_DEV_OPERATOR_EMAIL }}
+          REVIEW_DEV_OPERATOR_PASSWORD: ${{ secrets.REVIEW_DEV_OPERATOR_PASSWORD }}
+          REVIEW_DEV_VIEWER_EMAIL: ${{ secrets.REVIEW_DEV_VIEWER_EMAIL }}
+          REVIEW_DEV_VIEWER_PASSWORD: ${{ secrets.REVIEW_DEV_VIEWER_PASSWORD }}
+          REVIEW_DEV_FOREIGN_EMAIL: ${{ secrets.REVIEW_DEV_FOREIGN_EMAIL }}
+          REVIEW_DEV_FOREIGN_PASSWORD: ${{ secrets.REVIEW_DEV_FOREIGN_PASSWORD }}
+        run: |
+          set -euo pipefail
+          node tests/e2e/wos-qa-real-browser.cjs
+          node tests/e2e/wos-qa-resilience.cjs
+          echo WOS_P1_PR238_PROTECTED_QA_HTTP_E2E=PASS
