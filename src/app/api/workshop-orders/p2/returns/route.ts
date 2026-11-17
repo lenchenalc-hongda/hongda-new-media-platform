@@ -36,7 +36,7 @@ export async function GET() {
   const actor=p.data;
   try {
     let query=db.from('wos_production_orders')
-      .select('id,organization_id,created_by_profile_id,order_number,customer_name_snapshot,project_name_snapshot,product_name,version,version_label,workflow_status,updated_at')
+      .select('id,organization_id,created_by_profile_id,order_number,customer_name_snapshot,project_name_snapshot,product_name,product_material,requested_quantity,current_batch_quantity,customer_acceptance_standard,position_reference,version,version_label,workflow_status,updated_at')
       .eq('organization_id',actor.org_id).eq('workflow_status','NEEDS_INFORMATION')
       .order('updated_at',{ascending:false}).limit(101);
     if (actor.role==='sales') query=query.eq('created_by_profile_id',actor.id);
@@ -67,7 +67,11 @@ export async function GET() {
     const items=list.map(row=>({
       orderId:row.id, orderNumber:row.order_number,
       customerName:row.customer_name_snapshot,projectName:row.project_name_snapshot,
-      productName:row.product_name,version:row.version,versionLabel:row.version_label,
+      productName:row.product_name,productMaterial:row.product_material,
+      requestedQuantity:row.requested_quantity,currentBatchQuantity:row.current_batch_quantity,
+      customerAcceptanceStandard:row.customer_acceptance_standard,
+      positionReference:row.position_reference,
+      version:row.version,versionLabel:row.version_label,
       updatedAt:row.updated_at,
       reasons:blockers.data.filter(b=>b.entity_id===row.id).map(b=>({
         reason:b.description,code:b.blocker_code,openedAt:b.opened_at,
