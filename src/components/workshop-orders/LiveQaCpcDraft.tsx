@@ -8,7 +8,7 @@ type Project = { id: string; customerId: string; name: string; ownerProfileId: s
 type OptionsResponse = {
   ok: boolean;
   code: string;
-  data?: { customers: Customer[]; projects: Project[] };
+  data?: { customers: Customer[]; projects: Project[]; actorProfileId: string };
 };
 type Saved = {
   orderId: string; orderNumber: string; version: number;
@@ -36,6 +36,7 @@ export default function LiveQaCpcDraft({
   } | null>(null);
   const revisionEnabled = process.env.NEXT_PUBLIC_WOS_P1_QA_DRAFT_REVISION_ENABLED === 'true';
   const orderNumber = useRef<string | null>(null);
+  const recoveryStorageKey = useRef<string | null>(null);
   const eligibleProjects = useMemo(
     () => projects.filter(project => project.customerId === customerId),
     [projects, customerId],
@@ -50,10 +51,24 @@ export default function LiveQaCpcDraft({
         });
         const body: OptionsResponse = await response.json();
         if (!response.ok || !body.ok || body.code !== 'CPC_OPTIONS_VERIFIED'
-          || !Array.isArray(body.data?.customers) || !Array.isArray(body.data.projects)) {
+          || !Array.isArray(body.data?.customers) || !Array.isArray(body.data.projects)
+          || !/^[0-9a-f-]{36}$/i.test(body.data.actorProfileId)) {
           throw new Error('CPC_OPTIONS_UNAVAILABLE');
         }
         if (active) {
+          // The sole durable identifier used for a retry is a synthetic order
+          // number. Never persist passwords, access tokens or customer details.
+          const key = 'wos-p1-qa-cpc-draft:' + body.data.actorProfileId;
+          recoveryStorageKey.current = key;
+          try {
+            const existingNumber = window.localStorage.getItem(key);
+            if (existingNumber && /^QA-CPC-NONPROD-[0-9a-f-]{36}$/i.test(existingNumber)) {
+              orderNumber.current = existingNumber;
+              setNotice('QA_CPC_DRAFT_RETRY_SAME_NUMBER_AFTER_RELOAD');
+            }
+          } catch {
+            setNotice('QA_CPC_RECOVERY_STORAGE_UNAVAILABLE');
+          }
           setCustomers(body.data.customers);
           setProjects(body.data.projects);
           setLoading(false);
@@ -73,7 +88,19 @@ export default function LiveQaCpcDraft({
       setNotice('QA_CPC_REQUIRED_FIELDS_MISSING');
       return;
     }
+    if (!recoveryStorageKey.current) {
+      setNotice('QA_CPC_IDENTITY_NOT_VERIFIED');
+      return;
+    }
     if (!orderNumber.current) orderNumber.current = 'QA-CPC-NONPROD-' + crypto.randomUUID();
+    // Persist before HTTP. A database commit with a lost response must not
+    // cause a different order number when the browser/tab is reopened.
+    try {
+      window.localStorage.setItem(recoveryStorageKey.current, orderNumber.current);
+    } catch {
+      setNotice('QA_CPC_RECOVERY_STORAGE_UNAVAILABLE');
+      return;
+    }
     setBusy(true);
     setNotice('');
     try {
@@ -203,6 +230,23 @@ export default function LiveQaCpcDraft({
     }
   }
 
+  function newCpcDraft() {
+    if (!saved || busy || !recoveryStorageKey.current) return;
+    try {
+      window.localStorage.removeItem(recoveryStorageKey.current);
+    } catch {
+      setNotice('QA_CPC_RECOVERY_STORAGE_UNAVAILABLE');
+      return;
+    }
+    orderNumber.current = null;
+    pendingRevision.current = null;
+    savedDraftSnapshot.current = null;
+    setSaved(null);
+    setCustomerId('');
+    setProjectId('');
+    setNotice('QA_CPC_NEW_DRAFT_READY');
+  }
+
   const selectedCustomer = customers.find(customer => customer.id === customerId);
   return (
     <section aria-label="CPC 关联非生产云端草稿" className="space-y-3 rounded-lg border-2 border-indigo-300 bg-indigo-50 p-4">
@@ -262,6 +306,12 @@ export default function LiveQaCpcDraft({
           数据库已保存：{saved.orderNumber}（订单 ID：{saved.orderId}，版本：{saved.version}）。
           当前状态 DRAFT，未进入车间。
         </p>
+      )}
+      {saved && (
+        <button type="button" onClick={newCpcDraft}
+          className="min-h-11 rounded border border-indigo-400 bg-white px-3 py-2 text-xs text-indigo-900">
+          新建另一张 QA 草稿（不删除已保存订单）
+        </button>
       )}
       {saved && !revisionEnabled && (
         <p className="text-xs text-amber-900">
