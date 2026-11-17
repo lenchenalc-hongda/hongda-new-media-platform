@@ -28,7 +28,7 @@ assert(workflow.includes("NOT A RUNNABLE WORKFLOW"));
 assert(workflow.includes("REPLACE_WITH_OWNER_APPROVED_EXACT_SHA"));
 assert(workflow.includes("environment: hongda-review-dev"));
 assert(workflow.includes("if: github.ref == 'refs/heads/master'"));
-assert(workflow.includes("select(.state==\\"APPROVED\\"") === false || workflow.includes('APPROVED'));
+assert(workflow.includes('and .commit_id==$sha'));
 assert(workflow.includes("secretless-source-review:"));
 assert(workflow.includes("needs: [independent-gate, secretless-source-review]"));
 assert(workflow.includes("WOS_QA_SOAK_ROUNDS: '1'"));
