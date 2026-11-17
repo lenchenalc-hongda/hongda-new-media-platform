@@ -233,3 +233,99 @@ export async function POST(req: NextRequest) {
     return answer(503, 'QA_DRAFT_WRITE_UNVERIFIED');
   }
 }
+
+
+// Remains closed unless the separately reviewed QA-only SQL function has been
+// installed and the server-side flag is explicitly enabled. Never GRANT UPDATE
+// on the underlying WOS table to authenticate browser users.
+const revisionPatchSchema = z.object({
+  productName: z.string().trim().min(1).max(200),
+  productMaterial: z.string().trim().min(1).max(200),
+  requestedQuantity: z.number().int().positive().max(2147483647),
+  currentBatchQuantity: z.number().int().positive().max(2147483647),
+  plannedShipDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  priority,
+  isUrgent: z.boolean(),
+  splitDelivery: z.boolean(),
+  surfaceTreatment: z.string().max(2000),
+  patternScope: z.enum(['FULL','PARTIAL','MIXED']),
+  seamTolerance: z.string().max(2000),
+  positionReference: z.string().max(2000),
+  customerAcceptanceStandard: z.string().max(2000),
+  packagingMethod: z.string().max(2000),
+  cartonQuantity: z.number().int().positive().max(2147483647),
+  labelMarkingRule: z.string().max(2000),
+}).partial().strict().refine(p => Object.keys(p).length > 0);
+
+const revisionRequestSchema = z.object({
+  orderId: uuid,
+  expectedVersion: z.number().int().positive(),
+  requestId: uuid,
+  reason: z.string().trim().min(10).max(500),
+  patch: revisionPatchSchema,
+}).strict();
+
+export async function PATCH(req: NextRequest) {
+  if (!isolated() || process.env.WOS_P1_QA_REVISION_ENABLED !== 'true')
+    return answer(503, 'QA_DRAFT_REVISION_NOT_ENABLED');
+  if (!req.headers.get('content-type')?.startsWith('application/json')
+    || Number(req.headers.get('content-length') || '0') > 8192)
+    return answer(400, 'INVALID_INPUT');
+  const auth = await office();
+  if ('error' in auth) return auth.error;
+
+  let request: z.infer<typeof revisionRequestSchema>;
+  try {
+    const body = await req.text();
+    if (body.length > 8192) return answer(400, 'INVALID_INPUT');
+    const result = revisionRequestSchema.safeParse(JSON.parse(body));
+    if (!result.success) return answer(400, 'INVALID_INPUT');
+    request = result.data;
+  } catch {
+    return answer(400, 'INVALID_INPUT');
+  }
+
+  try {
+    const order = await auth.client.from('wos_production_orders')
+      .select('id,organization_id,created_by_profile_id,order_number,workflow_status')
+      .eq('id',request.orderId).eq('organization_id',auth.actor.org_id).maybeSingle();
+    if (order.error || !order.data
+      || order.data.organization_id !== auth.actor.org_id
+      || order.data.created_by_profile_id !== auth.actor.id
+      || !/^QA-CPC-NONPROD-[0-9a-f-]{36}$/i.test(order.data.order_number)
+      || order.data.workflow_status !== 'DRAFT')
+      return answer(403, 'QA_DRAFT_OWNER_DENIED');
+
+    const mutation = await auth.client.rpc('wos_qa_amend_cpc_draft', {
+      p_order_id: request.orderId,
+      p_expected_version: request.expectedVersion,
+      p_request_id: request.requestId,
+      p_patch: request.patch,
+      p_reason: request.reason,
+    });
+    if (mutation.error) {
+      if (mutation.error.code === 'PT409' || mutation.error.code === '23505')
+        return answer(409, 'QA_DRAFT_REVISION_CONFLICT');
+      if (mutation.error.code === '42501')
+        return answer(403, 'QA_DRAFT_REVISION_DENIED');
+      return answer(503, 'QA_DRAFT_REVISION_RPC_UNAVAILABLE');
+    }
+    const result = mutation.data as {
+      status?: string; orderId?: string; version?: number; submitted?: boolean;
+    } | null;
+    if (!result || !['UPDATED','REPLAYED'].includes(result.status ?? '')
+      || result.orderId !== request.orderId
+      || result.version !== request.expectedVersion + 1
+      || (result.status === 'UPDATED' && result.submitted !== false))
+      return answer(503, 'QA_DRAFT_REVISION_UNVERIFIED');
+    return answer(200, result.status === 'UPDATED'
+      ? 'QA_DRAFT_REVISION_COMMITTED' : 'QA_DRAFT_REVISION_REPLAYED', {
+        orderId: request.orderId,
+        orderNumber: order.data.order_number,
+        version: result.version,
+        persisted: true, submitted: false, editable: true,
+      });
+  } catch {
+    return answer(503, 'QA_DRAFT_REVISION_UNVERIFIED');
+  }
+}
