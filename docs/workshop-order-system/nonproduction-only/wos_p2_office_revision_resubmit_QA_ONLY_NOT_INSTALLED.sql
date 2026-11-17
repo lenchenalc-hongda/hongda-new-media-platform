@@ -291,11 +291,11 @@ DECLARE
 BEGIN
   -- Independent QA operator gate. No browser role may UPDATE this table.
   IF NOT EXISTS (
-    SELECT 1 FROM public.wos_qa_p2_execution_gate gate
-    WHERE gate.gate_name='OPERATOR_WRITES' AND gate.enabled=true
-      AND gate.enabled_until>pg_catalog.clock_timestamp()
-      AND gate.enabled_until<=pg_catalog.clock_timestamp()+INTERVAL '24 hours'
-      AND gate.approval_reference<>'NOT_AUTHORIZED'
+    SELECT 1 FROM public.wos_qa_p2_execution_gate AS g
+    WHERE g.gate_name='OPERATOR_WRITES' AND g.enabled=true
+      AND g.enabled_until>pg_catalog.clock_timestamp()
+      AND g.enabled_until<=pg_catalog.clock_timestamp()+INTERVAL '24 hours'
+      AND g.approval_reference<>'NOT_AUTHORIZED'
   ) THEN RAISE EXCEPTION 'QA_P2_DB_EXECUTION_NOT_AUTHORIZED'
     USING ERRCODE='42501'; END IF;
   IF auth.uid() IS NULL OR p_order_id IS NULL OR p_request_id IS NULL
