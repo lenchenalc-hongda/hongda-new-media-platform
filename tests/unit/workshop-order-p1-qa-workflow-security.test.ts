@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
 const wf = readFileSync('.github/workflows/wos-p1-pr238-protected-qa.yml', 'utf8');
-const sha = '0722a53a49753e6d42c6ad36fda3ab61fca1e74b';
+const sha = '6a72b446ccc517a5ff14e531b8a6663b4a70a77e';
 const checkout = 'ref: ' + '$' + '{{ needs.independent-gate.outputs.sha }}';
 
 function check(ok: boolean, label: string) {
