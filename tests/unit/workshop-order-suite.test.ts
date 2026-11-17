@@ -12,6 +12,7 @@ import './workshop-order-p7-nonprod-contract.test';
 import './workshop-order-p1-inbox-integrity.test';
 import './workshop-order-p1-cpc-draft-contract.test';
 import './workshop-order-p1-qa-revision-sql-contract.test';
+import './workshop-order-p2-qa-readiness.test';
 import './wos-qa-image-validation.test';
 import './wos-p7-edge-png.test';
 
