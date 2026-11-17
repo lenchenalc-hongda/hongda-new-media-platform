@@ -3,6 +3,7 @@ import Link from 'next/link';
 import AppLayout from '@/components/layout/AppLayout';
 import PageHeader from '@/components/layout/PageHeader';
 import ProductionOrderForm from '@/components/workshop-orders/ProductionOrderForm';
+import LiveQaReturnedOrders from '@/components/workshop-orders/LiveQaReturnedOrders';
 import { isApprovedWosSandboxUrl, isWosNonproductionApiEnabled } from '@/lib/workshop-orders/api-contract';
 
 export const metadata: Metadata = {
@@ -50,6 +51,7 @@ export default function WorkshopProductionOrderNewPage() {
         </p>
       </section>
 
+      {qaLive && <LiveQaReturnedOrders />}
       <ProductionOrderForm qaLive={qaLive} />
     </AppLayout>
   );

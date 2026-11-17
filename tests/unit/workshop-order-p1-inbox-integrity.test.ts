@@ -12,7 +12,11 @@ for (const predicate of [
   "client.from('wos_workshop_inbox')",
   "client.from('wos_submission_receipts')",
   'task.submission_id',
+  "task.source_revision + 1 > order.version",
+  "order.workflow_status === 'SUBMITTED'",
   "task.source_revision + 1 !== order.version",
+  "task.workflow_status !== 'SUBMITTED'",
+  "for (const order of persistedRows)",
   "WORKSHOP_TRANSACTION_MISMATCH",
   "task.source_version_label !== order.version_label",
 ]) {
