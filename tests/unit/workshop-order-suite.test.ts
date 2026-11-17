@@ -9,6 +9,7 @@ import './workshop-order-api.test';
 import './workshop-order-p6-atomic-submission.test';
 import './workshop-order-p6-private-image-contract.test';
 import './workshop-order-p7-nonprod-contract.test';
+import './workshop-order-p1-inbox-integrity.test';
 import './wos-qa-image-validation.test';
 import './wos-p7-edge-png.test';
 import './wos-p7-orphan-cleanup-contract.test';
