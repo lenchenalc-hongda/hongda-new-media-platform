@@ -25,7 +25,7 @@ function audit(source: string): void {
         source.includes('github.event.sender.login == \'lenchenalc-hongda\'') &&
         source.includes('github.event.comment.user.login == \'lenchenalc-hongda\'') &&
         source.includes('github.event.issue.pull_request == null') &&
-        source.includes('WOS_P1_SINGLE_QA_ACCEPTANCE_20261117_SHA=6a72b446ccc517a5ff14e531b8a6663b4a70a77e'), 'ONE_EXACT_OWNER_AND_ISSUE_COMMENT');
+        source.includes('WOS_P1_SINGLE_QA_ACCEPTANCE_RETRY1_20261117_SHA=6a72b446ccc517a5ff14e531b8a6663b4a70a77e'), 'ONE_EXACT_OWNER_AND_ISSUE_COMMENT');
 
   guard(source.includes('APPROVED_SHA: '+authorizedBusinessHead), 'BUSINESS_EXACT_HEAD_PIN');
   guard(source.includes('[ "$REQUESTED_SHA" = "$APPROVED_SHA" ]'), 'BUSINESS_HEAD_MATCH');
@@ -36,7 +36,13 @@ function audit(source: string): void {
   const safe=between(source,'  secretless-source-review:\n','  protected-real-qa:\n');
   const qa=between(source,'  protected-real-qa:\n');
 
-  guard(gate.includes('pulls/238') && gate.includes('pulls/239'), 'BOTH_PR_IDENTITIES');
+  guard(gate.includes('pulls/238') && gate.includes('pulls/239') &&
+        gate.includes('pulls/240'), 'ALL_THREE_PR_IDENTITIES');
+  guard(gate.includes('qa/wos-pr238-playwright-ubuntu24-20261117') &&
+        gate.includes('pr240=$(api "$base/pulls/240")') &&
+        gate.includes('5d794a5f5be0821c37df0bbf99005137a1f8197e') &&
+        gate.includes('848c32e02c829f2e1cafaf4a609420803ddc9762'),
+        'AUDITED_MERGE_AND_PRECISE_FIX_BRANCH');
   guard(gate.includes('if [ "$GITHUB_EVENT_NAME" = issue_comment ]; then') &&
         gate.includes('"$GITHUB_EVENT_PATH"') &&
         gate.includes('.comment.body==$body') &&
@@ -47,8 +53,9 @@ function audit(source: string): void {
   guard(gate.includes('qa/wos-pr238-protected-e2e-20261117'), 'EXPECTED_WORKFLOW_BRANCH');
   guard(gate.includes('.merged') && gate.includes('= true ]') && gate.includes('.merge_commit_sha'),
     'MERGED_WORKFLOW_PR_REQUIRED');
-  guard(gate.includes('(.parents | length)==2 and .parents[1].sha==$sha'),
-    'SECOND_PARENT_PIN');
+  guard(gate.includes('(.parents | length)==2 and') &&
+        gate.includes('.parents[0].sha=="5d794a5f5be0821c37df0bbf99005137a1f8197e"') &&
+        gate.includes('.parents[1].sha==$sha'), 'BOTH_MERGE_PARENTS_PINNED');
   guard(gate.includes('base/branches/master') || gate.includes('$base/branches/master'),
     'NO_MOVING_MASTER');
   guard(gate.includes('master_ci" = "$reviewed_ci') &&
@@ -66,8 +73,12 @@ function audit(source: string): void {
         gate.includes('scripts/agent-control/reliability-watchdog.mjs') &&
         gate.includes('tests/unit/agent-control-reliability-v2.test.ts'),
     'PRESERVED_PR202_ONE_PATH_LOCK_EXCEPTION');
-  guard(gate.includes('"$audited_workflow"') && gate.includes('"$installed_workflow"'),
-    'LIVE_WORKFLOW_BLOB_MATCH');
+  guard(gate.includes('"$audited_workflow"') && gate.includes('"$fix_workflow"') &&
+        gate.includes('"$installed_workflow" = "$fix_workflow"'),
+    'LIVE_REVIEWED_FIX_WORKFLOW_BLOB_MATCH');
+  guard(gate.includes('[ "$(jq -r \'.changed_files\' <<<"$pr240")" = 2 ]') &&
+        gate.includes('"tests/unit/workshop-order-p1-qa-workflow-security.test.ts"') &&
+        gate.includes('length==2 and'), 'PR240_EXACT_TWO_FILES');
   guard(gate.includes('actions/runs?head_sha=$target&event=pull_request&per_page=100'),
     'GENUINE_CI_PROVENANCE');
   guard(gate.includes('.path==".github/workflows/ci.yml"') &&
@@ -81,9 +92,11 @@ function audit(source: string): void {
         gate.includes('WOS_P1_QA_ACCOUNT_CREDENTIALS_USED=NO') &&
         gate.includes("count\" -ge 12"), 'INDEPENDENT_GITHUB_HOSTED_AUDIT_LOG_PROOF');
   guard(gate.includes('workflow_head=$workflow_head') &&
+        gate.includes('fix_head=$fix_head') &&
         gate.includes('verify_ci "$REQUESTED_SHA" no') &&
-        gate.includes('verify_ci "$workflow_head" yes'),
-    'TWO_EXACT_CI_RUN_BINDINGS');
+        gate.includes('verify_ci "$workflow_head" yes') &&
+        gate.includes('verify_ci "$fix_head" fix'),
+    'THREE_EXACT_CI_RUN_BINDINGS');
   guard(!/secrets\.REVIEW_DEV_/.test(gate) && !/secrets\.REVIEW_DEV_/.test(safe),
     'AUDIT_AND_SOURCE_CHECK_HAVE_ZERO_QA_PASSWORDS');
   guard(safe.includes(checkout) && safe.includes('persist-credentials: false') &&
@@ -94,9 +107,14 @@ function audit(source: string): void {
         qa.includes('contents: read') && qa.includes('actions: read'),
     'PROTECTED_ENV_AND_READ_ONLY_CREDENTIALS');
   guard(qa.includes('WOS_P1_BEFORE_QA_CREDENTIALS_AUDIT_RECHECK=PASS') &&
-        qa.includes('actions/runs/$BUSINESS_RUN') && qa.includes('actions/runs/$AUDIT_RUN') &&
+        qa.includes('actions/runs/$BUSINESS_RUN') &&
+        qa.includes('actions/runs/$AUDIT_RUN') && qa.includes('actions/runs/$FIX_RUN') &&
+        qa.includes('pulls/240') && qa.includes('FIX_HEAD') &&
         qa.includes('.merge_commit_sha') && qa.includes('branches/master'),
-    'SECOND_EXACT_AUDIT_GATE_BEFORE_SECRETS');
+    'THIRD_EXACT_AUDIT_GATE_BEFORE_SECRETS');
+  guard(qa.includes('  protected-real-qa:\n    # Playwright 1.56.1 does not support Ubuntu 26.04 runner') &&
+        qa.includes('runs-on: ubuntu-24.04'),
+    'PIN_UBUNTU24_FOR_PLAYWRIGHT');
   guard(qa.includes(checkout) && qa.includes('persist-credentials: false'), 'IMMUTABLE_QA_CHECKOUT');
   guard(qa.includes('NEXT_PUBLIC_SUPABASE_URL: https://xulmpqaknlwqqculbsek.supabase.co') &&
         !qa.includes('amqpvxrurenevniilhtl'), 'QA_PROJECT_PIN_NOT_PRODUCTION');
@@ -126,16 +144,16 @@ const negative: Array<[string,string]> = [
   ['WRONG_ISSUE',workflow.replace('github.event.issue.number == 104','github.event.issue.number == 10')],
   ['WRONG_COMMENT_ACTOR',workflow.replace('github.event.sender.login == \'lenchenalc-hongda\'',
     'github.event.sender.login == \'anyone\'')],
-  ['WRONG_COMMENT_MARKER',workflow.replaceAll('WOS_P1_SINGLE_QA_ACCEPTANCE_20261117_SHA=6a72b446ccc517a5ff14e531b8a6663b4a70a77e','WOS_UNVERIFIED_COMMENT_TRIGGER')],
+  ['WRONG_COMMENT_MARKER',workflow.replaceAll('WOS_P1_SINGLE_QA_ACCEPTANCE_RETRY1_20261117_SHA=6a72b446ccc517a5ff14e531b8a6663b4a70a77e','WOS_UNVERIFIED_COMMENT_TRIGGER')],
   ['NO_EVENT_JSON_RECHECK',workflow.replace('.comment.body==$body','.comment.body!=null')],
   ['BYPASS_ON_PR_COMMENTS',workflow.replace('github.event.issue.pull_request == null','true')],
 
   ['FORGED_HUMAN_APPROVAL',workflow.replace('WOS_P1_OWNER_AUTHORIZED_GITHUB_HOSTED_AUDIT=PASS',
     'WOS_P1_OWNER_PIN_INDEPENDENT_REVIEW_AND_CI=PASS')],
-  ['OMITTED_MERGE_PARENT',workflow.replace('(.parents | length)==2 and .parents[1].sha==$sha','true')],
+  ['OMITTED_MERGE_PARENT',workflow.replace('.parents[1].sha==$sha','true')],
   ['OMITTED_TRUSTED_CI',workflow.replace('master_ci" = "$reviewed_ci','master_ci" = "$compromised_ci')],
   ['INCOMPLETE_BUSINESS_FILES',workflow.replace('changed_files" -lt 100 ]','changed_files" -lt 1000 ]')],
-  ['WORKFLOW_SCOPE',workflow.replace('tests/unit/workshop-order-p1-qa-workflow-security.test.ts',
+  ['WORKFLOW_SCOPE',workflow.replaceAll('tests/unit/workshop-order-p1-qa-workflow-security.test.ts',
     'tests/unit/silent-bypass.test.ts')],
   ['PR202_LOCK_HEAD_CHANGED',workflow.replace('b3f382976049eacabefc7965cbb90312fd6903cc','0'.repeat(40))],
   ['MISSING_AUDIT_LOG_PROOF',workflow.replace('WOS_P1_PROTECTED_QA_STATIC_SECURITY_AUDIT=PASS','SKIPPED')],
@@ -151,6 +169,12 @@ const negative: Array<[string,string]> = [
   ['MULTI_QA_SOAK',workflow.replace("WOS_QA_SOAK_ROUNDS: '1'","WOS_QA_SOAK_ROUNDS: '10'")],
   ['UNPINNED_ACTIONS',workflow.replace('actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683','actions/checkout@v4')],
   ['EXFIL_ARTIFACT',workflow+'\n    - uses: actions/upload-artifact@v4'],
+  ['UNSUPPORTED_UBUNTU26',workflow.replace('runs-on: ubuntu-24.04','runs-on: ubuntu-latest')],
+  ['MISSING_FIX_PR',workflow.replace('pr240=$(api "$base/pulls/240")','pr240=$(api "$base/pulls/239")')],
+  ['UNPINNED_FIRST_PARENT',workflow.replace('.parents[0].sha=="5d794a5f5be0821c37df0bbf99005137a1f8197e"', '.parents[0].sha!=null')],
+  ['MISSING_FIX_CI',workflow.replace('verify_ci "$fix_head" fix','verify_ci "$fix_head" no')],
+  ['MISSING_FINAL_FIX_RUN',workflow.replace('ci3=$(api "$base/actions/runs/$FIX_RUN")','ci3=$(api "$base/actions/runs/$AUDIT_RUN")')],
+  ['REPLAY_OLD_OWNER_MARKER',workflow.replaceAll('WOS_P1_SINGLE_QA_ACCEPTANCE_RETRY1_20261117_SHA=', 'WOS_P1_SINGLE_QA_ACCEPTANCE_20261117_SHA=')],
 ];
 for(const [name,mutated] of negative){
   let failed=false;
