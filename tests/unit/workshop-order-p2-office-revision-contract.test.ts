@@ -72,7 +72,7 @@ for (const marker of [
 for(const marker of [
   'WOS_P2_QA_OFFICE_REVISION_ENABLED','resolveVerifiedSupabaseIdentity',
   'req.headers.get(\'origin\')','canWosOfficeRevise',
-  "client.from('wos_production_orders')",
+  "db.from('wos_production_orders')",
   "db.rpc('wos_qa_p2_office_revision'",
 ]) assert(route.includes(marker),'Office API gate missing '+marker);
 assert(app.includes('NEXT_PUBLIC_WOS_P2_QA_OFFICE_REVISION_ENABLED'));
