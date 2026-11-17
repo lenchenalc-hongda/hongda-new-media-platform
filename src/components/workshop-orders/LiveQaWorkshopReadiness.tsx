@@ -28,6 +28,10 @@ type ReadState = {
     confirmation_type:string; decision:string; profile_id:string;
     role_snapshot:string; note:string|null; confirmed_at:string;
   }>;
+  history: Array<{
+    previous_status:string|null; next_status:string; actor_profile_id:string;
+    actor_role:string; reason_code:string; note:string|null; created_at:string;
+  }>;
 };
 export default function LiveQaWorkshopReadiness({
   orderId, organizationId, versionLabel, currentBatchQuantity,
@@ -47,7 +51,7 @@ export default function LiveQaWorkshopReadiness({
       if (!db) throw new Error('QA_SUPABASE_NOT_CONFIGURED');
       // All records must be fetched using the current Operator/Admin session,
       // organization RLS, exact order id and entity type. No service role key.
-      const [resources, blockers, baselines, confirmations] = await Promise.all([
+      const [resources, blockers, baselines, confirmations, history] = await Promise.all([
         db.from('wos_resource_readiness')
           .select('organization_id,entity_id,entity_type,resource_type,status,version_label,quantity_expected,quantity_arrived,confirmed_by_profile_id,confirmed_at,note')
           .eq('organization_id',organizationId).eq('entity_id',orderId)
@@ -64,8 +68,13 @@ export default function LiveQaWorkshopReadiness({
           .select('organization_id,entity_id,entity_type,confirmation_type,decision,profile_id,role_snapshot,note,confirmed_at')
           .eq('organization_id',organizationId).eq('entity_id',orderId)
           .eq('entity_type','PRODUCTION_ORDER').limit(100),
+        db.from('wos_status_history')
+          .select('organization_id,entity_id,entity_type,previous_status,next_status,actor_profile_id,actor_role,reason_code,note,created_at')
+          .eq('organization_id',organizationId).eq('entity_id',orderId)
+          .eq('entity_type','PRODUCTION_ORDER')
+          .order('created_at',{ ascending:false }).limit(100),
       ]);
-      const batches = [resources, blockers, baselines, confirmations];
+      const batches = [resources, blockers, baselines, confirmations, history];
       if (batches.some(row => row.error || !Array.isArray(row.data) || (row.data?.length ?? 100) >= 100)) {
         throw new Error('QA_READINESS_RLS_READ_FAILED_OR_TRUNCATED');
       }
@@ -97,6 +106,15 @@ export default function LiveQaWorkshopReadiness({
           role_snapshot:row.role_snapshot,
           note:row.note,
           confirmed_at:row.confirmed_at,
+        })),
+        history:(history.data ?? []).map(row => ({
+          previous_status:row.previous_status,
+          next_status:row.next_status,
+          actor_profile_id:row.actor_profile_id,
+          actor_role:row.actor_role,
+          reason_code:row.reason_code,
+          note:row.note,
+          created_at:row.created_at,
         })),
       });
     } catch {
@@ -154,6 +172,17 @@ export default function LiveQaWorkshopReadiness({
           <p role="status" className="rounded border border-amber-400 bg-white p-3 text-xs font-medium text-amber-950">
             {readState.result.materialsVerified ? '物料资料可提交人工齐套审核；尚未放行开工。' : '资料或物料尚未核实，禁止开工。'}
           </p>
+          {readState.history.length > 0 && (
+            <section className="rounded border border-amber-200 bg-white p-3">
+              <h5 className="text-xs font-semibold">真实订单状态历史（操作人与时间）</h5>
+              <ul className="mt-1 list-disc space-y-1 pl-4 text-xs">
+                {readState.history.slice(0,20).map((h,i) => <li key={i}>
+                  {h.previous_status ?? '无'} → {h.next_status} · {h.reason_code} ·
+                  {h.actor_role} / {h.actor_profile_id} · {h.created_at} · {h.note ?? '无备注'}
+                </li>)}
+              </ul>
+            </section>
+          )}
           {readState.confirmations.length > 0 && (
             <section className="rounded border border-amber-200 bg-white p-3">
               <h5 className="text-xs font-semibold">真实车间确认与退回操作记录</h5>
