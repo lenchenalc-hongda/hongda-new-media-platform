@@ -46,6 +46,27 @@ BEGIN
 END $$;
 RESET ROLE;
 
+-- A stale original P1 submission receipt must not be accepted as the
+-- current SUBMITTED version, even when the caller matches an inflated version.
+UPDATE public.wos_production_orders SET version=5
+ WHERE id='dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+SELECT pg_catalog.set_config('request.jwt.claim.sub','44444444-4444-4444-8444-444444444444',false);
+SET ROLE authenticated;
+DO $
+BEGIN
+  BEGIN
+    PERFORM public.wos_qa_p2_operator_action(
+     'dddddddd-dddd-4ddd-8ddd-dddddddddddd',5,
+     '15151515-1515-4515-8515-151515151515',
+     'ACCEPT',NULL,NULL,NULL,NULL,'reject altered submission revision before acceptance');
+    RAISE EXCEPTION 'FAIL_SUBMISSION_SOURCE_REVISION_ACCEPTED';
+  EXCEPTION WHEN SQLSTATE 'PT409' THEN NULL;
+  END;
+END $;
+RESET ROLE;
+UPDATE public.wos_production_orders SET version=2
+ WHERE id='dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+
 -- Operator: ACCEPT, replay same request, tamper and stale version rejection.
 SELECT pg_catalog.set_config('request.jwt.claim.sub','11111111-1111-4111-8111-111111111111',false);
 SET ROLE authenticated;
