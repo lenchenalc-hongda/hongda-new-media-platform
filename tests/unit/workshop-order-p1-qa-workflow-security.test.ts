@@ -30,7 +30,7 @@ function audit(src: string) {
   check(gate.includes('.user.login!=$author') && gate.includes('collaborators/$reviewer/permission'), 'INDEPENDENT_REVIEWER');
   check(gate.includes('.path==".github/workflows/ci.yml"') && gate.includes('actions/runs?head_sha=$REQUESTED_SHA&event=pull_request'), 'CI_PROVENANCE');
   check(gate.includes('lint-and-audit glh-stage1-postgres-synthetic'), 'CI_REQUIRED_JOBS');
-  check(gate.includes('changed_files" -lt 100') && gate.includes('length == $count'), 'PR_FILES_PAGINATION_FAIL_CLOSED');
+  check(gate.includes('changed_files" -lt 100 ]') && gate.includes('length == $count'), 'PR_FILES_PAGINATION_FAIL_CLOSED');
   check(gate.includes("jq -e 'length < 100'") && gate.includes('reviews?per_page=100'), 'REVIEW_HISTORY_PAGINATION_FAIL_CLOSED');
   check(source.includes('pnpm exec tsc --noEmit') && source.includes('workshop-order-suite.test.ts'), 'SECRETLESS_SOURCE_CHECK');
   check(!gate.includes('secrets.REVIEW_DEV_') && !source.includes('secrets.REVIEW_DEV_'), 'NO_SECRETS_BEFORE_REVIEW');
@@ -66,7 +66,7 @@ const cases: Array<[string,string]> = [
   ['PRODUCTION_SUPABASE',wf.replaceAll('https://xulmpqaknlwqqculbsek.supabase.co','https://amqpvxrurenevniilhtl.supabase.co')],
   ['SECRET_IN_BUILD',wf.replace('      - name: Build and start isolated QA Preview-mode app WITHOUT user passwords', '      - name: Build and start isolated QA Preview-mode app WITHOUT user passwords\n        env:\n          REVIEW_DEV_ADMIN_PASSWORD: leaked')],
   ['ARTIFACT_EXFIL',wf+'\n      - uses: actions/upload-artifact@v4'],
-  ['TRUNCATED_FILES',wf.replace('changed_files" -lt 100','changed_files" -lt 1000')],
+  ['TRUNCATED_FILES',wf.replace('changed_files" -lt 100 ]','changed_files" -lt 1000 ]')],
   ['TRUNCATED_REVIEWS',wf.replaceAll("jq -e 'length < 100'", "jq -e 'length < 1000'")],
   ['REVIEWER_PERMISSION_LOST',wf.replace('collaborators/$approved/permission','collaborators/UNVERIFIED/permission')],
 ];
