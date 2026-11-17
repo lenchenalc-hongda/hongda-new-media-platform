@@ -1,0 +1,50 @@
+name: WOS P2 Office independent exact-SHA secretless audit
+on:
+  push:
+    branches:
+      - audit/wos-p2-office-review-20261118
+
+permissions:
+  contents: read
+  actions: read
+  pull-requests: read
+
+jobs:
+  independent-static-security-review:
+    if: >-
+      github.repository == 'lenchenalc-hongda/hongda-new-media-platform' &&
+      github.ref == 'refs/heads/audit/wos-p2-office-review-20261118'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      GH_READ_TOKEN: ${{ github.token }}
+      REVIEWED_EXACT_SHA: 89bb408d13e45458c608db29c47e2803d49b3170
+    steps:
+      - name: Checkout independent auditor from master-derived branch
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.sha }}
+          path: reviewer
+          persist-credentials: false
+      - name: Checkout untrusted PR241 as non-executable input only
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: 89bb408d13e45458c608db29c47e2803d49b3170
+          path: candidate
+          persist-credentials: false
+      - name: Verify separate checkout origins
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C reviewer rev-parse HEAD)" = "$GITHUB_SHA"
+          test "$(git -C candidate rev-parse HEAD)" = "$REVIEWED_EXACT_SHA"
+          test "$GITHUB_REF" = "refs/heads/audit/wos-p2-office-review-20261118"
+          test -z "$(printenv SUPABASE_URL || true)"
+          test -z "$(printenv SUPABASE_SERVICE_ROLE_KEY || true)"
+          echo WOS_P2_INDEPENDENT_AUDITOR_SEPARATE_REVIEWER_HEAD=PASS
+      - name: Run immutable-SHA independent static audit and negative mutations
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 reviewer/audits/wos-p2-office-review/independent_audit.py candidate
+          echo WOS_P2_SEPARATE_GITHUB_HOSTED_STATIC_SECURITY_REVIEW=PASS
