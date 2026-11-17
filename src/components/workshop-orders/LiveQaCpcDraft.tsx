@@ -26,6 +26,15 @@ export default function LiveQaCpcDraft({
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState('');
   const [saved, setSaved] = useState<Saved | null>(null);
+  const [revisionReason, setRevisionReason] = useState('');
+  const savedDraftSnapshot = useRef<NormalizedProductionOrderDraft | null>(null);
+  const pendingRevision = useRef<{
+    requestId: string;
+    reason: string;
+    patch: Record<string, string | number | boolean>;
+    snapshot: NormalizedProductionOrderDraft;
+  } | null>(null);
+  const revisionEnabled = process.env.NEXT_PUBLIC_WOS_P1_QA_DRAFT_REVISION_ENABLED === 'true';
   const orderNumber = useRef<string | null>(null);
   const eligibleProjects = useMemo(
     () => projects.filter(project => project.customerId === customerId),
@@ -106,9 +115,89 @@ export default function LiveQaCpcDraft({
         return;
       }
       setSaved(body.data);
+      savedDraftSnapshot.current = { ...draft };
       setNotice('QA_CPC_DRAFT_SAVED_TO_DATABASE');
     } catch {
       setNotice('QA_CPC_DRAFT_RESPONSE_UNCERTAIN_RETRY_SAME_NUMBER');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // This deliberately cannot run before separately authorized QA SQL and
+  // a server-side feature flag. A local form edit is never reported as saved.
+  async function reviseDraft() {
+    if (!saved || !valid || !revisionEnabled || busy || !savedDraftSnapshot.current)
+      return;
+    if (draft.versionLabel !== savedDraftSnapshot.current.versionLabel) {
+      setNotice('QA_DRAFT_IMAGE_BASELINE_VERSION_IMMUTABLE');
+      return;
+    }
+    if (revisionReason.trim().length < 10 || revisionReason.trim().length > 500) {
+      setNotice('QA_DRAFT_REVISION_REASON_REQUIRED');
+      return;
+    }
+    const allowed = [
+      'productName','productMaterial','requestedQuantity','currentBatchQuantity',
+      'plannedShipDate','priority','isUrgent','splitDelivery',
+      'surfaceTreatment','patternScope','seamTolerance','positionReference',
+      'customerAcceptanceStandard','packagingMethod','cartonQuantity','labelMarkingRule',
+    ] as const;
+    if (!pendingRevision.current) {
+      const patch: Record<string, string | number | boolean> = {};
+      for (const key of allowed) {
+        const next = draft[key];
+        if (next !== savedDraftSnapshot.current[key]) {
+          if (next === null || next === undefined) {
+            setNotice('QA_DRAFT_NULL_CHANGE_NOT_SUPPORTED');
+            return;
+          }
+          patch[key] = next;
+        }
+      }
+      if (Object.keys(patch).length === 0) {
+        setNotice('QA_DRAFT_NO_PRODUCTION_CHANGES');
+        return;
+      }
+      pendingRevision.current = {
+        requestId: crypto.randomUUID(),
+        reason: revisionReason.trim(),
+        patch, snapshot: { ...draft },
+      };
+    }
+    setBusy(true);
+    setNotice('QA_DRAFT_REVISION_SUBMITTING');
+    try {
+      const candidate = pendingRevision.current;
+      const response = await fetch('/api/workshop-orders/production/cpc-drafts', {
+        method: 'PATCH',
+        credentials: 'same-origin', cache: 'no-store',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          orderId: saved.orderId, expectedVersion: saved.version,
+          requestId: candidate.requestId, reason: candidate.reason,
+          patch: candidate.patch,
+        }),
+      });
+      const body: { ok?: boolean; code?: string; data?: Saved } =
+        await response.json().catch(() => ({}));
+      if (!response.ok || !body.ok
+        || !['QA_DRAFT_REVISION_COMMITTED','QA_DRAFT_REVISION_REPLAYED'].includes(body.code ?? '')
+        || body.data?.orderId !== saved.orderId
+        || body.data?.version !== saved.version + 1
+        || body.data?.persisted !== true || body.data?.submitted !== false) {
+        setNotice(body.code?.match(/^[A-Z_]{3,70}$/) ? body.code : 'QA_DRAFT_REVISION_UNVERIFIED');
+        return;
+      }
+      savedDraftSnapshot.current = candidate.snapshot;
+      pendingRevision.current = null;
+      setSaved(body.data);
+      setRevisionReason('');
+      setNotice('QA_DRAFT_REVISION_COMMITTED_TO_DATABASE');
+    } catch {
+      // Do not generate another idempotency key: the HTTP response may be lost
+      // after the database committed the revision.
+      setNotice('QA_DRAFT_REVISION_RESPONSE_UNKNOWN_RETRY_SAME_REQUEST');
     } finally {
       setBusy(false);
     }
@@ -171,8 +260,34 @@ export default function LiveQaCpcDraft({
       {saved && (
         <p role="status" className="break-all text-xs text-green-900">
           数据库已保存：{saved.orderNumber}（订单 ID：{saved.orderId}，版本：{saved.version}）。
-          当前状态 DRAFT，未进入车间。编辑后再次提交暂未开放。
+          当前状态 DRAFT，未进入车间。
         </p>
+      )}
+      {saved && !revisionEnabled && (
+        <p className="text-xs text-amber-900">
+          草稿修改功能已完成 API 和 SQL 候选设计，但尚未获得独立 QA 数据库安装授权。
+          当前仅可查看已保存版本，不会把本地修改冒充云端保存。
+        </p>
+      )}
+      {saved && revisionEnabled && (
+        <div className="space-y-2 rounded border border-indigo-300 bg-white p-3">
+          <p className="text-xs text-indigo-900">
+            修改上方生产资料后填写修订原因。订单编号、CPC 关联、负责人及签样版本不可通过该入口改变；
+            服务器将校验原版本并记录修改历史。
+          </p>
+          <label className="block space-y-1 text-xs font-medium">
+            修订原因（至少 10 字符）
+            <textarea aria-label="草稿修订原因" value={revisionReason}
+              onChange={event => setRevisionReason(event.target.value)}
+              disabled={busy} maxLength={500} rows={2}
+              className="w-full rounded border border-gray-300 p-2"/>
+          </label>
+          <button type="button" disabled={busy || !valid}
+            onClick={() => { void reviseDraft(); }}
+            className="min-h-11 rounded bg-indigo-800 px-4 py-2 text-sm text-white disabled:opacity-40">
+            {busy ? '版本修订核验中...' : '保存草稿修订（数据库 CAS）'}
+          </button>
+        </div>
       )}
       {notice && <p role="status" className="text-xs text-indigo-900">{notice}</p>}
     </section>
