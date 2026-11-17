@@ -100,6 +100,19 @@ jobs:
                "tests/unit/workshop-order-p1-qa-workflow-security.test.ts",
                "tests/unit/workshop-order-suite.test.ts"]|sort)' <<<"$f239" >/dev/null
           audited_workflow=$(api "$base/contents/.github/workflows/wos-p1-pr238-protected-qa.yml?ref=$workflow_head" | jq -r '.sha')
+          # One-path shared-lock exception: preserve PR202 unchanged. It
+          # remains blocked and retains its three-file machine-state lock.
+          pr202=$(api "$base/pulls/202")
+          [ "$(jq -r '.state' <<<"$pr202")" = open ]
+          [ "$(jq -r '.draft' <<<"$pr202")" = true ]
+          [ "$(jq -r '.head.sha' <<<"$pr202")" = b3f382976049eacabefc7965cbb90312fd6903cc ]
+          [ "$(jq -r '.changed_files' <<<"$pr202")" = 3 ]
+          f202=$(api "$base/pulls/202/files?per_page=100")
+          jq -e 'length==3 and
+            ([.[].filename]|sort)==
+            (["scripts/agent-control/reliability-core.mjs",
+              "scripts/agent-control/reliability-watchdog.mjs",
+              "tests/unit/agent-control-reliability-v2.test.ts"]|sort)' <<<"$f202" >/dev/null
           installed_workflow=$(api "$base/contents/.github/workflows/wos-p1-pr238-protected-qa.yml?ref=master" | jq -r '.sha')
           [ -n "$audited_workflow" ] && [ "$audited_workflow" = "$installed_workflow" ]
           [ "$master_ci" = "$(api "$base/contents/.github/workflows/ci.yml?ref=$workflow_head" | jq -r '.sha')" ]
