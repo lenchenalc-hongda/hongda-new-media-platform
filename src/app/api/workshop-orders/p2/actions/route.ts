@@ -7,6 +7,7 @@ import {
   isWosP2RpcResult,
   parseWosP2Action,
   wosP2RpcArgs,
+  wosP2ReviewRpcArgs,
 } from '@/lib/workshop-orders/p2-action-contract';
 
 export const dynamic = 'force-dynamic';
@@ -74,14 +75,16 @@ export async function POST(req:NextRequest) {
   // A committed request retried after a lost HTTP response must return
   // REPLAYED rather than a false VERSION_CONFLICT. The atomic RPC verifies
   // both the ledger fingerprint and every legal state transition.
-  const result=await client.rpc('wos_qa_p2_operator_action',wosP2RpcArgs(request));
+  const result=request.action==='REVIEW_CORRECTION'
+    ? await client.rpc('wos_qa_p2_review_correction',wosP2ReviewRpcArgs(request))
+    : await client.rpc('wos_qa_p2_operator_action',wosP2RpcArgs(request));
   if (result.error) {
     // The RPC produces only generic error messages/codes on purpose.
     const code=result.error.code||'';
     if (code==='42501') return answer(403,'FORBIDDEN');
     if (code==='PT409'||code==='23505') return answer(409,'VERSION_OR_IDEMPOTENCY_CONFLICT');
     if (code==='22023') return answer(400,'INVALID_INPUT');
-    if (code==='PGRST202'||code==='42883'||code==='42501') return answer(503,'QA_P2_RPC_NOT_INSTALLED');
+    if (code==='PGRST202'||code==='42883') return answer(503,'QA_P2_RPC_NOT_INSTALLED');
     return answer(503,'QA_P2_TRANSACTION_UNAVAILABLE');
   }
   if (!isWosP2RpcResult(result.data,request)) return answer(503,'QA_P2_UNVERIFIED_RESPONSE');
