@@ -11,6 +11,8 @@ on:
         description: Owner-authorized audited exact PR238 HEAD
         type: string
         required: true
+  issue_comment:
+    types: [created]
 
 permissions:
   contents: read
@@ -23,7 +25,20 @@ jobs:
   independent-gate:
     runs-on: ubuntu-latest
     timeout-minutes: 8
-    if: github.ref == 'refs/heads/master'
+    if: >-
+      github.ref == 'refs/heads/master' &&
+      (
+        github.event_name == 'workflow_dispatch' ||
+        (
+          github.event_name == 'issue_comment' &&
+          github.repository == 'lenchenalc-hongda/hongda-new-media-platform' &&
+          github.event.issue.number == 104 &&
+          github.event.issue.pull_request == null &&
+          github.event.sender.login == 'lenchenalc-hongda' &&
+          github.event.comment.user.login == 'lenchenalc-hongda' &&
+          github.event.comment.body == 'WOS_P1_SINGLE_QA_ACCEPTANCE_20261117_SHA=6a72b446ccc517a5ff14e531b8a6663b4a70a77e'
+        )
+      )
     permissions:
       contents: read
       pull-requests: read
@@ -39,13 +54,23 @@ jobs:
         name: Validate both PR HEADs and independent Github-hosted CI technical audit
         shell: bash
         env:
-          REQUESTED_SHA: ${{ inputs.reviewed_sha }}
+          REQUESTED_SHA: ${{ inputs.reviewed_sha || '6a72b446ccc517a5ff14e531b8a6663b4a70a77e' }}
           APPROVED_SHA: 6a72b446ccc517a5ff14e531b8a6663b4a70a77e
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           [ "$GITHUB_REF" = refs/heads/master ]
-          [ "$GITHUB_EVENT_NAME" = workflow_dispatch ]
+          if [ "$GITHUB_EVENT_NAME" = issue_comment ]; then
+            jq -e --arg body "WOS_P1_SINGLE_QA_ACCEPTANCE_20261117_SHA=6a72b446ccc517a5ff14e531b8a6663b4a70a77e" '
+              .action=="created" and .issue.number==104 and
+              (.issue | has("pull_request") | not) and
+              .sender.login=="lenchenalc-hongda" and
+              .comment.user.login=="lenchenalc-hongda" and
+              .comment.body==$body
+            ' "$GITHUB_EVENT_PATH" >/dev/null
+          else
+            [ "$GITHUB_EVENT_NAME" = workflow_dispatch ]
+          fi
           [[ "$REQUESTED_SHA" =~ ^[0-9a-f]{40}$ ]]
           [ "$REQUESTED_SHA" = "$APPROVED_SHA" ]
           base="https://api.github.com/repos/$GITHUB_REPOSITORY"
