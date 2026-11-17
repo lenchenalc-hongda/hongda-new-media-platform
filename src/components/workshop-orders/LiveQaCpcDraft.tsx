@@ -148,6 +148,17 @@ export default function LiveQaCpcDraft({
           </label>
         </div>
       )}
+      {!loading && customers.length === 0 && (
+        <p role="status" className="rounded border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">
+          当前登录账号所在组织没有可读取的 CPC 客户。QA 测试库内其他组织的客户不能跨组织选取；
+          请在同一 QA 组织中通过现有授权 CPC 流程建立测试客户与项目，禁止绕过 RLS。
+        </p>
+      )}
+      {!loading && customers.length > 0 && eligibleProjects.length === 0 && (
+        <p role="status" className="text-xs text-amber-900">
+          当前客户下没有本账号有权查看的活动项目，暂不能建立关联生产草稿。
+        </p>
+      )}
       {selectedCustomer?.status === 'pending_review' && (
         <p className="text-xs text-amber-800">该 QA 客户仍处于待核实状态；只允许保存草稿，不允许视为正式确认订单。</p>
       )}
