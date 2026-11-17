@@ -77,6 +77,12 @@ export function evaluateWosP2Readiness(input: WosP2ReadinessInput): WosP2Readine
     };
   }
   const resources = input.resources;
+  // Unknown or corrupt resource categories must not silently disappear from
+  // a favorable result. Future materials need an explicit versioned policy.
+  if (resources.some(row => !row ||
+      !WOS_P2_MATERIALS.some(spec => spec.code === row.resource_type))) {
+    issues.push('存在未识别或格式无效的物料记录，须人工复核');
+  }
   const materials = WOS_P2_MATERIALS.map(spec => {
     const rows = resources.filter(row => row?.resource_type === spec.code);
     if (rows.length !== 1) {
