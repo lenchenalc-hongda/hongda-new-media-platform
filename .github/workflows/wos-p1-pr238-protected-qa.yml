@@ -216,7 +216,9 @@ jobs:
           echo WOS_P1_SECRETLESS_SOURCE_CHECK=PASS
 
   protected-real-qa:
-    runs-on: ubuntu-latest
+    # Playwright 1.56.1 does not support Ubuntu 26.04 runner (verified Run #44075924956).
+    # Lock only the browser job to the supported Ubuntu 24.04 image.
+    runs-on: ubuntu-24.04
     needs: [independent-gate, secretless-source-review]
     if: ${{ needs['secretless-source-review'].result == 'success' && github.ref == 'refs/heads/master' }}
     timeout-minutes: 65
