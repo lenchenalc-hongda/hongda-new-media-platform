@@ -61,6 +61,18 @@ jobs:
           set -euo pipefail
           psql -v ON_ERROR_STOP=1 -d wos_p0_contract -c "SET wos.p0_01_ephemeral_rehearsal='on'" -f docs/workshop-order-system/production-readiness/wos_mvp_receipts_PROPOSAL_NOT_INSTALLED.sql >/dev/null
           psql -v ON_ERROR_STOP=1 -d wos_p0_contract -f tests/sql/wos-prod-p0-01/contract-assertions.sql
+      - name: Detect repeated same-schema application without silent overwrite
+        shell: bash
+        run: |
+          set -euo pipefail
+          if psql -v ON_ERROR_STOP=1 -d wos_p0_contract -c "SET wos.p0_01_ephemeral_rehearsal='on'" -f docs/workshop-order-system/production-readiness/wos_mvp_receipts_PROPOSAL_NOT_INSTALLED.sql >/tmp/wos-repeat.out 2>&1; then
+            echo 'FAIL: repeated structural proposal silently reapplied'
+            exit 1
+          fi
+          grep -q 'already exists' /tmp/wos-repeat.out
+          test "$(psql -At -d wos_p0_contract -c "SELECT count(*) FROM pg_tables WHERE schemaname='public' AND tablename IN ('wos_submission_receipts','wos_workshop_inbox','wos_operator_action_receipts','wos_office_revision_receipts','wos_operator_review_receipts','wos_office_readiness_receipts')")" = "6"
+          test "$(psql -At -d wos_p0_contract -c 'SELECT count(*) FROM public.wos_submission_receipts')" = "1"
+          echo WOS_P0_01_NON_IDEMPOTENT_DDL_REAPPLY_DETECTED_WITHOUT_DATA_LOSS=PASS
       - name: Fault-injected atomic rollback in a second empty PG17 database
         shell: bash
         run: |
