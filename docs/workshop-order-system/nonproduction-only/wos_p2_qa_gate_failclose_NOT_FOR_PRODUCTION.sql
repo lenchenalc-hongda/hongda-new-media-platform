@@ -38,6 +38,7 @@ DECLARE
   v_old_operator boolean;
   v_old_office boolean;
   v_existing wos_qa_safety.p2_gate_close_receipts%ROWTYPE;
+  v_is_replay boolean := false;
 BEGIN
   -- No capability to enable either gate, alter business records, change RLS,
   -- manipulate storage, or issue an approval. Caller is QA-authenticated.
@@ -70,9 +71,9 @@ BEGIN
        OR v_existing.reason<>p_reason
     THEN RAISE EXCEPTION 'FAILCLOSE_IDEMPOTENCY_CONFLICT'
        USING ERRCODE='23505'; END IF;
-    RETURN pg_catalog.jsonb_build_object(
-      'status','REPLAYED','githubRunId',p_github_run_id,
-      'requestId',p_request_id,'operatorEnabled',false,'officeEnabled',false);
+    -- A replay must still re-close the gates if a later run opened them.
+    -- Never return a stale CLOSED receipt without touching both gate rows.
+    v_is_replay := true;
   END IF;
 
   SELECT enabled INTO STRICT v_old_operator
@@ -91,13 +92,16 @@ BEGIN
         updated_at=pg_catalog.clock_timestamp()
     WHERE gate_name='OFFICE_WRITES';
 
-  INSERT INTO wos_qa_safety.p2_gate_close_receipts(
-    request_id,github_run_id,actor_profile_id,reason,
-    operator_was_enabled,office_was_enabled)
-  VALUES(p_request_id,p_github_run_id,v_actor.id,p_reason,
-    v_old_operator,v_old_office);
+  IF NOT v_is_replay THEN
+    INSERT INTO wos_qa_safety.p2_gate_close_receipts(
+      request_id,github_run_id,actor_profile_id,reason,
+      operator_was_enabled,office_was_enabled)
+    VALUES(p_request_id,p_github_run_id,v_actor.id,p_reason,
+      v_old_operator,v_old_office);
+  END IF;
   RETURN pg_catalog.jsonb_build_object(
-    'status','CLOSED','githubRunId',p_github_run_id,
+    'status',CASE WHEN v_is_replay THEN 'REPLAYED' ELSE 'CLOSED' END,
+    'githubRunId',p_github_run_id,
     'requestId',p_request_id,'operatorEnabled',false,'officeEnabled',false,
     'operatorWasEnabled',v_old_operator,'officeWasEnabled',v_old_office);
 END;
