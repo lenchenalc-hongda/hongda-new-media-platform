@@ -105,7 +105,14 @@ async function main() {
   stage='OFFICE_QA_SUBMIT_OR_ERROR';
   // Stop on a visible allowlisted UI error rather than blindly waiting
   // 110 seconds for an HTTP POST that the client guard may never send.
-  const failureAlert=office.page.getByRole('alert').first();
+  // Scope the failure signal to the actual QA submit component. The same
+  // Office page also mounts returned-order and form-validation components
+  // with unrelated role=alert nodes; page-wide first() caused a false FAIL
+  // (Run 44242557421: UNCLASSIFIED with no submitted POST).
+  const qaSubmitRegion=office.page.locator('section[aria-label="隔离数据库真实下单验收"]');
+  assert.equal(await qaSubmitRegion.count(),1,'QA_SUBMIT_REGION_NOT_UNIQUE');
+  const failureAlert=qaSubmitRegion.locator('[role="alert"]');
+  assert.equal(await failureAlert.count(),0,'QA_SUBMISSION_ERROR_PRESENT_BEFORE_CLICK');
   const submitWait=office.page.waitForResponse(response=>
     response.url()===origin+'/api/workshop-orders/production'
     &&response.request().method()==='POST',{timeout:45000})
