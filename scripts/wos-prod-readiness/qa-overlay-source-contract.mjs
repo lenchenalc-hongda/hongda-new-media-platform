@@ -34,8 +34,8 @@ for(const path of ['candidate-drafts','candidate-office-document','candidate-ima
 for(const t of [
  'CREATE SCHEMA wos_mvp_qa;','CREATE TABLE wos_mvp_qa.p1_execution_gate',
  "VALUES(true,false,'NOT_AUTHORIZED')",
- 'WOS_QA_OVERLAY_P1_OWNER_GATE_NOT_OPEN',
- 'WOS_QA_OVERLAY_P2_GATE_CONFLICT',
+ 'QA_OVERLAY_P1_OWNER_GATE_NOT_OPEN',
+ 'QA_OVERLAY_P2_GATE_CONFLICT',
  'CREATE TABLE wos_mvp_qa.cpc_order_bindings',
  'PERFORM wos_mvp_qa.assert_cpc_link',
  'CREATE TABLE wos_mvp_attestation.private_image_proofs',
