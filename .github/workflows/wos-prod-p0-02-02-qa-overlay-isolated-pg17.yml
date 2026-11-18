@@ -129,3 +129,25 @@ jobs:
           psql -v ON_ERROR_STOP=1 -At -d wos_overlay_fault -f "$d/02-readonly-qa-fingerprint.sql" > /tmp/wos-fault-after.jsonl
           diff -u /tmp/wos-fault-before.jsonl /tmp/wos-fault-after.jsonl
           echo WOS_OVERLAY_FAILURE_ATOMIC_ROLLBACK_83_LEGACY=PASS
+
+  app-contract-build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: New overlay source and frontend/backend RPC names
+        run: node scripts/wos-prod-readiness/qa-overlay-source-contract.mjs
+      - name: Pin pnpm and install dependencies without credentials
+        shell: bash
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.11.0 --activate
+          pnpm install --frozen-lockfile
+      - name: TypeScript application typecheck
+        run: pnpm exec tsc --noEmit
+      - name: WOS Office and private-byte unit tests
+        run: pnpm exec tsx tests/unit/workshop-order-suite.test.ts
+      - name: Next.js production compilation (NOT deployment)
+        run: pnpm build
