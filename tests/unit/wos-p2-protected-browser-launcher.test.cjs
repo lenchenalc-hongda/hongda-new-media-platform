@@ -82,4 +82,28 @@ assert(!closer.includes('console.log(error)'));
 assert(!closer.includes('console.error(error)'));
 console.log('WOS_P2_QA_FAILCLOSE_STATIC_GUARDS=PASS');
 
+// Catch the actual failure from 2026-11-18 Run #44232596314:
+// Chrome visited 127.0.0.1 but the business QA UI checks localhost only.
+assert(browser.includes("const origin='http://localhost:3000'"),
+  'browser must use explicitly allowed QA localhost host');
+assert(browser.includes('--host-resolver-rules=MAP localhost 127.0.0.1'),
+  'pin localhost to local loopback without exposing remote service');
+assert(!browser.includes("const origin='http://127.0.0.1:3000'"));
+for (const check of [
+  "stage='OFFICE_QA_PAGE_VISIBLE'",
+  "stage='OFFICE_FILL_SYNTHETIC_SAMPLE'",
+  "stage='OFFICE_SELECT_QA_IMAGE'",
+  "stage='OFFICE_QA_LOCAL_VALIDATION'",
+  "stage='OFFICE_QA_SUBMIT_OR_ERROR'",
+  "WOS_P2_QA_SUBMIT_UI_ERROR_CODE=",
+  "WOS_P2_QA_SUBMIT_HTTP_OBSERVED=NO",
+  "QA_OFFICE_UI_REJECTED_BEFORE_POST",
+  "QA_OFFICE_SUBMIT_NO_HTTP_RESPONSE",
+  "response.url()===origin+'/api/workshop-orders/production'",
+]) assert(browser.includes(check),'QA failfast source contract missing '+check);
+assert(!browser.includes('timeout:110000'),
+  'a blocked QA UI must not waste 110 seconds before diagnostics');
+console.log('WOS_P2_QA_LOCALHOST_HOST_GUARD_REGRESSION=PASS');
+console.log('WOS_P2_QA_FAILURE_STAGE_AND_NO_SECRET_DIAGNOSTICS=PASS');
+
 console.log('WOS_P2_PROTECTED_BROWSER_NOT_EXECUTED=YES');
