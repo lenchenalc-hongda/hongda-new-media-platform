@@ -151,7 +151,7 @@ NEEDED={
  "doc":[
   "尚未安装",
   "953d2204-3e65-4b75-b10e-c6e97f1bbb56",
-  "不允许再次提交办公室新生产订单",
+  "不得**再次提交办公室新生产订单",
   "明确迁移授权",
  ],
  "pgsetup":["CREATE ROLE anon","CREATE ROLE authenticated","CREATE SCHEMA auth","CREATE TABLE public.wos_qa_p2_execution_gate"],
