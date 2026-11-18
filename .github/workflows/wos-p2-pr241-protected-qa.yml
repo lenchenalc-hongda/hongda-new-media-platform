@@ -128,8 +128,12 @@ jobs:
           node --check ../trusted/tests/e2e/wos-p2-qa-gate-failclose.cjs
           node --check ../trusted/tests/e2e/wos-p2-qa-identity-readonly-preflight.cjs
           node --check ../trusted/tests/e2e/wos-p2-qa-owner-cas-attest.cjs
-          node --test ../trusted/tests/unit/wos-p2-owner-cas-attest.test.cjs
-          node --test ../trusted/tests/unit/wos-p2-qa-identity-readonly-preflight.test.cjs
+          # Run trusted source-contract tests with trusted/ as cwd, not app/.
+          # The Owner CAS tests read docs/workshop-order-system/... relative to cwd.
+          # Keep the business PR241 app checkout and its source tests unchanged.
+          test -f ../trusted/docs/workshop-order-system/nonproduction-only/wos_p2_owner_cas_attest_PROPOSED_QA_ONLY.sql
+          ( cd ../trusted && node --test tests/unit/wos-p2-owner-cas-attest.test.cjs )
+          ( cd ../trusted && node --test tests/unit/wos-p2-qa-identity-readonly-preflight.test.cjs )
           npm install --prefix /tmp/hongda-qa-browser --no-audit --no-fund \
             --silent playwright@1.56.1
           /tmp/hongda-qa-browser/node_modules/.bin/playwright install --with-deps chromium
