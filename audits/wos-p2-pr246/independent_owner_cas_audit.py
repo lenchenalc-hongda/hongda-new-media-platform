@@ -9,20 +9,22 @@ from pathlib import Path
 REPO="lenchenalc-hongda/hongda-new-media-platform"
 AUDITOR="audit/wos-p2-pr246-owner-cas-reuse-order-20261118"
 BASE="4cda5481d075dd928b6a68d85513fffe90e6dd10"
-HEAD="39f76d1ed2158c4b0d4f6f8e316587fd8f2d5684"
+HEAD="13ce66f11d977f7076d89e41d40fe4dcd3b13cd8"
 P2="89bb408d13e45458c608db29c47e2803d49b3170"
 P1="6a72b446ccc517a5ff14e531b8a6663b4a70a77e"
-RUNS=(44260440435,44260449908)
+RUNS=(44261479471,44261488381)
 FILES={
  "workflow":".github/workflows/wos-p2-pr241-protected-qa.yml",
  "ci":".github/workflows/wos-p2-owner-cas-reuse-secretless-ci.yml",
  "doc":"docs/workshop-order-system/nonproduction-only/WOS_P2_OWNER_CAS_ATTEST_AND_REUSE_ORDER_BASELINE.md",
  "sql":"docs/workshop-order-system/nonproduction-only/wos_p2_owner_cas_attest_PROPOSED_QA_ONLY.sql",
+ "template":"docs/workshop-order-system/nonproduction-only/wos_p2_owner_cas_ACTIVATION_TEMPLATE_NOT_AUTHORIZED.sql",
  "chromium":"tests/e2e/wos-p2-qa-alert-isolation-secretless.cjs",
  "browser":"tests/e2e/wos-p2-qa-browser.cjs",
  "attestor":"tests/e2e/wos-p2-qa-owner-cas-attest.cjs",
  "pgsetup":"tests/sql/wos-p2-owner-cas-pg17-setup.sql",
  "pgtests":"tests/sql/wos-p2-owner-cas-pg17-tests.sql",
+ "pgactivation":"tests/sql/wos-p2-owner-cas-activation-pg17-verify.sql",
  "mock":"tests/unit/wos-p2-owner-cas-attest.test.cjs",
  "contract":"tests/unit/wos-p2-protected-browser-launcher.test.cjs"
 }
@@ -57,6 +59,10 @@ NEEDED={
   "v_operator.enabled IS DISTINCT FROM TRUE",
   "v_office.enabled IS DISTINCT FROM TRUE",
   "v_expected_ref := 'OWNER_RUN_' || p_github_run_id",
+  "CREATE TABLE wos_qa_safety.p2_gate_open_receipts",
+  "REVOKE ALL ON TABLE wos_qa_safety.p2_gate_open_receipts",
+  "v_receipt.order_id IS DISTINCT FROM p_order_id",
+  "v_operator.enabled_until IS DISTINCT FROM v_receipt.expires_at",
   "v_operator.enabled_until <= v_now + interval '120 seconds'",
   "v_operator.enabled_until > v_now + interval '15 minutes'",
   "RETURN pg_catalog.jsonb_build_object('status','WAITING')",
@@ -64,6 +70,15 @@ NEEDED={
   "REVOKE ALL ON FUNCTION public.wos_qa_p2_owner_cas_attest",
   "GRANT EXECUTE ON FUNCTION public.wos_qa_p2_owner_cas_attest",
   "TO authenticated",
+ ],
+ "template":[
+  "BEGIN;",
+  "REPLACE_WITH_NEW_APPROVED_GITHUB_RUN_ID",
+  "UPDATE public.wos_qa_p2_execution_gate",
+  "UPDATE public.wos_qa_p2_office_execution_gate",
+  "INSERT INTO wos_qa_safety.p2_gate_open_receipts",
+  "GET DIAGNOSTICS v_rows=ROW_COUNT",
+  "COMMIT;",
  ],
  "attestor":[
   "MAX_POLL_MS=600000",
@@ -101,6 +116,7 @@ NEEDED={
   "wos-p2-owner-cas-pg17-tests.sql",
   "wos-p2-owner-cas-attest.test.cjs",
   "WOS_P2_PG17_LIVE_SQL_TESTS_EPHEMERAL_ONLY=PASS",
+  "WOS_P2_PG17_REAL_OWNER_CAS_TEMPLATE_REPLAY_DENIED=PASS",
  ],
  "pgtests":[
   "WOS_P2_QA_PG17_BOTH_OFF_WAITING=PASS",
@@ -111,6 +127,11 @@ NEEDED={
   "WOS_P2_QA_PG17_EXPIRED_GATE_DENIED=PASS",
   "WOS_P2_QA_PG17_CLOSED_RUN_REPLAY_DENIED=PASS",
   "WOS_P2_QA_PG17_ATTESTOR_ZERO_BUSINESS_WRITES=PASS",
+  "WOS_P2_QA_PG17_ON_GATES_WITHOUT_OPEN_RECEIPT_DENIED=PASS",
+ ],
+ "pgactivation":[
+  "WOS_P2_QA_PG17_ACTUAL_OWNER_CAS_TEMPLATE_ATOMIC_COMMIT=PASS",
+  "WOS_P2_QA_PG17_ACTUAL_OWNER_CAS_READ_ONLY_PROOF=PASS",
  ],
  "mock":[
   "missing Owner CAS times out closed without writing anything",
@@ -166,13 +187,13 @@ def attest_provenance():
     if run["head_sha"]!=HEAD or run["status"]!="completed" \
        or run["conclusion"]!="success":
       raise AssertionError("latest HEAD CI not green: "+str(rid))
-  jobs=api("actions/runs/44260440435/jobs?per_page=100")
+  jobs=api("actions/runs/44261479471/jobs?per_page=100")
   if jobs["total_count"]!=2 or \
      {j["name"] for j in jobs["jobs"]}!={
        "secretless-runtime-contract","pg17-ephemeral-attestation"} or \
      any(j["conclusion"]!="success" for j in jobs["jobs"]):
     raise AssertionError("QA isolated SQL/Chromium CI not both green")
-  jobs=api("actions/runs/44260449908/jobs?per_page=100")
+  jobs=api("actions/runs/44261488381/jobs?per_page=100")
   if jobs["total_count"]!=2 or \
      {j["name"] for j in jobs["jobs"]}!={"lint-and-audit","glh-stage1-postgres-synthetic"} or \
      any(j["conclusion"]!="success" for j in jobs["jobs"]):
@@ -218,6 +239,14 @@ def inspect(v):
   if "SUPABASE_SERVICE_ROLE_KEY" in v["attestor"] or \
      "service_role" in v["attestor"]:
     bad.append("privileged Supabase key in Node attestor")
+  if re.search(r"(?i)\b(?:DROP|TRUNCATE)\s+(?:TABLE\s+)?(?:public|wos_qa_safety)\.",v["template"]) or \
+     "UPDATE public.wos_production_orders" in v["template"]:
+    bad.append("atomic template attempts business or destructive mutation")
+  if not (v["template"].find("UPDATE public.wos_qa_p2_execution_gate")<
+      v["template"].find("UPDATE public.wos_qa_p2_office_execution_gate")<
+      v["template"].find("INSERT INTO wos_qa_safety.p2_gate_open_receipts")<
+      v["template"].find("COMMIT;")):
+    bad.append("CAS template does not commit both Gates with private receipt")
   if "secrets." in v["ci"] or "environment: hongda-review-dev" in v["ci"]:
     bad.append("untrusted branch gets protected QA secrets")
   if re.search(r"(?i)vercel\s+--prod|supabase\s+db\s+push|gh\s+pr\s+merge",
@@ -247,6 +276,7 @@ def mutations(v):
     ("browser","page.screenshot({path:'/tmp/creds.png'})"),
     ("sql","GRANT SELECT ON public.wos_qa_p2_execution_gate TO authenticated;"),
     ("sql","UPDATE public.wos_qa_p2_execution_gate SET enabled=true;"),
+    ("template","UPDATE public.wos_production_orders SET workflow_status='ACTIVE';"),
     ("attestor","const service_role='fake';"),
   ]
   for name,attack in attacks:
