@@ -86,6 +86,29 @@ jobs:
           psql -v ON_ERROR_STOP=1 -d wos_p0_contract -c "SET wos.p0_01_ephemeral_rehearsal='on'" -f "$FILE" >/dev/null
           psql -v ON_ERROR_STOP=1 -d wos_p0_contract -f tests/sql/wos-prod-p0-01/cpc-pair-assertions.sql
           bash tests/sql/wos-prod-p0-01/cpc-concurrency.sh wos_p0_contract
+      - name: Inject failure into CPC triple-link schema transaction and confirm clean rollback
+        shell: bash
+        run: |
+          set -euo pipefail
+          createdb wos_p0_cpc_fault
+          psql -v ON_ERROR_STOP=1 -d wos_p0_cpc_fault -f tests/sql/wos-prod-p0-01/synthetic-foundation.sql >/dev/null
+          psql -v ON_ERROR_STOP=1 -d wos_p0_cpc_fault -f supabase/migrations/20261014102000_workshop_order_system_foundation.sql >/dev/null
+          psql -v ON_ERROR_STOP=1 -d wos_p0_cpc_fault -c "SET wos.p0_01_ephemeral_rehearsal='on'" -f docs/workshop-order-system/production-readiness/wos_mvp_receipts_PROPOSAL_NOT_INSTALLED.sql >/dev/null
+          node - <<'NODE'
+          const fs=require('node:fs');
+          const src=fs.readFileSync('docs/workshop-order-system/production-readiness/wos_mvp_cpc_pair_PROPOSAL_NOT_INSTALLED.sql','utf8');
+          if ((src.match(/^COMMIT;$/gm)||[]).length!==1) throw new Error('EXPECTED_ONE_CPC_PROPOSAL_COMMIT');
+          fs.writeFileSync('/tmp/wos-cpc-fault.sql',src.replace(/^COMMIT;$/m,"SELECT 1/0;\nCOMMIT;"));
+          NODE
+          if psql -v ON_ERROR_STOP=1 -d wos_p0_cpc_fault -c "SET wos.p0_01_ephemeral_rehearsal='on'" -f /tmp/wos-cpc-fault.sql >/tmp/wos-cpc-fault.out 2>&1; then
+            echo 'FAIL: fault-injected CPC migration unexpectedly committed'
+            exit 1
+          fi
+          grep -q 'division by zero' /tmp/wos-cpc-fault.out
+          test "$(psql -At -d wos_p0_cpc_fault -c "SELECT count(*) FROM pg_constraint WHERE conrelid='public.wos_production_orders'::regclass AND conname LIKE 'wos_mvp_%_org_fk'")" = "0"
+          test "$(psql -At -d wos_p0_cpc_fault -c "SELECT count(*) FROM pg_indexes WHERE indexname='wos_mvp_cpc_project_customer_org_unique'")" = "0"
+          test "$(psql -At -d wos_p0_cpc_fault -c "SELECT is_nullable FROM information_schema.columns WHERE table_schema='public' AND table_name='wos_production_orders' AND column_name='customer_id'")" = "YES"
+          echo WOS_P0_01_02_CPC_PROPOSAL_FAILURE_ROLLBACK=PASS
       - name: Fault-injected atomic rollback in a second empty PG17 database
         shell: bash
         run: |
