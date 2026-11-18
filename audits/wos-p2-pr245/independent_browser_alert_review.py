@@ -132,11 +132,15 @@ def inspect(d):
   problems.append("page-global alert false-positive restored")
  if "const origin='http://127.0.0.1:3000'" in d["browser"]:
   problems.append("old QA loopback host restored")
- if not (d["protected"].index("Protected QA authentication and organization read-only preflight")<
-    d["protected"].index("Build and launch local Preview using only QA publishable key")<
-    d["protected"].index("QA Preview ready, bounded Owner CAS handoff, no database writes")<
-    d["protected"].index("Real 2-role Office/Operator test + Viewer/foreign denials")<
-    d["protected"].index("Always atomically close BOTH QA DB gates with QA-admin-only RPC")):
+ ordered=[
+  "Protected QA authentication and organization read-only preflight",
+  "Build and launch local Preview using only QA publishable key",
+  "QA Preview ready, bounded Owner CAS handoff, no database writes",
+  "Real 2-role Office/Operator test + Viewer/foreign denials",
+  "Always atomically close BOTH QA DB gates with QA-admin-only RPC",
+ ]
+ positions=[d["protected"].find(item) for item in ordered]
+ if any(index<0 for index in positions) or positions!=sorted(positions):
   problems.append("QA identity/preview/CAS/browser/close sequence not monotonic")
  if re.search(r"(?mi)^\s*(?:push|pull_request_target)\s*:",d["protected"]):
   problems.append("privileged workflow auto-trigger")
