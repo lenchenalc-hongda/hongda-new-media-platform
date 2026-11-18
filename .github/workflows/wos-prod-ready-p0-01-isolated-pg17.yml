@@ -1,0 +1,84 @@
+# QA-free isolated PostgreSQL 17 verification. No Supabase secrets, no Production account.
+# This workflow NEVER executes DDL on any hosted database and does not approve a migration.
+name: WOS P0-01 isolated production-neutral schema contract
+on:
+  pull_request:
+    branches: [master]
+    paths:
+      - 'docs/workshop-order-system/production-readiness/**'
+      - 'tests/sql/wos-prod-p0-01/**'
+      - 'scripts/wos-prod-readiness/**'
+      - '.github/workflows/wos-prod-ready-p0-01-isolated-pg17.yml'
+permissions:
+  contents: read
+jobs:
+  isolated-pg17:
+    if: github.repository == 'lenchenalc-hongda/hongda-new-media-platform'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    services:
+      postgres:
+        image: postgres:17.11
+        env:
+          POSTGRES_DB: wos_p0_contract
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: synthetic-ci-only
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres -d wos_p0_contract"
+          --health-interval 10s --health-timeout 5s --health-retries 5
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: '5432'
+      PGUSER: postgres
+      PGPASSWORD: synthetic-ci-only
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Pure source and forbidden-production check
+        run: node scripts/wos-prod-readiness/p0-01-source-guard.mjs
+      - name: PostgreSQL 17 synthetic bootstrap and fail-closed execution guard
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! command -v psql >/dev/null 2>&1; then
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq postgresql-client
+          fi
+          psql -v ON_ERROR_STOP=1 -d wos_p0_contract -f tests/sql/wos-prod-p0-01/synthetic-foundation.sql >/dev/null
+          psql -v ON_ERROR_STOP=1 -d wos_p0_contract -f supabase/migrations/20261014102000_workshop_order_system_foundation.sql >/dev/null
+          if psql -v ON_ERROR_STOP=1 -d wos_p0_contract -f docs/workshop-order-system/production-readiness/wos_mvp_receipts_PROPOSAL_NOT_INSTALLED.sql >/tmp/wos-guard.out 2>&1; then
+            echo 'FAIL: proposal unexpectedly accepted without isolated rehearsal flag'
+            exit 1
+          fi
+          grep -q 'WOS_PROPOSAL_ONLY_NO_HOSTED_EXECUTION' /tmp/wos-guard.out
+          test "$(psql -At -d wos_p0_contract -c "SELECT count(*) FROM pg_tables WHERE schemaname='public' AND tablename='wos_submission_receipts'")" = "0"
+          echo WOS_P0_01_DEFAULT_REFUSAL_NO_DDL=PASS
+      - name: Apply proposal ONLY to isolated PG17 and assert synthetic receipts/RLS
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql -v ON_ERROR_STOP=1 -d wos_p0_contract -c "SET wos.p0_01_ephemeral_rehearsal='on'" -f docs/workshop-order-system/production-readiness/wos_mvp_receipts_PROPOSAL_NOT_INSTALLED.sql >/dev/null
+          psql -v ON_ERROR_STOP=1 -d wos_p0_contract -f tests/sql/wos-prod-p0-01/contract-assertions.sql
+      - name: Fault-injected atomic rollback in a second empty PG17 database
+        shell: bash
+        run: |
+          set -euo pipefail
+          createdb wos_p0_rollback
+          psql -v ON_ERROR_STOP=1 -d wos_p0_rollback -f tests/sql/wos-prod-p0-01/synthetic-foundation.sql >/dev/null
+          psql -v ON_ERROR_STOP=1 -d wos_p0_rollback -f supabase/migrations/20261014102000_workshop_order_system_foundation.sql >/dev/null
+          node - <<'NODE'
+          const fs=require('node:fs');
+          const original=fs.readFileSync('docs/workshop-order-system/production-readiness/wos_mvp_receipts_PROPOSAL_NOT_INSTALLED.sql','utf8');
+          if((original.match(/^COMMIT;$/gm)||[]).length!==1)throw new Error('NO_SINGLE_ATOMIC_COMMIT');
+          const injected=original.replace(/^COMMIT;$/m,"SELECT 1/0; -- forced failure before commit\nCOMMIT;");
+          fs.writeFileSync('/tmp/wos-p0-01-injected.sql',injected);
+          NODE
+          if psql -v ON_ERROR_STOP=1 -d wos_p0_rollback -c "SET wos.p0_01_ephemeral_rehearsal='on'" -f /tmp/wos-p0-01-injected.sql >/tmp/wos-fault.out 2>&1; then
+            echo 'FAIL: forced mid-transaction rollback unexpectedly succeeded'
+            exit 1
+          fi
+          test "$(psql -At -d wos_p0_rollback -c "SELECT count(*) FROM pg_tables WHERE schemaname='public' AND tablename IN ('wos_submission_receipts','wos_workshop_inbox','wos_operator_action_receipts','wos_office_revision_receipts','wos_operator_review_receipts','wos_office_readiness_receipts')")" = "0"
+          test "$(psql -At -d wos_p0_rollback -c "SELECT count(*) FROM pg_indexes WHERE schemaname='public' AND indexname='wos_mvp_order_id_org_unique'")" = "0"
+          echo WOS_P0_01_PG17_ATOMIC_FAILURE_ROLLBACK=PASS
