@@ -9,10 +9,10 @@ from pathlib import Path
 REPO="lenchenalc-hongda/hongda-new-media-platform"
 AUDITOR="audit/wos-p2-pr246-owner-cas-reuse-order-20261118"
 BASE="4cda5481d075dd928b6a68d85513fffe90e6dd10"
-HEAD="13ce66f11d977f7076d89e41d40fe4dcd3b13cd8"
+HEAD="9907bd1674c72ab01a9a393de710dc663bd95e4d"
 P2="89bb408d13e45458c608db29c47e2803d49b3170"
 P1="6a72b446ccc517a5ff14e531b8a6663b4a70a77e"
-RUNS=(44261479471,44261488381)
+RUNS=(44263962452,44263970481)
 FILES={
  "workflow":".github/workflows/wos-p2-pr241-protected-qa.yml",
  "ci":".github/workflows/wos-p2-owner-cas-reuse-secretless-ci.yml",
@@ -59,7 +59,13 @@ NEEDED={
   "v_operator.enabled IS DISTINCT FROM TRUE",
   "v_office.enabled IS DISTINCT FROM TRUE",
   "v_expected_ref := 'OWNER_RUN_' || p_github_run_id",
-  "CREATE TABLE wos_qa_safety.p2_gate_open_receipts",
+  "CREATE TABLE wos_qa_safety.p2_gate_open_receipts",  "CREATE TRIGGER wos_qa_p2_single_order_gate_guard",
+  "BEFORE INSERT OR UPDATE OR DELETE ON public.wos_production_orders",
+  "wos_qa_safety.p2_single_order_write_guard()",
+  "QA_P2_GATE_SINGLE_ORDER_SCOPE_REJECTED",
+  "QA_OWNER_ATTEST_SINGLE_ORDER_GUARD_MISSING",
+  "REVOKE ALL ON FUNCTION wos_qa_safety.p2_single_order_write_guard()",
+
   "REVOKE ALL ON TABLE wos_qa_safety.p2_gate_open_receipts",
   "v_receipt.order_id IS DISTINCT FROM p_order_id",
   "v_operator.enabled_until IS DISTINCT FROM v_receipt.expires_at",
@@ -77,7 +83,8 @@ NEEDED={
   "UPDATE public.wos_qa_p2_execution_gate",
   "UPDATE public.wos_qa_p2_office_execution_gate",
   "INSERT INTO wos_qa_safety.p2_gate_open_receipts",
-  "GET DIAGNOSTICS v_rows=ROW_COUNT",
+  "GET DIAGNOSTICS v_rows=ROW_COUNT",  "QA_OWNER_CAS_SINGLE_ORDER_GUARD_MISSING",
+
   "COMMIT;",
  ],
  "attestor":[
@@ -86,7 +93,8 @@ NEEDED={
   "GITHUB_RUN_ATTEMPT,'1'",
   "WOS_P2_REUSE_EXISTING_ORDER_ONLY",
   "WOS_P2_OWNER_CAS_READONLY_ACK",
-  "QA_OWNER_CAS_NOT_ATTESTED_BEFORE_DEADLINE",
+  "QA_OWNER_CAS_NOT_ATTESTED_BEFORE_DEADLINE",  "QA DB attestation is fail-closed without exact-order Gate trigger",
+
   "wos_qa_p2_owner_cas_attest",
   "p_github_run_id:c.runId",
   "p_order_id:EXISTING_ORDER_ID",
@@ -127,11 +135,14 @@ NEEDED={
   "WOS_P2_QA_PG17_EXPIRED_GATE_DENIED=PASS",
   "WOS_P2_QA_PG17_CLOSED_RUN_REPLAY_DENIED=PASS",
   "WOS_P2_QA_PG17_ATTESTOR_ZERO_BUSINESS_WRITES=PASS",
-  "WOS_P2_QA_PG17_ON_GATES_WITHOUT_OPEN_RECEIPT_DENIED=PASS",
+  "WOS_P2_QA_PG17_ON_GATES_WITHOUT_OPEN_RECEIPT_DENIED=PASS",  "WOS_P2_QA_PG17_GATE_OFF_EXISTING_ORDER_MUTATIONS_UNCHANGED=PASS",
+  "WOS_P2_QA_PG17_ONLY_PINNED_ORDER_UPDATE_ALLOWED=PASS",
+
  ],
  "pgactivation":[
   "WOS_P2_QA_PG17_ACTUAL_OWNER_CAS_TEMPLATE_ATOMIC_COMMIT=PASS",
-  "WOS_P2_QA_PG17_ACTUAL_OWNER_CAS_READ_ONLY_PROOF=PASS",
+  "WOS_P2_QA_PG17_ACTUAL_OWNER_CAS_READ_ONLY_PROOF=PASS",  "WOS_P2_QA_PG17_OWNER_CAS_STRICT_SINGLE_ORDER_SCOPE=PASS",
+
  ],
  "mock":[
   "missing Owner CAS times out closed without writing anything",
@@ -141,7 +152,8 @@ NEEDED={
  ],
  "contract":[
   "WOS_P2_QA_EXISTING_ORDER_NO_DUPLICATE_P1=PASS",
-  "WOS_P2_OWNER_CAS_RUN_BOUND_LIVE_PROOF_ORDERING=PASS",
+  "WOS_P2_OWNER_CAS_RUN_BOUND_LIVE_PROOF_ORDERING=PASS",  "WOS_P2_QA_SCOPE_ONLY_EXISTING_SYNTHETIC_ORDER=PASS",
+
   "WOS_P2_PROTECTED_BROWSER_NOT_EXECUTED=YES",
  ],
  "chromium":[
@@ -152,7 +164,8 @@ NEEDED={
   "尚未安装",
   "953d2204-3e65-4b75-b10e-c6e97f1bbb56",
   "不得**再次提交办公室新生产订单",
-  "明确迁移授权",
+  "明确迁移授权",  "QA Gate 写入范围的数据库强制保护",
+
  ],
  "pgsetup":["CREATE ROLE anon","CREATE ROLE authenticated","CREATE SCHEMA auth","CREATE TABLE public.wos_qa_p2_execution_gate"],
 }
@@ -187,13 +200,13 @@ def attest_provenance():
     if run["head_sha"]!=HEAD or run["status"]!="completed" \
        or run["conclusion"]!="success":
       raise AssertionError("latest HEAD CI not green: "+str(rid))
-  jobs=api("actions/runs/44261479471/jobs?per_page=100")
+  jobs=api("actions/runs/44263962452/jobs?per_page=100")
   if jobs["total_count"]!=2 or \
      {j["name"] for j in jobs["jobs"]}!={
        "secretless-runtime-contract","pg17-ephemeral-attestation"} or \
      any(j["conclusion"]!="success" for j in jobs["jobs"]):
     raise AssertionError("QA isolated SQL/Chromium CI not both green")
-  jobs=api("actions/runs/44261488381/jobs?per_page=100")
+  jobs=api("actions/runs/44263970481/jobs?per_page=100")
   if jobs["total_count"]!=2 or \
      {j["name"] for j in jobs["jobs"]}!={"lint-and-audit","glh-stage1-postgres-synthetic"} or \
      any(j["conclusion"]!="success" for j in jobs["jobs"]):
@@ -249,6 +262,8 @@ def inspect(v):
     bad.append("CAS template does not commit both Gates with private receipt")
   if "secrets." in v["ci"] or "environment: hongda-review-dev" in v["ci"]:
     bad.append("untrusted branch gets protected QA secrets")
+  if re.search(r"(?i)DISABLE\\s+TRIGGER|DROP\\s+TRIGGER|ALTER\\s+TABLE\\s+public\\.wos_production_orders\\s+DISABLE",v["sql"]+"\\n"+v["template"]):
+    bad.append("QA exact-order scope guard disabled or dropped")
   if re.search(r"(?i)vercel\s+--prod|supabase\s+db\s+push|gh\s+pr\s+merge",
     v["workflow"]+"\n"+v["ci"]):
     bad.append("unapproved deploy or database change")
@@ -276,6 +291,7 @@ def mutations(v):
     ("browser","page.screenshot({path:'/tmp/creds.png'})"),
     ("sql","GRANT SELECT ON public.wos_qa_p2_execution_gate TO authenticated;"),
     ("sql","UPDATE public.wos_qa_p2_execution_gate SET enabled=true;"),
+    ("sql","ALTER TABLE public.wos_production_orders DISABLE TRIGGER wos_qa_p2_single_order_gate_guard;"),
     ("template","UPDATE public.wos_production_orders SET workflow_status='ACTIVE';"),
     ("attestor","const service_role='fake';"),
   ]

@@ -26,7 +26,7 @@ jobs:
       - name: Checkout exact PR246 candidate as unexecuted read-only source
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
-          ref: 13ce66f11d977f7076d89e41d40fe4dcd3b13cd8
+          ref: 9907bd1674c72ab01a9a393de710dc663bd95e4d
           path: candidate
           persist-credentials: false
       - name: Require exact source identity with zero QA credentials
@@ -34,7 +34,7 @@ jobs:
         run: |
           set -euo pipefail
           test "$(git -C reviewer rev-parse HEAD)" = "$GITHUB_SHA"
-          test "$(git -C candidate rev-parse HEAD)" = "13ce66f11d977f7076d89e41d40fe4dcd3b13cd8"
+          test "$(git -C candidate rev-parse HEAD)" = "9907bd1674c72ab01a9a393de710dc663bd95e4d"
           test -z "$(printenv REVIEW_DEV_ADMIN_PASSWORD || true)"
           test -z "$(printenv SUPABASE_SERVICE_ROLE_KEY || true)"
           echo WOS_P2_PR246_REVIEWER_SOURCE_IDENTITY=PASS
@@ -45,11 +45,11 @@ jobs:
           api="https://api.github.com/repos/$GITHUB_REPOSITORY/actions/runs"
           for i in $(seq 1 90); do
             all_green=yes
-            for id in 44261479471 44261488381; do
+            for id in 44263962452 44263970481; do
               j="$(curl -fsS --max-time 20 \
                 -H "Authorization: Bearer $GH_AUDIT_READ_TOKEN" \
                 -H "Accept: application/vnd.github+json" "$api/$id")"
-              test "$(jq -r .head_sha <<<"$j")" = "13ce66f11d977f7076d89e41d40fe4dcd3b13cd8"
+              test "$(jq -r .head_sha <<<"$j")" = "9907bd1674c72ab01a9a393de710dc663bd95e4d"
               status="$(jq -r .status <<<"$j")"
               conclusion="$(jq -r .conclusion <<<"$j")"
               if test "$status" = "completed" && test "$conclusion" != "success"; then
