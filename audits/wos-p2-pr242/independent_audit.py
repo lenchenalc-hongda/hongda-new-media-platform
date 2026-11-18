@@ -3,7 +3,7 @@
 import json,os,re,sys,subprocess,urllib.request
 from pathlib import Path
 REPO="lenchenalc-hongda/hongda-new-media-platform"
-PIN="f7ab0127670d363d5e51cff23e323d7edda0b831"
+PIN="79d64514799401a2df98844ddc5be11ddc49697d"
 BASE="b4edd93bb16f7a651ca37864a51a158727fd23f2"
 BRANCH="audit/wos-p2-pr242-protected-runner-20261118"
 FILES=[
@@ -11,7 +11,11 @@ FILES=[
 ".github/workflows/wos-p2-pr241-protected-qa.yml",
 "docs/workshop-order-system/nonproduction-only/WOS_P2_PROTECTED_BROWSER_QA_RUNBOOK.md",
 "tests/e2e/wos-p2-qa-browser.cjs",
-"tests/unit/wos-p2-protected-browser-launcher.test.cjs"]
+"tests/unit/wos-p2-protected-browser-launcher.test.cjs",
+"docs/workshop-order-system/nonproduction-only/wos_p2_qa_gate_failclose_NOT_FOR_PRODUCTION.sql",
+"tests/e2e/wos-p2-qa-gate-failclose.cjs",
+"tests/sql/wos-p2-gate-failclose-pg17-fixture.sql",
+"tests/sql/wos-p2-gate-failclose-pg17-assertions.sql"]
 CHECKS={
 "workflow":["workflow_dispatch:","github.ref == 'refs/heads/master'",
  "environment: hongda-review-dev","cancel-in-progress: false","persist-credentials: false",
@@ -31,7 +35,25 @@ CHECKS={
  "VIEWER_AND_FOREIGN_DENIED_WITHOUT_SIDE_EFFECTS"],
 "runbook":["xulmpqaknlwqqculbsek","OPERATOR_WRITES","OFFICE_WRITES","NOT INSTALLED"],
 "design_ci":["branches:","persist-credentials: false","node --check"],
-"design_test":["WOS_P2_PROTECTED_BROWSER_LAUNCHER_STATIC_SECURITY=PASS"]}
+"design_test":["WOS_P2_PROTECTED_BROWSER_LAUNCHER_STATIC_SECURITY=PASS",
+ "WOS_P2_QA_FAILCLOSE_STATIC_GUARDS=PASS"],
+"close_sql":["CREATE FUNCTION public.wos_qa_p2_failclose",
+ "SECURITY DEFINER SET search_path = ''","role = 'admin'",
+ "wos_qa_safety.reap_expired_p2_gates",
+ "wos_qa_safety.p2_gate_close_receipts",
+ "v_is_replay := true","SET enabled=false",
+ "REVOKE ALL ON FUNCTION public.wos_qa_p2_failclose"],
+"closer":["WOS_P2_QA_CLOSURE_ENABLED",
+ "WOS_P2_GATE_CLOSE_REASON","GITHUB_RUN_ID",
+ "REVIEW_DEV_ADMIN_PASSWORD","/auth/v1/token?grant_type=password",
+ "/rest/v1/rpc/wos_qa_p2_failclose",
+ "AbortSignal.timeout","WOS_P2_QA_GATE_CLOSE_ONLY_RPC=PASS"],
+"fixture":["CREATE ROLE authenticated","CREATE ROLE anon",
+ "wos_qa_p2_execution_gate","wos_qa_p2_office_execution_gate"],
+"pg_assertions":["WOS_P2_PG17_NORMAL_FAILURE_CLOSE_BOTH_GATES=PASS",
+ "WOS_P2_PG17_REPLAY_REQUIRES_REAL_CLOSE=PASS",
+ "WOS_P2_PG17_RUNNER_LOSS_EXPIRY_WATCHDOG=PASS",
+ "WOS_P2_PG17_NO_PREMATURE_WATCHDOG_CLOSE=PASS"]}
 def gh(path):
  token=os.environ.get("GH_READ_TOKEN","")
  if not token:raise AssertionError("missing read-only github token")
@@ -48,12 +70,12 @@ def trust():
   raise AssertionError("PR242 not exact reviewed draft")
  if gh("branches/master")["commit"]["sha"]!=BASE:raise AssertionError("master baseline moved")
  files=gh("pulls/242/files?per_page=100")
- if len(files)!=5 or {f["filename"] for f in files}!=set(FILES):raise AssertionError("unexpected files")
- for runid in [44130860279,44130968138]:
+ if len(files)!=9 or {f["filename"] for f in files}!=set(FILES):raise AssertionError("unexpected files")
+ for runid in [44206114970,44206121630]:
   run=gh("actions/runs/"+str(runid))
   if run["head_sha"]!=PIN or run["conclusion"]!="success" or run["status"]!="completed":
    raise AssertionError("CI run not pinned or green")
- jobs=gh("actions/runs/44130968138/jobs?per_page=100")
+ jobs=gh("actions/runs/44206121630/jobs?per_page=100")
  names={job["name"] for job in jobs["jobs"]}
  if names!={"lint-and-audit","glh-stage1-postgres-synthetic"} or not all(j["conclusion"]=="success" for j in jobs["jobs"]):
   raise AssertionError("required CI jobs absent")
@@ -63,7 +85,7 @@ def read(root):
  if subprocess.check_output(["git","-C",str(root),"rev-parse","HEAD"],text=True).strip()!=PIN:
   raise AssertionError("wrong candidate checkout")
  result={}
- for key,path in zip(["design_ci","workflow","runbook","browser","design_test"],FILES):
+ for key,path in zip(["design_ci","workflow","runbook","browser","design_test","close_sql","closer","fixture","pg_assertions"],FILES):
   f=root/path
   if f.is_symlink() or not f.is_file() or not f.resolve().is_relative_to(root):
    raise AssertionError("invalid source path")
@@ -83,6 +105,10 @@ def assess(doc):
   (r"(?i)gh\s+pr\s+merge", "unapproved merge")]:
   if re.search(pattern,wf):errors.append(label)
  if "secrets." in doc["design_ci"]:errors.append("untrusted design CI reads secrets")
+ if re.search(r"(?i)SET\\s+enabled\\s*=\\s*true",doc["close_sql"]):
+  errors.append("failclose code can activate gate")
+ if "SERVICE_ROLE_KEY" in doc["closer"] or "console.log(error)" in doc["closer"]:
+  errors.append("privileged credential or raw error in cleanup client")
  if re.search(r"console\.(?:log|error)\s*\(\s*(?:error|password|token)\b",doc["browser"]):
   errors.append("browser logs secret-capable error")
  if "page.screenshot(" in doc["browser"]:errors.append("unprotected screenshots")
@@ -118,7 +144,9 @@ def main():
  print("WOS_P2_PR242_CANDIDATE_CODE_EXECUTED=NO")
  print("WOS_P2_PR242_QA_SECRETS_ACCESSED=NO")
  print("WOS_P2_PR242_NO_PROD_RELEASE_PROOF=PENDING")
- print("WOS_P2_PR242_IMMEDIATE_GATE_OFF=NOT_IMPLEMENTED")
+ print("WOS_P2_PR242_FAIL_CLOSE_DB_AND_PG17=VERIFIED")
+ print("WOS_P2_PR242_PROTECTED_HTTP_EXECUTION=NOT_RUN")
+ print("WOS_P2_PR242_CURRENT_VERCEL_IGNORE_BUILD_CONFIG=UNVERIFIED")
  print("WOS_P2_PR242_HUMAN_REVIEW=NOT_GRANTED")
  print("WOS_P2_PR242_MERGE_DISPATCH_APPROVAL=WITHHELD")
  return 0
