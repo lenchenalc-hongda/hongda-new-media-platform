@@ -287,6 +287,13 @@ BEGIN
  OR (v_actor.role='sales' AND v_order.sales_owner_profile_id<>v_actor.id
  AND v_order.created_by_profile_id<>v_actor.id)
  THEN RAISE EXCEPTION 'ORDER_SCOPE_OR_VERSION_DENIED' USING ERRCODE='42501'; END IF;
+ -- Even trusted Edge service_role must not mint a candidate proof for
+ -- any pre-existing legacy QA order outside the new CPC-bound cohort.
+ IF NOT EXISTS(SELECT 1 FROM wos_mvp_qa.cpc_order_bindings b
+    WHERE b.order_id=p_order_id AND b.organization_id=v_actor.org_id
+    AND b.customer_id=v_order.customer_id AND b.project_id=v_order.project_id)
+ THEN RAISE EXCEPTION 'QA_OVERLAY_PROOF_REQUIRES_NEW_CPC_BOUND_ORDER'
+  USING ERRCODE='23514';END IF;
  v_prefix:='organizations/'||v_actor.org_id::text||
   '/wos/production-order/'||p_order_id::text||
   '/images/product/versions/'||v_order.version_label||
@@ -366,6 +373,13 @@ BEGIN
  OR (v_actor.role='sales' AND v_actor.id<>v_order.created_by_profile_id
    AND v_actor.id<>v_order.sales_owner_profile_id)
  THEN RAISE EXCEPTION 'ORDER_VERSION_OR_ROLE_DENIED' USING ERRCODE='PT409'; END IF;
+ -- Even trusted Edge service_role must not mint a candidate proof for
+ -- any pre-existing legacy QA order outside the new CPC-bound cohort.
+ IF NOT EXISTS(SELECT 1 FROM wos_mvp_qa.cpc_order_bindings b
+    WHERE b.order_id=p_order_id AND b.organization_id=v_actor.org_id
+    AND b.customer_id=v_order.customer_id AND b.project_id=v_order.project_id)
+ THEN RAISE EXCEPTION 'QA_OVERLAY_PROOF_REQUIRES_NEW_CPC_BOUND_ORDER'
+  USING ERRCODE='23514';END IF;
  v_prefix:='organizations/'||v_actor.org_id::text||
  '/wos/production-order/'||p_order_id::text||
  '/images/product/versions/'||v_order.version_label||'/'||p_image_id::text||'/';
