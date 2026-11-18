@@ -73,9 +73,7 @@ function verifyReady(payload,c,nowMs) {
    reject('QA_OWNER_CAS_EXPIRY_INVALID');
  return true;
 }
-async function checkOnce({env=process.env,fetchImpl=fetch,now=Date.now}={}) {
- const c=config(env);
- const token=await adminToken(fetchImpl,c);
+async function proofRpc({fetchImpl,c,token,now}) {
  const payload=await api(fetchImpl,ATTEST_RPC,{
    method:'POST',
    headers:{
@@ -95,20 +93,29 @@ async function checkOnce({env=process.env,fetchImpl=fetch,now=Date.now}={}) {
  verifyReady(payload,c,now());
  return {status:'READY'};
 }
+async function checkOnce({env=process.env,fetchImpl=fetch,now=Date.now}={}) {
+ const c=config(env);
+ const token=await adminToken(fetchImpl,c);
+ return proofRpc({fetchImpl,c,token,now});
+}
 async function waitForReady({
  env=process.env,fetchImpl=fetch,now=Date.now,
  sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms)),
  maxMs=MAX_POLL_MS,intervalMs=INTERVAL_MS,emit=console.log,
 }={}){
  // Strict maximum; unit tests inject a shorter deadline without any real DB.
- config(env);
+ const c=config(env);
  if(!Number.isFinite(maxMs)||maxMs<0||maxMs>MAX_POLL_MS ||
     !Number.isFinite(intervalMs)||intervalMs<1||intervalMs>INTERVAL_MS)
    reject('QA_ATTEST_POLL_LIMIT_INVALID');
+ // Use one protected QA Admin auth session for the entire short poll.
+ // Repeated password logins every five seconds would cause rate limits and
+ // unnecessary sessions; this bearer token is never logged or persisted.
+ const token=await adminToken(fetchImpl,c);
  const started=now();
  let attempts=0;
  for(;;){
-   const observed=await checkOnce({env,fetchImpl,now});
+   const observed=await proofRpc({fetchImpl,c,token,now});
    attempts++;
    if(observed.status==='READY'){
      emit('WOS_P2_OWNER_CAS_LIVE_DB_RUN_BOUND_PROOF=PASS');
