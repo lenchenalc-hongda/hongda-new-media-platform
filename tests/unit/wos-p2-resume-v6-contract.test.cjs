@@ -81,6 +81,13 @@ test('CAS SQL requires the failed prior run to be closed and forbids replay',()=
 });
 test('v6 attestor is additive, JWT-scoped, explicitly GRANTed, and never opens Gates',()=>{
   assert.match(sql,/CREATE OR REPLACE FUNCTION public\.wos_qa_p2_resume_v6_owner_attest/);
+  assert.equal((sql.match(/^CREATE OR REPLACE FUNCTION/gm)||[]).length,1,
+    'v6 SQL must contain only its one new additive attestor function');
+  assert.equal((sql.match(/^BEGIN;$/gm)||[]).length,1);
+  assert.equal((sql.match(/^COMMIT;$/gm)||[]).length,1);
+  assert.doesNotMatch(sql,/CREATE\s+TABLE|CREATE\s+TRIGGER|ALTER\s+TABLE|DROP\s+/i,
+    'v6 SQL must not recreate installed QA tables/triggers or alter legacy objects');
+
   assert.doesNotMatch(sql,/CREATE OR REPLACE FUNCTION public\.wos_qa_p2_owner_cas_attest\(/);
   assert.match(sql,/p_expected_version IS DISTINCT FROM 6/);
   assert.match(sql,/v_order\.workflow_status IS DISTINCT FROM 'WORKSHOP_REVIEW'/);
