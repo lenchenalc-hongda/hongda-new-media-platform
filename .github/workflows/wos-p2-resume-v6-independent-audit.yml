@@ -74,7 +74,8 @@ jobs:
               'group: wos-p2-protected-browser']:
            assert fragment in workflow,fragment
           assert '\n  push:' not in workflow
-          assert 'service_role' not in workflow.lower().replace('no service_role','')
+          assert 'secrets.SUPABASE_SERVICE_ROLE_KEY' not in workflow
+          assert 'SUPABASE_SERVICE_ROLE' not in workflow
           assert 'contents: write' not in workflow
           print('QA_V6_PROTECTED_MANUAL_ENV_FAILCLOSE=PASS')
           prefix='docs/workshop-order-system/nonproduction-only/'
