@@ -1,8 +1,17 @@
 -- EPHEMERAL PostgreSQL 17 ONLY. Builds schema-compatible synthetic QA
 -- tables for source audit of the proposed, NOT INSTALLED attestation RPC.
 -- NEVER run against a hosted Supabase or real business database.
-CREATE ROLE anon NOLOGIN;
-CREATE ROLE authenticated NOLOGIN;
+-- Roles are cluster-wide; a second ephemeral test database reuses them.
+DO $fixture_roles$
+BEGIN
+ IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='anon') THEN
+   CREATE ROLE anon NOLOGIN;
+ END IF;
+ IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='authenticated') THEN
+   CREATE ROLE authenticated NOLOGIN;
+ END IF;
+END
+$fixture_roles$;
 CREATE SCHEMA auth;
 CREATE SCHEMA wos_qa_safety;
 CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE
