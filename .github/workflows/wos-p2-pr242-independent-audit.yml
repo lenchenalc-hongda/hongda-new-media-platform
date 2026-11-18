@@ -26,14 +26,14 @@ jobs:
       - name: Checkout PR242 pinned source as untrusted data only
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
-          ref: f7ab0127670d363d5e51cff23e323d7edda0b831
+          ref: 79d64514799401a2df98844ddc5be11ddc49697d
           path: candidate
           persist-credentials: false
       - name: Validate separate SHA provenance and no QA secrets
         run: |
           set -euo pipefail
           test "$(git -C reviewer rev-parse HEAD)" = "$GITHUB_SHA"
-          test "$(git -C candidate rev-parse HEAD)" = "f7ab0127670d363d5e51cff23e323d7edda0b831"
+          test "$(git -C candidate rev-parse HEAD)" = "79d64514799401a2df98844ddc5be11ddc49697d"
           test -z "$(printenv SUPABASE_SERVICE_ROLE_KEY || true)"
           test -z "$(printenv REVIEW_DEV_ADMIN_PASSWORD || true)"
           echo WOS_P2_REVIEWER_INDEPENDENT_RUNNER_IDENTITY=PASS
