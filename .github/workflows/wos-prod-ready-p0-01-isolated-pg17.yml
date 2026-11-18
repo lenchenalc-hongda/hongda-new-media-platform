@@ -109,6 +109,18 @@ jobs:
           test "$(psql -At -d wos_p0_cpc_fault -c "SELECT count(*) FROM pg_indexes WHERE indexname='wos_mvp_cpc_project_customer_org_unique'")" = "0"
           test "$(psql -At -d wos_p0_cpc_fault -c "SELECT is_nullable FROM information_schema.columns WHERE table_schema='public' AND table_name='wos_production_orders' AND column_name='customer_id'")" = "YES"
           echo WOS_P0_01_02_CPC_PROPOSAL_FAILURE_ROLLBACK=PASS
+      - name: Synthetic CPC draft, private image claim and atomic first submit
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql -v ON_ERROR_STOP=1 -d wos_p0_contract -f tests/sql/wos-prod-p0-01/synthetic-cpc-authorization.sql >/dev/null
+          if psql -v ON_ERROR_STOP=1 -d wos_p0_contract -f docs/workshop-order-system/production-readiness/wos_mvp_draft_image_submit_SYNTHETIC_ONLY_NOT_INSTALLED.sql >/tmp/wos-draft-guard.out 2>&1; then
+            echo 'FAIL: synthetic draft proposal installed without guard'
+            exit 1
+          fi
+          grep -q 'WOS_DRAFT_SUBMIT_PROPOSAL_ISOLATED_ONLY' /tmp/wos-draft-guard.out
+          psql -v ON_ERROR_STOP=1 -d wos_p0_contract -c "SET wos.p0_01_ephemeral_rehearsal='on'" -f docs/workshop-order-system/production-readiness/wos_mvp_draft_image_submit_SYNTHETIC_ONLY_NOT_INSTALLED.sql >/dev/null
+          psql -v ON_ERROR_STOP=1 -d wos_p0_contract -f tests/sql/wos-prod-p0-01/draft-image-submit-assertions.sql
       - name: Fault-injected atomic rollback in a second empty PG17 database
         shell: bash
         run: |
