@@ -1,7 +1,13 @@
 -- PostgreSQL 17 isolated CI fixture ONLY. No real business tables, accounts, or data.
 -- This is a minimal structural stand-in for independently reviewed Production CPC names.
-CREATE ROLE anon NOLOGIN;
-CREATE ROLE authenticated NOLOGIN;
+DO $roles$ BEGIN
+ IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='anon') THEN
+   EXECUTE 'CREATE ROLE anon NOLOGIN';
+ END IF;
+ IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='authenticated') THEN
+   EXECUTE 'CREATE ROLE authenticated NOLOGIN';
+ END IF;
+END $roles$;
 CREATE SCHEMA auth;
 CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS $auth$
   SELECT nullif(current_setting('request.jwt.claim.sub',true),'')::uuid
