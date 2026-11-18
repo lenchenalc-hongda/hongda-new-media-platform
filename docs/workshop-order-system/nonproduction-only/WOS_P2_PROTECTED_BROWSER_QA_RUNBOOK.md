@@ -1,6 +1,21 @@
 # WOS P2｜真实双账号验收执行与安全回退基线（尚未授权执行）
 
-**状态：PREPARED / NOT INSTALLED / NOT DISPATCHED。** 这是独立受保护 QA 浏览器工作流的交付说明，不能直接用于正式业务。
+**状态：QA SQL + FAILCLOSE 已安装 / 真实 E2E 尚未派发。** 这是独立受保护 QA 浏览器工作流的交付说明，不能直接用于正式业务。
+
+
+## 2026-11-18｜QA 双 Gate Fail-close 交付补充（覆盖上述历史“待安装”状态）
+
+本节为现状；前文安装前准入清单保留作历史审批与回归核对，不代表今天仍未安装。
+
+- QA 项目 **仅** `xulmpqaknlwqqculbsek`：已安装的 Office/Review 结构、Operator 兼容 RPC 继续保持；新增 `wos_p2_qa_gate_failclose_safety_20261118` 的 QA-only、close-only 安全模块。没有安装到正式项目。
+- 受保护 GitHub workflow 加入 `if: always()` 的 `wos-p2-qa-gate-failclose.cjs`：用现有受保护 QA Admin 账号 + publishable key 登录，调用 `public.wos_qa_p2_failclose`。此 RPC 只能将 `OPERATOR_WRITES` 和 `OFFICE_WRITES` 原子设为 `false`、清空有效期和审批引用；不能启用 Gate。失败时流水线标红，不能静默算 PASS。
+- `pg_cron` 1.6.4 已只在 QA 安装；任务 `wos-p2-qa-gate-watchdog` 每 **30 秒**在数据库内执行 `wos_qa_safety.reap_expired_p2_gates()`，无需浏览器和 GitHub Runner。其首次执行状态为 `succeeded`。只会物理关闭过期 Gate，不会提前关闭有效授权。
+- [隔离 PostgreSQL 17 Run #44205510581](https://github.com/lenchenalc-hongda/hongda-new-media-platform/actions/runs/44205510581)：真正开启隔离合成 Gate、失败关闭、重放再次关闭、权限拒绝、过期兜底、合法租约不被误关。
+- QA 数据库本地事务演练：在 **未提交的事务**里模拟两 Gate ON，调用真实受限 Admin RPC，并确认两 Gate OFF；另模拟两 Gate 过期并执行 watchdog，同样确认两 Gate OFF。两次均 ROLLBACK，外部用户不可能看到该中间状态。二次独立读取确认 Gate 持久状态仍 OFF，原始业务计数不变。
+- **灾难性 Runner 丢失边界**：GitHub 的 `always()` 在宿主突然失联时不保证执行，此时数据库 watchdog 在**Gate 过期以后**的下一个周期物理关闭它们；不能声称毫秒级/立即关闭。准备启动真双账号 E2E 前，必须重新验证两个 Gate 有效期最多 15 分钟、watchdog 最近成功以及具体的失败关闭结果。
+- 真实使用 QA Admin 密码登录 / 远端 HTTP RPC 的受保护工作流尚未派发，所以 GitHub `always()` 路径暂不能宣称真实 HTTP E2E PASS；**现阶段只已证明 DB 函数实操 + Runner cleanup 代码及隔离 CI**。
+- **Vercel release**：历史 master QA workflow-only 合并对应 Production 部署 `dpl_DJGcgMnt2w17JMxwRY598M73nFyj` 显示 `CANCELED` 并指向 Ignored Build Step，支持历史抑制有效；当前 Vercel 插件未暴露 `commandForIgnoringBuildStep` 设置值，因此不保证后续 PR #242 merge 仍会被忽略。必须由 Owner 在 Vercel Project Settings → Build and Deployment → Ignored Build Step 核对当前规则，并独立复验后才能申请 workflow-only 受保护合并。
+- PR #238 / #241 / #242 全部 Draft，**禁止合并、对外发送、正式部署、真实 QA 写入**，直至用户另行审批指定 HEAD 和测试窗口。
 
 ## 1. 代码与独立技术证据
 
