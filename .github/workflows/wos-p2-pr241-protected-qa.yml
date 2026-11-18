@@ -123,6 +123,7 @@ jobs:
           pnpm exec tsc --noEmit
           pnpm exec tsx tests/unit/workshop-order-suite.test.ts
           node --check ../trusted/tests/e2e/wos-p2-qa-browser.cjs
+          node --check ../trusted/tests/e2e/wos-p2-qa-gate-failclose.cjs
           npm install --prefix /tmp/hongda-qa-browser --no-audit --no-fund \
             --silent playwright@1.56.1
           /tmp/hongda-qa-browser/node_modules/.bin/playwright install --with-deps chromium
@@ -185,6 +186,25 @@ jobs:
           # independently enabled for a short QA-only window immediately before
           # this step; no database credentials, gate install/enable here.
           node tests/e2e/wos-p2-qa-browser.cjs
+      - name: Always atomically close BOTH QA DB gates with QA-admin-only RPC
+        if: always()
+        working-directory: trusted
+        env:
+          GITHUB_RUN_ID: ${{ github.run_id }}
+          WOS_P2_QA_CLOSURE_ENABLED: 'true'
+          WOS_P2_GATE_CLOSE_REASON: ${{ job.status == 'success' && 'PASS' || job.status == 'cancelled' && 'CANCEL' || 'FAIL' }}
+          NEXT_PUBLIC_SUPABASE_URL: https://xulmpqaknlwqqculbsek.supabase.co
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.REVIEW_DEV_SUPABASE_ANON_KEY }}
+          REVIEW_DEV_ADMIN_EMAIL: ${{ secrets.REVIEW_DEV_ADMIN_EMAIL }}
+          REVIEW_DEV_ADMIN_PASSWORD: ${{ secrets.REVIEW_DEV_ADMIN_PASSWORD }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Post-run CLOSE-only request is independent of the browser result.
+          # The RPC checks the authenticated QA Admin profile and can never
+          # open a Gate. No Service Role key is made available to this job.
+          node tests/e2e/wos-p2-qa-gate-failclose.cjs
+          echo WOS_P2_QA_BOTH_GATES_CLOSED_BY_PROTECTED_WORKFLOW=PASS
       - name: Stop local QA Preview even after test failure
         if: always()
         shell: bash
@@ -193,5 +213,6 @@ jobs:
             kill "$(cat /tmp/wos-p2-next.pid)" 2>/dev/null || true
           fi
           echo WOS_P2_LOCAL_PREVIEW_SHUTDOWN_REQUESTED=YES
-          # DBA must separately fail-close OPERATOR_WRITES and OFFICE_WRITES
-          # immediately, including error cases; expiry is only a backup.
+          # A separately installed QA-only pg_cron watchdog is required for
+          # hard Runner termination, which may prevent always() from running.
+          # Never substitute expiry-only fallback for success/failure cleanup.
