@@ -1,0 +1,161 @@
+name: WOS P0-02-02 separate GitHub-hosted no-secret source audit
+on:
+  push:
+    branches:
+      - audit/wos-prod-p0-02-02-independent-20261118
+permissions:
+  contents: read
+  pull-requests: read
+  actions: read
+jobs:
+  independent-technical-audit:
+    if: github.repository == 'lenchenalc-hongda/hongda-new-media-platform'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Trusted master reference (read-only)
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: 7a005119303e852e1041f11bec32e5430286c25e
+          path: baseline
+          persist-credentials: false
+      - name: Exact candidate PR #249 source (read-only)
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: 5d07b8782bdb60f9bf9e448d89c4b751dc7aac4e
+          path: candidate
+          persist-credentials: false
+      - name: Independent source identity and fail-closed security review
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import os, json, pathlib, re, subprocess, urllib.request
+          ROOT=pathlib.Path('candidate')
+          REPO='lenchenalc-hongda/hongda-new-media-platform'
+          HEAD='5d07b8782bdb60f9bf9e448d89c4b751dc7aac4e'
+          BASE='7a005119303e852e1041f11bec32e5430286c25e'
+          EXPECTED=set([".github/workflows/wos-prod-ready-p0-01-isolated-pg17.yml","docs/workshop-order-system/production-readiness/P0-01-04-IMPLEMENTATION-PLAN.md","docs/workshop-order-system/production-readiness/p0-01-object-contract.json","docs/workshop-order-system/production-readiness/wos_mvp_complete_office_form_PROPOSAL_NOT_INSTALLED.sql","docs/workshop-order-system/production-readiness/wos_mvp_cpc_pair_PROPOSAL_NOT_INSTALLED.sql","docs/workshop-order-system/production-readiness/wos_mvp_draft_image_submit_SYNTHETIC_ONLY_NOT_INSTALLED.sql","docs/workshop-order-system/production-readiness/wos_mvp_private_storage_RLS_PROPOSAL_NOT_INSTALLED.sql","docs/workshop-order-system/production-readiness/wos_mvp_private_storage_attestation_PROPOSAL_NOT_INSTALLED.sql","docs/workshop-order-system/production-readiness/wos_mvp_receipts_PROPOSAL_NOT_INSTALLED.sql","scripts/wos-prod-readiness/p0-01-source-guard.mjs","src/app/api/workshop-orders/production/candidate-drafts/route.ts","src/app/api/workshop-orders/production/candidate-image-register/route.ts","src/app/api/workshop-orders/production/candidate-office-document/route.ts","src/app/api/workshop-orders/production/candidate-submit/route.ts","src/app/api/workshop-orders/production/cpc-options/route.ts","src/app/workshop-orders/production/new/page.tsx","src/components/workshop-orders/ProductionOrderForm.tsx","src/components/workshop-orders/WosMvpOfficeCandidatePanel.tsx","src/lib/workshop-orders/prod-cpc-eligibility.ts","src/lib/workshop-orders/prod-office-document-candidate.ts","src/lib/workshop-orders/prod-p1-candidate-contract.ts","supabase/functions/wos-mvp-verify-image-candidate/contract.ts","supabase/functions/wos-mvp-verify-image-candidate/index.ts","supabase/functions/wos-mvp-verify-image-candidate/png.ts","tests/sql/wos-prod-p0-01/contract-assertions.sql","tests/sql/wos-prod-p0-01/cpc-concurrency.sh","tests/sql/wos-prod-p0-01/cpc-pair-assertions.sql","tests/sql/wos-prod-p0-01/draft-image-submit-assertions.sql","tests/sql/wos-prod-p0-01/full-office-form-submit-assertions.sql","tests/sql/wos-prod-p0-01/synthetic-cpc-authorization.sql","tests/sql/wos-prod-p0-01/synthetic-foundation.sql","tests/sql/wos-prod-p0-01/synthetic-storage-metadata.sql","tests/sql/wos-prod-p0-01/verified-storage-image-assertions.sql","tests/unit/workshop-order-prod-cpc-eligibility.test.ts","tests/unit/workshop-order-prod-office-form-candidate.test.ts","tests/unit/workshop-order-prod-p1-candidate-contract.test.ts","tests/unit/workshop-order-prod-private-image-edge.test.ts","tests/unit/workshop-order-suite.test.ts","tsconfig.json"])
+          def git(dir):
+            return subprocess.check_output(['git','-C',dir,'rev-parse','HEAD'],text=True).strip()
+          assert git('candidate')==HEAD and git('baseline')==BASE,'CHECKOUT_SHA_IDENTITY_FAIL'
+          assert os.environ['GITHUB_REF']=='refs/heads/audit/wos-prod-p0-02-02-independent-20261118'
+          def api(endpoint):
+            req=urllib.request.Request('https://api.github.com/repos/'+REPO+'/'+endpoint,headers={
+             'Authorization':'Bearer '+os.environ['GH_TOKEN'],
+             'Accept':'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28'})
+            with urllib.request.urlopen(req,timeout=25) as response: return json.load(response)
+          pr=api('pulls/249')
+          assert pr['head']['sha']==HEAD and pr['base']['sha']==BASE
+          assert pr['draft'] and not pr['merged'] and pr['state']=='open'
+          fs=api('pulls/249/files?per_page=100')
+          actual={x['filename'] for x in fs}
+          assert len(fs)==len(EXPECTED) and actual==EXPECTED,'CANDIDATE_PATH_ALLOWLIST_CHANGED'
+          lock={x['filename'] for x in api('pulls/202/files?per_page=100')}
+          assert actual.isdisjoint(lock),'PR202_SHARED_LOCK_PATH_TOUCHED'
+          assert not any(x.startswith('supabase/migrations/') for x in actual)
+          assert not any(x.startswith('src/lib/supabase/') or '/.env' in x for x in actual)
+          print('WOS_P0_02_02_EXACT_SHA_PATHS_PR202_LOCK=PASS')
+          def source(path): return (ROOT/path).read_text(encoding='utf-8')
+          edge=source('supabase/functions/wos-mvp-verify-image-candidate/index.ts')
+          ec=source('supabase/functions/wos-mvp-verify-image-candidate/contract.ts')
+          ui=source('src/components/workshop-orders/WosMvpOfficeCandidatePanel.tsx')
+          page=source('src/app/workshop-orders/production/new/page.tsx')
+          form=source('src/components/workshop-orders/ProductionOrderForm.tsx')
+          apis=[source('src/app/api/workshop-orders/production/'+name+'/route.ts')
+           for name in ('cpc-options','candidate-drafts','candidate-office-document',
+            'candidate-image-register','candidate-submit')]
+          raw='\\n'.join(apis)
+          assert "const ONLY_QA_URL = 'https://xulmpqaknlwqqculbsek.supabase.co'" in edge
+          for marker in ("Deno.env.get('SUPABASE_URL')!==ONLY_QA_URL",
+           "Deno.env.get('WOS_MVP_IMAGE_CANDIDATE_ENABLED')!=='true'",
+           "userDb.auth.getUser(token)",".eq('user_id',user.id).eq('is_active',true)",
+           "await check()","userDb.storage.from(IMAGE_BUCKET)",
+           ".download(body.storagePath)","pngValid(bytes,body.sha256)",
+           "const before=await snapshot()","const after=await snapshot()",
+           "sameStorageObject(before,after)",
+           "admin.rpc('wos_mvp_commit_image_proof_candidate'"):
+            assert marker in edge,('EDGE_GUARD_MISSING',marker)
+          assert edge.count('await check()')>=2
+          assert not re.search(r"admin\.storage\.",edge)
+          assert 'getUser(token)' in edge and 'raw_user_meta_data' not in edge
+          for marker in ('order.version!==request.expectedVersion','order.organization_id!==actor.org_id',
+            "order.workflow_status!=='DRAFT'",'request.storagePath===expectedProductPngPath',
+            'a.objectVersion===b.objectVersion','a.objectUpdatedAt===b.objectUpdatedAt'):
+            assert marker in ec,('EDGE_SCOPE_MARKER_MISSING',marker)
+          print('WOS_P0_02_02_EDGE_USER_RLS_BYTES_SHA_VERSION_IDENTITY=PASS')
+          for marker in ("process.env.VERCEL_ENV === 'preview'",
+            'WOS_PROD_P1_UI_CANDIDATE_ENABLED','WOS_PROD_P1_DRAFT_CANDIDATE_ENABLED',
+            'WOS_PROD_P1_OFFICE_CANDIDATE_ENABLED','WOS_PROD_P1_IMAGE_CANDIDATE_ENABLED',
+            'WOS_PROD_P1_SUBMIT_CANDIDATE_ENABLED','isWosCpcReadCandidateEnabled'):
+            assert marker in page,('PREVIEW_SWITCH_MISSING',marker)
+          assert '<ProductionOrderForm candidateLive={candidateLive}' in page
+          assert 'WosMvpOfficeCandidatePanel' in form
+          for marker in ("client.storage.from('wos-private').upload",
+            'upsert:false','functions.invoke(', 'INDEPENDENT_EDGE_BYTE_ATTESTATION_REQUIRED',
+            'candidate-office-document','candidate-image-register',
+            'candidate-submit','CPC_OPTIONS_RLS_VERIFIED'):
+            assert marker in ui,('OFFICE_FLOW_BYPASS',marker)
+          assert 'service_role' not in raw.lower() and 'NEXT_PUBLIC_SUPABASE_SERVICE' not in raw
+          assert all('isWosCpcReadCandidateEnabled' in x for x in apis)
+          assert 'wos_mvp_submit_first_order_full_candidate' in apis[-1]
+          assert "wos_mvp_submit_first_order_candidate" not in apis[-1]
+          print('WOS_P0_02_02_OFFICE_UI_ALL_FLAGS_AND_FULL_RPC=PASS')
+          proof=source('docs/workshop-order-system/production-readiness/wos_mvp_private_storage_attestation_PROPOSAL_NOT_INSTALLED.sql')
+          doc=source('docs/workshop-order-system/production-readiness/wos_mvp_complete_office_form_PROPOSAL_NOT_INSTALLED.sql')
+          storage=source('docs/workshop-order-system/production-readiness/wos_mvp_private_storage_RLS_PROPOSAL_NOT_INSTALLED.sql')
+          for needle in ("WOS_REAL_STORAGE_PROOF_PROPOSAL_NOT_AUTHORIZED",
+            'storage_object_id uuid NOT NULL','storage_object_version text',
+            'storage_object_updated_at timestamptz NOT NULL','order_version integer NOT NULL',
+            'actor_user_id uuid NOT NULL','verified_sha256 text NOT NULL',
+            'ALTER TABLE wos_mvp_attestation.private_image_proofs ENABLE ROW LEVEL SECURITY',
+            'wos_mvp_commit_image_proof_candidate', 'JOIN storage.objects obj',
+            'obj.version IS NOT DISTINCT FROM proof.storage_object_version',
+            'proof.order_version=v_order.version'):
+            assert needle in proof,('PROOF_LEDGER_MISSING',needle)
+          for needle in ("WOS_OFFICE_DOCUMENT_PROPOSAL_NOT_AUTHORIZED",
+            'OFFICE_FORM_FIELD_SET_MISMATCH','jsonb_object_keys(p_document)',
+            'wos_mvp_save_complete_office_candidate','office_document_receipts',
+            'wos_mvp_submit_first_order_full_candidate',
+            'OFFICE_FIELDS_NOT_SAVED_FOR_CURRENT_VERSION'):
+            assert needle in doc,('COMPLETE_DOCUMENT_MISSING',needle)
+          for needle in ("WOS_STORAGE_RLS_PROPOSAL_NOT_AUTHORIZED",
+            'CREATE POLICY wos_mvp_candidate_private_upload',
+            'CREATE POLICY wos_mvp_candidate_private_read',
+            'REVOKE ALL ON storage.objects FROM PUBLIC,anon,authenticated',
+            'AND p.role IN (', 'auth.uid()'):
+            assert needle in storage,('STORAGE_RLS_PROPOSAL_MISSING',needle)
+          assert not re.search(r'\bGRANT\s+(?:ALL|INSERT|UPDATE|DELETE)\s+ON\s+wos_mvp_attestation\.private_image_proofs',proof,re.I)
+          assert 'FROM PUBLIC,anon,authenticated' in proof
+          assert "FROM PUBLIC,anon,authenticated,service_role" in proof
+          assert "GRANT EXECUTE ON FUNCTION public.wos_mvp_commit_image_proof_candidate" in proof
+          assert "TO service_role" in proof
+          assert 'WOS_PROD_P1_UI_CANDIDATE_ENABLED' not in edge
+          for path in ('docs/workshop-order-system/production-readiness/wos_mvp_private_storage_attestation_PROPOSAL_NOT_INSTALLED.sql',
+          'docs/workshop-order-system/production-readiness/wos_mvp_complete_office_form_PROPOSAL_NOT_INSTALLED.sql'):
+            s=source(path)
+            assert len(re.findall(r'^BEGIN;',s,re.M))==1 and len(re.findall(r'^COMMIT;',s,re.M))==1
+          print('WOS_P0_02_02_PRIVATE_PROOF_AND_OFFICE_SQL_FAILCLOSED=PASS')
+          tests=source('tests/sql/wos-prod-p0-01/full-office-form-submit-assertions.sql')
+          for marker in ('MISSING_PATTERN_SCOPE_WAS_SAVED','MISSING_SHIP_DATE_WAS_SAVED',
+            'MISSING_CARTON_QUANTITY_WAS_SAVED','FORGED_ORG_EXTRA_FIELD_WAS_SAVED',
+            'FULL_OFFICE_FIRST_SUBMIT_FAILED'):
+            assert marker in tests,('NEGATIVE_SQL_TEST_MISSING',marker)
+          assert "WOS_P0_02_02_FULL_OFFICE_DOCUMENT_V2_PRIVATE_IMAGE_AND_V3_SUBMIT=PASS" in tests
+          assert 'WOS_P0_02_02_BOUND_PROOF_STORAGE_IDENTITY_AND_VERIFIED_SUBMIT=PASS' in source('tests/sql/wos-prod-p0-01/verified-storage-image-assertions.sql')
+          print('WOS_P0_02_02_SEPARATE_SOURCE_NEGATIVE_TESTS_AND_EXCLUSIONS=PASS')
+          PY
+      - name: Independent GitHub-hosted negative contract tests (no Supabase tokens)
+        working-directory: candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          corepack enable
+          corepack prepare pnpm@10.11.0 --activate
+          pnpm install --frozen-lockfile
+          pnpm exec tsx tests/unit/workshop-order-prod-private-image-edge.test.ts
+          pnpm exec tsx tests/unit/workshop-order-prod-office-form-candidate.test.ts
+          pnpm exec tsx tests/unit/workshop-order-prod-cpc-eligibility.test.ts
+          echo WOS_P0_02_02_SEPARATE_HOSTED_TECHNICAL_AUDIT=PASS
