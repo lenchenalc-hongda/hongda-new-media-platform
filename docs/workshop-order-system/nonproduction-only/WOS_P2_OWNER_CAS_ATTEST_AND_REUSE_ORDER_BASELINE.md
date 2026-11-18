@@ -38,10 +38,11 @@
 
 参见 `wos_p2_owner_cas_attest_PROPOSED_QA_ONLY.sql`。
 
-- 只新增一个只读的 `public.wos_qa_p2_owner_cas_attest(text,uuid,text,integer)`；不新建任何表，也不修改原 Gate 表权限。
+- 仅设计一个 QA 私有安全回执表 `wos_qa_safety.p2_gate_open_receipts`（Run ID 唯一，拒绝 anon/authenticated 的 SELECT/INSERT/UPDATE，启用 RLS）和一个只读的 `public.wos_qa_p2_owner_cas_attest(text,uuid,text,integer)`；不修改任何原 Gate 表权限。**两者都尚未安装到真实 QA。**
 - 函数在只读查询中使用经过 Supabase JWT 确认的 `auth.uid()` 和权威 `profiles`，限定本组织有效 Admin，拒绝 anon/Operator/其他组织 Admin。
 - 函数内置固定 QA 项目和固定订单/业务 SHA/版本，核验原始 Inbox/回执与无 P2 动作，并拒绝同 Run 的历史 Close Receipt。
-- 严格核验两个 Gate 的 `enabled=true`、独立 Owner CAS `approval_reference=OWNER_RUN_<runId>_PR241_89bb408d`、时间窗口和两行更新一致性，才能回 `READY`。仅关闭状态可回 `WAITING`；任何部分开启、过期或审批引用不符均拒绝。
+- **必须存在真实私有开闸回执**：同一 Owner DBA 原子事务内成功更新两个 Gate，随后插入唯一 `p2_gate_open_receipts`。证明函数核对私有回执的 Run ID、原订单、业务 SHA、精确批准引用、`opened_at` 和 `expires_at`，并要求它们与两条 Gate 的值完全相同才返回 `READY`。只靠两个 Gate 都 ON、时间戳接近、GitHub 评论或客户端环境变量均不足以放行。
+- 严格核验双 Gate `enabled=true`、`approval_reference=OWNER_RUN_<runId>_PR241_89bb408d`、<=15 分钟 TTL 及回执一致性。仅双 Gate 都关闭且**无开闸回执**时可回 `WAITING`；任何部分开启、缺失回执、过期或引用不符均拒绝。
 - `SECURITY DEFINER` 是为了精确读取已经受控的 Gate 表；设置固定 `search_path`，`REVOKE EXECUTE FROM PUBLIC,anon`，`GRANT EXECUTE TO authenticated` 且函数内部检查有效 QA Admin。**不得**给 authenticated/anon 任何 Gate 表的 SELECT/UPDATE 权限。
 - 不访问正式业务 Supabase，不使用 Service Role 客户端密钥，不修改生产数据库、RLS、Storage、Secrets 或 Vercel Production。
 
@@ -52,8 +53,8 @@
 未来在新一条、精确 HEAD 且唯一一次的 Owner 批准下：
 
 - 对接精确 GitHub Run ID（不可复用失败 Run #44255738492 或其他已关闭 Run）。
-- 在 Owner 的独立 QA DBA 数据库事务中检查旧 Gate 都是 OFF 且 TTL NULL、无该 Run 的旧关闭回执、订单仍为 SUBMITTED/2；用单次原子 CAS 将两个 Gate 都写入 **同一个不超过 15 分钟**的到期时刻、与该 Run ID 精确匹配的 `approval_reference`，并保证异常时事务整体回滚。
-- 两个 Gate 的状态从可被只读证明函数确认的同一个新授权产生，而不是直接使用客户端布尔变量。
+- 使用 `wos_p2_owner_cas_ACTIVATION_TEMPLATE_NOT_AUTHORIZED.sql` 的经审核版本作为唯一 Owner DBA 原子事务框架；未替换 `REPLACE_WITH_NEW_APPROVED_GITHUB_RUN_ID` 的模板明确不能成功运行。在同一事务中检查旧 Gate OFF/TTL NULL、无旧开闸/关闭回执、固定订单 SUBMITTED/2，CAS 写入两个 Gate **完全相同**的开启时刻和至多 15 分钟 TTL，原子插入唯一私有开闸回执；任何失败整个事务回滚。
+- 两个 Gate 必须和唯一私有开闸回执在**同一个 DB Commit** 成立；单独打开 Gate 或在另一事务补插回执不符合 Owner 事务审计要求。只读证明函数同时核验三者的原始精确字段。
 - 激活后受保护 GitHub Runner 仅能读取新证明函数，不能执行任何 DBA 写入；若 Owner 未执行 CAS，则到了等待截止时间直接失败。
 - 证据至少包括 GitHub Run ID、Owner CAS 原子成功回执、只读 Gate 证明的 READY、真实浏览器各步骤、`always()` close-only 回执、Watcher 记录及事务后数据库状态。
 
