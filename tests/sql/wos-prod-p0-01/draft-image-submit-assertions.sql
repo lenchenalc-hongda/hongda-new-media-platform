@@ -164,13 +164,13 @@ VALUES('88888888-0000-4000-8000-000000000003','aaaaaaaa-0000-4000-8000-000000000
  'synthetic-private/58888888-0000-4000-8000-000000000003.png','V1',
  repeat('b',64),clock_timestamp()+interval '10 minutes');
 CREATE FUNCTION public.wos_mvp_synthetic_inbox_failure()
-RETURNS trigger LANGUAGE plpgsql AS $
+RETURNS trigger LANGUAGE plpgsql AS $synthetic_inbox$
 BEGIN
  IF NEW.order_id='58888888-0000-4000-8000-000000000003' THEN
   RAISE EXCEPTION 'WOS_SYNTHETIC_INBOX_FAILURE' USING ERRCODE='PT500';
  END IF;
  RETURN NEW;
-END $;
+END $synthetic_inbox$;
 CREATE TRIGGER wos_mvp_synthetic_inbox_failure BEFORE INSERT ON public.wos_workshop_inbox
 FOR EACH ROW EXECUTE FUNCTION public.wos_mvp_synthetic_inbox_failure();
 SET ROLE authenticated;
