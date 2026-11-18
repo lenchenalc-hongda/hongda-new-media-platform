@@ -140,12 +140,23 @@ async function main() {
   const batch=Number(fields['本批生产数量']);
   assert(Number.isSafeInteger(requested)&&Number.isSafeInteger(batch)&&requested>=batch);
   const correctedName=(fields['产品名称']+' P2QA').slice(0,195);
-  await officeCard.getByLabel('产品名称').fill(correctedName);
-  await officeCard.getByLabel('产品材质').fill('QA verified plastic composition');
-  await officeCard.getByLabel('订单总数量').fill(String(requested+50));
-  await officeCard.getByLabel('本批生产数量').fill(String(batch));
-  await officeCard.getByLabel('客户验收标准').fill('QA corrected visual quality standard approved for synthetic test');
-  await officeCard.getByLabel('印刷定位 / 位置说明').fill('QA corrected 15 mm left alignment');
+  const correctedQuantity=requested+50;
+  const correctedBatch=batch+1;
+  assert(Number.isSafeInteger(correctedQuantity)&&correctedQuantity>0);
+  assert(Number.isSafeInteger(correctedBatch)&&correctedBatch<=correctedQuantity);
+  const sixFieldEdits={
+    '产品名称':correctedName,
+    '产品材质':'QA verified plastic composition '+orderNumber,
+    '订单总数量':String(correctedQuantity),
+    '本批生产数量':String(correctedBatch),
+    '客户验收标准':'QA corrected visual quality standard '+orderNumber,
+    '印刷定位 / 位置说明':'QA corrected 15 mm left alignment '+orderNumber,
+  };
+  for (const [label,newValue] of Object.entries(sixFieldEdits)) {
+    assert.notEqual(newValue,fields[label],
+      'six-field test must actually modify every original field');
+    await officeCard.getByLabel(label).fill(newValue);
+  }
   await officeCard.locator('textarea').fill('Office corrected all six allowed fields after workshop return.');
 
   stage='OFFICE_SAVE_REVISION';
@@ -165,6 +176,21 @@ async function main() {
   evidence('OFFICE_SIX_FIELD_VERSIONED_SAVE_AND_SNAPSHOT');
   // Retries must use the original durable fingerprint; SQL checks the request.
   const savedIntent=JSON.parse(saveRequest.postData());
+  // The real browser must send all six allowlisted fields, not merely touch
+  // six inputs while submitting an unchanged value.
+  const sixExpectedKeys=[
+    'productName','productMaterial','requestedQuantity',
+    'currentBatchQuantity','customerAcceptanceStandard','positionReference',
+  ];
+  assert.deepEqual(Object.keys(savedIntent.patch).sort(),sixExpectedKeys.sort(),
+    'save request did not contain six changed fields');
+  assert.equal(savedIntent.patch.productName,sixFieldEdits['产品名称']);
+  assert.equal(savedIntent.patch.productMaterial,sixFieldEdits['产品材质']);
+  assert.equal(savedIntent.patch.requestedQuantity,correctedQuantity);
+  assert.equal(savedIntent.patch.currentBatchQuantity,correctedBatch);
+  assert.equal(savedIntent.patch.customerAcceptanceStandard,sixFieldEdits['客户验收标准']);
+  assert.equal(savedIntent.patch.positionReference,sixFieldEdits['印刷定位 / 位置说明']);
+  evidence('OFFICE_ALL_SIX_FIELDS_PRESENT_IN_AUTHENTICATED_HTTP_PATCH');
   const replay=await jsonPost(office.page,'/api/workshop-orders/p2/office-revisions',
     savedIntent,'x-wos-p2-office-revision');
   assert.equal(replay.status,200);
@@ -182,6 +208,12 @@ async function main() {
   await office.page.getByRole('button',{name:'刷新退回任务'}).click();
   officeCard=office.page.locator('article').filter({hasText:orderNumber}).first();
   await officeCard.waitFor({timeout:30000});
+  for (const [label,expectedValue] of Object.entries(sixFieldEdits)) {
+    const observed=await officeCard.getByLabel(label).inputValue();
+    assert.equal(observed,expectedValue,
+      'Office re-read did not confirm persisted revision field: '+label);
+  }
+  evidence('OFFICE_SIX_FIELDS_RELOADED_FROM_QA_API');
   await officeCard.locator('textarea').fill('Resubmitting previously saved QA correction to the workshop.');
   const resubmitWait=office.page.waitForResponse(resp=>
     resp.url()===origin+'/api/workshop-orders/p2/office-revisions'
@@ -226,8 +258,17 @@ async function main() {
       const r=await fetch('/api/workshop-orders/inbox',{cache:'no-store',credentials:'same-origin'});
       return {status:r.status,body:await r.json().catch(()=>null)};
     });
-    const ids=inbox.body?.data?.items?.map(x=>x.id)??[];
-    assert(!ids.includes(orderId),'forbidden account read target order');
+    assert([200,403].includes(inbox.status),
+      'negative read test returned unavailable endpoint instead of an access decision');
+    if (inbox.status===200) {
+      assert(Array.isArray(inbox.body?.data?.items),
+        'negative read API response is not an authoritative item collection');
+      const ids=inbox.body.data.items.map(x=>x.id);
+      assert(!ids.includes(orderId),'forbidden account read target order');
+    } else {
+      assert.equal(inbox.body?.ok,false,
+        'negative read denial was not verified');
+    }
   }
   evidence('VIEWER_AND_FOREIGN_DENIED_WITHOUT_SIDE_EFFECTS');
   stage='FINAL_READBACK';
