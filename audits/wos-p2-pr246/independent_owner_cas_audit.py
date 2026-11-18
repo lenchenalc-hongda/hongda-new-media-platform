@@ -9,10 +9,10 @@ from pathlib import Path
 REPO="lenchenalc-hongda/hongda-new-media-platform"
 AUDITOR="audit/wos-p2-pr246-owner-cas-reuse-order-20261118"
 BASE="4cda5481d075dd928b6a68d85513fffe90e6dd10"
-HEAD="be265f8565aba20b1cfd15f5f5429fb191ddb171"
+HEAD="39f76d1ed2158c4b0d4f6f8e316587fd8f2d5684"
 P2="89bb408d13e45458c608db29c47e2803d49b3170"
 P1="6a72b446ccc517a5ff14e531b8a6663b4a70a77e"
-RUNS=(44259911297,44259970036)
+RUNS=(44260440435,44260449908)
 FILES={
  "workflow":".github/workflows/wos-p2-pr241-protected-qa.yml",
  "ci":".github/workflows/wos-p2-owner-cas-reuse-secretless-ci.yml",
@@ -166,13 +166,13 @@ def attest_provenance():
     if run["head_sha"]!=HEAD or run["status"]!="completed" \
        or run["conclusion"]!="success":
       raise AssertionError("latest HEAD CI not green: "+str(rid))
-  jobs=api("actions/runs/44259911297/jobs?per_page=100")
+  jobs=api("actions/runs/44260440435/jobs?per_page=100")
   if jobs["total_count"]!=2 or \
      {j["name"] for j in jobs["jobs"]}!={
        "secretless-runtime-contract","pg17-ephemeral-attestation"} or \
      any(j["conclusion"]!="success" for j in jobs["jobs"]):
     raise AssertionError("QA isolated SQL/Chromium CI not both green")
-  jobs=api("actions/runs/44259970036/jobs?per_page=100")
+  jobs=api("actions/runs/44260449908/jobs?per_page=100")
   if jobs["total_count"]!=2 or \
      {j["name"] for j in jobs["jobs"]}!={"lint-and-audit","glh-stage1-postgres-synthetic"} or \
      any(j["conclusion"]!="success" for j in jobs["jobs"]):
