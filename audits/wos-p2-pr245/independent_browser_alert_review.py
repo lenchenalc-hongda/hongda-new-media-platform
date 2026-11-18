@@ -41,7 +41,7 @@ MUST={
   "44242557421",
   "UNCLASSIFIED","OFFICE_QA_SUBMIT_OR_ERROR",
   "was_enabled=false",
-  "未授权","role=\"alert\"",
+  "新的单次独立 Owner 授权","role=\"alert\"",
   "90 秒","没有连接 QA Auth",
  ],
  "chromium":[
