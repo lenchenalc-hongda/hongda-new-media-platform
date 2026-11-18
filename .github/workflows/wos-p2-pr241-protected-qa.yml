@@ -124,9 +124,33 @@ jobs:
           pnpm exec tsx tests/unit/workshop-order-suite.test.ts
           node --check ../trusted/tests/e2e/wos-p2-qa-browser.cjs
           node --check ../trusted/tests/e2e/wos-p2-qa-gate-failclose.cjs
+          node --check ../trusted/tests/e2e/wos-p2-qa-identity-readonly-preflight.cjs
+          node --test ../trusted/tests/unit/wos-p2-qa-identity-readonly-preflight.test.cjs
           npm install --prefix /tmp/hongda-qa-browser --no-audit --no-fund \
             --silent playwright@1.56.1
           /tmp/hongda-qa-browser/node_modules/.bin/playwright install --with-deps chromium
+      - name: Protected QA authentication and organization read-only preflight
+        working-directory: trusted
+        env:
+          WOS_P2_QA_READONLY_PREFLIGHT_ACK: 'true'
+          WOS_P2_REVIEWED_SHA: ${{ needs.protected-source-gate.outputs.head }}
+          NEXT_PUBLIC_SUPABASE_URL: https://xulmpqaknlwqqculbsek.supabase.co
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.REVIEW_DEV_SUPABASE_ANON_KEY }}
+          REVIEW_DEV_ADMIN_EMAIL: ${{ secrets.REVIEW_DEV_ADMIN_EMAIL }}
+          REVIEW_DEV_ADMIN_PASSWORD: ${{ secrets.REVIEW_DEV_ADMIN_PASSWORD }}
+          REVIEW_DEV_OPERATOR_EMAIL: ${{ secrets.REVIEW_DEV_OPERATOR_EMAIL }}
+          REVIEW_DEV_OPERATOR_PASSWORD: ${{ secrets.REVIEW_DEV_OPERATOR_PASSWORD }}
+          REVIEW_DEV_VIEWER_EMAIL: ${{ secrets.REVIEW_DEV_VIEWER_EMAIL }}
+          REVIEW_DEV_VIEWER_PASSWORD: ${{ secrets.REVIEW_DEV_VIEWER_PASSWORD }}
+          REVIEW_DEV_FOREIGN_EMAIL: ${{ secrets.REVIEW_DEV_FOREIGN_EMAIL }}
+          REVIEW_DEV_FOREIGN_PASSWORD: ${{ secrets.REVIEW_DEV_FOREIGN_PASSWORD }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Login only against exact QA Auth and read the caller's RLS-scoped
+          # profiles row. No business writes, no storage, no RPC, no Gate enable.
+          node tests/e2e/wos-p2-qa-identity-readonly-preflight.cjs
+          echo WOS_P2_QA_PROTECTED_IDENTITY_PREFLIGHT=PASS
       - name: Build and launch local Preview using only QA publishable key
         working-directory: app
         env:
