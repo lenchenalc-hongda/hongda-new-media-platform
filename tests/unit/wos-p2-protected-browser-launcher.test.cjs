@@ -103,8 +103,8 @@ assert(!browser.includes("const origin='http://127.0.0.1:3000'"));
 const handoff=workflow.indexOf('Await live read-only Owner CAS proof for existing order');
 const build=workflow.indexOf('Build and launch local Preview using only QA publishable key');
 const browserStep=workflow.indexOf('Real 2-role Office/Operator test + Viewer/foreign denials');
-const closer=workflow.indexOf('Always atomically close BOTH QA DB gates with QA-admin-only RPC');
-assert(build>=0 && handoff>build && browserStep>handoff && closer>browserStep,
+const closeStepPos=workflow.indexOf('Always atomically close BOTH QA DB gates with QA-admin-only RPC');
+assert(build>=0 && handoff>build && browserStep>handoff && closeStepPos>browserStep,
  'identity/build -> DB attestation -> browser -> always-close must be ordered');
 assert(workflow.includes("WOS_P2_QA_LIVE_OWNER_CAS_VERIFIED_BEFORE_BROWSER=PASS"));
 assert(workflow.includes("WOS_P2_QA_REUSE_EXISTING_ORDER_ONLY: 'true'"));
