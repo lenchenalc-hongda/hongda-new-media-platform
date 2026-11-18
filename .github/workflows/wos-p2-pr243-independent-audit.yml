@@ -1,0 +1,53 @@
+name: WOS P2 PR243 independent localhost guard security review
+on:
+  push:
+    branches:
+      - audit/wos-p2-run44232596314-localhost-fix-20261118
+permissions:
+  contents: read
+  actions: read
+  pull-requests: read
+jobs:
+  master-sourced-independent-static-review:
+    if: >-
+      github.repository == 'lenchenalc-hongda/hongda-new-media-platform' &&
+      github.ref == 'refs/heads/audit/wos-p2-run44232596314-localhost-fix-20261118'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    env:
+      GH_READ_TOKEN: ${{ github.token }}
+    steps:
+      - name: Checkout trusted independent reviewer code from master-derived branch
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.sha }}
+          path: reviewer
+          persist-credentials: false
+      - name: Checkout exact PR243 candidate as untrusted static source only
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: 035b18e56d69398542f086dae4d2303b8c0ea1e0
+          path: candidate
+          persist-credentials: false
+      - name: Checkout immutable PR241 business QA guard as read-only comparison
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: 89bb408d13e45458c608db29c47e2803d49b3170
+          path: business
+          persist-credentials: false
+      - name: Enforce exact source identities and zero privileged QA credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C reviewer rev-parse HEAD)" = "$GITHUB_SHA"
+          test "$(git -C candidate rev-parse HEAD)" = "035b18e56d69398542f086dae4d2303b8c0ea1e0"
+          test "$(git -C business rev-parse HEAD)" = "89bb408d13e45458c608db29c47e2803d49b3170"
+          test -z "$(printenv SUPABASE_SERVICE_ROLE_KEY || true)"
+          test -z "$(printenv REVIEW_DEV_ADMIN_PASSWORD || true)"
+          echo WOS_P2_PR243_INDEPENDENT_THREE_SHA_IDENTITY=PASS
+      - name: Run nonexecuting candidate audit and reviewer-owned negative tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 reviewer/audits/wos-p2-loopback-pr243/independent_audit.py candidate business
+          echo WOS_P2_PR243_INDEPENDENT_SOURCE_AUDIT=PASS
