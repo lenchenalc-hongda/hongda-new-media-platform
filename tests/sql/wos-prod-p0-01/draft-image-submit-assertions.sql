@@ -13,7 +13,7 @@ DECLARE
  d jsonb;
  replay jsonb;
 BEGIN
- d:=wos_mvp_isolated.create_cpc_draft(
+ d:=public.wos_mvp_create_cpc_draft_candidate(
  '58888888-0000-4000-8000-000000000001',
  '31111111-0000-4000-8000-000000000001',
  '41111111-0000-4000-8000-000000000001',
@@ -77,7 +77,7 @@ SET ROLE authenticated;
 DO $submit$
 DECLARE result jsonb; replay jsonb;
 BEGIN
- result:=wos_mvp_isolated.submit_first_order(
+ result:=public.wos_mvp_submit_first_order_candidate(
   '58888888-0000-4000-8000-000000000001',1,
   '78888888-0000-4000-8000-000000000001','Office QA completeness accepted');
  IF result->>'result'<>'CREATED' OR (result->>'version')::int<>2

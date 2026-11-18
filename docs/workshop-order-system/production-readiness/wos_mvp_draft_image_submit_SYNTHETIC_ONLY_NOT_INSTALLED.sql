@@ -198,4 +198,25 @@ GRANT EXECUTE ON FUNCTION
  wos_mvp_isolated.create_cpc_draft(uuid,uuid,uuid,text,text,integer,text),
  wos_mvp_isolated.submit_first_order(uuid,integer,uuid,text)
  TO authenticated;
+-- Public Data API adapters are SECURITY INVOKER and only proxy the locked
+-- ephemeral private functions. These are NOT installed in hosted Supabase.
+CREATE FUNCTION public.wos_mvp_create_cpc_draft_candidate(
+ p_request_id uuid,p_customer_id uuid,p_project_id uuid,p_product_name text,
+ p_material text,p_quantity integer,p_priority text
+) RETURNS jsonb LANGUAGE sql SECURITY INVOKER SET search_path='pg_catalog'
+AS $proxy$ SELECT wos_mvp_isolated.create_cpc_draft(
+ p_request_id,p_customer_id,p_project_id,p_product_name,p_material,p_quantity,p_priority); $proxy$;
+CREATE FUNCTION public.wos_mvp_submit_first_order_candidate(
+ p_order_id uuid,p_expected_version integer,p_idempotency_key uuid,p_note text
+) RETURNS jsonb LANGUAGE sql SECURITY INVOKER SET search_path='pg_catalog'
+AS $proxy$ SELECT wos_mvp_isolated.submit_first_order(
+ p_order_id,p_expected_version,p_idempotency_key,p_note); $proxy$;
+REVOKE ALL ON FUNCTION
+ public.wos_mvp_create_cpc_draft_candidate(uuid,uuid,uuid,text,text,integer,text),
+ public.wos_mvp_submit_first_order_candidate(uuid,integer,uuid,text)
+ FROM PUBLIC,anon,authenticated;
+GRANT EXECUTE ON FUNCTION
+ public.wos_mvp_create_cpc_draft_candidate(uuid,uuid,uuid,text,text,integer,text),
+ public.wos_mvp_submit_first_order_candidate(uuid,integer,uuid,text)
+ TO authenticated;
 COMMIT;
