@@ -11,6 +11,9 @@ BEGIN
      OR has_table_privilege('authenticated','public.wos_qa_p2_execution_gate','UPDATE')
      OR has_table_privilege('authenticated','public.wos_qa_p2_office_execution_gate','SELECT')
      OR has_table_privilege('authenticated','public.wos_qa_p2_office_execution_gate','UPDATE')
+     OR has_table_privilege('authenticated','wos_qa_safety.p2_gate_open_receipts','SELECT')
+     OR has_table_privilege('authenticated','wos_qa_safety.p2_gate_open_receipts','INSERT')
+     OR has_table_privilege('anon','wos_qa_safety.p2_gate_open_receipts','SELECT')
   THEN RAISE EXCEPTION 'QA_ATTEST_GRANTS_NOT_MINIMAL'; END IF;
 END
 $a$;
@@ -62,6 +65,8 @@ $a$;
 COMMIT;
 SELECT 'WOS_P2_QA_PG17_CROSS_ORG_ADMIN_DENIED=PASS' AS result;
 
+-- Deliberately simulate two ON Gates WITHOUT the durable Owner CAS
+-- receipt. Even same timestamps/references are insufficient authorization.
 UPDATE public.wos_qa_p2_execution_gate
  SET enabled=true, enabled_until=clock_timestamp()+interval '12 minutes',
      approval_reference='OWNER_RUN_55555555555_PR241_89bb408d',
@@ -71,6 +76,32 @@ UPDATE public.wos_qa_p2_office_execution_gate
      enabled_until=(SELECT enabled_until FROM public.wos_qa_p2_execution_gate),
      approval_reference='OWNER_RUN_55555555555_PR241_89bb408d',
      updated_at=(SELECT updated_at FROM public.wos_qa_p2_execution_gate);
+BEGIN;
+SET LOCAL ROLE authenticated;
+SELECT set_config('request.jwt.claim.sub','11111111-1111-4111-8111-111111111111',true);
+DO $a$
+BEGIN
+ PERFORM public.wos_qa_p2_owner_cas_attest(
+  '55555555555','953d2204-3e65-4b75-b10e-c6e97f1bbb56',
+  '89bb408d13e45458c608db29c47e2803d49b3170',2);
+ RAISE EXCEPTION 'TWO_ON_GATES_WITHOUT_OWNER_RECEIPT_ALLOWED';
+EXCEPTION WHEN insufficient_privilege THEN NULL;
+END
+$a$;
+COMMIT;
+SELECT 'WOS_P2_QA_PG17_ON_GATES_WITHOUT_OPEN_RECEIPT_DENIED=PASS' AS result;
+
+-- The Owner's durable private receipt is source-of-truth and must be
+-- committed atomically with BOTH Gate writes in the real QA activation
+-- template. Fixture simulates this expected post-commit state.
+INSERT INTO wos_qa_safety.p2_gate_open_receipts
+ (github_run_id,order_id,reviewed_sha,approval_reference,opened_at,expires_at)
+ SELECT '55555555555',
+   '953d2204-3e65-4b75-b10e-c6e97f1bbb56'::uuid,
+   '89bb408d13e45458c608db29c47e2803d49b3170',
+   approval_reference,updated_at,enabled_until
+ FROM public.wos_qa_p2_execution_gate
+ WHERE gate_name='OPERATOR_WRITES';
 
 BEGIN;
 SET LOCAL ROLE authenticated;
