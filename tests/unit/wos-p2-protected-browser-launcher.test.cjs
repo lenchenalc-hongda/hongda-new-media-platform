@@ -72,7 +72,7 @@ for(const v of [
   "v_is_replay := true",
   'REVOKE ALL ON FUNCTION public.wos_qa_p2_failclose',
 ])assert(gateSql.includes(v),'gate close SQL missing '+v);
-assert(!gateSql.includes('enabled=true'),'close-only SQL cannot enable Gate');
+assert(!/SET\s+enabled\s*=\s*true/i.test(gateSql),'close-only SQL cannot enable Gate');
 assert(!gateSql.includes('DROP TABLE'),'QA controller cannot drop tables');
 assert(closer.includes("'/rest/v1/rpc/wos_qa_p2_failclose'"));
 assert(closer.includes("'/auth/v1/token?grant_type=password'"));
