@@ -1,5 +1,9 @@
 -- Transactional dry-run using synthetic project/person/image proof ONLY.
 \set ON_ERROR_STOP on
+-- Prior generic P0-01 fixture used uppercase ACTIVE; real CPC stores lowercase active.
+-- Normalize only the disposable synthetic rows to actual production CPC status casing.
+UPDATE public.cpc_customer_references SET status='active' WHERE id='31111111-0000-4000-8000-000000000001';
+UPDATE public.cpc_projects SET status='active' WHERE id='41111111-0000-4000-8000-000000000001';
 SET wos.p0_01_ephemeral_rehearsal='on';
 -- A second project owned by the same synthetic Sales user (owner is active).
 SELECT set_config('request.jwt.claim.sub','21111111-0000-4000-8000-000000000001',false);
