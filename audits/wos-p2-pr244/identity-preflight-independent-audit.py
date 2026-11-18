@@ -61,7 +61,7 @@ NEEDED={
  ],
 "runbook":[
  "xulmpqaknlwqqculbsek","不授权启动第二轮 E2E",
- "Foreign","sales","另一个组织",
+ "Foreign","sales","必须与 Admin 所属组织不同",
  "两个 Gate","单次 15 分钟",
 ]
 }
