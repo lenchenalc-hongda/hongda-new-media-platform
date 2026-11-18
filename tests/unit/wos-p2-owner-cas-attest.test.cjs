@@ -76,13 +76,16 @@ test('WAITING is not READY or permission to run browser',async()=>{
 });
 test('eventual Owner CAS succeeds without fixed delay, only after DB proof',async()=>{
  let t=now;
- const {fn}=fakeFetch(['WAITING','WAITING','READY']);
+ const {fn,requests}=fakeFetch(['WAITING','WAITING','READY']);
  const logs=[];
  const got=await waitForReady({env:{...env},fetchImpl:fn,now:()=>t,
    sleep:async(ms)=>{t+=ms},maxMs:40000,intervalMs:1000,
    emit:x=>logs.push(x)});
  assert.equal(got.status,'READY');
  assert.equal(t,now+2000);
+ assert.equal(requests.filter(x=>x.url.includes('/auth/v1/token')).length,1,
+  'one short QA Admin session for entire poll: avoid auth rate limiting');
+ assert.equal(requests.filter(x=>x.url.includes('wos_qa_p2_owner_cas_attest')).length,3);
  assert(logs.includes('WOS_P2_OWNER_CAS_LIVE_DB_RUN_BOUND_PROOF=PASS'));
 });
 test('missing Owner CAS times out closed without writing anything',async()=>{
