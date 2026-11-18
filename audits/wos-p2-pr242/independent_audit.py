@@ -3,7 +3,7 @@
 import json,os,re,sys,subprocess,urllib.request
 from pathlib import Path
 REPO="lenchenalc-hongda/hongda-new-media-platform"
-PIN="79d64514799401a2df98844ddc5be11ddc49697d"
+PIN="442f05380722ca083b64b53defdf8a368da30d97"
 BASE="b4edd93bb16f7a651ca37864a51a158727fd23f2"
 BRANCH="audit/wos-p2-pr242-protected-runner-20261118"
 FILES=[
@@ -32,7 +32,11 @@ CHECKS={
  "OFFICE_STALE_VERSION_REJECTED","OFFICE_RESUBMIT_SAVED_REVISION_WITHOUT_DUPLICATING_P1_INBOX",
  "OPERATOR_REVIEW_CORRECTION_ONLY_RESOLVED_DOCUMENT_BLOCKER",
  "OLD_SIGNED_SAMPLE_BLOCKED_FOR_CURRENT_REVISION",
- "VIEWER_AND_FOREIGN_DENIED_WITHOUT_SIDE_EFFECTS"],
+ "VIEWER_AND_FOREIGN_DENIED_WITHOUT_SIDE_EFFECTS",
+ "OFFICE_ALL_SIX_FIELDS_PRESENT_IN_AUTHENTICATED_HTTP_PATCH",
+ "OFFICE_SIX_FIELDS_RELOADED_FROM_QA_API",
+ "assert.deepEqual(Object.keys(savedIntent.patch).sort()",
+ "assert.notEqual(newValue,fields[label]"],
 "runbook":["xulmpqaknlwqqculbsek","OPERATOR_WRITES","OFFICE_WRITES","QA SQL + FAILCLOSE 已安装","真实 E2E 尚未派发","Vercel release"],
 "design_ci":["branches:","persist-credentials: false","node --check"],
 "design_test":["WOS_P2_PROTECTED_BROWSER_LAUNCHER_STATIC_SECURITY=PASS",
@@ -71,11 +75,11 @@ def trust():
  if gh("branches/master")["commit"]["sha"]!=BASE:raise AssertionError("master baseline moved")
  files=gh("pulls/242/files?per_page=100")
  if len(files)!=9 or {f["filename"] for f in files}!=set(FILES):raise AssertionError("unexpected files")
- for runid in [44206114970,44206121630]:
+ for runid in [44213182913,44213190300]:
   run=gh("actions/runs/"+str(runid))
   if run["head_sha"]!=PIN or run["conclusion"]!="success" or run["status"]!="completed":
    raise AssertionError("CI run not pinned or green")
- jobs=gh("actions/runs/44206121630/jobs?per_page=100")
+ jobs=gh("actions/runs/44213190300/jobs?per_page=100")
  names={job["name"] for job in jobs["jobs"]}
  if names!={"lint-and-audit","glh-stage1-postgres-synthetic"} or not all(j["conclusion"]=="success" for j in jobs["jobs"]):
   raise AssertionError("required CI jobs absent")
