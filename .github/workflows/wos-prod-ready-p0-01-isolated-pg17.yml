@@ -121,6 +121,25 @@ jobs:
           grep -q 'WOS_DRAFT_SUBMIT_PROPOSAL_ISOLATED_ONLY' /tmp/wos-draft-guard.out
           psql -v ON_ERROR_STOP=1 -d wos_p0_contract -c "SET wos.p0_01_ephemeral_rehearsal='on'" -f docs/workshop-order-system/production-readiness/wos_mvp_draft_image_submit_SYNTHETIC_ONLY_NOT_INSTALLED.sql >/dev/null
           psql -v ON_ERROR_STOP=1 -d wos_p0_contract -f tests/sql/wos-prod-p0-01/draft-image-submit-assertions.sql
+      - name: Verified private PNG proof and real-object identity rehearsal (no actual Storage API)
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql -v ON_ERROR_STOP=1 -d wos_p0_contract -f tests/sql/wos-prod-p0-01/synthetic-storage-metadata.sql >/dev/null
+          if psql -v ON_ERROR_STOP=1 -d wos_p0_contract -f docs/workshop-order-system/production-readiness/wos_mvp_private_storage_attestation_PROPOSAL_NOT_INSTALLED.sql >/tmp/wos-img-guard.out 2>&1; then
+            echo 'FAIL: real attestation proposal ignored ephemeral guard'
+            exit 1
+          fi
+          grep -q 'WOS_REAL_STORAGE_PROOF_PROPOSAL_NOT_AUTHORIZED' /tmp/wos-img-guard.out
+          psql -v ON_ERROR_STOP=1 -d wos_p0_contract -c "SET wos.p0_01_ephemeral_rehearsal='on'" -f docs/workshop-order-system/production-readiness/wos_mvp_private_storage_attestation_PROPOSAL_NOT_INSTALLED.sql >/dev/null
+          if psql -v ON_ERROR_STOP=1 -d wos_p0_contract -f docs/workshop-order-system/production-readiness/wos_mvp_private_storage_RLS_PROPOSAL_NOT_INSTALLED.sql >/tmp/wos-storage-guard.out 2>&1; then
+            echo 'FAIL: storage RLS proposal ignored ephemeral guard'
+            exit 1
+          fi
+          grep -q 'WOS_STORAGE_RLS_PROPOSAL_NOT_AUTHORIZED' /tmp/wos-storage-guard.out
+          psql -v ON_ERROR_STOP=1 -d wos_p0_contract -c "SET wos.p0_01_ephemeral_rehearsal='on'" -f docs/workshop-order-system/production-readiness/wos_mvp_private_storage_RLS_PROPOSAL_NOT_INSTALLED.sql >/dev/null
+          psql -v ON_ERROR_STOP=1 -d wos_p0_contract -f tests/sql/wos-prod-p0-01/verified-storage-image-assertions.sql
+          echo WOS_P0_02_02_ISOLATED_DB_AND_STORAGE_RLS=PASS
       - name: Fault-injected atomic rollback in a second empty PG17 database
         shell: bash
         run: |
