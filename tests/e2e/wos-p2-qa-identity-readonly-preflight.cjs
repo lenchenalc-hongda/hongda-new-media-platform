@@ -31,7 +31,8 @@ function checkEnv(env) {
   assert.equal(env.WOS_P2_QA_READONLY_PREFLIGHT_ACK,'true','READONLY_ACK_REQUIRED');
   assert.equal(env.WOS_P2_REVIEWED_SHA,EXACT_P2,'EXACT_P2_SHA_REQUIRED');
   assert.equal(env.NEXT_PUBLIC_SUPABASE_URL,QA_ORIGIN,'QA_PROJECT_PIN');
-  assert.equal(env.WOS_P2_QA_MUTATIONS_ENABLED,'true','REVIEWED_LOCAL_PREVIEW_FLAG');
+  // This step is read-only and deliberately does not depend on either
+  // database write gate or any business-mutation environment flag.
   const key=env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   if(typeof key!=='string'||key.length<20) fail('PUBLISHABLE_KEY_REQUIRED');
   for(const {name} of ROLES) {
