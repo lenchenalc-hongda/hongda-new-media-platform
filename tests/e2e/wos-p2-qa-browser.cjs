@@ -5,7 +5,9 @@
 'use strict';
 const assert = require('node:assert/strict');
 const {chromium} = require('/tmp/hongda-qa-browser/node_modules/playwright');
-const origin='http://127.0.0.1:3000';
+// The QA business page explicitly permits localhost, NOT 127.0.0.1.
+// Keep the network IPv4-loopback by pinning Chromium's resolver below.
+const origin='http://localhost:3000';
 const qaUrl='https://xulmpqaknlwqqculbsek.supabase.co';
 const exactHead='89bb408d13e45458c608db29c47e2803d49b3170';
 const png=Buffer.from(
@@ -80,26 +82,53 @@ async function jsonPost(page,url,body,header) {
 }
 async function main() {
  assert(allowed(),'P2_QA_ENVIRONMENT_OR_EXACT_PIN_NOT_AUTHORIZED');
- const browser=await chromium.launch({headless:true,args:['--no-sandbox']});
+ const browser=await chromium.launch({headless:true,args:[
+  '--no-sandbox','--host-resolver-rules=MAP localhost 127.0.0.1'
+]});
  const sessions=[];
  try {
   stage='OFFICE_LOGIN';
   const office=await login(browser,'ADMIN','/workshop-orders/production/new');
   sessions.push(office.context);
-  stage='CREATE_SYNTHETIC_ORDER';
-  await office.page.getByRole('heading',{name:'QA Preview · 真实 HTTP 提交验收'}).waitFor();
+  stage='OFFICE_QA_PAGE_VISIBLE';
+  await office.page.getByRole('heading',{name:'QA Preview · 真实 HTTP 提交验收'}).waitFor({timeout:20000});
+  stage='OFFICE_FILL_SYNTHETIC_SAMPLE';
   await office.page.getByRole('button',{name:'自动填入全套合成 QA 测试资料'}).click();
   const orderNumber=await office.page.locator('input#orderNumber').inputValue();
   assert(/^QA-NONPROD-[a-f0-9-]{36}$/i.test(orderNumber),'not synthetic order');
+  stage='OFFICE_SELECT_QA_IMAGE';
   await office.page.locator('input[type=file]').setInputFiles({
     name:'wos-p2-e2e-qa-only.png',mimeType:'image/png',buffer:png});
+  stage='OFFICE_QA_LOCAL_VALIDATION';
   await office.page.getByRole('button',{name:'检查资料完整性'}).click();
-  await office.page.getByText('本地字段完整性检查通过',{exact:false}).waitFor();
+  await office.page.getByText('本地字段完整性检查通过',{exact:false}).waitFor({timeout:20000});
+  stage='OFFICE_QA_SUBMIT_OR_ERROR';
+  // Stop on a visible allowlisted UI error rather than blindly waiting
+  // 110 seconds for an HTTP POST that the client guard may never send.
+  const failureAlert=office.page.getByRole('alert').first();
   const submitWait=office.page.waitForResponse(response=>
     response.url()===origin+'/api/workshop-orders/production'
-    &&response.request().method()==='POST',{timeout:110000});
+    &&response.request().method()==='POST',{timeout:45000})
+    .then(response=>({kind:'HTTP',response}))
+    .catch(()=>({kind:'HTTP_TIMEOUT'}));
+  const uiErrorWait=failureAlert.waitFor({state:'visible',timeout:45000})
+    .then(()=>({kind:'UI_ERROR'}))
+    .catch(()=>({kind:'NO_UI_ERROR'}));
   await office.page.getByRole('button',{name:'上传图片并提交 QA 订单'}).click();
-  const submission=await submitWait;
+  const outcome=await Promise.race([submitWait,uiErrorWait]);
+  if (outcome.kind==='UI_ERROR') {
+    // Only log developer-defined fixed error codes, never server response,
+    // login identity, customer text or HTML content.
+    const message=(await failureAlert.textContent().catch(()=>''))||'';
+    const allowlisted=message.match(/\b(?:QA_[A-Z0-9_]+|PLEASE_LOGIN_TO_QA_FIRST|OFFICE_SUBMIT_ROLE_REQUIRED)\b/);
+    console.error('WOS_P2_QA_SUBMIT_UI_ERROR_CODE='+ (allowlisted?.[0]||'UNCLASSIFIED'));
+    throw Error('QA_OFFICE_UI_REJECTED_BEFORE_POST');
+  }
+  if (outcome.kind!=='HTTP') {
+    console.error('WOS_P2_QA_SUBMIT_HTTP_OBSERVED=NO');
+    throw Error('QA_OFFICE_SUBMIT_NO_HTTP_RESPONSE');
+  }
+  const submission=outcome.response;
   const submissionBody=await submission.json();
   assert.equal(submission.status(),200);
   assert.equal(submissionBody.code,'SUBMISSION_VERIFIED');
