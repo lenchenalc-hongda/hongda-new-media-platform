@@ -314,38 +314,7 @@ BEGIN
    AND proof.actor_user_id=v_actor.user_id
    AND im.uploaded_by_profile_id=v_actor.id
    AND im.mime_type='image/png'
-   AND proof.verified_sha256 ~ '^[a-f0-9]{64}pg_catalog.clock_timestamp()
-   AND im.mime_type IN ('image/jpeg','image/png','image/webp')
-   AND im.file_size BETWEEN 1 AND 20971520
- ) THEN RAISE EXCEPTION 'WOS_PRIVATE_IMAGE_ATTESTATION_REQUIRED'
-   USING ERRCODE='23514'; END IF;
- -- Atomic P1 receipt, immutable inbox projection, status and audit log.
- INSERT INTO public.wos_office_readiness_receipts
- (organization_id,order_id,source_revision,source_version_label,actor_profile_id,note)
- VALUES(v_actor.org_id,p_order_id,p_expected_version,v_order.version_label,v_actor.id,p_note);
- INSERT INTO public.wos_submission_receipts
- (organization_id,order_id,source_revision,source_version_label,idempotency_key,
-  actor_profile_id,request_fingerprint)
- VALUES(v_actor.org_id,p_order_id,p_expected_version,v_order.version_label,
-  p_idempotency_key,v_actor.id,v_fingerprint)
- RETURNING id INTO v_receipt_id;
- UPDATE public.wos_production_orders
- SET workflow_status='SUBMITTED',version=version+1,submitted_at=pg_catalog.now(),
- updated_at=pg_catalog.now() WHERE id=p_order_id AND version=p_expected_version;
- IF NOT FOUND THEN RAISE EXCEPTION 'WOS_CONCURRENT_VERSION_CONFLICT' USING ERRCODE='PT409'; END IF;
- INSERT INTO public.wos_workshop_inbox
- (organization_id,order_id,submission_id,source_revision,source_version_label)
- VALUES(v_actor.org_id,p_order_id,v_receipt_id,p_expected_version,v_order.version_label)
- RETURNING id INTO v_inbox_id;
- INSERT INTO public.wos_status_history
- (organization_id,entity_type,entity_id,previous_status,next_status,
-  actor_profile_id,actor_role,reason_code,metadata)
- VALUES(v_actor.org_id,'PRODUCTION_ORDER',p_order_id,'DRAFT','SUBMITTED',
-  v_actor.id,v_actor.role,'OFFICE_FIRST_SUBMIT',
-  pg_catalog.jsonb_build_object('receiptId',v_receipt_id,'inboxTaskId',v_inbox_id));
- RETURN pg_catalog.jsonb_build_object('result','CREATED','orderId',p_order_id,
- 'receiptId',v_receipt_id,'inboxTaskId',v_inbox_id,'version',p_expected_version+1);
-END $body$;
+   AND proof.verified_sha256 ~ '^[a-f0-9]{64}$'
    AND proof.expires_at>pg_catalog.clock_timestamp()
    AND im.mime_type IN ('image/jpeg','image/png','image/webp')
    AND im.file_size BETWEEN 1 AND 20971520
