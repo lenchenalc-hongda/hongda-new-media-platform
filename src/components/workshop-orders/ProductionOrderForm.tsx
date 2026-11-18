@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, type ChangeEvent } from 'react';
+import WosMvpOfficeCandidatePanel from './WosMvpOfficeCandidatePanel';
 import {
   PRODUCTION_ORDER_ENTRY_SECTIONS,
   createEmptyProductionOrderDraft,
@@ -13,7 +14,7 @@ import {
 const inputClassName =
   'mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500';
 
-export default function ProductionOrderForm() {
+export default function ProductionOrderForm({ candidateLive = false }: { candidateLive?: boolean }) {
   const [draft, setDraft] = useState<ProductionOrderDraft>(
     createEmptyProductionOrderDraft,
   );
@@ -167,7 +168,7 @@ export default function ProductionOrderForm() {
           <div>
             <p className="text-sm font-semibold text-blue-950">本地资料完整性</p>
             <p className="mt-1 text-xs text-blue-800">
-              本页面仅作本地录入与校验，不会保存草稿，也不会向数据库提交生产单。
+              {candidateLive ? '当前为受保护的隔离 QA 候选。保存与提交必须经过受限 RPC 和私有图片字节证明。' : '本页面仅作本地录入与校验，不会保存草稿，也不会向数据库提交生产单。'}
             </p>
           </div>
           <div className="text-right">
@@ -198,7 +199,7 @@ export default function ProductionOrderForm() {
             role="status"
             className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-800"
           >
-            本地完整性检查通过：资料已齐。当前页面未保存、未提交，请等待后续受控的正式提交功能。
+            {candidateLive ? '字段完整性检查通过；请在下方 CPC 区域单独执行受控保存、私有图片核验及提交。' : '本地完整性检查通过：资料已齐。当前页面未保存、未提交，请等待后续受控的正式提交功能。'}
           </div>
         )}
         {hasValidated && !validation.ok && (
@@ -231,9 +232,23 @@ export default function ProductionOrderForm() {
         </section>
       ))}
 
+      {candidateLive && (
+        <WosMvpOfficeCandidatePanel
+          draft={draft}
+          normalized={validation.normalized}
+          valid={validation.ok}
+          onCpcChosen={(customerName, projectName) => setDraft(current => ({
+            ...current, customerName, projectName, versionLabel: current.versionLabel || 'V1',
+          }))}
+          onDraftCreated={(orderNumber) => setDraft(current => ({
+            ...current, orderNumber, versionLabel: 'V1',
+          }))}
+        />
+      )}
+
       <div className="sticky bottom-0 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-gray-200 bg-white/95 p-3 shadow-sm backdrop-blur">
         <p className="text-xs text-gray-500">
-          校验结果只保留在当前页面，刷新后不会恢复，也不会写入浏览器存储。
+          {candidateLive ? '单据资料必须以数据库回执为准；当前页面不授权生产开工。' : '校验结果只保留在当前页面，刷新后不会恢复，也不会写入浏览器存储。'}
         </p>
         <button
           type="submit"
