@@ -83,23 +83,36 @@ BEGIN
  OR p_document->>'versionLabel' IS DISTINCT FROM v_order.version_label
  OR v_order.version_label<>'V1'
  THEN RAISE EXCEPTION 'OFFICE_FORM_SOURCE_SNAPSHOT_MISMATCH' USING ERRCODE='23514'; END IF;
+ -- Reject unknown/omitted JSON properties even when a caller invokes this
+ -- Supabase RPC directly without going through the Next.js form validator.
+ IF (SELECT count(*) FROM pg_catalog.jsonb_object_keys(p_document))<>21
+ OR EXISTS(
+  SELECT 1 FROM pg_catalog.jsonb_object_keys(p_document) AS attr(name)
+  WHERE attr.name NOT IN (
+   'customerName','projectName','orderNumber','productName','priority',
+   'isUrgent','versionLabel','requestedQuantity','currentBatchQuantity',
+   'plannedShipDate','splitDelivery','followUpBatchPlan','productMaterial',
+   'surfaceTreatment','patternScope','seamTolerance','positionReference',
+   'customerAcceptanceStandard','packagingMethod','cartonQuantity','labelMarkingRule'
+  )
+ ) THEN RAISE EXCEPTION 'OFFICE_FORM_FIELD_SET_MISMATCH' USING ERRCODE='23514';END IF;
  -- Check every required shop-floor field; no UI-only validation.
  IF coalesce(length(btrim(p_document->>'productName')),0) NOT BETWEEN 1 AND 200
  OR coalesce(length(btrim(p_document->>'productMaterial')),0) NOT BETWEEN 1 AND 200
- OR p_document->>'priority' NOT IN ('LOW','MEDIUM','HIGH','CRITICAL')
- OR p_document->>'patternScope' NOT IN ('FULL','PARTIAL','MIXED')
+ OR coalesce(p_document->>'priority','') NOT IN ('LOW','MEDIUM','HIGH','CRITICAL')
+ OR coalesce(p_document->>'patternScope','') NOT IN ('FULL','PARTIAL','MIXED')
  OR coalesce(length(btrim(p_document->>'surfaceTreatment')),0) NOT BETWEEN 1 AND 1000
  OR coalesce(length(btrim(p_document->>'seamTolerance')),0) NOT BETWEEN 1 AND 1000
  OR coalesce(length(btrim(p_document->>'positionReference')),0) NOT BETWEEN 1 AND 1000
  OR coalesce(length(btrim(p_document->>'customerAcceptanceStandard')),0) NOT BETWEEN 1 AND 2000
  OR coalesce(length(btrim(p_document->>'packagingMethod')),0) NOT BETWEEN 1 AND 1000
  OR coalesce(length(btrim(p_document->>'labelMarkingRule')),0) NOT BETWEEN 1 AND 2000
- OR p_document->>'plannedShipDate' !~ '^\d{4}-\d{2}-\d{2}$'
- OR pg_catalog.jsonb_typeof(p_document->'isUrgent')<>'boolean'
- OR pg_catalog.jsonb_typeof(p_document->'splitDelivery')<>'boolean'
- OR p_document->>'requestedQuantity' !~ '^[1-9][0-9]{0,9}$'
- OR p_document->>'currentBatchQuantity' !~ '^[1-9][0-9]{0,9}$'
- OR p_document->>'cartonQuantity' !~ '^[1-9][0-9]{0,9}$'
+ OR coalesce(p_document->>'plannedShipDate','') !~ '^\d{4}-\d{2}-\d{2}$'
+ OR coalesce(pg_catalog.jsonb_typeof(p_document->'isUrgent'),'')<>'boolean'
+ OR coalesce(pg_catalog.jsonb_typeof(p_document->'splitDelivery'),'')<>'boolean'
+ OR coalesce(p_document->>'requestedQuantity','') !~ '^[1-9][0-9]{0,9}$'
+ OR coalesce(p_document->>'currentBatchQuantity','') !~ '^[1-9][0-9]{0,9}$'
+ OR coalesce(p_document->>'cartonQuantity','') !~ '^[1-9][0-9]{0,9}$'
  THEN RAISE EXCEPTION 'OFFICE_REQUIRED_FIELDS_INCOMPLETE' USING ERRCODE='23514';END IF;
  IF (p_document->>'splitDelivery')::boolean=true AND
   coalesce(length(btrim(p_document->>'followUpBatchPlan')),0)=0

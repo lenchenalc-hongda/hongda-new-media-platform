@@ -48,6 +48,43 @@ BEGIN
   RAISE EXCEPTION 'INCOMPLETE_OFFICE_FORM_WAS_SAVED';
  EXCEPTION WHEN check_violation THEN NULL;
  END;
+ -- Direct RPC negative cases before successful CAS save.
+ BEGIN
+  PERFORM public.wos_mvp_save_complete_office_candidate(
+   '58888888-0000-4000-8000-0000000000bb',1,
+   '68888888-0000-4000-8000-0000000000c1',document-'patternScope');
+  RAISE EXCEPTION 'MISSING_PATTERN_SCOPE_WAS_SAVED';
+ EXCEPTION WHEN check_violation THEN NULL;
+ END;
+ BEGIN
+  PERFORM public.wos_mvp_save_complete_office_candidate(
+   '58888888-0000-4000-8000-0000000000bb',1,
+   '68888888-0000-4000-8000-0000000000c2',document-'plannedShipDate');
+  RAISE EXCEPTION 'MISSING_SHIP_DATE_WAS_SAVED';
+ EXCEPTION WHEN check_violation THEN NULL;
+ END;
+ BEGIN
+  PERFORM public.wos_mvp_save_complete_office_candidate(
+   '58888888-0000-4000-8000-0000000000bb',1,
+   '68888888-0000-4000-8000-0000000000c3',document-'cartonQuantity');
+  RAISE EXCEPTION 'MISSING_CARTON_QUANTITY_WAS_SAVED';
+ EXCEPTION WHEN check_violation THEN NULL;
+ END;
+ BEGIN
+  PERFORM public.wos_mvp_save_complete_office_candidate(
+   '58888888-0000-4000-8000-0000000000bb',1,
+   '68888888-0000-4000-8000-0000000000c4',document-'splitDelivery');
+  RAISE EXCEPTION 'MISSING_SPLIT_DELIVERY_WAS_SAVED';
+ EXCEPTION WHEN check_violation THEN NULL;
+ END;
+ BEGIN
+  PERFORM public.wos_mvp_save_complete_office_candidate(
+   '58888888-0000-4000-8000-0000000000bb',1,
+   '68888888-0000-4000-8000-0000000000c5',
+   document||'{"organizationId":"bbbbbbbb-0000-4000-8000-000000000002"}'::jsonb);
+  RAISE EXCEPTION 'FORGED_ORG_EXTRA_FIELD_WAS_SAVED';
+ EXCEPTION WHEN check_violation THEN NULL;
+ END;
  v:=public.wos_mvp_save_complete_office_candidate(
   '58888888-0000-4000-8000-0000000000bb',1,
   '68888888-0000-4000-8000-0000000000bb',document);
