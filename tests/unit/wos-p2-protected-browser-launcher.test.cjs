@@ -32,7 +32,8 @@ assert(browser.includes("WOS_P2_PROTECTED_BROWSER_E2E_ACK"));
 assert(browser.includes("WOS_QA_BROWSER_ACK_TEST_WRITES"));
 assert(browser.includes("WOS_P2_REVIEWED_SHA"));
 for(const text of [
-  "OFFICE_UI_SYNTHETIC_SUBMISSION_HTTP_AND_RECEIPT",
+  "REUSED_SUBMITTED_QA_ORDER_NO_NEW_P1_SUBMISSION",
+  "OPERATOR_READ_EXISTING_P1_INBOX",
   "OPERATOR_AUTHENTICATED_ACCEPTED",
   "OPERATOR_RETURN_BLOCKER_TRANSACTION",
   "OFFICE_SIX_FIELD_VERSIONED_SAVE_AND_SNAPSHOT",
@@ -43,8 +44,20 @@ for(const text of [
   "OLD_SIGNED_SAMPLE_BLOCKED_FOR_CURRENT_REVISION",
   "VIEWER_AND_FOREIGN_DENIED_WITHOUT_SIDE_EFFECTS",
   "ONE_IMMUTABLE_P1_INBOX_AND_CURRENT_QA_REVISION",
+  "OWNER_CAS_VERIFIED_BEFORE_EXISTING_ORDER_ACTIONS",
   "WOS_P2_PROTECTED_BROWSER_REAL_TWO_ROLE_E2E=PASS",
-])assert(browser.includes(text),'E2E check missing '+text);
+])assert(browser.includes(text),'existing-order E2E coverage missing '+text);
+assert(!browser.includes("上传图片并提交 QA 订单"),
+  'reuse acceptance must never create another P1 Office order');
+assert(!browser.includes("OFFICE_UI_SYNTHETIC_SUBMISSION_HTTP_AND_RECEIPT"),
+  'must not duplicate previous successful P1 write');
+assert(!browser.includes("setInputFiles("),
+  'must not upload another P1 image');
+assert(browser.includes("require('./wos-p2-qa-owner-cas-attest.cjs')"));
+assert(browser.indexOf("stage='OWNER_CAS_REVERIFY_BEFORE_ANY_BROWSER_ACTION'")<
+  browser.indexOf("const browser=await chromium.launch"),
+  'read-only live proof must precede the browser and every mutation');
+
 assert(!browser.includes('console.log(error)'));
 assert(!browser.includes('console.error(error)'));
 assert(!browser.includes("page.screenshot("));
@@ -82,50 +95,40 @@ assert(!closer.includes('console.log(error)'));
 assert(!closer.includes('console.error(error)'));
 console.log('WOS_P2_QA_FAILCLOSE_STATIC_GUARDS=PASS');
 
-// Catch the actual failure from 2026-11-18 Run #44232596314:
-// Chrome visited 127.0.0.1 but the business QA UI checks localhost only.
+// Historic failure guards are retained, but this new acceptance skips P1.
 assert(browser.includes("const origin='http://localhost:3000'"),
-  'browser must use explicitly allowed QA localhost host');
-assert(browser.includes('--host-resolver-rules=MAP localhost 127.0.0.1'),
-  'pin localhost to local loopback without exposing remote service');
+ 'QA loopback origin must pass the existing business hostname guard');
+assert(browser.includes('--host-resolver-rules=MAP localhost 127.0.0.1'));
 assert(!browser.includes("const origin='http://127.0.0.1:3000'"));
-for (const check of [
-  "stage='OFFICE_QA_PAGE_VISIBLE'",
-  "stage='OFFICE_FILL_SYNTHETIC_SAMPLE'",
-  "stage='OFFICE_SELECT_QA_IMAGE'",
-  "stage='OFFICE_QA_LOCAL_VALIDATION'",
-  "stage='OFFICE_QA_SUBMIT_OR_ERROR'",
-  "WOS_P2_QA_SUBMIT_UI_ERROR_CODE=",
-  "WOS_P2_QA_SUBMIT_HTTP_OBSERVED=NO",
-  "QA_OFFICE_UI_REJECTED_BEFORE_POST",
-  "QA_OFFICE_SUBMIT_NO_HTTP_RESPONSE",
-  "response.url()===origin+'/api/workshop-orders/production'",
-]) assert(browser.includes(check),'QA failfast source contract missing '+check);
-assert(!browser.includes('timeout:110000'),
-  'a blocked QA UI must not waste 110 seconds before diagnostics');
-console.log('WOS_P2_QA_LOCALHOST_HOST_GUARD_REGRESSION=PASS');
-console.log('WOS_P2_QA_FAILURE_STAGE_AND_NO_SECRET_DIAGNOSTICS=PASS');
-
-// Run #44242557421: the Office page can display independent returned-order
-// and validation alerts. Never interpret its first global alert as a QA
-// submission error. The actual component has one dedicated labeled region.
-assert(browser.includes('const qaSubmitRegion=office.page.locator(\'section[aria-label="隔离数据库真实下单验收"]\')'));
-assert(browser.includes('const failureAlert=qaSubmitRegion.locator(\'[role="alert"]\')'));
-assert(browser.includes('QA_SUBMIT_REGION_NOT_UNIQUE'));
-assert(browser.includes('QA_SUBMISSION_ERROR_PRESENT_BEFORE_CLICK'));
-assert(!browser.includes("office.page.getByRole('alert').first()"),
-  'page-wide alert mistakenly matched unrelated error in Run 44242557421');
-console.log('WOS_P2_QA_SUBMIT_COMPONENT_ALERT_SCOPE=PASS');
-const readyPos=workflow.indexOf('Build and launch local Preview using only QA publishable key');
-const handoffPos=workflow.indexOf('QA Preview ready, bounded Owner CAS handoff, no database writes');
-const realTestPos=workflow.indexOf('Real 2-role Office/Operator test + Viewer/foreign denials');
-assert(readyPos>=0 && handoffPos>readyPos && realTestPos>handoffPos,
-  'DB Gate activation handoff must follow Preview readiness but precede browser');
-assert(workflow.includes('WOS_P2_QA_PREVIEW_READY_FOR_SINGLE_OWNER_GATE_CAS=YES'));
-assert(workflow.includes('WOS_P2_QA_OWNER_CAS_HANDOFF_ELAPSED_NO_AUTO_GATE_ENABLE=YES'));
-assert(workflow.includes('sleep 90'),'bounded handoff must give Owner time to CAS enable QA');
-assert(workflow.includes('Always atomically close BOTH QA DB gates with QA-admin-only RPC'));
-console.log('WOS_P2_QA_PREVIEW_READY_CAS_HANDOFF_BOUNDARY=PASS');
-
-
+const handoff=workflow.indexOf('Await live read-only Owner CAS proof for existing order');
+const build=workflow.indexOf('Build and launch local Preview using only QA publishable key');
+const browserStep=workflow.indexOf('Real 2-role Office/Operator test + Viewer/foreign denials');
+const closeStepPos=workflow.indexOf('Always atomically close BOTH QA DB gates with QA-admin-only RPC');
+assert(build>=0 && handoff>build && browserStep>handoff && closeStepPos>browserStep,
+ 'identity/build -> DB attestation -> browser -> always-close must be ordered');
+assert(workflow.includes("WOS_P2_QA_LIVE_OWNER_CAS_VERIFIED_BEFORE_BROWSER=PASS"));
+assert(workflow.includes("WOS_P2_REUSE_EXISTING_ORDER_ONLY: 'true'"));
+assert(workflow.includes("WOS_P2_OWNER_CAS_READONLY_ACK: 'true'"));
+assert(workflow.includes("node tests/e2e/wos-p2-qa-owner-cas-attest.cjs"));
+assert(workflow.includes('test "$GITHUB_RUN_ATTEMPT" = "1"'));
+assert(!workflow.includes('sleep 90'),'blind sleep cannot authorize business writes');
+assert(!workflow.includes('OWNER_CAS_HANDOFF_ELAPSED_NO_AUTO_GATE_ENABLE'));
+assert(!workflow.includes('SUPABASE_SERVICE_ROLE_KEY'));
+const sqlProof=fs.readFileSync(
+ 'docs/workshop-order-system/nonproduction-only/wos_p2_owner_cas_attest_PROPOSED_QA_ONLY.sql','utf8');
+assert(sqlProof.includes("wos_qa_p2_owner_cas_attest"));
+assert(sqlProof.includes("v_operator.enabled IS DISTINCT FROM TRUE"));
+assert(sqlProof.includes("v_office.enabled IS DISTINCT FROM TRUE"));
+assert(sqlProof.includes("v_expected_ref := 'OWNER_RUN_' || p_github_run_id"));
+assert(sqlProof.includes("wos_qa_safety.p2_gate_close_receipts"));
+assert(sqlProof.includes("status','WAITING'"));
+assert(sqlProof.includes("status','READY'"));
+assert(!/UPDATE\s+public\.wos_qa_p2_(?:office_)?execution_gate\s+SET/i.test(sqlProof));
+console.log('WOS_P2_QA_EXISTING_ORDER_NO_DUPLICATE_P1=PASS');
+console.log('WOS_P2_OWNER_CAS_RUN_BOUND_LIVE_PROOF_ORDERING=PASS');
+assert(sqlProof.includes('CREATE TRIGGER wos_qa_p2_single_order_gate_guard'));
+assert(sqlProof.includes('QA_OWNER_ATTEST_SINGLE_ORDER_GUARD_MISSING'));
+assert(sqlProof.includes('QA_P2_GATE_SINGLE_ORDER_SCOPE_REJECTED'));
+assert(sqlProof.includes('BEFORE INSERT OR UPDATE OR DELETE ON public.wos_production_orders'));
+console.log('WOS_P2_QA_SCOPE_ONLY_EXISTING_SYNTHETIC_ORDER=PASS');
 console.log('WOS_P2_PROTECTED_BROWSER_NOT_EXECUTED=YES');

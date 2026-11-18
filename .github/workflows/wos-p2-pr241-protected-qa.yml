@@ -43,6 +43,8 @@ jobs:
         run: |
           set -euo pipefail
           test "$GITHUB_SHA" = "$TRUSTED_MASTER"
+          # Same GitHub Run may never be rerun after failure or cleanup.
+          test "$GITHUB_RUN_ATTEMPT" = "1"
           test "$REQUESTED" = "89bb408d13e45458c608db29c47e2803d49b3170"
           base="https://api.github.com/repos/$GITHUB_REPOSITORY"
           api() {
@@ -125,6 +127,8 @@ jobs:
           node --check ../trusted/tests/e2e/wos-p2-qa-browser.cjs
           node --check ../trusted/tests/e2e/wos-p2-qa-gate-failclose.cjs
           node --check ../trusted/tests/e2e/wos-p2-qa-identity-readonly-preflight.cjs
+          node --check ../trusted/tests/e2e/wos-p2-qa-owner-cas-attest.cjs
+          node --test ../trusted/tests/unit/wos-p2-owner-cas-attest.test.cjs
           node --test ../trusted/tests/unit/wos-p2-qa-identity-readonly-preflight.test.cjs
           npm install --prefix /tmp/hongda-qa-browser --no-audit --no-fund \
             --silent playwright@1.56.1
@@ -178,25 +182,37 @@ jobs:
             sleep 2
           done
           curl -fsS http://127.0.0.1:3000/login -o /dev/null
-      - name: QA Preview ready, bounded Owner CAS handoff, no database writes
+      - name: Await live read-only Owner CAS proof for existing order
+        working-directory: trusted
+        timeout-minutes: 12
+        env:
+          WOS_P2_OWNER_CAS_READONLY_ACK: 'true'
+          WOS_P2_REUSE_EXISTING_ORDER_ONLY: 'true'
+          WOS_P2_REVIEWED_SHA: ${{ needs.protected-source-gate.outputs.head }}
+          WOS_P2_TRUSTED_MASTER_SHA: ${{ github.sha }}
+          NEXT_PUBLIC_SUPABASE_URL: https://xulmpqaknlwqqculbsek.supabase.co
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.REVIEW_DEV_SUPABASE_ANON_KEY }}
+          REVIEW_DEV_ADMIN_EMAIL: ${{ secrets.REVIEW_DEV_ADMIN_EMAIL }}
+          REVIEW_DEV_ADMIN_PASSWORD: ${{ secrets.REVIEW_DEV_ADMIN_PASSWORD }}
         shell: bash
-        timeout-minutes: 3
         run: |
           set -euo pipefail
-          # Human/Owner database activation is independently authorized and
-          # performed outside this Runner. The protected QA runner has no
-          # privileged Gate opener or Service Role credentials.
+          # Not an opener and never grants Gate table SELECT. The proposed
+          # QA-only RPC is authorized separately and checks *live* DB CAS:
+          # run id, original SUBMITTED order, expiry and both exact Gate rows.
+          # A missing RPC, wrong token, partial Gate, expired authorization or
+          # deadline failure stops before a single real browser write.
           curl -fsS --max-time 10 http://127.0.0.1:3000/login -o /dev/null
-          echo WOS_P2_QA_PREVIEW_READY_FOR_SINGLE_OWNER_GATE_CAS=YES
-          # Fixed, bounded coordination interval; failure/stop still runs
-          # the always() close-only RPC. It is NOT an approval or a Gate check.
-          sleep 90
-          curl -fsS --max-time 10 http://127.0.0.1:3000/login -o /dev/null
-          echo WOS_P2_QA_OWNER_CAS_HANDOFF_ELAPSED_NO_AUTO_GATE_ENABLE=YES
+          echo WOS_P2_QA_PREVIEW_READY_WAITING_FOR_VERIFIED_OWNER_CAS=YES
+          node tests/e2e/wos-p2-qa-owner-cas-attest.cjs
+          echo WOS_P2_QA_LIVE_OWNER_CAS_VERIFIED_BEFORE_BROWSER=PASS
       - name: Real 2-role Office/Operator test + Viewer/foreign denials
         working-directory: trusted
         env:
           WOS_P2_REVIEWED_SHA: ${{ needs.protected-source-gate.outputs.head }}
+          WOS_P2_TRUSTED_MASTER_SHA: ${{ github.sha }}
+          WOS_P2_OWNER_CAS_READONLY_ACK: 'true'
+          WOS_P2_REUSE_EXISTING_ORDER_ONLY: 'true'
           WOS_P2_PROTECTED_BROWSER_E2E_ACK: 'true'
           WOS_QA_BROWSER_ACK_TEST_WRITES: 'true'
           AUTH_MODE: supabase
@@ -221,9 +237,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          # Database installer/operator gate must be separately owner-approved,
-          # independently enabled for a short QA-only window immediately before
-          # this step; no database credentials, gate install/enable here.
+          # Separately installed, read-only QA attestation has verified the
+          # *live* run-bound DBA CAS. The trusted browser also re-verifies
+          # before opening any browser context. No Gate-opening credentials,
+          # service_role, Office new-order upload or automatic retry here.
           node tests/e2e/wos-p2-qa-browser.cjs
       - name: Always atomically close BOTH QA DB gates with QA-admin-only RPC
         if: always()

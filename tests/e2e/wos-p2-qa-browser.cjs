@@ -5,20 +5,22 @@
 'use strict';
 const assert = require('node:assert/strict');
 const {chromium} = require('/tmp/hongda-qa-browser/node_modules/playwright');
+const {checkOnce,EXISTING_ORDER_ID,EXISTING_ORDER_NUMBER} =
+  require('./wos-p2-qa-owner-cas-attest.cjs');
 // The QA business page explicitly permits localhost, NOT 127.0.0.1.
 // Keep the network IPv4-loopback by pinning Chromium's resolver below.
 const origin='http://localhost:3000';
 const qaUrl='https://xulmpqaknlwqqculbsek.supabase.co';
 const exactHead='89bb408d13e45458c608db29c47e2803d49b3170';
-const png=Buffer.from(
- 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII=',
- 'base64');
 const creds=['ADMIN','OPERATOR','VIEWER','FOREIGN'].flatMap(x=>
  ['REVIEW_DEV_'+x+'_EMAIL','REVIEW_DEV_'+x+'_PASSWORD']);
 function allowed() {
  return process.env.WOS_P2_PROTECTED_BROWSER_E2E_ACK==='true'
   && process.env.WOS_QA_BROWSER_ACK_TEST_WRITES==='true'
   && process.env.WOS_P2_REVIEWED_SHA===exactHead
+  && process.env.WOS_P2_OWNER_CAS_READONLY_ACK==='true'
+  && process.env.WOS_P2_REUSE_EXISTING_ORDER_ONLY==='true'
+  && process.env.GITHUB_RUN_ATTEMPT==='1'
   && process.env.AUTH_MODE==='supabase'
   && process.env.VERCEL_ENV==='preview'
   && process.env.NEXT_PUBLIC_SUPABASE_URL===qaUrl
@@ -82,72 +84,35 @@ async function jsonPost(page,url,body,header) {
 }
 async function main() {
  assert(allowed(),'P2_QA_ENVIRONMENT_OR_EXACT_PIN_NOT_AUTHORIZED');
+ // Separate trusted step already saw Owner CAS. Re-read the *live* QA DB
+ // with an authenticated QA Admin immediately before opening any browser.
+ // A file, UI text, GitHub comment or environment flag can NEVER substitute
+ // for this proof. Existing business RPCs independently enforce gate expiry.
+ stage='OWNER_CAS_REVERIFY_BEFORE_ANY_BROWSER_ACTION';
+ const proof=await checkOnce();
+ assert.equal(proof.status,'READY','QA_OWNER_CAS_GATE_NOT_LIVE');
+ evidence('OWNER_CAS_VERIFIED_BEFORE_EXISTING_ORDER_ACTIONS');
  const browser=await chromium.launch({headless:true,args:[
   '--no-sandbox','--host-resolver-rules=MAP localhost 127.0.0.1'
 ]});
  const sessions=[];
  try {
-  stage='OFFICE_LOGIN';
-  const office=await login(browser,'ADMIN','/workshop-orders/production/new');
-  sessions.push(office.context);
-  stage='OFFICE_QA_PAGE_VISIBLE';
-  await office.page.getByRole('heading',{name:'QA Preview · 真实 HTTP 提交验收'}).waitFor({timeout:20000});
-  stage='OFFICE_FILL_SYNTHETIC_SAMPLE';
-  await office.page.getByRole('button',{name:'自动填入全套合成 QA 测试资料'}).click();
-  const orderNumber=await office.page.locator('input#orderNumber').inputValue();
-  assert(/^QA-NONPROD-[a-f0-9-]{36}$/i.test(orderNumber),'not synthetic order');
-  stage='OFFICE_SELECT_QA_IMAGE';
-  await office.page.locator('input[type=file]').setInputFiles({
-    name:'wos-p2-e2e-qa-only.png',mimeType:'image/png',buffer:png});
-  stage='OFFICE_QA_LOCAL_VALIDATION';
-  await office.page.getByRole('button',{name:'检查资料完整性'}).click();
-  await office.page.getByText('本地字段完整性检查通过',{exact:false}).waitFor({timeout:20000});
-  stage='OFFICE_QA_SUBMIT_OR_ERROR';
-  // Stop on a visible allowlisted UI error rather than blindly waiting
-  // 110 seconds for an HTTP POST that the client guard may never send.
-  // Scope the failure signal to the actual QA submit component. The same
-  // Office page also mounts returned-order and form-validation components
-  // with unrelated role=alert nodes; page-wide first() caused a false FAIL
-  // (Run 44242557421: UNCLASSIFIED with no submitted POST).
-  const qaSubmitRegion=office.page.locator('section[aria-label="隔离数据库真实下单验收"]');
-  assert.equal(await qaSubmitRegion.count(),1,'QA_SUBMIT_REGION_NOT_UNIQUE');
-  const failureAlert=qaSubmitRegion.locator('[role="alert"]');
-  assert.equal(await failureAlert.count(),0,'QA_SUBMISSION_ERROR_PRESENT_BEFORE_CLICK');
-  const submitWait=office.page.waitForResponse(response=>
-    response.url()===origin+'/api/workshop-orders/production'
-    &&response.request().method()==='POST',{timeout:45000})
-    .then(response=>({kind:'HTTP',response}))
-    .catch(()=>({kind:'HTTP_TIMEOUT'}));
-  const uiErrorWait=failureAlert.waitFor({state:'visible',timeout:45000})
-    .then(()=>({kind:'UI_ERROR'}))
-    .catch(()=>({kind:'NO_UI_ERROR'}));
-  await office.page.getByRole('button',{name:'上传图片并提交 QA 订单'}).click();
-  const outcome=await Promise.race([submitWait,uiErrorWait]);
-  if (outcome.kind==='UI_ERROR') {
-    // Only log developer-defined fixed error codes, never server response,
-    // login identity, customer text or HTML content.
-    const message=(await failureAlert.textContent().catch(()=>''))||'';
-    const allowlisted=message.match(/\b(?:QA_[A-Z0-9_]+|PLEASE_LOGIN_TO_QA_FIRST|OFFICE_SUBMIT_ROLE_REQUIRED)\b/);
-    console.error('WOS_P2_QA_SUBMIT_UI_ERROR_CODE='+ (allowlisted?.[0]||'UNCLASSIFIED'));
-    throw Error('QA_OFFICE_UI_REJECTED_BEFORE_POST');
-  }
-  if (outcome.kind!=='HTTP') {
-    console.error('WOS_P2_QA_SUBMIT_HTTP_OBSERVED=NO');
-    throw Error('QA_OFFICE_SUBMIT_NO_HTTP_RESPONSE');
-  }
-  const submission=outcome.response;
-  const submissionBody=await submission.json();
-  assert.equal(submission.status(),200);
-  assert.equal(submissionBody.code,'SUBMISSION_VERIFIED');
-  assert.equal(submissionBody.data.productionStarted,false);
-  const orderId=submissionBody.data.orderId;
-  assert(typeof orderId==='string' && orderId.length===36);
+  stage='EXISTING_SYNTHETIC_ORDER_REUSE_PIN';
+  // Prior approved Run #44255738492 already persisted this P1 order.
+  // This run MUST NEVER create another Office order, upload a new P1 image,
+  // or duplicate the immutable Inbox/submission receipt.
+  const orderId=EXISTING_ORDER_ID;
+  const orderNumber=EXISTING_ORDER_NUMBER;
   globalThis.currentOrderId=orderId;
-  evidence('OFFICE_UI_SYNTHETIC_SUBMISSION_HTTP_AND_RECEIPT');
+  evidence('REUSED_SUBMITTED_QA_ORDER_NO_NEW_P1_SUBMISSION');
 
-  stage='OPERATOR_LOGIN_ACCEPT';
+  stage='OPERATOR_LOGIN';
   const operator=await login(browser,'OPERATOR','/workshop-orders/inbox');
   sessions.push(operator.context);
+  stage='OPERATOR_EXISTING_ORDER_INBOX';
+  await waitOrderCard(operator.page,orderNumber);
+  evidence('OPERATOR_READ_EXISTING_P1_INBOX');
+  stage='OPERATOR_ACCEPT';
   let accepted=await workshopAction(operator.page,orderNumber,'ACCEPT',
     'QA operator has received the synthetic order for review');
   assert.equal(accepted.workflowStatus,'WORKSHOP_REVIEW');
@@ -160,6 +125,9 @@ async function main() {
   const originalReturnVersion=returned.version;
   evidence('OPERATOR_RETURN_BLOCKER_TRANSACTION');
 
+  stage='OFFICE_LOGIN_AFTER_RETURN';
+  const office=await login(browser,'ADMIN','/workshop-orders/production/new');
+  sessions.push(office.context);
   stage='OFFICE_READ_RETURNED';
   await office.page.goto(origin+'/workshop-orders/production/new',{waitUntil:'domcontentloaded'});
   const reload=office.page.getByRole('button',{name:'刷新退回任务'});
