@@ -16,6 +16,8 @@ import './workshop-order-prod-p1-candidate-contract.test';
 
 import './workshop-order-prod-private-image-edge.test';
 
+import './workshop-order-prod-office-form-candidate.test';
+
 // WOS project-owned test aggregator. Each new WOS test is imported here,
 // so the existing shared CI invokes it without modifying shared workflows.
 console.log('workshop-order-suite.test.ts: PASS');

@@ -40,7 +40,7 @@ export async function POST(req:NextRequest){
   if(!actor.ok)return json(403,'FORBIDDEN');
   // No user-controlled status/owner/org fields; DB has to recheck all.
   // Synthetic binary-proof table is NEVER valid for actual Storage uploads.
-  const result=await client.rpc('wos_mvp_submit_first_order_candidate',{
+  const result=await client.rpc('wos_mvp_submit_first_order_full_candidate',{
     p_order_id:input.orderId,p_expected_version:input.expectedVersion,
     p_idempotency_key:input.idempotencyKey,p_note:input.readinessNote,
   });
