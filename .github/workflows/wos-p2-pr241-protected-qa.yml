@@ -1,0 +1,218 @@
+# STAGED ONLY: no master merge, no Production deployment, no dispatch yet.
+# QA gate installation and expiry remain independent DBA approvals.
+name: WOS P2 protected PR241 exact-head browser acceptance
+on:
+  workflow_dispatch:
+    inputs:
+      reviewed_sha:
+        description: Owner-approved exact reviewed PR241 HEAD
+        required: true
+        type: string
+      audited_master_sha:
+        description: Approved trusted workflow merge HEAD, not a user branch SHA
+        required: true
+        type: string
+
+permissions:
+  contents: read
+concurrency:
+  group: wos-p2-protected-browser
+  cancel-in-progress: false
+
+jobs:
+  protected-source-gate:
+    if: >-
+      github.repository == 'lenchenalc-hongda/hongda-new-media-platform' &&
+      github.ref == 'refs/heads/master'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: read
+    outputs:
+      head: ${{ steps.verify.outputs.head }}
+    steps:
+      - name: Require exact P2 SHA, independent reviewer and trusted master provenance
+        id: verify
+        env:
+          REQUESTED: ${{ inputs.reviewed_sha }}
+          TRUSTED_MASTER: ${{ inputs.audited_master_sha }}
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_SHA" = "$TRUSTED_MASTER"
+          test "$REQUESTED" = "89bb408d13e45458c608db29c47e2803d49b3170"
+          base="https://api.github.com/repos/$GITHUB_REPOSITORY"
+          api() {
+            curl -fsS --max-time 25 \
+              -H "Authorization: Bearer $GH_TOKEN" \
+              -H "Accept: application/vnd.github+json" "$base/$1"
+          }
+          test "$(api branches/master | jq -r '.commit.sha')" = "$GITHUB_SHA"
+          p2="$(api pulls/241)"
+          jq -e --arg sha "$REQUESTED" '
+            .state=="open" and .draft==true and .merged==false
+            and .head.sha==$sha and
+            .base.ref=="feature/wos-p1-qa-transaction-inbox-20261117"
+            and .changed_files==27' <<<"$p2" >/dev/null
+          p1="$(api pulls/238)"
+          jq -e '.state=="open" and .draft==true and .merged==false
+            and .head.sha=="6a72b446ccc517a5ff14e531b8a6663b4a70a77e"' \
+            <<<"$p1" >/dev/null
+          files="$(api 'pulls/241/files?per_page=100')"
+          jq -e 'length==27 and
+            ([.[] | select(.filename | startswith("supabase/migrations/"))]|length)==0' \
+            <<<"$files" >/dev/null
+          ci="$(api actions/runs/44127583534)"
+          jq -e --arg sha "$REQUESTED" '.head_sha==$sha and .event=="push"
+            and .conclusion=="success" and
+            .path==".github/workflows/wos-p2-secretless-contract-ci.yml"' \
+            <<<"$ci" >/dev/null
+          jobs="$(api 'actions/runs/44127583534/jobs?per_page=100')"
+          jq -e '.total_count==3 and
+            ([.jobs[].name]|sort)==(["wos-p2-contract",
+            "wos-p2-office-pg17-audit","wos-p2-pg17-audit"]|sort)
+            and all(.jobs[]; .conclusion=="success")' <<<"$jobs" >/dev/null
+          reviewer="$(api actions/runs/44128682235)"
+          jq -e '.head_sha=="3e526b09195ff34bae70f6c38fe39d0b73e39cb5"
+            and .event=="push" and .conclusion=="success"
+            and .path==".github/workflows/wos-p2-office-independent-audit.yml"' \
+            <<<"$reviewer" >/dev/null
+          echo "head=$REQUESTED" >> "$GITHUB_OUTPUT"
+          echo WOS_P2_PROTECTED_EXACT_SHA_AND_TECHNICAL_REVIEW=PASS
+
+  real-qa-browser:
+    needs: protected-source-gate
+    if: >-
+      github.ref == 'refs/heads/master' &&
+      needs.protected-source-gate.result == 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    environment: hongda-review-dev
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout exact business HEAD, no credentials persisted
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ needs.protected-source-gate.outputs.head }}
+          path: app
+          persist-credentials: false
+      - name: Checkout independently reviewed browser script from protected master
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.sha }}
+          path: trusted
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1
+        with:
+          version: '10'
+      - name: Secretless source and browser setup
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C app rev-parse HEAD)" = "89bb408d13e45458c608db29c47e2803d49b3170"
+          test "$(git -C trusted rev-parse HEAD)" = "$GITHUB_SHA"
+          cd app
+          pnpm install --frozen-lockfile --ignore-scripts
+          pnpm exec tsc --noEmit
+          pnpm exec tsx tests/unit/workshop-order-suite.test.ts
+          node --check ../trusted/tests/e2e/wos-p2-qa-browser.cjs
+          node --check ../trusted/tests/e2e/wos-p2-qa-gate-failclose.cjs
+          npm install --prefix /tmp/hongda-qa-browser --no-audit --no-fund \
+            --silent playwright@1.56.1
+          /tmp/hongda-qa-browser/node_modules/.bin/playwright install --with-deps chromium
+      - name: Build and launch local Preview using only QA publishable key
+        working-directory: app
+        env:
+          AUTH_MODE: supabase
+          VERCEL_ENV: preview
+          NEXT_PUBLIC_SUPABASE_URL: https://xulmpqaknlwqqculbsek.supabase.co
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.REVIEW_DEV_SUPABASE_ANON_KEY }}
+          WOS_P5C_NONPROD_API_ENABLED: 'true'
+          WOS_P7_NONPROD_SUBMIT_ENABLED: 'true'
+          WOS_P2_QA_MUTATIONS_ENABLED: 'true'
+          WOS_P2_QA_OFFICE_REVISION_ENABLED: 'true'
+          NEXT_PUBLIC_WOS_P2_QA_MUTATIONS_ENABLED: 'true'
+          NEXT_PUBLIC_WOS_P2_QA_OFFICE_REVISION_ENABLED: 'true'
+          NEXT_PUBLIC_WOS_QA_LOCAL_TEST: 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$NEXT_PUBLIC_SUPABASE_ANON_KEY"
+          pnpm build
+          nohup pnpm exec next start --hostname 127.0.0.1 -p 3000 \
+            >/tmp/wos-p2-local-preview.log 2>&1 </dev/null &
+          echo $! >/tmp/wos-p2-next.pid
+          for i in $(seq 1 90); do
+            if curl -fsS http://127.0.0.1:3000/login -o /dev/null; then break; fi
+            sleep 2
+          done
+          curl -fsS http://127.0.0.1:3000/login -o /dev/null
+      - name: Real 2-role Office/Operator test + Viewer/foreign denials
+        working-directory: trusted
+        env:
+          WOS_P2_REVIEWED_SHA: ${{ needs.protected-source-gate.outputs.head }}
+          WOS_P2_PROTECTED_BROWSER_E2E_ACK: 'true'
+          WOS_QA_BROWSER_ACK_TEST_WRITES: 'true'
+          AUTH_MODE: supabase
+          VERCEL_ENV: preview
+          NEXT_PUBLIC_SUPABASE_URL: https://xulmpqaknlwqqculbsek.supabase.co
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.REVIEW_DEV_SUPABASE_ANON_KEY }}
+          WOS_P5C_NONPROD_API_ENABLED: 'true'
+          WOS_P7_NONPROD_SUBMIT_ENABLED: 'true'
+          WOS_P2_QA_MUTATIONS_ENABLED: 'true'
+          WOS_P2_QA_OFFICE_REVISION_ENABLED: 'true'
+          NEXT_PUBLIC_WOS_P2_QA_MUTATIONS_ENABLED: 'true'
+          NEXT_PUBLIC_WOS_P2_QA_OFFICE_REVISION_ENABLED: 'true'
+          NEXT_PUBLIC_WOS_QA_LOCAL_TEST: 'true'
+          REVIEW_DEV_ADMIN_EMAIL: ${{ secrets.REVIEW_DEV_ADMIN_EMAIL }}
+          REVIEW_DEV_ADMIN_PASSWORD: ${{ secrets.REVIEW_DEV_ADMIN_PASSWORD }}
+          REVIEW_DEV_OPERATOR_EMAIL: ${{ secrets.REVIEW_DEV_OPERATOR_EMAIL }}
+          REVIEW_DEV_OPERATOR_PASSWORD: ${{ secrets.REVIEW_DEV_OPERATOR_PASSWORD }}
+          REVIEW_DEV_VIEWER_EMAIL: ${{ secrets.REVIEW_DEV_VIEWER_EMAIL }}
+          REVIEW_DEV_VIEWER_PASSWORD: ${{ secrets.REVIEW_DEV_VIEWER_PASSWORD }}
+          REVIEW_DEV_FOREIGN_EMAIL: ${{ secrets.REVIEW_DEV_FOREIGN_EMAIL }}
+          REVIEW_DEV_FOREIGN_PASSWORD: ${{ secrets.REVIEW_DEV_FOREIGN_PASSWORD }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Database installer/operator gate must be separately owner-approved,
+          # independently enabled for a short QA-only window immediately before
+          # this step; no database credentials, gate install/enable here.
+          node tests/e2e/wos-p2-qa-browser.cjs
+      - name: Always atomically close BOTH QA DB gates with QA-admin-only RPC
+        if: always()
+        working-directory: trusted
+        env:
+          GITHUB_RUN_ID: ${{ github.run_id }}
+          WOS_P2_QA_CLOSURE_ENABLED: 'true'
+          WOS_P2_GATE_CLOSE_REASON: ${{ job.status == 'success' && 'PASS' || job.status == 'cancelled' && 'CANCEL' || 'FAIL' }}
+          NEXT_PUBLIC_SUPABASE_URL: https://xulmpqaknlwqqculbsek.supabase.co
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.REVIEW_DEV_SUPABASE_ANON_KEY }}
+          REVIEW_DEV_ADMIN_EMAIL: ${{ secrets.REVIEW_DEV_ADMIN_EMAIL }}
+          REVIEW_DEV_ADMIN_PASSWORD: ${{ secrets.REVIEW_DEV_ADMIN_PASSWORD }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Post-run CLOSE-only request is independent of the browser result.
+          # The RPC checks the authenticated QA Admin profile and can never
+          # open a Gate. No Service Role key is made available to this job.
+          node tests/e2e/wos-p2-qa-gate-failclose.cjs
+          echo WOS_P2_QA_BOTH_GATES_CLOSED_BY_PROTECTED_WORKFLOW=PASS
+      - name: Stop local QA Preview even after test failure
+        if: always()
+        shell: bash
+        run: |
+          if test -f /tmp/wos-p2-next.pid; then
+            kill "$(cat /tmp/wos-p2-next.pid)" 2>/dev/null || true
+          fi
+          echo WOS_P2_LOCAL_PREVIEW_SHUTDOWN_REQUESTED=YES
+          # A separately installed QA-only pg_cron watchdog is required for
+          # hard Runner termination, which may prevent always() from running.
+          # Never substitute expiry-only fallback for success/failure cleanup.
