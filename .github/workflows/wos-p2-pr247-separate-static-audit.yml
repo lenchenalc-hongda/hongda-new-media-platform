@@ -1,0 +1,95 @@
+# Source-isolated review: no QA secrets, model calls, database access, or production deploy.
+name: WOS P2 PR247 separate static audit
+on:
+  push:
+    branches:
+      - audit/wos-p2-pr247-independent-cwd-20261118
+permissions:
+  contents: read
+  pull-requests: read
+  issues: read
+  actions: read
+jobs:
+  review:
+    if: github.repository == 'lenchenalc-hongda/hongda-new-media-platform'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Exact trusted baseline
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: 1e9f1bfb415bd51b9d8963e170b55d96473546dc
+          path: baseline
+          persist-credentials: false
+      - name: Exact untrusted PR candidate
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: 6f293781e1ff7e3e7a5980c8fefedba2d08fb34b
+          path: candidate
+          persist-credentials: false
+      - name: Isolated exact source, provenance and disjoint-lock audit
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json,os,pathlib,urllib.request
+          repo='lenchenalc-hongda/hongda-new-media-platform'
+          head='6f293781e1ff7e3e7a5980c8fefedba2d08fb34b'
+          base='1e9f1bfb415bd51b9d8963e170b55d96473546dc'
+          path='.github/workflows/wos-p2-pr241-protected-qa.yml'
+          assert os.environ['GITHUB_REF']=='refs/heads/audit/wos-p2-pr247-independent-cwd-20261118'
+          old='\n'.join([
+           '          node --test ../trusted/tests/unit/wos-p2-owner-cas-attest.test.cjs',
+           '          node --test ../trusted/tests/unit/wos-p2-qa-identity-readonly-preflight.test.cjs'])
+          new='\n'.join([
+           '          # Run trusted source-contract tests with trusted/ as cwd, not app/.',
+           '          # The Owner CAS tests read docs/workshop-order-system/... relative to cwd.',
+           '          # Keep the business PR241 app checkout and its source tests unchanged.',
+           '          test -f ../trusted/docs/workshop-order-system/nonproduction-only/wos_p2_owner_cas_attest_PROPOSED_QA_ONLY.sql',
+           '          ( cd ../trusted && node --test tests/unit/wos-p2-owner-cas-attest.test.cjs )',
+           '          ( cd ../trusted && node --test tests/unit/wos-p2-qa-identity-readonly-preflight.test.cjs )'])
+          original=pathlib.Path('baseline',path).read_text()
+          candidate=pathlib.Path('candidate',path).read_text()
+          assert original.count(old)==1 and candidate==original.replace(old,new),'EXACT_DIFF_FAILED'
+          assert pathlib.Path('candidate/docs/workshop-order-system/nonproduction-only/wos_p2_owner_cas_attest_PROPOSED_QA_ONLY.sql').is_file()
+          for pin in ['GITHUB_RUN_ATTEMPT','hongda-review-dev','WOS_P2_OWNER_CAS_READONLY_ACK','WOS_P2_QA_CLOSURE_ENABLED','if: always()','WOS_P2_REUSE_EXISTING_ORDER_ONLY']:
+           assert pin in candidate, 'MISSING_SAFETY_CONTROL_'+pin
+          print('PR247_EXACT_DIFF_ONLY_CWD_FIX=PASS')
+          def api(relative):
+           request=urllib.request.Request('https://api.github.com/repos/'+repo+'/'+relative,headers={
+            'Accept':'application/vnd.github+json','Authorization':'Bearer '+os.environ['GH_TOKEN'],'X-GitHub-Api-Version':'2022-11-28'})
+           with urllib.request.urlopen(request,timeout=25) as response:return json.load(response)
+          pr=api('pulls/247')
+          assert pr['state']=='open' and not pr['draft'] and not pr['merged']
+          assert pr['head']['sha']==head and pr['base']['sha']==base and pr['base']['ref']=='master'
+          f247=api('pulls/247/files?per_page=100')
+          assert len(f247)==1 and f247[0]['filename']==path
+          pr202=api('pulls/202')
+          assert pr202['state']=='open' and pr202['draft'] and not pr202['merged']
+          paths202={f['filename'] for f in api('pulls/202/files?per_page=100')}
+          assert paths202=={
+           'scripts/agent-control/reliability-core.mjs',
+           'scripts/agent-control/reliability-watchdog.mjs',
+           'tests/unit/agent-control-reliability-v2.test.ts'}
+          assert path not in paths202
+          assert '"shared_path_lock_owner": 202' in api('issues/160')['body']
+          run=api('actions/runs/44280716044')
+          assert run['head_sha']==head and run['conclusion']=='success' and run['status']=='completed'
+          jobs=api('actions/runs/44280716044/jobs?per_page=100')
+          assert {job['name']:job['conclusion'] for job in jobs['jobs']}=={
+           'lint-and-audit':'success','glh-stage1-postgres-synthetic':'success'}
+          print('PR247_EXACT_HEAD_CI_AND_ZERO_PR202_OVERLAP=PASS')
+          print('PR247_SOURCE_SEPARATE_TECHNICAL_AUDIT=PASS')
+          print('PR247_MERGE_BLOCKED_SHARED_LOCK_AND_OWNER_WAIVER_REQUIRED')
+          PY
+      - name: Run source-scope Owner CAS mock tests from corrected cwd
+        shell: bash
+        working-directory: candidate
+        run: |
+          set -euo pipefail
+          test -f docs/workshop-order-system/nonproduction-only/wos_p2_owner_cas_attest_PROPOSED_QA_ONLY.sql
+          node --test tests/unit/wos-p2-owner-cas-attest.test.cjs
+          node --test tests/unit/wos-p2-qa-identity-readonly-preflight.test.cjs
+          echo PR247_SOURCE_SEPARATE_MOCK_SUITE=PASS
