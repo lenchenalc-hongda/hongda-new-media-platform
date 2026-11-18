@@ -1,0 +1,102 @@
+name: WOS QA-overlay independent fixed-source audit
+on:
+  push:
+    branches: [audit/wos-p0-02-02-qa-overlay-20261119]
+permissions:
+  contents: read
+  pull-requests: read
+jobs:
+  independent-audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: 7a005119303e852e1041f11bec32e5430286c25e
+          path: baseline
+          persist-credentials: false
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ed1b9eb70ff4d211c3662b75ba32b6c97795d197
+          path: candidate
+          persist-credentials: false
+      - name: Verify exact Git source, protected files, private proof and SQL blob SHAs
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json,os,pathlib,subprocess,urllib.request,re
+          repo='lenchenalc-hongda/hongda-new-media-platform'
+          head='ed1b9eb70ff4d211c3662b75ba32b6c97795d197';parent='5d07b8782bdb60f9bf9e448d89c4b751dc7aac4e';master='7a005119303e852e1041f11bec32e5430286c25e'
+          expected=set([".github/workflows/wos-prod-p0-02-02-qa-overlay-isolated-pg17.yml","docs/workshop-order-system/nonproduction-only/wos-p0-02-02-qa-overlay/01-readonly-preflight.sql","docs/workshop-order-system/nonproduction-only/wos-p0-02-02-qa-overlay/02-readonly-qa-fingerprint.sql","docs/workshop-order-system/nonproduction-only/wos-p0-02-02-qa-overlay/03-qa-overlay-incremental-INSTALL_NOT_AUTHORIZED.sql","docs/workshop-order-system/nonproduction-only/wos-p0-02-02-qa-overlay/04-readonly-postflight.sql","docs/workshop-order-system/nonproduction-only/wos-p0-02-02-qa-overlay/05-zero-write-rollback-NOT_AUTHORIZED.sql","docs/workshop-order-system/nonproduction-only/wos-p0-02-02-qa-overlay/README.md","scripts/wos-prod-readiness/qa-overlay-source-contract.mjs","tests/sql/wos-prod-p0-02-02-qa-overlay/overlay-new-cpc-contract.sql","tests/sql/wos-prod-p0-02-02-qa-overlay/qa-existing-structure-83-legacy.sql","tests/sql/wos-prod-p0-02-02-qa-overlay/strict-private-proof-negative.sql"])
+          blobs={"01-readonly-preflight.sql":"3c412211c171332e9ec39a8922d3a634646d5679","02-readonly-qa-fingerprint.sql":"ea749fe0c9fd37f239ad4bf1d140dc85d5126649","03-qa-overlay-incremental-INSTALL_NOT_AUTHORIZED.sql":"4af430aba86c21e5035eef7deb4c1b0c3a17ec1c","04-readonly-postflight.sql":"b6062deb11e91465d2c71a12454637faa9f9e38e","05-zero-write-rollback-NOT_AUTHORIZED.sql":"84c62c952f3c6eec61a76c104179bc4b39458814"}
+          def git(w,*args):return subprocess.check_output(['git','-C',w,*args],text=True).strip()
+          assert git('candidate','rev-parse','HEAD')==head
+          assert git('baseline','rev-parse','HEAD')==master
+          assert os.environ['GITHUB_REF']=='refs/heads/audit/wos-p0-02-02-qa-overlay-20261119'
+          def api(path):
+            request=urllib.request.Request('https://api.github.com/repos/'+repo+'/'+path,headers={
+             'Authorization':'Bearer '+os.environ['GH_TOKEN'],
+             'Accept':'application/vnd.github+json'})
+            with urllib.request.urlopen(request,timeout=25) as s:return json.load(s)
+          pr=api('pulls/250');ancestor=api('pulls/249')
+          assert pr['head']['sha']==head and pr['base']['sha']==parent and pr['draft'] and not pr['merged']
+          assert ancestor['head']['sha']==parent and ancestor['draft'] and not ancestor['merged']
+          changed={x['filename'] for x in api('pulls/250/files?per_page=100')}
+          assert changed==expected and len(changed)==11,('CHANGED_PATHS',sorted(changed))
+          assert not changed.intersection({x['filename'] for x in api('pulls/202/files?per_page=100')})
+          assert not any(x.startswith('supabase/migrations/') or x.startswith('src/lib/supabase/') for x in changed)
+          d='docs/workshop-order-system/nonproduction-only/wos-p0-02-02-qa-overlay/'
+          for filename,sha in blobs.items():
+            assert git('candidate','hash-object',d+filename)==sha,('BLOB_CHANGED',filename)
+          print('WOS_QA_OVERLAY_AUDIT_SHA_PATHS_BLOBS_PR202_LOCK=PASS')
+          def read(p):return pathlib.Path('candidate',p).read_text(encoding='utf-8')
+          install=read(d+'03-qa-overlay-incremental-INSTALL_NOT_AUTHORIZED.sql')
+          before=read(d+'01-readonly-preflight.sql')
+          after=read(d+'04-readonly-postflight.sql')
+          rollback=read(d+'05-zero-write-rollback-NOT_AUTHORIZED.sql')
+          assert len(re.findall(r'^BEGIN;',install,re.M))==1
+          assert len(re.findall(r'^COMMIT;',install,re.M))==1
+          for marker in ("VALUES(true,false,'NOT_AUTHORIZED')",
+           'QA_OVERLAY_P1_OWNER_GATE_NOT_OPEN','QA_OVERLAY_P2_GATE_CONFLICT',
+           'QA_OVERLAY_PROOF_REQUIRES_NEW_CPC_BOUND_ORDER',
+           'CREATE TABLE wos_mvp_qa.cpc_order_bindings',
+           'CREATE TABLE wos_mvp_attestation.private_image_proofs',
+           'CREATE TABLE wos_mvp_attestation.office_document_receipts',
+           'PERFORM wos_mvp_qa.assert_cpc_link',
+           'wos_mvp_submit_first_order_full_candidate'):
+            assert marker in install,('SQL_GATE_MISSING',marker)
+          assert install.count('QA_OVERLAY_PROOF_REQUIRES_NEW_CPC_BOUND_ORDER')==2
+          assert not re.search(r'CREATE TABLE public\.wos_|DROP TABLE public\.wos_|DROP TRIGGER wos_qa_|ALTER COLUMN (customer_id|project_id) SET NOT NULL|REVOKE ALL ON storage\.objects|CREATE POLICY .* ON storage\.objects',install,re.I)
+          assert 'synthetic_private_image_proofs' not in install
+          assert 'wos.p0_01_ephemeral_rehearsal' not in install
+          assert 'WOS_LEGACY_ORDER_BASELINE_CHANGED' in before
+          assert 'WOS_QA_OVERLAY_HISTORICAL_RECORD_COUNT_CHANGED' in after
+          assert 'WOS_OVERLAY_LIVE_DATA_EXISTS_USE_FORWARD_FIX' in rollback
+          assert ' CASCADE' not in rollback
+          print('WOS_QA_OVERLAY_AUDIT_LEGACY_DATA_ZERO_WRITER_DEFAULT_OFF=PASS')
+          fixture=read('tests/sql/wos-prod-p0-02-02-qa-overlay/qa-existing-structure-83-legacy.sql')
+          for marker in ('generate_series(1,83)','wos_p7_private_object_insert',
+           'wos_p7_private_object_select','wos_p7_storage_reader_roles',
+           'wos_qa_p2_single_order_gate_guard'):assert marker in fixture
+          wf=read('.github/workflows/wos-prod-p0-02-02-qa-overlay-isolated-pg17.yml')
+          assert 'WOS_OVERLAY_FAILURE_ATOMIC_ROLLBACK_83_LEGACY=PASS' in wf
+          assert 'WOS_OVERLAY_ZERO_WRITE_ROLLBACK_83_LEGACY_PRESERVED=PASS' in wf
+          assert 'secrets.' not in wf
+          print('WOS_QA_OVERLAY_AUDIT_P7_RLS_REAL_POLICY_AND_ROLLBACK_EVIDENCE=PASS')
+          PY
+      - name: Independently rerun candidate frontend/Edge contract checks (no secrets)
+        working-directory: candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/wos-prod-readiness/qa-overlay-source-contract.mjs
+          corepack enable
+          corepack prepare pnpm@10.11.0 --activate
+          pnpm install --frozen-lockfile
+          pnpm exec tsx tests/unit/workshop-order-prod-private-image-edge.test.ts
+          pnpm exec tsx tests/unit/workshop-order-prod-office-form-candidate.test.ts
+          pnpm exec tsx tests/unit/workshop-order-prod-cpc-eligibility.test.ts
+          echo WOS_QA_OVERLAY_SEPARATE_HOSTED_TECHNICAL_AUDIT=PASS
