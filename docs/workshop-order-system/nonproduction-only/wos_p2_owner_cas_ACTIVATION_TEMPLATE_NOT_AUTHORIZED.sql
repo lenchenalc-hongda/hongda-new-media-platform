@@ -21,6 +21,14 @@ BEGIN
   THEN
     RAISE EXCEPTION 'QA_OWNER_CAS_EXPLICIT_NEW_RUN_ID_REQUIRED'; END IF;
   v_ref:='OWNER_RUN_'||v_run_id||'_PR241_89bb408d';
+  IF NOT EXISTS (
+   SELECT 1 FROM pg_catalog.pg_trigger tr
+   WHERE tr.tgrelid='public.wos_production_orders'::regclass
+     AND tr.tgname='wos_qa_p2_single_order_gate_guard'
+     AND tr.tgenabled IN ('O','A')
+     AND tr.tgfoid='wos_qa_safety.p2_single_order_write_guard()'::regprocedure
+  ) THEN RAISE EXCEPTION 'QA_OWNER_CAS_SINGLE_ORDER_GUARD_MISSING'; END IF;
+
 
   -- CAS is allowed only against both completely closed Gates and a fresh,
   -- unconsumed Run. Never let this template modify an existing business order.

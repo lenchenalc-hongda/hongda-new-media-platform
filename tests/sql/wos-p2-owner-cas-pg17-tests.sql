@@ -19,6 +19,25 @@ END
 $a$;
 SELECT 'WOS_P2_QA_PG17_FUNCTION_GRANTS_MINIMAL=PASS' AS result;
 
+-- Verify installed, enabled trigger and check no public execution grant.
+DO $scope_preflight$
+BEGIN
+ IF NOT EXISTS (SELECT 1 FROM pg_catalog.pg_trigger t
+ WHERE t.tgrelid='public.wos_production_orders'::regclass
+   AND t.tgname='wos_qa_p2_single_order_gate_guard'
+   AND t.tgenabled IN ('O','A')
+   AND t.tgfoid='wos_qa_safety.p2_single_order_write_guard()'::regprocedure)
+ OR has_function_privilege('authenticated',
+  'wos_qa_safety.p2_single_order_write_guard()','EXECUTE')
+ THEN RAISE EXCEPTION 'QA_SINGLE_ORDER_TRIGGER_NOT_RESTRICTED'; END IF;
+END $scope_preflight$;
+BEGIN;
+UPDATE public.wos_production_orders SET version=version+1
+ WHERE id='44444444-4444-4444-8444-444444444444'::uuid;
+ROLLBACK;
+SELECT 'WOS_P2_QA_PG17_GATE_OFF_EXISTING_ORDER_MUTATIONS_UNCHANGED=PASS' AS result;
+
+
 BEGIN;
 SET LOCAL ROLE authenticated;
 SELECT set_config('request.jwt.claim.sub','11111111-1111-4111-8111-111111111111',true);
@@ -123,6 +142,44 @@ $a$;
 COMMIT;
 SELECT 'WOS_P2_QA_PG17_RUN_BOUND_DUAL_GATE_READY=PASS' AS result;
 
+-- Transactional negative tests: target update permitted, unrelated UPDATE,
+-- new INSERT, any DELETE and target order-number tampering rejected.
+BEGIN;
+UPDATE public.wos_production_orders SET version=version+1
+ WHERE id='953d2204-3e65-4b75-b10e-c6e97f1bbb56'::uuid;
+DO $scope$
+BEGIN
+ UPDATE public.wos_production_orders SET version=version+1
+ WHERE id='44444444-4444-4444-8444-444444444444'::uuid;
+ RAISE EXCEPTION 'UNRELATED_ORDER_UPDATE_WAS_ALLOWED';
+EXCEPTION WHEN insufficient_privilege THEN NULL;
+END $scope$;
+DO $scope$
+BEGIN
+ INSERT INTO public.wos_production_orders
+ (id,order_number,organization_id,workflow_status,version)
+ VALUES ('55555555-5555-4555-8555-555555555555'::uuid,
+ 'QA-NONPROD-EXTRA','0ff53d93-2b9e-48b9-8113-a4768c39cdd2'::uuid,'SUBMITTED',1);
+ RAISE EXCEPTION 'NEW_ORDER_INSERT_WAS_ALLOWED';
+EXCEPTION WHEN insufficient_privilege THEN NULL;
+END $scope$;
+DO $scope$
+BEGIN
+ DELETE FROM public.wos_production_orders WHERE id='953d2204-3e65-4b75-b10e-c6e97f1bbb56'::uuid;
+ RAISE EXCEPTION 'TARGET_ORDER_DELETE_WAS_ALLOWED';
+EXCEPTION WHEN insufficient_privilege THEN NULL;
+END $scope$;
+DO $scope$
+BEGIN
+ UPDATE public.wos_production_orders SET order_number='QA-CHANGED'
+ WHERE id='953d2204-3e65-4b75-b10e-c6e97f1bbb56'::uuid;
+ RAISE EXCEPTION 'TARGET_ORDER_NUMBER_TAMPERING_ALLOWED';
+EXCEPTION WHEN insufficient_privilege THEN NULL;
+END $scope$;
+ROLLBACK;
+SELECT 'WOS_P2_QA_PG17_ONLY_PINNED_ORDER_UPDATE_ALLOWED=PASS' AS result;
+
+
 BEGIN;
 SET LOCAL ROLE authenticated;
 SELECT set_config('request.jwt.claim.sub','11111111-1111-4111-8111-111111111111',true);
@@ -205,7 +262,7 @@ SELECT 'WOS_P2_QA_PG17_CLOSED_RUN_REPLAY_DENIED=PASS' AS result;
 
 DO $a$
 BEGIN
- IF (SELECT count(*) FROM public.wos_production_orders)<>1
+ IF (SELECT count(*) FROM public.wos_production_orders)<>2
  OR (SELECT count(*) FROM public.wos_submission_receipts)<>1
  OR (SELECT count(*) FROM public.wos_workshop_inbox)<>1
  OR (SELECT count(*) FROM public.wos_qa_p2_action_receipts)<>0

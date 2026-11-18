@@ -41,3 +41,17 @@ END
 $a$;
 COMMIT;
 SELECT 'WOS_P2_QA_PG17_ACTUAL_OWNER_CAS_READ_ONLY_PROOF=PASS' AS result;
+
+BEGIN;
+UPDATE public.wos_production_orders SET version=version+1
+ WHERE id='953d2204-3e65-4b75-b10e-c6e97f1bbb56'::uuid;
+DO $scope$
+BEGIN
+ UPDATE public.wos_production_orders SET version=version+1
+ WHERE id='44444444-4444-4444-8444-444444444444'::uuid;
+ RAISE EXCEPTION 'CAS_PROOF_FAILED_SINGLE_ORDER_SCOPE';
+EXCEPTION WHEN insufficient_privilege THEN NULL;
+END $scope$;
+ROLLBACK;
+SELECT 'WOS_P2_QA_PG17_OWNER_CAS_STRICT_SINGLE_ORDER_SCOPE=PASS' AS result;
+

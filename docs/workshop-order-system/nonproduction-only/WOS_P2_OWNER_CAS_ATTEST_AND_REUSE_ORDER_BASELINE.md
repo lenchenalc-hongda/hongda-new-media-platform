@@ -66,3 +66,11 @@
 - `.github/workflows/wos-p2-owner-cas-reuse-secretless-ci.yml`：隔离无密钥 CI；不使用 QA Admin 密码、PG Service Role 或真实 QA Gate。
 
 **任何 CI PASS 都不等于实际 P2 车间闭环 PASS。** 只有在下一次独立批准后，实际 Owner Gate、Operator 接单、退回、Office 六字段修订、重新提交、Operator 复核、幂等/冲突/越权/签样失效与最终关闭证据均 PASS，才能将 P2 E2E 标记成功。
+
+## QA Gate 写入范围的数据库强制保护（新增 / 尚未安装）
+
+只读检查发现：同一 QA 组织有 84 张订单，83 张不是此次获批的目标订单；现有 Operator/Office/复核 SECURITY DEFINER RPC 校验角色、组织、Gate 和版本，但不绑定本次唯一订单或 Run。故本 PR 的 QA-only 安装方案增加 `wos_qa_safety.p2_single_order_write_guard()` 与 `wos_qa_p2_single_order_gate_guard`。
+
+当任意 QA Gate 为 ON 时，数据库触发器只允许对原订单 `953d2204-3e65-4b75-b10e-c6e97f1bbb56` 进行 UPDATE，拒绝其他订单 UPDATE、所有新 INSERT、所有 DELETE 和篡改原订单 ID/组织/订单号；同一 RPC 内已写的阻塞项/回执等随事务回滚。**两 Gate 都 OFF 时不改变既有 QA 写入行为。** Owner CAS 只读证明还必须验证该触发器已启用，否则无论 Gate 状态如何均不能返回 READY。
+
+此触发器只针对未来经过单独审核授权的 Supabase QA 安装；代码开发没有修改真实 QA 或正式数据库。临时 PG17 CI 验证 Gate OFF 普通 DML、Gate ON 正确订单更新和其他订单 INSERT/UPDATE/DELETE 拒绝、Owner CAS 后的相同范围保护。

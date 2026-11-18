@@ -159,3 +159,18 @@ test('SQL proposal cannot open Gate, leak authenticated table SELECT, or deploy 
  assert(!sql.includes('CREATE POLICY'));
 });
 console.log('WOS_P2_OWNER_CAS_SECRETLESS_NEGATIVE_TESTS=PASS');
+
+test('QA DB attestation is fail-closed without exact-order Gate trigger',()=>{
+ const sql=fs.readFileSync('docs/workshop-order-system/nonproduction-only/wos_p2_owner_cas_attest_PROPOSED_QA_ONLY.sql','utf8');
+ for(const marker of ['CREATE TRIGGER wos_qa_p2_single_order_gate_guard',
+  'BEFORE INSERT OR UPDATE OR DELETE ON public.wos_production_orders',
+  'wos_qa_safety.p2_single_order_write_guard()',
+  'QA_P2_GATE_SINGLE_ORDER_SCOPE_REJECTED',
+  'QA_OWNER_ATTEST_SINGLE_ORDER_GUARD_MISSING',
+  "tr.tgenabled IN ('O','A')",
+  "OLD.id='953d2204-3e65-4b75-b10e-c6e97f1bbb56'::uuid","NEW.id='953d2204-3e65-4b75-b10e-c6e97f1bbb56'::uuid",
+  'REVOKE ALL ON FUNCTION wos_qa_safety.p2_single_order_write_guard()'])
+  assert(sql.includes(marker),'Missing single-order SQL guard: '+marker);
+ assert(!sql.includes('DROP TRIGGER'));
+ assert(!sql.includes('GRANT EXECUTE ON FUNCTION wos_qa_safety.p2_single_order_write_guard()'));
+});

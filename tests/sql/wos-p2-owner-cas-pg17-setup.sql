@@ -50,6 +50,9 @@ INSERT INTO public.wos_production_orders VALUES
  ('953d2204-3e65-4b75-b10e-c6e97f1bbb56',
  'QA-NONPROD-d2f91453-fe42-42e9-98d4-a6a902645ded',
  '0ff53d93-2b9e-48b9-8113-a4768c39cdd2','SUBMITTED',2);
+INSERT INTO public.wos_production_orders VALUES
+ ('44444444-4444-4444-8444-444444444444','QA-OLDER-UNRELATED-ORDER',
+  '0ff53d93-2b9e-48b9-8113-a4768c39cdd2','SUBMITTED',1);
 INSERT INTO public.wos_submission_receipts VALUES
  ('953d2204-3e65-4b75-b10e-c6e97f1bbb56');
 INSERT INTO public.wos_workshop_inbox VALUES

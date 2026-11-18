@@ -22,6 +22,47 @@ ALTER TABLE wos_qa_safety.p2_gate_open_receipts ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON TABLE wos_qa_safety.p2_gate_open_receipts FROM PUBLIC, anon, authenticated;
 COMMENT ON TABLE wos_qa_safety.p2_gate_open_receipts
 IS 'QA-only private evidence written atomically with dual Owner CAS Gate activation; never exposed to anon or authenticated.';
+
+-- QA-only P2 scope enforcement. Existing SECURITY DEFINER P2 RPCs check
+-- role, org, Gate and version but do not bind to the one authorized order.
+-- While either write Gate remains enabled (even if it just expired), only
+-- UPDATE of the exact existing QA synthetic order is permitted. INSERT,
+-- DELETE and UPDATE to other orders fail the entire calling RPC transaction.
+-- Gate OFF leaves all original QA writes unchanged. NEVER install without
+-- a separate exact-source QA Owner schema authorization.
+CREATE OR REPLACE FUNCTION wos_qa_safety.p2_single_order_write_guard()
+RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER
+SET search_path = pg_catalog, public, wos_qa_safety AS $p2_scope$
+DECLARE v_operator_on boolean; v_office_on boolean;
+BEGIN
+ SELECT coalesce((SELECT enabled FROM public.wos_qa_p2_execution_gate
+   WHERE gate_name='OPERATOR_WRITES'),true) INTO v_operator_on;
+ SELECT coalesce((SELECT enabled FROM public.wos_qa_p2_office_execution_gate
+   WHERE gate_name='OFFICE_WRITES'),true) INTO v_office_on;
+ IF v_operator_on OR v_office_on THEN
+   IF TG_OP='UPDATE' THEN
+     IF OLD.id='953d2204-3e65-4b75-b10e-c6e97f1bbb56'::uuid AND NEW.id='953d2204-3e65-4b75-b10e-c6e97f1bbb56'::uuid
+       AND OLD.organization_id='0ff53d93-2b9e-48b9-8113-a4768c39cdd2'::uuid
+       AND NEW.organization_id='0ff53d93-2b9e-48b9-8113-a4768c39cdd2'::uuid
+       AND OLD.order_number='QA-NONPROD-d2f91453-fe42-42e9-98d4-a6a902645ded'
+       AND NEW.order_number='QA-NONPROD-d2f91453-fe42-42e9-98d4-a6a902645ded'
+     THEN RETURN NEW; END IF;
+   END IF;
+   RAISE EXCEPTION 'QA_P2_GATE_SINGLE_ORDER_SCOPE_REJECTED'
+     USING ERRCODE='42501';
+ END IF;
+ IF TG_OP='DELETE' THEN RETURN OLD; END IF;
+ RETURN NEW;
+END
+$p2_scope$;
+REVOKE ALL ON FUNCTION wos_qa_safety.p2_single_order_write_guard()
+ FROM PUBLIC, anon, authenticated;
+CREATE TRIGGER wos_qa_p2_single_order_gate_guard
+ BEFORE INSERT OR UPDATE OR DELETE ON public.wos_production_orders
+ FOR EACH ROW EXECUTE FUNCTION wos_qa_safety.p2_single_order_write_guard();
+COMMENT ON FUNCTION wos_qa_safety.p2_single_order_write_guard()
+ IS 'QA-only: prevent mutation of unrelated P2 orders during dual write Gate window';
+
 CREATE OR REPLACE FUNCTION public.wos_qa_p2_owner_cas_attest(
     p_github_run_id text,
     p_order_id uuid,
@@ -63,6 +104,24 @@ BEGIN
        OR p_expected_version IS DISTINCT FROM 2
     THEN
       RAISE EXCEPTION 'QA_OWNER_ATTEST_PIN_REJECTED' USING ERRCODE = '42501';
+    END IF;
+
+
+    -- Fail closed if enforced single-order write guard was not installed
+    -- (or was disabled). Two ON Gates and an Owner receipt alone are NOT
+    -- sufficient proof of the exact authorized business-write scope.
+    IF NOT EXISTS (
+      SELECT 1 FROM pg_catalog.pg_trigger tr
+      WHERE tr.tgrelid='public.wos_production_orders'::regclass
+        AND tr.tgname='wos_qa_p2_single_order_gate_guard'
+        AND tr.tgfoid='wos_qa_safety.p2_single_order_write_guard()'::regprocedure
+        AND tr.tgenabled IN ('O','A')
+        AND (tr.tgtype & 1)=1 AND (tr.tgtype & 2)=2
+        AND (tr.tgtype & 4)=4 AND (tr.tgtype & 8)=8
+        AND (tr.tgtype & 16)=16
+    ) THEN
+      RAISE EXCEPTION 'QA_OWNER_ATTEST_SINGLE_ORDER_GUARD_MISSING'
+        USING ERRCODE='42501';
     END IF;
 
     -- A closed run is terminal: it may never be attested or replayed.
