@@ -1,0 +1,46 @@
+name: WOS P2 PR245 independent QA alert-scope security audit
+on:
+  push:
+    branches:
+      - audit/wos-p2-pr245-alert-scope-20261118
+permissions:
+  contents: read
+  actions: read
+  pull-requests: read
+jobs:
+  github-hosted-independent-reviewer:
+    if: >-
+      github.repository == 'lenchenalc-hongda/hongda-new-media-platform' &&
+      github.ref == 'refs/heads/audit/wos-p2-pr245-alert-scope-20261118'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    env:
+      GITHUB_REVIEW_TOKEN: ${{ github.token }}
+    steps:
+      - name: Checkout independent reviewer from protected master-derived branch
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.sha }}
+          path: reviewer
+          persist-credentials: false
+      - name: Checkout pinned PR245 candidate as static data, never execute code
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: 8e8c8bee93efe3c9454dfd2f6e37eb5d21c2ba9e
+          path: candidate
+          persist-credentials: false
+      - name: Verify exact code ancestry without QA or Production credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C reviewer rev-parse HEAD)" = "$GITHUB_SHA"
+          test "$(git -C candidate rev-parse HEAD)" = "8e8c8bee93efe3c9454dfd2f6e37eb5d21c2ba9e"
+          test -z "$(printenv REVIEW_DEV_ADMIN_PASSWORD || true)"
+          test -z "$(printenv SUPABASE_SERVICE_ROLE_KEY || true)"
+          echo WOS_P2_PR245_REVIEWER_SOURCES_IMMUTABLE=PASS
+      - name: Independent SHA, six-file, CI and QA safety negative source review
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 reviewer/audits/wos-p2-pr245/independent_browser_alert_review.py candidate
+          echo WOS_P2_PR245_INDEPENDENT_GITHUB_SOURCE_REVIEW=PASS
