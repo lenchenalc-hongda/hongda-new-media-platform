@@ -107,7 +107,7 @@ const closeStepPos=workflow.indexOf('Always atomically close BOTH QA DB gates wi
 assert(build>=0 && handoff>build && browserStep>handoff && closeStepPos>browserStep,
  'identity/build -> DB attestation -> browser -> always-close must be ordered');
 assert(workflow.includes("WOS_P2_QA_LIVE_OWNER_CAS_VERIFIED_BEFORE_BROWSER=PASS"));
-assert(workflow.includes("WOS_P2_QA_REUSE_EXISTING_ORDER_ONLY: 'true'"));
+assert(workflow.includes("WOS_P2_REUSE_EXISTING_ORDER_ONLY: 'true'"));
 assert(workflow.includes("WOS_P2_OWNER_CAS_READONLY_ACK: 'true'"));
 assert(workflow.includes("node tests/e2e/wos-p2-qa-owner-cas-attest.cjs"));
 assert(workflow.includes('test "$GITHUB_RUN_ATTEMPT" = "1"'));
