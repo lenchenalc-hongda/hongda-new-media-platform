@@ -51,4 +51,35 @@ assert(!browser.includes("page.screenshot("));
 assert(!browser.includes('trace.zip'));
 console.log('WOS_P2_PROTECTED_BROWSER_LAUNCHER_STATIC_SECURITY=PASS');
 console.log('WOS_P2_PROTECTED_BROWSER_E2E_SCRIPT_SYNTAX_READY=PASS');
+
+const gateSql=fs.readFileSync(
+  'docs/workshop-order-system/nonproduction-only/wos_p2_qa_gate_failclose_NOT_FOR_PRODUCTION.sql','utf8');
+const closer=fs.readFileSync('tests/e2e/wos-p2-qa-gate-failclose.cjs','utf8');
+for(const v of [
+  'name: Always atomically close BOTH QA DB gates',
+  'if: always()','wos-p2-qa-gate-failclose.cjs',
+  "WOS_P2_QA_CLOSURE_ENABLED: 'true'",
+  'WOS_P2_GATE_CLOSE_REASON:',
+  "job.status == 'cancelled'",
+  'WOS_P2_QA_BOTH_GATES_CLOSED_BY_PROTECTED_WORKFLOW',
+])assert(workflow.includes(v),'protected cleanup missing '+v);
+for(const v of [
+  'wos_qa_safety.p2_gate_close_receipts',
+  'wos_qa_safety.reap_expired_p2_gates',
+  'SECURITY DEFINER SET search_path',
+  "role = 'admin'",
+  "approval_reference='NOT_AUTHORIZED'",
+  "v_is_replay := true",
+  'REVOKE ALL ON FUNCTION public.wos_qa_p2_failclose',
+])assert(gateSql.includes(v),'gate close SQL missing '+v);
+assert(!gateSql.includes('enabled=true'),'close-only SQL cannot enable Gate');
+assert(!gateSql.includes('DROP TABLE'),'QA controller cannot drop tables');
+assert(closer.includes("'/rest/v1/rpc/wos_qa_p2_failclose'"));
+assert(closer.includes("'/auth/v1/token?grant_type=password'"));
+assert(closer.includes('WOS_P2_QA_GATE_CLOSE_ONLY_RPC=PASS'));
+assert(!closer.includes('SERVICE_ROLE_KEY'));
+assert(!closer.includes('console.log(error)'));
+assert(!closer.includes('console.error(error)'));
+console.log('WOS_P2_QA_FAILCLOSE_STATIC_GUARDS=PASS');
+
 console.log('WOS_P2_PROTECTED_BROWSER_NOT_EXECUTED=YES');
