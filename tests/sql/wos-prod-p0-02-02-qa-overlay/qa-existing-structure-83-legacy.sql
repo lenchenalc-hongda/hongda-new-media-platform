@@ -34,7 +34,7 @@ BEGIN
  IF TG_OP='DELETE' THEN RETURN OLD; END IF;
  RETURN NEW;
 END
-$function$
+$function$;
 
 CREATE TRIGGER wos_qa_p2_single_order_gate_guard
  BEFORE INSERT OR DELETE OR UPDATE ON public.wos_production_orders
