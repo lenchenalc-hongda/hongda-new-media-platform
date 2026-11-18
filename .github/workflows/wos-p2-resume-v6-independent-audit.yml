@@ -1,0 +1,115 @@
+name: WOS P2 v6 independent no-secret QA source audit
+on:
+  push:
+    branches:
+      - audit/wos-p2-resume-v6-independent-20261118
+permissions:
+  contents: read
+  pull-requests: read
+  actions: read
+jobs:
+  audit:
+    if: github.repository == 'lenchenalc-hongda/hongda-new-media-platform'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - name: Trusted baseline
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: 76de8365aaea8dff534dc43947dfac779abbf987
+          path: baseline
+          persist-credentials: false
+      - name: Exact candidate source
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: 900fae3939294a245cc10956e6f781217d9c4334
+          path: candidate
+          persist-credentials: false
+      - name: Pinned Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+      - name: Separate source identity + security audit
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import os,json,re,pathlib,urllib.request
+          repo='lenchenalc-hongda/hongda-new-media-platform'
+          head='900fae3939294a245cc10956e6f781217d9c4334'
+          base='76de8365aaea8dff534dc43947dfac779abbf987'
+          root=pathlib.Path('candidate')
+          expected={
+           '.github/workflows/wos-p2-pr241-resume-v6-protected-qa.yml',
+           'docs/workshop-order-system/nonproduction-only/wos_p2_resume_v6_owner_cas_ACTIVATION_TEMPLATE_NOT_AUTHORIZED.sql',
+           'docs/workshop-order-system/nonproduction-only/wos_p2_resume_v6_readonly_owner_attest_QA_ONLY_NOT_INSTALLED.sql',
+           'tests/e2e/wos-p2-qa-resume-v6-browser.cjs',
+           'tests/e2e/wos-p2-qa-resume-v6-owner-cas-attest.cjs',
+           'tests/e2e/wos-p2-qa-resume-v6-refresh.cjs',
+           'tests/unit/wos-p2-resume-v6-contract.test.cjs'}
+          def api(path):
+           req=urllib.request.Request('https://api.github.com/repos/'+repo+'/'+path,headers={
+             'Authorization':'Bearer '+os.environ['GH_TOKEN'],
+             'Accept':'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28'})
+           with urllib.request.urlopen(req,timeout=25) as response:return json.load(response)
+          assert os.environ['GITHUB_REF']=='refs/heads/audit/wos-p2-resume-v6-independent-20261118'
+          p=api('pulls/248')
+          assert p['head']['sha']==head and p['base']['sha']==base and p['state']=='open'
+          assert p['draft'] and not p['merged']
+          files=api('pulls/248/files?per_page=100')
+          assert len(files)==7 and {f['filename'] for f in files}==expected
+          assert all(f['status']=='added' for f in files)
+          f202=api('pulls/202/files?per_page=100')
+          assert expected.isdisjoint({f['filename'] for f in f202})
+          print('QA_V6_EXACT_7_NEW_FILES_AND_PR202_NON_OVERLAP=PASS')
+          workflow=(root/'.github/workflows/wos-p2-pr241-resume-v6-protected-qa.yml').read_text()
+          for fragment in ['workflow_dispatch:','environment: hongda-review-dev',
+              'WOS_P2_RESUME_V6_ONLY:', 'WOS_P2_OWNER_CAS_READONLY_ACK:',
+              'node tests/e2e/wos-p2-qa-resume-v6-browser.cjs',
+              'node tests/e2e/wos-p2-qa-resume-v6-owner-cas-attest.cjs',
+              'Always atomically close BOTH QA DB gates','if: always()',
+              '89bb408d13e45458c608db29c47e2803d49b3170',
+              'group: wos-p2-protected-browser']:
+           assert fragment in workflow,fragment
+          assert '\n  push:' not in workflow
+          assert 'service_role' not in workflow.lower().replace('no service_role','')
+          assert 'contents: write' not in workflow
+          print('QA_V6_PROTECTED_MANUAL_ENV_FAILCLOSE=PASS')
+          prefix='docs/workshop-order-system/nonproduction-only/'
+          owner=(root/(prefix+'wos_p2_resume_v6_owner_cas_ACTIVATION_TEMPLATE_NOT_AUTHORIZED.sql')).read_text()
+          attest=(root/(prefix+'wos_p2_resume_v6_readonly_owner_attest_QA_ONLY_NOT_INSTALLED.sql')).read_text()
+          for token in ['REPLACE_WITH_FRESH_SEPARATELY_OWNER_APPROVED_RESUME_V6_RUN_ID',
+              "v_run_id='44299301427'","o.version=6","o.version_label='QA-R6'",
+              '_PR241_89bb408d_V6','wos_qa_safety.p2_single_order_write_guard']:
+           assert token in owner,token
+          for token in ['CREATE OR REPLACE FUNCTION public.wos_qa_p2_resume_v6_owner_attest',
+              'p_expected_version IS DISTINCT FROM 6',
+              "v_order.workflow_status IS DISTINCT FROM 'WORKSHOP_REVIEW'",
+              "v_order.version_label IS DISTINCT FROM 'QA-R6'",
+              "c.github_run_id='44299301427'","auth.uid() IS NULL",
+              'FROM PUBLIC, anon','TO authenticated']:
+           assert token in attest,token
+          assert 'CREATE OR REPLACE FUNCTION public.wos_qa_p2_owner_cas_attest(' not in attest
+          assert not re.search(r'UPDATE\s+public\.wos_production_orders',owner,re.I)
+          assert not re.search(r'UPDATE\s+public\.wos_qa_p2_(?:office_)?execution_gate',attest,re.I)
+          assert owner.strip().endswith('COMMIT;') and attest.strip().endswith('COMMIT;')
+          print('QA_V6_CAS_RUN_VERSION_JWT_AND_SCOPE_GUARDS=PASS')
+          for unchanged in [
+            '.github/workflows/wos-p2-pr241-protected-qa.yml',
+            'docs/workshop-order-system/nonproduction-only/wos_p2_owner_cas_attest_PROPOSED_QA_ONLY.sql',
+            'tests/e2e/wos-p2-qa-browser.cjs']:
+           assert (root/unchanged).read_bytes()==(pathlib.Path('baseline')/unchanged).read_bytes()
+          print('QA_V2_FLOW_UNCHANGED=PASS')
+          PY
+      - name: Real GitHub-hosted negative mock tests / no credentials
+        working-directory: candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check tests/e2e/wos-p2-qa-resume-v6-browser.cjs
+          node --check tests/e2e/wos-p2-qa-resume-v6-refresh.cjs
+          node --check tests/e2e/wos-p2-qa-resume-v6-owner-cas-attest.cjs
+          node --test tests/unit/wos-p2-resume-v6-contract.test.cjs
+          echo QA_V6_SEPARATE_TECHNICAL_AUDIT=PASS
