@@ -106,4 +106,26 @@ assert(!browser.includes('timeout:110000'),
 console.log('WOS_P2_QA_LOCALHOST_HOST_GUARD_REGRESSION=PASS');
 console.log('WOS_P2_QA_FAILURE_STAGE_AND_NO_SECRET_DIAGNOSTICS=PASS');
 
+// Run #44242557421: the Office page can display independent returned-order
+// and validation alerts. Never interpret its first global alert as a QA
+// submission error. The actual component has one dedicated labeled region.
+assert(browser.includes('const qaSubmitRegion=office.page.locator(\'section[aria-label="隔离数据库真实下单验收"]\')'));
+assert(browser.includes('const failureAlert=qaSubmitRegion.locator(\'[role="alert"]\')'));
+assert(browser.includes('QA_SUBMIT_REGION_NOT_UNIQUE'));
+assert(browser.includes('QA_SUBMISSION_ERROR_PRESENT_BEFORE_CLICK'));
+assert(!browser.includes("office.page.getByRole('alert').first()"),
+  'page-wide alert mistakenly matched unrelated error in Run 44242557421');
+console.log('WOS_P2_QA_SUBMIT_COMPONENT_ALERT_SCOPE=PASS');
+const readyPos=workflow.indexOf('Build and launch local Preview using only QA publishable key');
+const handoffPos=workflow.indexOf('QA Preview ready, bounded Owner CAS handoff, no database writes');
+const realTestPos=workflow.indexOf('Real 2-role Office/Operator test + Viewer/foreign denials');
+assert(readyPos>=0 && handoffPos>readyPos && realTestPos>handoffPos,
+  'DB Gate activation handoff must follow Preview readiness but precede browser');
+assert(workflow.includes('WOS_P2_QA_PREVIEW_READY_FOR_SINGLE_OWNER_GATE_CAS=YES'));
+assert(workflow.includes('WOS_P2_QA_OWNER_CAS_HANDOFF_ELAPSED_NO_AUTO_GATE_ENABLE=YES'));
+assert(workflow.includes('sleep 90'),'bounded handoff must give Owner time to CAS enable QA');
+assert(workflow.includes('Always atomically close BOTH QA DB gates with QA-admin-only RPC'));
+console.log('WOS_P2_QA_PREVIEW_READY_CAS_HANDOFF_BOUNDARY=PASS');
+
+
 console.log('WOS_P2_PROTECTED_BROWSER_NOT_EXECUTED=YES');
