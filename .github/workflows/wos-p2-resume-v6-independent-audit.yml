@@ -22,7 +22,7 @@ jobs:
       - name: Exact candidate source
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
-          ref: 900fae3939294a245cc10956e6f781217d9c4334
+          ref: c8a785c0dc7ff16d09a4b359b1ba2b8671c12aa2
           path: candidate
           persist-credentials: false
       - name: Pinned Node
@@ -38,7 +38,7 @@ jobs:
           python3 - <<'PY'
           import os,json,re,pathlib,urllib.request
           repo='lenchenalc-hongda/hongda-new-media-platform'
-          head='900fae3939294a245cc10956e6f781217d9c4334'
+          head='c8a785c0dc7ff16d09a4b359b1ba2b8671c12aa2'
           base='76de8365aaea8dff534dc43947dfac779abbf987'
           root=pathlib.Path('candidate')
           expected={
@@ -93,6 +93,11 @@ jobs:
               'FROM PUBLIC, anon','TO authenticated']:
            assert token in attest,token
           assert 'CREATE OR REPLACE FUNCTION public.wos_qa_p2_owner_cas_attest(' not in attest
+          assert len(re.findall(r'^CREATE OR REPLACE FUNCTION',attest,re.M))==1
+          assert len(re.findall(r'^BEGIN;',attest,re.M))==1
+          assert len(re.findall(r'^COMMIT;',attest,re.M))==1
+          assert not re.search(r'CREATE\s+TABLE|CREATE\s+TRIGGER|ALTER\s+TABLE|DROP\s+',attest,re.I)
+          assert 'o.workflow_status, o.version, o.version_label' in attest
           assert not re.search(r'UPDATE\s+public\.wos_production_orders',owner,re.I)
           assert not re.search(r'UPDATE\s+public\.wos_qa_p2_(?:office_)?execution_gate',attest,re.I)
           assert owner.strip().endswith('COMMIT;') and attest.strip().endswith('COMMIT;')
