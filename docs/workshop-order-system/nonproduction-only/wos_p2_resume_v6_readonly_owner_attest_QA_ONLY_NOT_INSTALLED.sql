@@ -141,7 +141,7 @@ BEGIN
     END IF;
 
     SELECT o.id, o.order_number, o.organization_id,
-           o.workflow_status, o.version
+           o.workflow_status, o.version, o.version_label
       INTO v_order
       FROM public.wos_production_orders o
       WHERE o.id = p_order_id;
