@@ -79,8 +79,27 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          psql -v ON_ERROR_STOP=1 -d wos_overlay -f tests/sql/wos-prod-p0-01/verified-storage-image-assertions.sql
+          psql -v ON_ERROR_STOP=1 -d wos_overlay -f tests/sql/wos-prod-p0-02-02-qa-overlay/strict-private-proof-negative.sql
           psql -v ON_ERROR_STOP=1 -d wos_overlay -f tests/sql/wos-prod-p0-01/full-office-form-submit-assertions.sql
+      - name: Zero-write rollback plan removes only new objects, preserving all old records
+        shell: bash
+        run: |
+          set -euo pipefail
+          createdb wos_overlay_rollback
+          psql -v ON_ERROR_STOP=1 -d wos_overlay_rollback -f tests/sql/wos-prod-p0-01/synthetic-foundation.sql >/dev/null
+          psql -v ON_ERROR_STOP=1 -d wos_overlay_rollback -f supabase/migrations/20261014102000_workshop_order_system_foundation.sql >/dev/null
+          psql -v ON_ERROR_STOP=1 -d wos_overlay_rollback -c "SET wos.p0_01_ephemeral_rehearsal='on'" -f docs/workshop-order-system/production-readiness/wos_mvp_receipts_PROPOSAL_NOT_INSTALLED.sql >/dev/null
+          psql -v ON_ERROR_STOP=1 -d wos_overlay_rollback -f tests/sql/wos-prod-p0-01/synthetic-cpc-authorization.sql >/dev/null
+          psql -v ON_ERROR_STOP=1 -d wos_overlay_rollback -f tests/sql/wos-prod-p0-01/synthetic-storage-metadata.sql >/dev/null
+          psql -v ON_ERROR_STOP=1 -d wos_overlay_rollback -f tests/sql/wos-prod-p0-02-02-qa-overlay/qa-existing-structure-83-legacy.sql >/dev/null
+          d=docs/workshop-order-system/nonproduction-only/wos-p0-02-02-qa-overlay
+          psql -v ON_ERROR_STOP=1 -At -d wos_overlay_rollback -f "$d/02-readonly-qa-fingerprint.sql" > /tmp/wos-rollback-before.jsonl
+          psql -v ON_ERROR_STOP=1 -d wos_overlay_rollback -f "$d/03-qa-overlay-incremental-INSTALL_NOT_AUTHORIZED.sql" >/dev/null
+          psql -v ON_ERROR_STOP=1 -d wos_overlay_rollback -f "$d/05-zero-write-rollback-NOT_AUTHORIZED.sql"
+          psql -v ON_ERROR_STOP=1 -d wos_overlay_rollback -f "$d/01-readonly-preflight.sql" >/dev/null
+          psql -v ON_ERROR_STOP=1 -At -d wos_overlay_rollback -f "$d/02-readonly-qa-fingerprint.sql" > /tmp/wos-rollback-after.jsonl
+          diff -u /tmp/wos-rollback-before.jsonl /tmp/wos-rollback-after.jsonl
+          echo WOS_OVERLAY_ZERO_WRITE_ROLLBACK_83_LEGACY_PRESERVED=PASS
       - name: Failure injection before COMMIT must leave no new schema or column
         shell: bash
         run: |

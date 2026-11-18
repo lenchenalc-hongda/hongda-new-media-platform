@@ -70,20 +70,20 @@ INSERT INTO public.profiles(id,user_id,org_id,role,is_active) VALUES
  ('11111111-0000-4000-8000-000000000004','21111111-0000-4000-8000-000000000004','aaaaaaaa-0000-4000-8000-000000000001','operator',true);
 INSERT INTO public.cpc_customer_references(id,org_id,status,display_name_snapshot)
 VALUES('31111111-0000-4000-8000-000000000001',
- 'aaaaaaaa-0000-4000-8000-000000000001','active','Synthetic CPC Customer');
+ 'aaaaaaaa-0000-4000-8000-000000000001','active','Synthetic Test Customer');
 INSERT INTO public.cpc_projects(id,org_id,customer_reference_id,title,owner_profile_id,status)
 VALUES('41111111-0000-4000-8000-000000000001',
  'aaaaaaaa-0000-4000-8000-000000000001',
  '31111111-0000-4000-8000-000000000001',
- 'Synthetic CPC Project','11111111-0000-4000-8000-000000000001','active');
+ 'Synthetic Test Project','11111111-0000-4000-8000-000000000001','active');
 INSERT INTO public.wos_production_orders(id,organization_id,customer_id,customer_name_snapshot,
  project_id,project_name_snapshot,order_number,product_name,sales_owner_profile_id,
  project_owner_profile_id,priority,version_label,workflow_status,version,
  requested_quantity,current_batch_quantity,product_material,created_by_profile_id)
 VALUES('953d2204-3e65-4b75-b10e-c6e97f1bbb56',
  'aaaaaaaa-0000-4000-8000-000000000001',
- '31111111-0000-4000-8000-000000000001','Synthetic CPC Customer',
- '41111111-0000-4000-8000-000000000001','Synthetic CPC Project',
+ '31111111-0000-4000-8000-000000000001','Synthetic Test Customer',
+ '41111111-0000-4000-8000-000000000001','Synthetic Test Project',
  'QA-NONPROD-d2f91453-fe42-42e9-98d4-a6a902645ded','Original Synthetic Order',
  '11111111-0000-4000-8000-000000000001','11111111-0000-4000-8000-000000000001',
  'MEDIUM','QA-R6','WAITING_MATERIAL',7,100,100,'PP',
