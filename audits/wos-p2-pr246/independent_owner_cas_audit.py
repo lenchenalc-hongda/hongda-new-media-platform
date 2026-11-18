@@ -93,7 +93,7 @@ NEEDED={
   "GITHUB_RUN_ATTEMPT,'1'",
   "WOS_P2_REUSE_EXISTING_ORDER_ONLY",
   "WOS_P2_OWNER_CAS_READONLY_ACK",
-  "QA_OWNER_CAS_NOT_ATTESTED_BEFORE_DEADLINE",  "QA DB attestation is fail-closed without exact-order Gate trigger",
+  "QA_OWNER_CAS_NOT_ATTESTED_BEFORE_DEADLINE",
 
   "wos_qa_p2_owner_cas_attest",
   "p_github_run_id:c.runId",
@@ -146,6 +146,7 @@ NEEDED={
  ],
  "mock":[
   "missing Owner CAS times out closed without writing anything",
+  "QA DB attestation is fail-closed without exact-order Gate trigger",
   "independent Owner CAS proof rejects spoofing, partial Gate and time drift",
   "GITHUB_RUN_ATTEMPT:'2'",
   "QA_OWNER_CAS_NOT_ATTESTED_BEFORE_DEADLINE",
@@ -262,7 +263,7 @@ def inspect(v):
     bad.append("CAS template does not commit both Gates with private receipt")
   if "secrets." in v["ci"] or "environment: hongda-review-dev" in v["ci"]:
     bad.append("untrusted branch gets protected QA secrets")
-  if re.search(r"(?i)DISABLE\\s+TRIGGER|DROP\\s+TRIGGER|ALTER\\s+TABLE\\s+public\\.wos_production_orders\\s+DISABLE",v["sql"]+"\\n"+v["template"]):
+  if re.search(r"(?i)DISABLE\s+TRIGGER|DROP\s+TRIGGER|ALTER\s+TABLE\s+public\.wos_production_orders\s+DISABLE",v["sql"]+"\\n"+v["template"]):
     bad.append("QA exact-order scope guard disabled or dropped")
   if re.search(r"(?i)vercel\s+--prod|supabase\s+db\s+push|gh\s+pr\s+merge",
     v["workflow"]+"\n"+v["ci"]):
