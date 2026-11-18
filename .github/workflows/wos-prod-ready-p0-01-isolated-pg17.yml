@@ -140,6 +140,19 @@ jobs:
           psql -v ON_ERROR_STOP=1 -d wos_p0_contract -c "SET wos.p0_01_ephemeral_rehearsal='on'" -f docs/workshop-order-system/production-readiness/wos_mvp_private_storage_RLS_PROPOSAL_NOT_INSTALLED.sql >/dev/null
           psql -v ON_ERROR_STOP=1 -d wos_p0_contract -f tests/sql/wos-prod-p0-01/verified-storage-image-assertions.sql
           echo WOS_P0_02_02_ISOLATED_DB_AND_STORAGE_RLS=PASS
+      - name: Complete Office fields persist before versioned private image and submit
+        shell: bash
+        run: |
+          set -euo pipefail
+          DOC=docs/workshop-order-system/production-readiness/wos_mvp_complete_office_form_PROPOSAL_NOT_INSTALLED.sql
+          if psql -v ON_ERROR_STOP=1 -d wos_p0_contract -f "$DOC" >/tmp/wos-full-form-guard.out 2>&1; then
+            echo 'FAIL: Office document proposal bypassed guard'
+            exit 1
+          fi
+          grep -q 'WOS_OFFICE_DOCUMENT_PROPOSAL_NOT_AUTHORIZED' /tmp/wos-full-form-guard.out
+          psql -v ON_ERROR_STOP=1 -d wos_p0_contract -c "SET wos.p0_01_ephemeral_rehearsal='on'" -f "$DOC" >/dev/null
+          psql -v ON_ERROR_STOP=1 -d wos_p0_contract -f tests/sql/wos-prod-p0-01/full-office-form-submit-assertions.sql
+          echo WOS_P0_02_02_OFFICE_FORM_PERSISTENCE=PASS
       - name: Fault-injected atomic rollback in a second empty PG17 database
         shell: bash
         run: |
