@@ -1,0 +1,76 @@
+name: WOS P2 PR246 independent Owner CAS proof and existing-order audit
+on:
+  push:
+    branches:
+      - audit/wos-p2-pr246-owner-cas-reuse-order-20261118
+permissions:
+  contents: read
+  actions: read
+  pull-requests: read
+jobs:
+  master-derived-independent-static-review:
+    if: >-
+      github.repository == 'lenchenalc-hongda/hongda-new-media-platform' &&
+      github.ref == 'refs/heads/audit/wos-p2-pr246-owner-cas-reuse-order-20261118'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      GH_AUDIT_READ_TOKEN: ${{ github.token }}
+    steps:
+      - name: Checkout reviewer-owned source from protected master-derived audit branch
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.sha }}
+          path: reviewer
+          persist-credentials: false
+      - name: Checkout exact PR246 candidate as unexecuted read-only source
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: 13ce66f11d977f7076d89e41d40fe4dcd3b13cd8
+          path: candidate
+          persist-credentials: false
+      - name: Require exact source identity with zero QA credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C reviewer rev-parse HEAD)" = "$GITHUB_SHA"
+          test "$(git -C candidate rev-parse HEAD)" = "13ce66f11d977f7076d89e41d40fe4dcd3b13cd8"
+          test -z "$(printenv REVIEW_DEV_ADMIN_PASSWORD || true)"
+          test -z "$(printenv SUPABASE_SERVICE_ROLE_KEY || true)"
+          echo WOS_P2_PR246_REVIEWER_SOURCE_IDENTITY=PASS
+      - name: Wait bounded for independent secretless PG17 and full repository CI
+        shell: bash
+        run: |
+          set -euo pipefail
+          api="https://api.github.com/repos/$GITHUB_REPOSITORY/actions/runs"
+          for i in $(seq 1 90); do
+            all_green=yes
+            for id in 44261479471 44261488381; do
+              j="$(curl -fsS --max-time 20 \
+                -H "Authorization: Bearer $GH_AUDIT_READ_TOKEN" \
+                -H "Accept: application/vnd.github+json" "$api/$id")"
+              test "$(jq -r .head_sha <<<"$j")" = "13ce66f11d977f7076d89e41d40fe4dcd3b13cd8"
+              status="$(jq -r .status <<<"$j")"
+              conclusion="$(jq -r .conclusion <<<"$j")"
+              if test "$status" = "completed" && test "$conclusion" != "success"; then
+                echo WOS_P2_PR246_CANDIDATE_CI_FAILED
+                exit 1
+              fi
+              if test "$status" != "completed"; then all_green=no; fi
+            done
+            if test "$all_green" = yes; then
+              echo WOS_P2_PR246_SHA_PINNED_CI_READY=PASS
+              break
+            fi
+            if test "$i" -eq 90; then
+              echo WOS_P2_PR246_CANDIDATE_CI_UNFINISHED_FAIL_CLOSED
+              exit 1
+            fi
+            sleep 5
+          done
+      - name: Independent reviewer-owned static audit and negative attacks
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 reviewer/audits/wos-p2-pr246/independent_owner_cas_audit.py candidate
+          echo WOS_P2_PR246_INDEPENDENT_TECHNICAL_REVIEW_SUCCESS=PASS
