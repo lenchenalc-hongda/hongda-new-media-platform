@@ -105,7 +105,7 @@ def assess(doc):
   (r"(?i)gh\s+pr\s+merge", "unapproved merge")]:
   if re.search(pattern,wf):errors.append(label)
  if "secrets." in doc["design_ci"]:errors.append("untrusted design CI reads secrets")
- if re.search(r"(?i)SET\\s+enabled\\s*=\\s*true",doc["close_sql"]):
+ if re.search(r"(?i)SET\s+enabled\s*=\s*true",doc["close_sql"]):
   errors.append("failclose code can activate gate")
  if "SERVICE_ROLE_KEY" in doc["closer"] or "console.log(error)" in doc["closer"]:
   errors.append("privileged credential or raw error in cleanup client")
@@ -125,6 +125,7 @@ def mutations(doc):
   ("workflow","\n  push:\n"),("workflow","\n vercel --prod\n"),
   ("workflow","\n supabase db push\n"),("workflow","\n gh pr merge 241\n"),
   ("browser","\nconsole.log(error)\n"),("browser","\npage.screenshot({})\n"),
+  ("close_sql","\nUPDATE public.wos_qa_p2_execution_gate SET enabled=true;\n"),
   ("design_ci","\n# secrets.REVIEW_DEV_ADMIN_PASSWORD\n")]:
   candidate=dict(doc);candidate[key]=doc[key]+payload
   if not assess(candidate):raise AssertionError("injection not detected")
