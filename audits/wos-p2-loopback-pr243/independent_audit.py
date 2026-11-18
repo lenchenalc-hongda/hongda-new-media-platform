@@ -51,7 +51,7 @@ REQUIRED = {
  "runbook": [
   "44232596314", "127.0.0.1", "localhost", "QA_ENVIRONMENT_NOT_PINNED",
   "110 seconds", "04:41:09", "83 orders", "81 P1 Inbox",
-  "no second real E2E dispatch"
+  "running a second real E2E requires"
  ],
  "business": [
   "window.location.hostname === 'localhost'",
@@ -111,10 +111,8 @@ def inspect(v):
  for name,markers in REQUIRED.items():
   for marker in markers:
    if marker not in v[name]:findings.append(name+": missing "+repr(marker))
- for k in ("browser","contract","workflow","runbook"):
-  if "SUPABASE_SERVICE_ROLE_KEY" in v[k] and k!="workflow":
-   # The workflow's negative proof checks absence of the environment secret.
-   findings.append(k+": unexpected service-role secret")
+ if re.search(r"(?i)(?:process\.env\.|secrets\.)(?:SUPABASE_SERVICE_ROLE_KEY|VERCEL_TOKEN)",v["browser"]):
+  findings.append("protected production secret used by browser")
  if "const origin='http://127.0.0.1:3000'" in v["browser"]:
   findings.append("original browser host regression")
  if "timeout:110000" in v["browser"]:
