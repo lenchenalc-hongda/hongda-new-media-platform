@@ -1,75 +1,8 @@
--- QA PROPOSAL ONLY. Do not apply without independent exact-HEAD review and QA-only Owner authorization.
--- This is ADDITIVE: original public.wos_qa_p2_owner_cas_attest(..., expected_version=2) remains unchanged.
--- Project xulmpqaknlwqqculbsek ONLY. Read-only evidence RPC. Does not enable either Gate.
--- Exact resumed order: 953d2204-3e65-4b75-b10e-c6e97f1bbb56 / WORKSHOP_REVIEW / QA-R6 / version 6.
--- Closed prior Run 44299301427 is terminal; never reuse its receipt.
+-- QA-ONLY ADDITIVE RPC PROPOSAL. NOT INSTALLED. No table/trigger/old function modifications.
+-- Only for Supabase QA xulmpqaknlwqqculbsek and surviving WORKSHOP_REVIEW / QA-R6 / v6 order.
+-- Prior Run 44299301427 is terminal; use fresh Run and independent Owner authorization.
 BEGIN;
 SET LOCAL statement_timeout='8000ms';
--- WOS P2 QA ONLY / PROPOSED SOURCE. DO NOT RUN on production.
--- NOT INSTALLED: requires a new, separate Owner authorization for
--- Supabase QA project xulmpqaknlwqqculbsek and independently reviewed SQL.
--- This function cannot open either Gate, modify orders, or create grants to
--- Gate tables. The existing owner DBA CAS is the only activation method.
--- Supabase QA expected order was created by real Run #44255738492.
-BEGIN;
--- Private receipt is inserted by an *independent Owner DBA* in the SAME
--- transaction that changes both Gate rows. The attestor is read-only.
--- Creating this private QA ledger needs its own future Owner approval.
-CREATE TABLE wos_qa_safety.p2_gate_open_receipts (
-    github_run_id text PRIMARY KEY,
-    order_id uuid NOT NULL,
-    reviewed_sha text NOT NULL,
-    approval_reference text NOT NULL,
-    opened_at timestamptz NOT NULL,
-    expires_at timestamptz NOT NULL,
-    CHECK (github_run_id ~ '^[0-9]{5,20}$'),
-    CHECK (expires_at > opened_at AND expires_at <= opened_at + interval '15 minutes')
-);
-ALTER TABLE wos_qa_safety.p2_gate_open_receipts ENABLE ROW LEVEL SECURITY;
-REVOKE ALL ON TABLE wos_qa_safety.p2_gate_open_receipts FROM PUBLIC, anon, authenticated;
-COMMENT ON TABLE wos_qa_safety.p2_gate_open_receipts
-IS 'QA-only private evidence written atomically with dual Owner CAS Gate activation; never exposed to anon or authenticated.';
-
--- QA-only P2 scope enforcement. Existing SECURITY DEFINER P2 RPCs check
--- role, org, Gate and version but do not bind to the one authorized order.
--- While either write Gate remains enabled (even if it just expired), only
--- UPDATE of the exact existing QA synthetic order is permitted. INSERT,
--- DELETE and UPDATE to other orders fail the entire calling RPC transaction.
--- Gate OFF leaves all original QA writes unchanged. NEVER install without
--- a separate exact-source QA Owner schema authorization.
-CREATE OR REPLACE FUNCTION wos_qa_safety.p2_single_order_write_guard()
-RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER
-SET search_path = pg_catalog, public, wos_qa_safety AS $p2_scope$
-DECLARE v_operator_on boolean; v_office_on boolean;
-BEGIN
- SELECT coalesce((SELECT enabled FROM public.wos_qa_p2_execution_gate
-   WHERE gate_name='OPERATOR_WRITES'),true) INTO v_operator_on;
- SELECT coalesce((SELECT enabled FROM public.wos_qa_p2_office_execution_gate
-   WHERE gate_name='OFFICE_WRITES'),true) INTO v_office_on;
- IF v_operator_on OR v_office_on THEN
-   IF TG_OP='UPDATE' THEN
-     IF OLD.id='953d2204-3e65-4b75-b10e-c6e97f1bbb56'::uuid AND NEW.id='953d2204-3e65-4b75-b10e-c6e97f1bbb56'::uuid
-       AND OLD.organization_id='0ff53d93-2b9e-48b9-8113-a4768c39cdd2'::uuid
-       AND NEW.organization_id='0ff53d93-2b9e-48b9-8113-a4768c39cdd2'::uuid
-       AND OLD.order_number='QA-NONPROD-d2f91453-fe42-42e9-98d4-a6a902645ded'
-       AND NEW.order_number='QA-NONPROD-d2f91453-fe42-42e9-98d4-a6a902645ded'
-     THEN RETURN NEW; END IF;
-   END IF;
-   RAISE EXCEPTION 'QA_P2_GATE_SINGLE_ORDER_SCOPE_REJECTED'
-     USING ERRCODE='42501';
- END IF;
- IF TG_OP='DELETE' THEN RETURN OLD; END IF;
- RETURN NEW;
-END
-$p2_scope$;
-REVOKE ALL ON FUNCTION wos_qa_safety.p2_single_order_write_guard()
- FROM PUBLIC, anon, authenticated;
-CREATE TRIGGER wos_qa_p2_single_order_gate_guard
- BEFORE INSERT OR UPDATE OR DELETE ON public.wos_production_orders
- FOR EACH ROW EXECUTE FUNCTION wos_qa_safety.p2_single_order_write_guard();
-COMMENT ON FUNCTION wos_qa_safety.p2_single_order_write_guard()
- IS 'QA-only: prevent mutation of unrelated P2 orders during dual write Gate window';
-
 CREATE OR REPLACE FUNCTION public.wos_qa_p2_resume_v6_owner_attest(
     p_github_run_id text,
     p_order_id uuid,
@@ -257,16 +190,9 @@ BEGIN
     );
 END
 $$;
--- Functions in an exposed schema default to PUBLIC EXECUTE unless revoked.
-REVOKE ALL ON FUNCTION public.wos_qa_p2_owner_cas_attest(
-  text,uuid,text,integer) FROM PUBLIC, anon;
-GRANT EXECUTE ON FUNCTION public.wos_qa_p2_owner_cas_attest(
-  text,uuid,text,integer) TO authenticated;
-COMMENT ON FUNCTION public.wos_qa_p2_owner_cas_attest(text,uuid,text,integer)
-IS 'QA-only, Admin-only, read-only proof of Owner CAS for Run and fixed SUBMITTED synthetic order. NOT a Gate opener.';
-COMMIT;
-
--- Default EXECUTE to PUBLIC on new Postgres functions is forbidden.
+-- Default PUBLIC EXECUTE on newly created functions is forbidden.
 REVOKE ALL ON FUNCTION public.wos_qa_p2_resume_v6_owner_attest(text,uuid,text,integer) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.wos_qa_p2_resume_v6_owner_attest(text,uuid,text,integer) TO authenticated;
+COMMENT ON FUNCTION public.wos_qa_p2_resume_v6_owner_attest(text,uuid,text,integer)
+IS 'QA-only Admin JWT and fresh Run bound read-only proof for surviving QA-R6 v6 order; no Gate mutations.';
 COMMIT;
