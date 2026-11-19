@@ -189,6 +189,20 @@ jobs:
     environment: wos-p1-qa-preflight
     permissions:
       contents: read
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.sha }}
+          path: qa-trusted
+          persist-credentials: false
+          sparse-checkout: |
+            qa/wos-p00202-p1-readonly/certs/supabase-root-2021-ca.pem
+      - name: Verify pinned Supabase QA Root CA is present
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C qa-trusted rev-parse HEAD)" = "$GITHUB_SHA"
+          test -s qa-trusted/qa/wos-p00202-p1-readonly/certs/supabase-root-2021-ca.pem
     env:
       WOS_QA_READONLY_DSN: ${{ secrets.WOS_QA_READONLY_DSN }}
       WOS_QA_SESSION_POOLER_HOST: ${{ vars.WOS_QA_SESSION_POOLER_HOST }}
@@ -200,13 +214,13 @@ jobs:
           # Role must be separately Owner-authorised, provisioned and TLS-enabled.
           # Never print DSN, password, private table rows, JWT, headers or signatures.
           python3 - <<'PY'
-          import datetime,hashlib,json,os,re,subprocess,sys,urllib.parse
+          import datetime,hashlib,json,os,re,ssl,subprocess,sys,urllib.parse
           def fail():
               raise SystemExit('WOS_P1_QA_AGGREGATE_PROOF_FAIL_CLOSED')
           # Shared Supavisor session pooler is IPv4; actual host MUST be copied
           # from the QA project's Connect > Session Pooler and owner-reviewed.
           # No invented aws-0/aws-1 host is permitted.
-          CA_BUNDLE='/etc/ssl/certs/ca-certificates.crt'
+          CA_BUNDLE=os.path.join(os.environ.get('GITHUB_WORKSPACE',''), 'qa-trusted/qa/wos-p00202-p1-readonly/certs/supabase-root-2021-ca.pem')
           def validate_transport(raw,expected_host,ca_bundle_ready):
               try:
                   uri=urllib.parse.urlsplit(raw)
@@ -227,7 +241,16 @@ jobs:
                   return None
           raw=os.environ.get('WOS_QA_READONLY_DSN','')
           expected_host=os.environ.get('WOS_QA_SESSION_POOLER_HOST','')
-          ca_ready=os.path.isfile(CA_BUNDLE) and os.path.getsize(CA_BUNDLE)>10000
+          try:
+              with open(CA_BUNDLE,encoding='ascii') as ca_file:
+                  pem=ca_file.read()
+              ca_ready=(pem.startswith('-----BEGIN CERTIFICATE-----\\n')
+                  and pem.rstrip().endswith('-----END CERTIFICATE-----')
+                  and len(pem)<4096 and hashlib.sha256(
+                      ssl.PEM_cert_to_DER_cert(pem)).hexdigest()
+                  =='807025ad50d4ed219d2c9c7d299c004f824eb00cf7f65afef607d07b72e6cafa')
+          except (OSError,ValueError):
+              ca_ready=False
           if not raw or len(raw)>2048: fail()
           verified=validate_transport(raw,expected_host,ca_ready)
           if verified is None: fail()
