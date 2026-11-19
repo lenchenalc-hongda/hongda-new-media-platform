@@ -202,11 +202,11 @@ jobs:
              echo UNEXPECTED_RAW_ORDER_READ; exit 1
           fi
           grep -Fq 'permission denied' /tmp/wos-deny-raw
-          actual="$(psql -X -qAt -v ON_ERROR_STOP=1 -c "
-            SET SESSION AUTHORIZATION wos_qa_readonly_preflight;
-            SET default_transaction_read_only=on;
-            SELECT wos_p1_preflight_private.readonly_snapshot()::text
-          ")"
+          actual="$(psql -X -qAt -v ON_ERROR_STOP=1 \
+            -c "SET SESSION AUTHORIZATION wos_qa_readonly_preflight" \
+            -c "BEGIN TRANSACTION READ ONLY" \
+            -c "SELECT wos_p1_preflight_private.readonly_snapshot()::text" \
+            -c "ROLLBACK")"
           printf '%s' "$actual" | python3 -c '
           import sys,json
           v=json.load(sys.stdin)
@@ -224,11 +224,11 @@ jobs:
           set -euo pipefail
           psql -X -q -v ON_ERROR_STOP=1 -c \
             "INSERT INTO public.wos_production_orders VALUES(NULL,NULL)"
-          actual="$(psql -X -qAt -v ON_ERROR_STOP=1 -c "
-            SET SESSION AUTHORIZATION wos_qa_readonly_preflight;
-            SET default_transaction_read_only=on;
-            SELECT wos_p1_preflight_private.readonly_snapshot()::text
-          ")"
+          actual="$(psql -X -qAt -v ON_ERROR_STOP=1 \
+            -c "SET SESSION AUTHORIZATION wos_qa_readonly_preflight" \
+            -c "BEGIN TRANSACTION READ ONLY" \
+            -c "SELECT wos_p1_preflight_private.readonly_snapshot()::text" \
+            -c "ROLLBACK")"
           printf '%s' "$actual" | python3 -c '
           import json,sys
           v=json.load(sys.stdin)
@@ -240,3 +240,203 @@ jobs:
               OR EXISTS(SELECT 1 FROM pg_namespace WHERE nspname='wos_p1_preflight_private')
               THEN 1 ELSE 0 END" | grep -qx 0
           echo 'WOS_P1_PG17_DRIFT_AND_RESTRICT_ROLLBACK=PASS'
+
+  synthetic-identity-and-gate-negative-tests:
+    needs: independent-provenance
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: f70e8ff62c9fa9ad3c3b7e3eebb4994dc3f0e844
+          persist-credentials: false
+          path: candidate
+      - name: Offline mock OIDC issuer, short-lived claims, HTTP 503 and readonly proof
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import base64,contextlib,copy,datetime,io,json,os,pathlib,re,subprocess,tempfile,time,textwrap,urllib.request
+          wf=pathlib.Path('candidate/.github/workflows/wos-p00202-p1-protected-readonly-preflight.yml').read_text()
+          code_blocks=re.findall(r"(?ms)^          python3 - <<'PY'\n(.*?)^          PY$",wf)
+          assert len(code_blocks)==2,('WORKFLOW_PROBE_EXTRACTION_FAILED',len(code_blocks))
+          oidc_code=textwrap.dedent(code_blocks[0])
+          db_code=textwrap.dedent(code_blocks[1])
+          repo='lenchenalc-hongda/hongda-new-media-platform'
+          branch='refs/heads/master'
+          job=f'{repo}/.github/workflows/wos-p00202-p1-protected-readonly-preflight.yml@{branch}'
+          project_host='hongda-wos-p00202-qa-preview-o22fvh0ib-lens-projects-3fc386bd.vercel.app'
+          codes={
+            'candidate-drafts':'WOS_P1_DRAFT_CANDIDATE_DISABLED',
+            'candidate-office-document':'OFFICE_DOCUMENT_CANDIDATE_DISABLED',
+            'candidate-image-register':'PRIVATE_IMAGE_CANDIDATE_DISABLED',
+            'candidate-submit':'WOS_P1_SUBMIT_CANDIDATE_DISABLED',
+          }
+          when=int(time.time())
+          claims={
+            'iss':'https://token.actions.githubusercontent.com',
+            'aud':'https://github.com/lenchenalc-hongda',
+            'repository':repo,'repository_id':'1286793274','repository_owner_id':'297604134',
+            'ref':branch,'workflow_ref':job,'environment':'hongda-review-dev',
+            'event_name':'workflow_dispatch','runner_environment':'github-hosted',
+            'sub':f'repo:{repo}:environment:hongda-review-dev',
+            'run_id':'111','run_attempt':'1','workflow_sha':'dummy-protected-master',
+            'iat':when-1,'nbf':when-1,'exp':when+240,
+          }
+          def pack_token(c):
+            def encoded(x):
+              return base64.urlsafe_b64encode(json.dumps(x,separators=(',',':')).encode()).decode().rstrip('=')
+            return encoded({'typ':'JWT','alg':'none'})+'.'+encoded(c)+'.synthetic'
+          class FakeResponse:
+            def __init__(self,body,status=200,content_type='application/json'):
+              self._body=io.BytesIO(body)
+              self.status=status
+              self.headers={'Content-Type':content_type}
+            def read(self,n=-1): return self._body.read(n)
+            def __enter__(self): return self
+            def __exit__(self,*args): self._body.close()
+          class FakeOpener:
+            def __init__(self,status=503,incorrect_code=False,bad_type=False):
+              self.status=status;self.incorrect_code=incorrect_code;self.bad_type=bad_type
+            def open(self,req,timeout=15):
+              assert req.full_url.startswith('https://'+project_host+'/api/workshop-orders/production/')
+              assert req.get_method()=='POST' and req.data==b'{}'
+              assert req.headers.get('X-vercel-trusted-oidc-idp-token')
+              route=req.full_url.split('/')[-1]
+              code=('BAD_DISABLED' if self.incorrect_code else codes[route])
+              payload=(b'<html>no</html>' if self.bad_type
+                else json.dumps({'ok':False,'code':code,'data':None}).encode())
+              return FakeResponse(payload,status=self.status,
+                content_type='text/html' if self.bad_type else 'application/json')
+          old_env=os.environ.copy()
+          saved_urlopen=urllib.request.urlopen
+          saved_opener=urllib.request.build_opener
+          summary=tempfile.NamedTemporaryFile(delete=False)
+          summary.close()
+          def simulate_oidc(overrides=None,status=503,incorrect_code=False,bad_type=False,missing=False,edited_code=None,changed_env=None):
+            env=old_env.copy()
+            env.update(GITHUB_REPOSITORY=repo,GITHUB_REF=branch,
+              GITHUB_EVENT_NAME='workflow_dispatch',GITHUB_RUN_ATTEMPT='1',
+              GITHUB_RUN_ID='111',GITHUB_SHA='dummy-protected-master',
+              GITHUB_WORKFLOW_REF=job,
+              ACTIONS_ID_TOKEN_REQUEST_URL='https://synthetic-oidc.invalid/issue?request=1',
+              ACTIONS_ID_TOKEN_REQUEST_TOKEN='synthetic-request-token',
+              GITHUB_STEP_SUMMARY=summary.name)
+            env.update(changed_env or {})
+            os.environ.clear();os.environ.update(env)
+            c=claims.copy();c.update(overrides or {})
+            token=pack_token(c)
+            def fake_urlopen(req,timeout=15):
+              assert req.full_url.startswith('https://synthetic-oidc.invalid/issue?request=1&audience=')
+              return FakeResponse(json.dumps({'value':'' if missing else token}).encode())
+            urllib.request.urlopen=fake_urlopen
+            urllib.request.build_opener=lambda *args: FakeOpener(status,incorrect_code,bad_type)
+            passed=False
+            try:
+              with contextlib.redirect_stdout(io.StringIO()):
+                exec(compile(edited_code or oidc_code,'<synthetic-oidc>', 'exec'),{'__name__':'__main__'})
+              passed=True
+            except (Exception,SystemExit):
+              passed=False
+            finally:
+              urllib.request.urlopen=saved_urlopen
+              urllib.request.build_opener=saved_opener
+              os.environ.clear();os.environ.update(old_env)
+            return passed
+          assert simulate_oidc(), 'SYNTHETIC_GOOD_OIDC_MUST_PASS'
+          negatives=[]
+          for key,bad in [
+            ('iss','https://wrong.invalid'),('aud','https://github.com/other'),
+            ('repository','untrusted/project'),('repository_id','99999'),
+            ('repository_owner_id','99999'),('ref','refs/heads/unsafe'),
+            ('workflow_ref',job.replace('protected-readonly','other')),
+            ('environment','production'),('event_name','push'),
+            ('runner_environment','self-hosted'),('sub','repo:wrong:environment:production'),
+            ('run_id','222'),('run_attempt','2'),('workflow_sha','badmaster'),
+            ('exp',when-20),('nbf',when+100),
+          ]:
+            negatives.append((key,{'overrides':{key:bad}}))
+          negatives+= [
+            ('no_token',{'missing':True}),('login_302',{'status':302}),
+            ('vercel_401',{'status':401}),('vercel_403',{'status':403}),
+            ('wrong_http_200',{'status':200}),
+            ('wrong_disabled_code',{'incorrect_code':True}),
+            ('html_body',{'bad_type':True}),
+            ('wrong_hostname',{'edited_code':oidc_code.replace(project_host,'untrusted.vercel.app')}),
+            ('unsafe_branch',{'changed_env':{'GITHUB_REF':'refs/heads/untrusted'}}),
+            ('unauthorized_workflow',{'changed_env':{'GITHUB_WORKFLOW_REF':'other'}}),
+          ]
+          for label,opts in negatives:
+            assert not simulate_oidc(**opts),('OIDC_BYPASS_ACCEPTED',label)
+          print('WOS_P1_OFFLINE_OIDC_HTTP_NEGATIVE_REJECTIONS='+str(len(negatives)))
+          old_run=subprocess.run
+          now=datetime.datetime.now(datetime.timezone.utc)
+          goodproof={
+            'proof_version':'WOS_P1_QA_READONLY_V1',
+            'qa_project_ref':'xulmpqaknlwqqculbsek',
+            'database':'postgres','checked_at':now.isoformat(),
+            'p1_off':True,'p2_operator_off':True,'p2_office_off':True,
+            'orders':84,'null_cpc':83,'private_objects':83,
+            'private_bucket':True,'image_proofs':0,'cpc_bindings':0,'office_receipts':0,
+          }
+          def simulate_db(override=None,dsnhost='db.xulmpqaknlwqqculbsek.supabase.co',
+            sslmode='verify-full',username='wos_qa_readonly_preflight'):
+            env=old_env.copy()
+            env['WOS_QA_READONLY_DSN']=f'postgresql://{username}:synthetic-only@{dsnhost}:5432/postgres?sslmode={sslmode}'
+            env['GITHUB_STEP_SUMMARY']=summary.name
+            os.environ.clear();os.environ.update(env)
+            data={
+              'session_user':'wos_qa_readonly_preflight',
+              'current_user':'wos_qa_readonly_preflight',
+              'read_only':'on','role_safe':True,'no_membership':True,
+              'direct_business_privs':0,'other_secdef_execute':0,
+              'proof':goodproof.copy(),
+            }
+            for k,v in (override or {}).items():
+              if k.startswith('proof.'):data['proof'][k[6:]]=v
+              else:data[k]=v
+            class Completed:
+              returncode=0;stdout=json.dumps(data);stderr=''
+            def fake_run(*args,**kwargs):return Completed()
+            subprocess.run=fake_run
+            passed=False
+            try:
+              with contextlib.redirect_stdout(io.StringIO()):
+                exec(compile(db_code,'<synthetic-db>','exec'),{'__name__':'__main__'})
+              passed=True
+            except (Exception,SystemExit):
+              passed=False
+            finally:
+              subprocess.run=old_run
+              os.environ.clear();os.environ.update(old_env)
+            return passed
+          assert simulate_db(), 'SYNTHETIC_GOOD_DB_PROOF_MUST_PASS'
+          dbnegatives=[
+            ('production_host',dict(dsnhost='db.production.supabase.co')),
+            ('pooler_host',dict(dsnhost='aws-0-us-east-1.pooler.supabase.com')),
+            ('weak_tls',dict(sslmode='require')),
+            ('admin_role',dict(username='postgres')),
+            ('wrong_caller',dict(override={'session_user':'postgres'})),
+            ('writable_transaction',dict(override={'read_only':'off'})),
+            ('privileged_role',dict(override={'role_safe':False})),
+            ('role_membership',dict(override={'no_membership':False})),
+            ('raw_table_granted',dict(override={'direct_business_privs':1})),
+            ('secdef_extra_grant',dict(override={'other_secdef_execute':1})),
+            ('p1_open',dict(override={'proof.p1_off':False})),
+            ('p2_operator_open',dict(override={'proof.p2_operator_off':False})),
+            ('p2_office_open',dict(override={'proof.p2_office_off':False})),
+            ('orders_drift',dict(override={'proof.orders':85})),
+            ('cpc_drift',dict(override={'proof.null_cpc':84})),
+            ('storage_drift',dict(override={'proof.private_objects':84})),
+            ('public_bucket',dict(override={'proof.private_bucket':False})),
+            ('image_proof_nonzero',dict(override={'proof.image_proofs':1})),
+            ('bindings_nonzero',dict(override={'proof.cpc_bindings':1})),
+            ('receipts_nonzero',dict(override={'proof.office_receipts':1})),
+            ('wrong_qa_ref',dict(override={'proof.qa_project_ref':'production'})),
+            ('stale_aggregate',dict(override={'proof.checked_at':'2020-01-01T00:00:00+00:00'})),
+          ]
+          for label,opts in dbnegatives:
+            assert not simulate_db(**opts),('DB_BYPASS_ACCEPTED',label)
+          print('WOS_P1_OFFLINE_AGGREGATE_ROLE_NEGATIVE_REJECTIONS='+str(len(dbnegatives)))
+          print('WOS_P1_SYNTHETIC_IDENTITY_AND_GATE_FAILCLOSED=PASS')
+          PY
