@@ -1,0 +1,167 @@
+# REVIEW ONLY. Cannot execute until separately reviewed and merged to protected master.
+# Never grants P1 writes; does not import business data or production credentials.
+name: WOS P0-02-02 P1 protected QA read-only preflight
+on:
+  workflow_dispatch:
+    inputs:
+      reviewed_sha:
+        description: Exact approved PR 251 SHA
+        required: true
+        type: string
+permissions:
+  contents: read
+  pull-requests: read
+  actions: read
+concurrency:
+  group: wos-p00202-p1-protected-readonly-preflight
+  cancel-in-progress: false
+jobs:
+  fixed-source:
+    if: github.repository == 'lenchenalc-hongda/hongda-new-media-platform' && github.ref == 'refs/heads/master'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      REQUESTED_SHA: ${{ inputs.reviewed_sha }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: 3ad29f4a5a6f941d2e49b634f54d65cbbcd4a2e4
+          path: candidate
+          persist-credentials: false
+      - name: Verify immutable PR, exact edge blobs and independent hosted runs
+        shell: bash
+        run: |
+          set -euo pipefail
+          EXPECTED=3ad29f4a5a6f941d2e49b634f54d65cbbcd4a2e4
+          test "$REQUESTED_SHA" = "$EXPECTED"
+          test "$(git -C candidate rev-parse HEAD)" = "$EXPECTED"
+          cd candidate
+          test "$(git hash-object supabase/functions/wos-mvp-verify-image-candidate/index.ts)" = 908c0287564f77aa3cddad01a685340f9076d2b2
+          test "$(git hash-object supabase/functions/wos-mvp-verify-image-candidate/contract.ts)" = d0b6865b2295eb4b4561f5312fa93644f2ccde7d
+          test "$(git hash-object supabase/functions/wos-mvp-verify-image-candidate/png.ts)" = d9342a9daaf8353077bdc710c7db0e33b91b9300
+          for path in candidate-drafts candidate-office-document candidate-image-register candidate-submit; do
+            file=src/app/api/workshop-orders/production/$path/route.ts
+            grep -Fq "isWosCpcReadCandidateEnabled" "$file"
+            grep -Fq "CANDIDATE_ENABLED" "$file"
+          done
+          grep -Fq "process.env.VERCEL_ENV === 'preview'" src/app/workshop-orders/production/new/page.tsx
+          cd ..
+          ROOT=https://api.github.com/repos/lenchenalc-hongda/hongda-new-media-platform
+          api() {
+            curl --fail --silent --show-error --max-time 25 \
+              -H "Authorization: Bearer $GH_TOKEN" \
+              -H "Accept: application/vnd.github+json" "$ROOT/$1"
+          }
+          data="$(api pulls/251)"
+          jq -e --arg sha "$EXPECTED" '
+            .state=="open" and .draft==true and (.merged==false or .merged==null)
+            and .head.sha==$sha
+            and .head.ref=="codex/wos-p0-02-02-overlay-real-qa-fk-fix-20261119"
+          ' <<<"$data" >/dev/null
+          verify_run() {
+            local run_id="$1" run_sha="$2" path="$3" res
+            res="$(api actions/runs/$run_id)"
+            jq -e --argjson id "$run_id" --arg sha "$run_sha" --arg path "$path" '
+              .id==$id and .head_sha==$sha and .path==$path
+              and .status=="completed" and .conclusion=="success"
+              and .run_attempt==1 and .event=="push"
+            ' <<<"$res" >/dev/null
+          }
+          verify_run 44330593424 c9439f0744fe1bf4f7bd6427f2a3794b55912442 .github/workflows/wos-prod-p0-02-02-separate-source-audit.yml
+          verify_run 44427429301 21ff6e30429a16e51c3c5812a4c31345d8bb2b3f .github/workflows/wos-qa-overlay-fk-hotfix-independent-audit.yml
+          verify_run 44427113391 "$EXPECTED" .github/workflows/wos-prod-p0-02-02-qa-overlay-isolated-pg17.yml
+          echo 'WOS_P1_PRECHECK_EXACT_PR_EDGE_AUDITS=PASS'
+  protected-preview-http:
+    needs: fixed-source
+    if: needs.fixed-source.result == 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    environment: hongda-review-dev
+    permissions:
+      contents: read
+    env:
+      VERCEL_TOKEN: ${{ secrets.WOS_QA_VERCEL_TOKEN }}
+      VERCEL_CLI_VERSION: ${{ vars.WOS_QA_VERCEL_CLI_VERSION }}
+      VERCEL_ORG_ID: team_OZQkJ9a5x0fAirpMzt3vn3Xp
+      VERCEL_PROJECT_ID: prj_MhozO5QPUuUl8muAAKtkj5napeSp
+    steps:
+      - name: Verify Vercel project and exact READY Preview via authenticated owner scope
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$VERCEL_TOKEN"
+          [[ "$VERCEL_CLI_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          url="https://api.vercel.com/v13/deployments/dpl_53tMyB4UvQ47CwxcZfiZeZQZYz2e?teamId=$VERCEL_ORG_ID"
+          response="$(curl --fail --silent --show-error --max-time 25 -H "Authorization: Bearer $VERCEL_TOKEN" "$url")"
+          jq -e --arg proj "$VERCEL_PROJECT_ID" --arg sha "3ad29f4a5a6f941d2e49b634f54d65cbbcd4a2e4" '
+            .id=="dpl_53tMyB4UvQ47CwxcZfiZeZQZYz2e"
+            and .readyState=="READY" and .target==null
+            and .projectId==$proj and .meta.githubCommitSha==$sha
+          ' <<<"$response" >/dev/null
+          echo 'WOS_P1_PREVIEW_ID_SHA_TARGET_OWNER_VERIFIED=PASS'
+      - name: Real application-layer 503 under Vercel Authentication
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install -g "vercel@$VERCEL_CLI_VERSION" --no-audit --no-fund >/dev/null
+          base=https://hongda-wos-p00202-qa-preview-o22fvh0ib-lens-projects-3fc386bd.vercel.app
+          run_case() {
+            local route="$1" expected="$2" response status
+            response="$(mktemp)"
+            trap 'rm -f "$response"' RETURN
+            status="$(vercel curl "$base/api/workshop-orders/production/$route" \
+              -X POST -H 'Content-Type: application/json' \
+              --data '{}' --silent --show-error -o "$response" -w '%{http_code}')"
+            test "$status" = 503
+            jq -e --arg code "$expected" '.ok==false and .code==$code' "$response" >/dev/null
+            printf '%s: 503 %s\n' "$route" "$expected" >> "$GITHUB_STEP_SUMMARY"
+            rm -f "$response"
+            trap - RETURN
+          }
+          run_case candidate-drafts WOS_P1_DRAFT_CANDIDATE_DISABLED
+          run_case candidate-office-document OFFICE_DOCUMENT_CANDIDATE_DISABLED
+          run_case candidate-image-register PRIVATE_IMAGE_CANDIDATE_DISABLED
+          run_case candidate-submit WOS_P1_SUBMIT_CANDIDATE_DISABLED
+          echo 'WOS_P1_AUTHENTICATED_PREVIEW_FOUR_APP_503=PASS'
+  qa-readonly-database:
+    needs: protected-preview-http
+    if: needs.protected-preview-http.result == 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    environment: hongda-review-dev
+    permissions:
+      contents: read
+    env:
+      WOS_QA_READONLY_DSN: ${{ secrets.WOS_QA_READONLY_DSN }}
+    steps:
+      - name: Verify QA-only least-privilege database identity and gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$WOS_QA_READONLY_DSN"
+          export PGOPTIONS='-c default_transaction_read_only=on'
+          result="$(psql "$WOS_QA_READONLY_DSN" -X -A -t -v ON_ERROR_STOP=1 -c "
+            SELECT jsonb_build_object(
+              'role',current_user,
+              'read_only',current_setting('transaction_read_only'),
+              'p1_off',(SELECT bool_and(NOT enabled AND enabled_until IS NULL AND approved_run_id IS NULL AND approved_sha IS NULL) FROM wos_mvp_qa.p1_execution_gate),
+              'p2_operator_off',(SELECT bool_and(NOT enabled AND enabled_until IS NULL) FROM public.wos_qa_p2_execution_gate WHERE gate_name='OPERATOR_WRITES'),
+              'p2_office_off',(SELECT bool_and(NOT enabled AND enabled_until IS NULL) FROM public.wos_qa_p2_office_execution_gate WHERE gate_name='OFFICE_WRITES'),
+              'orders',(SELECT count(*) FROM public.wos_production_orders),
+              'null_cpc',(SELECT count(*) FROM public.wos_production_orders WHERE customer_id IS NULL OR project_id IS NULL),
+              'objects',(SELECT count(*) FROM storage.objects WHERE bucket_id='wos-private'),
+              'proofs',(SELECT count(*) FROM wos_mvp_attestation.private_image_proofs),
+              'bindings',(SELECT count(*) FROM wos_mvp_qa.cpc_order_bindings)
+            )::text
+          ")"
+          jq -e '
+            .role=="wos_qa_readonly_preflight"
+            and .read_only=="on"
+            and .p1_off==true
+            and .p2_operator_off==true and .p2_office_off==true
+            and .orders==84 and .null_cpc==83 and .objects==83
+            and .proofs==0 and .bindings==0
+          ' <<<"$result" >/dev/null
+          printf 'WOS_P1_GATES_OFF_HISTORY_UNCHANGED_READONLY=PASS\n' >> "$GITHUB_STEP_SUMMARY"
+          echo 'WOS_P1_OWNER_PREFLIGHT_NO_WRITE_PASS'
