@@ -55,7 +55,7 @@ jobs:
           notes=(base/'qa/wos-p00202-p1-readonly/SENTINEL_SECURITY_REVIEW_NOT_AUTHORIZED.md').read_text()
           assert install.startswith('-- WOS P1 QA ONLY: DESIGN')
           assert rollback.startswith('-- WOS P1 QA ONLY: reviewed rollback design')
-          assert 'NOT AUTHORIZED' in notes and 'separate exact Owner' in notes
+          assert 'NOT AUTHORIZED' in notes and 'precise Owner DDL authorization' in notes
           assert install.count('CREATE FUNCTION wos_p1_preflight_private.enforce_credential_expiry()')==1
           assert 'SECURITY INVOKER' in install and 'SECURITY DEFINER' not in install
           assert 'REVOKE ALL ON FUNCTION' in install
