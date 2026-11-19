@@ -1,0 +1,208 @@
+{
+  "schema_version": 1,
+  "purpose": "P8 nonproduction schema-only historical replay; NEVER Production; no business data",
+  "source_project_ref": "amqpvxrurenevniilhtl",
+  "expected_public_tables": 67,
+  "expected_tracked_migrations": 29,
+  "note": "Source filename times may differ from applied Production migration versions. Never alter Production migration history to force replay.",
+  "early_sources": [
+    {
+      "file": "supabase/migrations/20260801000000_review_center_auth_forward_migration.sql",
+      "origin": "untracked-historical"
+    },
+    {
+      "file": "supabase/migrations/20260817_review_center_phase2_core_foundation.sql",
+      "origin": "untracked-historical"
+    },
+    {
+      "file": "supabase/migrations/20260817_review_center_phase2_policy_role_hardening.sql",
+      "origin": "untracked-historical"
+    },
+    {
+      "file": "supabase/migrations/20260818_review_center_phase2_draft_mutation_foundation.sql",
+      "origin": "untracked-historical"
+    },
+    {
+      "file": "supabase/migrations/20260818_review_center_phase2_jsonb_compat_hardening.sql",
+      "origin": "untracked-historical"
+    },
+    {
+      "file": "supabase/migrations/20260819_review_center_profile_directory.sql",
+      "origin": "untracked-historical"
+    },
+    {
+      "file": "supabase/migrations/20260820_review_center_participant_directory.sql",
+      "origin": "untracked-historical"
+    },
+    {
+      "file": "supabase/migrations/20260825200000_review_center_lifecycle_foundation.sql",
+      "origin": "untracked-historical"
+    },
+    {
+      "file": "supabase/migrations/20260825213000_review_center_lifecycle_submit_permission_null_safety.sql",
+      "origin": "untracked-historical"
+    },
+    {
+      "file": "supabase/migrations/20260825221500_review_center_capa_schema_foundation.sql",
+      "origin": "untracked-historical"
+    },
+    {
+      "file": "supabase/migrations/20260825223000_review_center_capa_mutation_foundation.sql",
+      "origin": "untracked-historical"
+    },
+    {
+      "file": "supabase/migrations/20260825_review_center_event_actor_directory.sql",
+      "origin": "untracked-historical"
+    },
+    {
+      "file": "supabase/migrations/20260826210336_review_center_metadata_foundation.sql",
+      "origin": "untracked-historical"
+    },
+    {
+      "file": "supabase/migrations/20260827000000_review_center_case_core_foundation.sql",
+      "origin": "untracked-historical"
+    },
+    {
+      "file": "supabase/migrations/20260827010000_review_center_case_mutation_foundation.sql",
+      "origin": "untracked-historical"
+    },
+    {
+      "file": "supabase/migrations/20260916043000_review_center_submit_missing_fields.sql",
+      "origin": "untracked-historical"
+    },
+    {
+      "file": "supabase/migrations/20260916053000_review_center_return_reason_required.sql",
+      "origin": "untracked-historical"
+    }
+  ],
+  "production_migrations": [
+    {
+      "applied_version": "20261001143000",
+      "file": "supabase/migrations/20261001143000_customer_project_center_phase5a_core_foundation.sql"
+    },
+    {
+      "applied_version": "20261002024500",
+      "file": "supabase/migrations/20261002024500_customer_project_center_phase5b_mutation_rpcs.sql"
+    },
+    {
+      "applied_version": "20261002033500",
+      "file": "supabase/migrations/20261002033500_customer_project_center_phase5d_progress_waiting_event.sql"
+    },
+    {
+      "applied_version": "20261002050000",
+      "file": "supabase/migrations/20261002050000_customer_project_center_phase5f_customer_followup.sql"
+    },
+    {
+      "applied_version": "20261002065000",
+      "file": "supabase/migrations/20261002065000_customer_project_center_phase6b_reschedule_rpc.sql"
+    },
+    {
+      "applied_version": "20261002073000",
+      "file": "supabase/migrations/20261002073000_customer_project_center_phase6c_ai_drafts.sql"
+    },
+    {
+      "applied_version": "20261002090000",
+      "file": "supabase/migrations/20261002090000_customer_project_center_phase7a_reports.sql"
+    },
+    {
+      "applied_version": "20261006140000",
+      "file": "supabase/migrations/20261006140000_customer_project_center_pilot_env_hardening.sql"
+    },
+    {
+      "applied_version": "20261007020000",
+      "file": "supabase/migrations/20261007020000_customer_project_center_project_create_replay_guard.sql"
+    },
+    {
+      "applied_version": "20261024053736",
+      "file": "supabase/migrations/20261009181000_global_lead_hub_phase1_foundation.sql"
+    },
+    {
+      "applied_version": "20261024054519",
+      "file": "supabase/migrations/20261010074500_global_lead_hub_phase2_core_human_ui.sql"
+    },
+    {
+      "applied_version": "20261024054523",
+      "file": "supabase/migrations/20261010182400_global_lead_hub_phase3_whatsapp_inbound.sql"
+    },
+    {
+      "applied_version": "20261024054529",
+      "file": "supabase/migrations/20261011181500_global_lead_hub_phase5_handoff_persistence.sql"
+    },
+    {
+      "applied_version": "20261024054533",
+      "file": "supabase/migrations/20261021120000_global_lead_hub_stage1_manual_production_intake.sql"
+    },
+    {
+      "applied_version": "20261024054538",
+      "file": "supabase/migrations/20261021135000_global_lead_hub_stage1_human_workflow.sql"
+    },
+    {
+      "applied_version": "20261024145344",
+      "file": "supabase/migrations/20261024210000_commercial_payment_methods_review.sql"
+    },
+    {
+      "applied_version": "20261025132114",
+      "file": "supabase/migrations/20261025140500_customer_project_center_dual_rating_foundation.sql"
+    },
+    {
+      "applied_version": "20261025135913",
+      "file": "supabase/migrations/20261025161000_cpc_customer_notes_and_development_plan.sql"
+    },
+    {
+      "applied_version": "20261025141549",
+      "file": "supabase/migrations/20261025183000_cpc_potential_owner_self_publish.sql"
+    },
+    {
+      "applied_version": "20261027005218",
+      "file": "supabase/migrations/20261027073000_commercial_quotation_drafts.sql"
+    },
+    {
+      "applied_version": "20261027005229",
+      "file": "supabase/migrations/20261027080000_commercial_quotation_draft_revisions.sql"
+    },
+    {
+      "applied_version": "20261027020101",
+      "file": "supabase/migrations/20261027095000_commercial_confirmed_quotes.sql"
+    },
+    {
+      "applied_version": "20261027020110",
+      "file": "supabase/migrations/20261027100000_commercial_confirmed_guard.sql"
+    },
+    {
+      "applied_version": "20261027020118",
+      "file": "supabase/migrations/20261027101000_commercial_confirmed_payment_snapshot.sql"
+    },
+    {
+      "applied_version": "20261027100912",
+      "file": "supabase/migrations/20261027175500_cpc_provisional_source_channel_separation.sql"
+    },
+    {
+      "applied_version": "20261030030750",
+      "file": "supabase/migrations/20261030113000_cpc_project_owner_name_for_visible_projects.sql"
+    },
+    {
+      "applied_version": "20261030060630",
+      "file": "supabase/migrations/20261030135500_cpc_project_archived_visibility.sql"
+    },
+    {
+      "applied_version": "20261103070727",
+      "file": "supabase/migrations/20261103065800_commercial_quote_unit_price_four_decimals.sql"
+    },
+    {
+      "applied_version": "20261107063851",
+      "file": "supabase/migrations/20261107142700_commercial_quotation_item_images.sql"
+    }
+  ],
+  "excluded": [
+    "supabase/migrations/20260708_site_data.sql (DROP TABLE and unauthenticated ALL grants)",
+    "supabase/migrations/20261014102000_workshop_order_system_foundation.sql (P8 deliberately absent at baseline)",
+    "supabase/migrations/20261031110000_commercial_supplier_order_drafts.sql (not in Production migration record)",
+    "supabase/migrations/20261031120000_commercial_supplier_order_versions.sql (not in Production migration record)",
+    "supabase/migrations/20261031133000_commercial_supplier_order_rpc_hardening.sql (not in Production migration record)"
+  ],
+  "security_drift": [
+    "site_data original Production public-true policies deliberately not restored",
+    "legacy original RLS helper permissions require explicit audit",
+    "this replayer is not a native Supabase migration-history repair"
+  ]
+}

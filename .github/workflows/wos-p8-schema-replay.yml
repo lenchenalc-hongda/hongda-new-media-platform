@@ -1,0 +1,135 @@
+name: WOS P8 Schema-Only Replay (No Cloud Credentials)
+on:
+  pull_request:
+    branches: [master, main]
+    paths:
+      - 'scripts/wos-p8/**'
+      - 'tests/sql/wos_p8_*'
+      - '.github/workflows/wos-p8-schema-replay.yml'
+      - 'supabase/migrations/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: wos-p8-schema-replay-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  reproducible-history:
+    name: wos-p8-p06-p07-replay-transaction-rollback
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: wos_p8_replay_ci
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: wos-p8-only-disposable
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d wos_p8_replay_ci"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 8
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: '5432'
+      PGUSER: postgres
+      PGDATABASE: wos_p8_replay_ci
+      PGPASSWORD: wos-p8-only-disposable
+    steps:
+      - name: Checkout untrusted code with no privileged credentials
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Setup Node 22
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+      - name: Install psql client
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y postgresql-client
+      - name: Static manifest and parser validation
+        run: |
+          set -euo pipefail
+          node --check scripts/wos-p8/replay-history.mjs
+          node scripts/wos-p8/replay-history.mjs --plan > /tmp/wos-p8-replay-plan.txt
+          test "$(grep -c -- ' -> supabase/migrations/' /tmp/wos-p8-replay-plan.txt)" = 29
+          grep -q WOS_P8_NO_SQL_EXECUTED /tmp/wos-p8-replay-plan.txt
+      - name: P8 Edge and protected real-branch harness syntax/security preflight
+        run: |
+          set -euo pipefail
+          node --check scripts/wos-p8/real-branch-acceptance.mjs
+          node scripts/wos-p8/real-branch-acceptance.mjs --self-test
+          grep -q 'WOS_P8_EXACT_BRANCH_REF' scripts/wos-p8/edge-verify-image.ts
+          grep -q 'WOS_P8_EDGE_TEST_ENABLED' scripts/wos-p8/edge-verify-image.ts
+          grep -q 'SERVICE_ROLE_REQUIRED' tests/sql/wos_p8_p7_service_proof_and_cleanup.sql
+          grep -q 'DecompressionStream' scripts/wos-p8/png-validator.ts
+          if grep -Ei 'DELETE[[:space:]]+FROM[[:space:]]+storage\\.objects|TRUNCATE[[:space:]]+storage\\.objects' tests/sql/wos_p8_p7_service_proof_and_cleanup.sql; then
+            echo 'Forbidden direct Storage binary metadata mutation'
+            exit 1
+          fi
+          echo 'WOS_P8_EDGE_FAIL_CLOSED_AND_NO_SQL_STORAGE_DELETE=PASS'
+      - name: Enforce negative branch gate without credentials
+        run: |
+          set -euo pipefail
+          if node scripts/wos-p8/replay-history.mjs --branch >/dev/null 2>&1; then
+            echo 'ERROR: unauthorized branch replay was accepted'
+            exit 1
+          fi
+          echo 'WOS_P8_PRODUCTION_BRANCH_GUARD=PASS'
+      - name: Replay history from original version mapping in real PostgreSQL 17
+        run: |
+          set -euo pipefail
+          node scripts/wos-p8/replay-history.mjs --ci
+      - name: Independently confirm table inventory and zero business rows
+        run: |
+          set -euo pipefail
+          test "$(psql -X -At -v ON_ERROR_STOP=1 -c "SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_type='BASE TABLE'")" = 67
+          test "$(psql -X -At -v ON_ERROR_STOP=1 -c "SELECT count(*) FROM public.organizations")" = 0
+          test "$(psql -X -At -v ON_ERROR_STOP=1 -c "SELECT count(*) FROM public.profiles")" = 0
+          test "$(psql -X -At -v ON_ERROR_STOP=1 -c "SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_name LIKE 'wos_%'")" = 0
+          echo 'WOS_P8_P06_REAL_PG17_ZERO_BUSINESS_DATA=PASS'
+          echo 'WOS_P8_SUPABASE_BRANCH_NATIVE_REPLAY=NOT_TESTED'
+          echo 'WOS_P8_STORAGE_AND_EDGE_BINARY=NOT_TESTED'
+
+      - name: Capture full schema and private storage pre-WOS baseline
+        run: |
+          set -euo pipefail
+          psql -X -q -A -t -v ON_ERROR_STOP=1 -f tests/sql/wos_p8_schema_parity_snapshot.sql > /tmp/wos_p8_baseline.txt
+          cat /tmp/wos_p8_baseline.txt
+          grep -q 'non_wos_structure|67|b70315b9a18ca1f92ff4cafcd2c07676' /tmp/wos_p8_baseline.txt
+      - name: Apply exact WOS ten-table foundation plus production-structure P7 candidate
+        run: |
+          set -euo pipefail
+          psql -X -q -v ON_ERROR_STOP=1 -f supabase/migrations/20261014102000_workshop_order_system_foundation.sql
+          psql -X -q -v ON_ERROR_STOP=1 -f tests/sql/wos_p8_p7_production_compatible_candidate.sql
+          psql -X -q -v ON_ERROR_STOP=1 -f tests/sql/wos_p8_p7_service_proof_and_cleanup.sql
+          test "$(psql -X -A -t -v ON_ERROR_STOP=1 -c "SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_name LIKE 'wos_%'")" = 15
+          echo 'WOS_P8_P07_FIFTEEN_WOS_TABLES=PASS'
+      - name: Deny production-only test ACL on wrong PostgreSQL database
+        run: |
+          set -euo pipefail
+          if psql -X -q -v ON_ERROR_STOP=1 -f tests/sql/wos_p8_branch_only_synthetic_seed_acl.sql >/tmp/wos-p8-acl-negative.txt 2>&1; then
+            echo 'Unsafe branch-only service privileges accepted on CI database'
+            exit 1
+          fi
+          grep -q 'WOS_P8_APPROVED_BRANCH_REQUIRED' /tmp/wos-p8-acl-negative.txt
+          echo 'WOS_P8_SYNTHETIC_SEED_GRANTED_ONLY_ON_APPROVED_BRANCH=PASS'
+      - name: Execute synthetic multi-role transaction, image-proof and rollback smoke
+        run: |
+          set -euo pipefail
+          psql -X -q -v ON_ERROR_STOP=1 -f tests/sql/wos_p8_p7_prod_compatible_smoke.sql
+      - name: Teardown WOS without CASCADE and compare exact pre-WOS catalog fingerprint
+        run: |
+          set -euo pipefail
+          psql -X -q -v ON_ERROR_STOP=1 -f tests/sql/wos_p8_p7_disposable_full_rollback.sql
+          psql -X -q -A -t -v ON_ERROR_STOP=1 -f tests/sql/wos_p8_schema_parity_snapshot.sql > /tmp/wos_p8_after.txt
+          diff -u /tmp/wos_p8_baseline.txt /tmp/wos_p8_after.txt
+          echo 'WOS_P8_P07_NO_CPC_GLH_COMMERCIAL_SCHEMA_DRIFT=PASS'
+          echo 'WOS_P8_REAL_AUTHENTICATED_EDGE_BINARY=NOT_RUN'
