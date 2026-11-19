@@ -1,0 +1,46 @@
+# REVIEW DATA ONLY. This file lives under docs/workshop-order-system/, NOT
+# .github/workflows/. It MUST NOT be copied into an executable workflow until
+# independent infra-serialization audit and exact-head Owner authorization.
+name: WOS P1 QA cloud secret observer (disabled review candidate)
+on:
+  schedule:
+    - cron: '3/5 * * * *'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: wos-p1-qa-secret-observer
+  cancel-in-progress: false
+jobs:
+  observe:
+    if: >-
+      github.repository == 'lenchenalc-hongda/hongda-new-media-platform' &&
+      github.ref == 'refs/heads/master' &&
+      vars.WOS_P1_CLOUD_REAPER_ENABLED == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    environment: wos-p1-qa-cloud-reaper
+    steps:
+      - name: Checkout exact protected master code without persisted token
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          sparse-checkout: |
+            src/lib/workshop-orders/qa-cloud-reaper/observer.py
+          sparse-checkout-cone-mode: false
+      - name: Mint short-lived downscoped App token (Environments read only)
+        id: app-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1
+        with:
+          client-id: ${{ vars.WOS_P1_CLEANUP_APP_CLIENT_ID }}
+          private-key: ${{ secrets.WOS_P1_CLEANUP_APP_PRIVATE_KEY }}
+          repositories: hongda-new-media-platform
+          permission-environments: read
+      - name: Observe bounded QA Secret metadata only; never delete
+        shell: bash
+        env:
+          WOS_P1_CLEANUP_APP_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          set -euo pipefail
+          python3 src/lib/workshop-orders/qa-cloud-reaper/observer.py
