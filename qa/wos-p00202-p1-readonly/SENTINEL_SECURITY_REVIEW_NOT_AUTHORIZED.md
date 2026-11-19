@@ -15,7 +15,7 @@ A PostgreSQL `VALID UNTIL` password expiry prevents new authentication but does 
   1. `wos_p1_preflight_private.enforce_credential_expiry()`, a private **SECURITY INVOKER** function callable by `postgres` only. No parameters. Revokes PUBLIC and read-only role EXECUTE.
   2. `cron.schedule('wos-p1-qa-readonly-credential-sentinel','* * * * *','SELECT wos_p1_preflight_private.enforce_credential_expiry();')`.
 - A fixed `EXECUTE 'ALTER ROLE wos_qa_readonly_preflight NOLOGIN PASSWORD NULL'` contains **no interpolated input**. Only the exact named QA role can be changed.
-- `pg_terminate_backend(pid)` iterates sessions with `pg_stat_activity.usename='wos_qa_readonly_preflight'` only. Failure must abort and remain visible in `cron.job_run_details`; the role's LOGIN is disabled first. This is NOT permission to terminate arbitrary business sessions.
+- `pg_terminate_backend(pid)` iterates sessions with `pg_stat_activity.usename='wos_qa_readonly_preflight'` only. Session termination failure emits a fixed WARNING **without rolling back the prior NOLOGIN / password revocation**; the next Cron invocation retries and independent post-run inspection must reject any remaining sessions. Warnings alone do not prove cleanup PASS. This is NOT permission to terminate arbitrary business sessions.
 - The two SQL scripts contain no business SELECT, no RLS/Storage edits, no Edge/Preview modifications, no model calls, no Production changes.
 - Rollback requires NOLOGIN, NULL password and ZERO sessions. It removes only the exact named Cron job and this function with `RESTRICT`. Existing schema, role, `readonly_snapshot()` and unrelated cron jobs must remain.
 
@@ -33,6 +33,6 @@ A PostgreSQL `VALID UNTIL` password expiry prevents new authentication but does 
 - Real P1 zero-write run must bind protected master and exact QA Preview, obtain real OIDC HTTP 503 for 4 endpoints, and collect immutable 84/83/83 proof digest. This file itself is NOT that E2E or its authorization.
 
 ## Recovery and limitations
-If `pg_cron` pauses or cannot signal a dedicated role session, the job may fail; `VALID UNTIL` blocks new logins but existing sessions may survive. Therefore *monitor job health*, use server-enforced statement/idle timeouts, and DO NOT mark cleanup complete without post-run active-session verification. A manual `trap EXIT` alone cannot satisfy crash recovery. The Cron sentinel does not delete `WOS_QA_READONLY_DSN` from GitHub; that revocation remains a separate mandatory confirmation.
+If `pg_cron` pauses or cannot signal a dedicated role session, the job can fail or emit warnings; `VALID UNTIL` blocks new logins but existing sessions may survive. Role-revocation and session-termination must not share a fatal exception rollback. Therefore *monitor job health and warnings*, use server-enforced statement/idle timeouts, and DO NOT mark cleanup complete without post-run active-session verification. A manual `trap EXIT` alone cannot satisfy crash recovery. The Cron sentinel does not delete `WOS_QA_READONLY_DSN` from GitHub; that revocation remains a separate mandatory confirmation.
 
 **Status:** No SQL installed, role unchanged (NOLOGIN), no password/secret issued, no workflow dispatched. Await separate technical audit and Owner approval before running any of the SQL scripts.
