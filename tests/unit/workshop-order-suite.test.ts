@@ -14,6 +14,7 @@ import './workshop-order-p1-cloud-reaper-workflow-candidate.test';
 import './workshop-order-p1-handoff-counterexamples.test';
 import './workshop-order-p1-handoff-cas-bridge.test';
 import './workshop-order-p1-postgres-cas-bridge.test';
+import './workshop-order-p1-standalone-oidc-candidate.test';
 
 // WOS project-owned test aggregator. Each new WOS test is imported here,
 // so the existing shared CI invokes it without modifying shared workflows.
