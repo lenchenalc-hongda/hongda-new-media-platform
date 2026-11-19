@@ -1,4 +1,4 @@
-# REVIEW ONLY: master-based isolated proposal, never dispatch without a separate Owner grant.
+# REVIEW ONLY: GitHub OIDC QA trust + private aggregate proof design. Not approved for dispatch.
 # Never grants P1 writes; does not import business data or production credentials.
 name: WOS P0-02-02 P1 protected QA read-only preflight
 on:
@@ -72,62 +72,115 @@ jobs:
           verify_run 44427429301 21ff6e30429a16e51c3c5812a4c31345d8bb2b3f .github/workflows/wos-qa-overlay-fk-hotfix-independent-audit.yml
           verify_run 44427113391 "$EXPECTED" .github/workflows/wos-prod-p0-02-02-qa-overlay-isolated-pg17.yml
           echo 'WOS_P1_PRECHECK_EXACT_PR_EDGE_AUDITS=PASS'
+
   protected-preview-http:
     needs: fixed-source
-    if: needs.fixed-source.result == 'success'
+    if: needs.fixed-source.result == 'success' && github.event_name == 'workflow_dispatch' && github.run_attempt == 1 && github.ref == 'refs/heads/master'
     runs-on: ubuntu-24.04
-    timeout-minutes: 12
+    timeout-minutes: 8
     environment: hongda-review-dev
     permissions:
       contents: read
-    env:
-      VERCEL_TOKEN: ${{ secrets.WOS_QA_VERCEL_TOKEN }}
-      VERCEL_CLI_VERSION: ${{ vars.WOS_QA_VERCEL_CLI_VERSION }}
-      VERCEL_ORG_ID: team_OZQkJ9a5x0fAirpMzt3vn3Xp
-      VERCEL_PROJECT_ID: prj_MhozO5QPUuUl8muAAKtkj5napeSp
+      id-token: write
     steps:
-      - name: Verify Vercel project and exact READY Preview via authenticated owner scope
+      - name: Verify real 503 via GitHub OIDC and Vercel Trusted Sources
         shell: bash
         run: |
           set -euo pipefail
-          test -n "$VERCEL_TOKEN"
-          test "$VERCEL_CLI_VERSION" = "63.1.2"
-          url="https://api.vercel.com/v13/deployments/dpl_53tMyB4UvQ47CwxcZfiZeZQZYz2e?teamId=$VERCEL_ORG_ID"
-          response="$(curl --fail --silent --show-error --max-time 25 -H "Authorization: Bearer $VERCEL_TOKEN" "$url")"
-          jq -e --arg proj "$VERCEL_PROJECT_ID" --arg sha "3ad29f4a5a6f941d2e49b634f54d65cbbcd4a2e4" '
-            .id=="dpl_53tMyB4UvQ47CwxcZfiZeZQZYz2e"
-            and .readyState=="READY" and .target==null
-            and (.project.id // .projectId)==$proj
-            and .url=="hongda-wos-p00202-qa-preview-o22fvh0ib-lens-projects-3fc386bd.vercel.app"
-            and .meta.githubCommitRef=="codex/wos-p0-02-02-overlay-real-qa-fk-fix-20261119"
-            and .meta.githubOrg=="lenchenalc-hongda" and .meta.githubRepo=="hongda-new-media-platform"
-            and .meta.githubCommitSha==$sha
-          ' <<<"$response" >/dev/null
-          echo 'WOS_P1_PREVIEW_ID_SHA_TARGET_OWNER_VERIFIED=PASS'
-      - name: Real application-layer 503 under Vercel Authentication
-        shell: bash
-        run: |
-          set -euo pipefail
-          npm install -g "vercel@$VERCEL_CLI_VERSION" --no-audit --no-fund >/dev/null
-          base=https://hongda-wos-p00202-qa-preview-o22fvh0ib-lens-projects-3fc386bd.vercel.app
-          run_case() {
-            local route="$1" expected="$2" response status
-            response="$(mktemp)"
-            trap 'rm -f "$response"' RETURN
-            status="$(vercel curl "$base/api/workshop-orders/production/$route" \
-              -X POST -H 'Content-Type: application/json' \
-              --data '{}' --silent --show-error -o "$response" -w '%{http_code}')"
-            test "$status" = 503
-            jq -e --arg code "$expected" '.ok==false and .code==$code' "$response" >/dev/null
-            printf '%s: 503 %s\n' "$route" "$expected" >> "$GITHUB_STEP_SUMMARY"
-            rm -f "$response"
-            trap - RETURN
+          # No Vercel API token, CLI, share link, automation bypass or production URL.
+          # Owner must independently bind READY Preview deployment metadata before dispatch.
+          python3 - <<'PY'
+          import base64,datetime,json,os,sys,time,urllib.error,urllib.parse,urllib.request
+          def fail():
+              raise SystemExit('WOS_P1_OIDC_PREVIEW_FAIL_CLOSED')
+          repo='lenchenalc-hongda/hongda-new-media-platform'
+          branch='refs/heads/master'
+          workflow=f'{repo}/.github/workflows/wos-p00202-p1-protected-readonly-preflight.yml@{branch}'
+          expected_env='hongda-review-dev'
+          audience='https://github.com/lenchenalc-hongda'
+          hostname='hongda-wos-p00202-qa-preview-o22fvh0ib-lens-projects-3fc386bd.vercel.app'
+          expected_codes={
+              'candidate-drafts':'WOS_P1_DRAFT_CANDIDATE_DISABLED',
+              'candidate-office-document':'OFFICE_DOCUMENT_CANDIDATE_DISABLED',
+              'candidate-image-register':'PRIVATE_IMAGE_CANDIDATE_DISABLED',
+              'candidate-submit':'WOS_P1_SUBMIT_CANDIDATE_DISABLED',
           }
-          run_case candidate-drafts WOS_P1_DRAFT_CANDIDATE_DISABLED
-          run_case candidate-office-document OFFICE_DOCUMENT_CANDIDATE_DISABLED
-          run_case candidate-image-register PRIVATE_IMAGE_CANDIDATE_DISABLED
-          run_case candidate-submit WOS_P1_SUBMIT_CANDIDATE_DISABLED
-          echo 'WOS_P1_AUTHENTICATED_PREVIEW_FOUR_APP_503=PASS'
+          if (os.getenv('GITHUB_REPOSITORY')!=repo or os.getenv('GITHUB_REF')!=branch
+              or os.getenv('GITHUB_EVENT_NAME')!='workflow_dispatch'
+              or os.getenv('GITHUB_RUN_ATTEMPT')!='1'
+              or os.getenv('GITHUB_WORKFLOW_REF')!=workflow): fail()
+          req_url=os.getenv('ACTIONS_ID_TOKEN_REQUEST_URL','')
+          req_key=os.getenv('ACTIONS_ID_TOKEN_REQUEST_TOKEN','')
+          if not req_url.startswith('https://') or not req_key: fail()
+          connector='&' if '?' in req_url else '?'
+          req_url+=connector+urllib.parse.urlencode({'audience':audience})
+          token_req=urllib.request.Request(
+              req_url, headers={'Authorization':'Bearer '+req_key,'Accept':'application/json'})
+          try:
+              with urllib.request.urlopen(token_req,timeout=15) as r:
+                  token=json.load(r).get('value','')
+          except Exception: fail()
+          if not isinstance(token,str) or len(token)>8192 or len(token)<100: fail()
+          try:
+              part=token.split('.')
+              if len(part)!=3: fail()
+              claims=json.loads(base64.urlsafe_b64decode(part[1]+'='*((-len(part[1]))%4)))
+          except Exception: fail()
+          now=time.time()
+          exact={
+              'iss':'https://token.actions.githubusercontent.com',
+              'aud':audience,
+              'repository':repo,
+              'repository_id':'1286793274',
+              'repository_owner_id':'297604134',
+              'ref':branch,
+              'environment':expected_env,
+              'workflow_ref':workflow,
+              'event_name':'workflow_dispatch',
+              'runner_environment':'github-hosted',
+              'sub':f'repo:{repo}:environment:{expected_env}',
+          }
+          if any(str(claims.get(k))!=v for k,v in exact.items()): fail()
+          if (str(claims.get('run_attempt'))!='1'
+              or str(claims.get('run_id'))!=os.environ['GITHUB_RUN_ID']
+              or str(claims.get('workflow_sha'))!=os.environ['GITHUB_SHA']
+              or int(claims.get('iat',0))>now+30
+              or int(claims.get('nbf',0))>now+30
+              or int(claims.get('exp',0))<now+15
+              or int(claims.get('exp',0))-int(claims.get('iat',0))>600): fail()
+          # Only a single exact immutable QA deployment hostname is ever requested.
+          # A 302/401/403 protection/login page is NOT proof of application execution.
+          class NoRedirect(urllib.request.HTTPRedirectHandler):
+              def redirect_request(self,*args,**kwargs): return None
+          opener=urllib.request.build_opener(NoRedirect)
+          try:
+              with open(os.environ['GITHUB_STEP_SUMMARY'],'a',encoding='utf-8') as summary:
+                  summary.write('### WOS P1 protected Preview OIDC negative probes\n')
+                  for route,code in expected_codes.items():
+                      url=f'https://{hostname}/api/workshop-orders/production/{route}'
+                      req=urllib.request.Request(
+                          url,method='POST',data=b'{}',
+                          headers={'Content-Type':'application/json',
+                              'x-vercel-trusted-oidc-idp-token':token})
+                      try:
+                          with opener.open(req,timeout=15) as resp:
+                              status=resp.status
+                              body=resp.read(2049)
+                              content_type=resp.headers.get('Content-Type','')
+                      except urllib.error.HTTPError as err:
+                          status=err.code
+                          body=err.read(2049)
+                          content_type=err.headers.get('Content-Type','')
+                      except Exception: fail()
+                      if status!=503 or len(body)>2048 or not content_type.startswith('application/json'): fail()
+                      try: result=json.loads(body)
+                      except Exception: fail()
+                      if not isinstance(result,dict) or result.get('ok') is not False or result.get('code')!=code or result.get('data') is not None: fail()
+                      summary.write(f'- {route}: HTTP 503 {code}\n')
+          except Exception: fail()
+          # Never print or upload the OIDC token or HTTP response bodies.
+          print('WOS_P1_OIDC_PINNED_QA_PREVIEW_FOUR_APP_503=PASS')
+          PY
   qa-readonly-database:
     needs: protected-preview-http
     if: needs.protected-preview-http.result == 'success'
@@ -139,67 +192,101 @@ jobs:
     env:
       WOS_QA_READONLY_DSN: ${{ secrets.WOS_QA_READONLY_DSN }}
     steps:
-      - name: Verify QA-only least-privilege database identity and gates
+      - name: Verify QA-only NOLOGIN-origin readonly proof role and aggregate snapshot
         shell: bash
         run: |
           set -euo pipefail
-          test -n "$WOS_QA_READONLY_DSN"
-          # Verify QA-only DSN provenance without revealing any credentials.
+          # Role must be separately Owner-authorised, provisioned and TLS-enabled.
+          # Never print DSN, password, private table rows, JWT, headers or signatures.
           python3 - <<'PY'
-          from urllib.parse import urlsplit,parse_qs,unquote
-          import os
-          u=urlsplit(os.environ['WOS_QA_READONLY_DSN'])
-          ref='xulmpqaknlwqqculbsek'
-          host=u.hostname or ''
-          user=unquote(u.username or '')
-          direct=host==f'db.{ref}.supabase.co'
-          pooler=host.endswith('.pooler.supabase.com') and user.endswith('.'+ref)
-          ssl=parse_qs(u.query).get('sslmode',[''])[0]
-          assert u.scheme in ('postgres','postgresql') and (direct or pooler), 'QA_ONLY_DSN_REQUIRED'
-          assert ssl in ('require','verify-ca','verify-full'), 'QA_TLS_REQUIRED'
-          assert u.password and u.path=='/postgres', 'QA_READONLY_DSN_INVALID'
+          import datetime,hashlib,json,os,subprocess,sys,urllib.parse
+          def fail():
+              raise SystemExit('WOS_P1_QA_AGGREGATE_PROOF_FAIL_CLOSED')
+          raw=os.environ.get('WOS_QA_READONLY_DSN','')
+          if not raw or len(raw)>2048: fail()
+          try:
+              uri=urllib.parse.urlsplit(raw)
+              query=urllib.parse.parse_qs(uri.query,strict_parsing=True)
+              user=urllib.parse.unquote(uri.username or '')
+              password=urllib.parse.unquote(uri.password or '')
+              good=(uri.scheme in ('postgres','postgresql')
+                and uri.hostname=='db.xulmpqaknlwqqculbsek.supabase.co'
+                and uri.port in (None,5432)
+                and user=='wos_qa_readonly_preflight'
+                and uri.path=='/postgres' and not uri.fragment
+                and query=={'sslmode':['verify-full']} and bool(password))
+              if not good: fail()
+          except Exception: fail()
+          pg=os.environ.copy()
+          pg.pop('WOS_QA_READONLY_DSN',None)
+          pg.update(PGHOST=uri.hostname,PGPORT=str(uri.port or 5432),
+            PGDATABASE='postgres',PGUSER=user,PGPASSWORD=password,
+            PGSSLMODE='verify-full',
+            PGOPTIONS='-c default_transaction_read_only=on -c search_path=pg_catalog')
+          sql="""
+          SELECT pg_catalog.jsonb_build_object(
+            'session_user',session_user,
+            'current_user',current_user,
+            'read_only',pg_catalog.current_setting('transaction_read_only'),
+            'role_safe',(SELECT NOT (r.rolsuper OR r.rolbypassrls OR r.rolcreatedb
+              OR r.rolcreaterole OR r.rolreplication OR r.rolinherit)
+              FROM pg_catalog.pg_roles r WHERE r.rolname=current_user),
+            'no_membership',NOT EXISTS(SELECT 1 FROM pg_catalog.pg_auth_members m
+              JOIN pg_catalog.pg_roles r ON r.oid=m.member WHERE r.rolname=current_user),
+            'direct_business_privs',(
+              SELECT pg_catalog.count(*)
+              FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n
+                ON n.oid=c.relnamespace
+              WHERE c.relkind IN ('r','p','v','m','f')
+                AND n.nspname IN ('public','storage','wos_mvp_qa',
+                  'wos_mvp_attestation','wos_qa_safety')
+                AND pg_catalog.has_schema_privilege(current_user,n.oid,'USAGE')
+                AND pg_catalog.has_table_privilege(current_user,c.oid,
+                  'SELECT,INSERT,UPDATE,DELETE')),
+            'other_secdef_execute',(
+              SELECT pg_catalog.count(*) FROM pg_catalog.pg_proc p
+              JOIN pg_catalog.pg_namespace n ON n.oid=p.pronamespace
+              WHERE p.prosecdef
+                AND NOT(n.nspname='wos_p1_preflight_private' AND p.proname='readonly_snapshot')
+                AND pg_catalog.has_schema_privilege(current_user,n.oid,'USAGE')
+                AND pg_catalog.has_function_privilege(current_user,p.oid,'EXECUTE')),
+            'proof',wos_p1_preflight_private.readonly_snapshot()
+          )::text;
+          """
+          try:
+              result=subprocess.run(
+                  ['psql','-X','-A','-t','-w','-v','ON_ERROR_STOP=1','-c',sql],
+                  capture_output=True,text=True,timeout=30,env=pg)
+          except Exception: fail()
+          if result.returncode!=0: fail()
+          try:
+              values=json.loads(result.stdout.strip())
+              proof=values['proof']
+              checked=datetime.datetime.fromisoformat(proof['checked_at'].replace('Z','+00:00'))
+              delta=abs((datetime.datetime.now(datetime.timezone.utc)-checked).total_seconds())
+          except Exception: fail()
+          if not (
+              values['session_user']=='wos_qa_readonly_preflight'
+              and values['current_user']=='wos_qa_readonly_preflight'
+              and values['read_only']=='on'
+              and values['role_safe'] is True
+              and values['no_membership'] is True
+              and values['direct_business_privs']==0
+              and values['other_secdef_execute']==0
+              and proof['proof_version']=='WOS_P1_QA_READONLY_V1'
+              and proof['qa_project_ref']=='xulmpqaknlwqqculbsek'
+              and proof['database']=='postgres'
+              and proof['p1_off'] is True
+              and proof['p2_operator_off'] is True
+              and proof['p2_office_off'] is True
+              and proof['orders']==84 and proof['null_cpc']==83
+              and proof['private_objects']==83 and proof['private_bucket'] is True
+              and proof['image_proofs']==0 and proof['cpc_bindings']==0
+              and proof['office_receipts']==0 and delta<=120
+          ): fail()
+          digest=hashlib.sha256(json.dumps(proof,sort_keys=True,separators=(',',':')).encode()).hexdigest()
+          with open(os.environ['GITHUB_STEP_SUMMARY'],'a',encoding='utf-8') as f:
+              f.write(f'\nQA aggregate snapshot SHA-256: {digest}\n')
+              f.write('P1/P2 OFF, 84/83/83, no role escalation: PASS\n')
+          print('WOS_P1_QA_READONLY_AGGREGATE_ATTESTOR=PASS')
           PY
-          export PGOPTIONS='-c default_transaction_read_only=on'
-          result="$(psql "$WOS_QA_READONLY_DSN" -X -A -t -v ON_ERROR_STOP=1 -c "
-            SELECT jsonb_build_object(
-              'role',current_user,
-              'read_only',current_setting('transaction_read_only'),
-              'role_super',(SELECT rolsuper FROM pg_roles WHERE rolname=current_user),
-              'role_bypassrls',(SELECT rolbypassrls FROM pg_roles WHERE rolname=current_user),
-              'role_createdb',(SELECT rolcreatedb FROM pg_roles WHERE rolname=current_user),
-              'role_createrole',(SELECT rolcreaterole FROM pg_roles WHERE rolname=current_user),
-              'orders_write',has_table_privilege(current_user,'public.wos_production_orders','INSERT,UPDATE,DELETE'),
-              'storage_write',has_table_privilege(current_user,'storage.objects','INSERT,UPDATE,DELETE'),
-              'p1_gate_write',has_table_privilege(current_user,'wos_mvp_qa.p1_execution_gate','INSERT,UPDATE,DELETE'),
-              'p2_operator_write',has_table_privilege(current_user,'public.wos_qa_p2_execution_gate','INSERT,UPDATE,DELETE'),
-              'p2_office_write',has_table_privilege(current_user,'public.wos_qa_p2_office_execution_gate','INSERT,UPDATE,DELETE'),
-              'privileged_candidate_execute',(SELECT coalesce(bool_or(has_function_privilege(current_user,p.oid,'EXECUTE')),false)
-                FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
-                WHERE n.nspname='public'
-                AND p.proname IN ('wos_mvp_commit_image_proof_candidate','wos_mvp_storage_snapshot_candidate')),
-
-              'p1_off',(SELECT bool_and(NOT enabled AND enabled_until IS NULL AND approved_run_id IS NULL AND approved_sha IS NULL) FROM wos_mvp_qa.p1_execution_gate),
-              'p2_operator_off',(SELECT bool_and(NOT enabled AND enabled_until IS NULL) FROM public.wos_qa_p2_execution_gate WHERE gate_name='OPERATOR_WRITES'),
-              'p2_office_off',(SELECT bool_and(NOT enabled AND enabled_until IS NULL) FROM public.wos_qa_p2_office_execution_gate WHERE gate_name='OFFICE_WRITES'),
-              'orders',(SELECT count(*) FROM public.wos_production_orders),
-              'null_cpc',(SELECT count(*) FROM public.wos_production_orders WHERE customer_id IS NULL OR project_id IS NULL),
-              'objects',(SELECT count(*) FROM storage.objects WHERE bucket_id='wos-private'),
-              'proofs',(SELECT count(*) FROM wos_mvp_attestation.private_image_proofs),
-              'bindings',(SELECT count(*) FROM wos_mvp_qa.cpc_order_bindings)
-            )::text
-          ")"
-          jq -e '
-            .role=="wos_qa_readonly_preflight"
-            and .read_only=="on"
-            and .role_super==false and .role_bypassrls==false
-            and .role_createdb==false and .role_createrole==false
-            and .orders_write==false and .storage_write==false
-            and .p1_gate_write==false and .p2_operator_write==false
-            and .p2_office_write==false and .privileged_candidate_execute==false
-            and .p1_off==true
-            and .p2_operator_off==true and .p2_office_off==true
-            and .orders==84 and .null_cpc==83 and .objects==83
-            and .proofs==0 and .bindings==0
-          ' <<<"$result" >/dev/null
-          printf 'WOS_P1_GATES_OFF_HISTORY_UNCHANGED_READONLY=PASS\n' >> "$GITHUB_STEP_SUMMARY"
-          echo 'WOS_P1_OWNER_PREFLIGHT_NO_WRITE_PASS'
