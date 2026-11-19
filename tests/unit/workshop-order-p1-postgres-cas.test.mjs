@@ -35,8 +35,11 @@ test('real isolated PostgreSQL two competing UPDATE RETURNING transactions', {ti
   try {
     let ready=false;
     for(let i=0;i<60;i++){
-      const p=spawnSync('docker',['exec',container,'pg_isready','-U','postgres','-d','wos_ci'],{encoding:'utf8'});
-      if(p.status===0){ready=true;break}
+      // pg_isready can succeed during the official image's temporary
+      // initdb server before POSTGRES_DB has actually been created.
+      const p=spawnSync('docker',['exec',container,'psql','-X','-v','ON_ERROR_STOP=1',
+        '-U','postgres','-d','wos_ci','-Atc','SELECT 1'],{encoding:'utf8'});
+      if(p.status===0 && (p.stdout??'').trim()==='1'){ready=true;break}
       await new Promise(r=>setTimeout(r,500));
     }
     assert.ok(ready,'ISOLATED_POSTGRES_NOT_READY');
