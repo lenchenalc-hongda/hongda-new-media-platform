@@ -64,18 +64,18 @@ BEGIN
     'database', pg_catalog.current_database(),
     'checked_at', pg_catalog.clock_timestamp(),
     'p1_off', (
-      SELECT count(*) = 1 AND pg_catalog.coalesce(
+      SELECT count(*) = 1 AND coalesce(
         pg_catalog.bool_and(enabled = FALSE AND enabled_until IS NULL
           AND approved_run_id IS NULL AND approved_sha IS NULL), FALSE)
       FROM wos_mvp_qa.p1_execution_gate
     ),
     'p2_operator_off', (
-      SELECT count(*) = 1 AND pg_catalog.coalesce(
+      SELECT count(*) = 1 AND coalesce(
         pg_catalog.bool_and(enabled = FALSE AND enabled_until IS NULL), FALSE)
       FROM public.wos_qa_p2_execution_gate WHERE gate_name = 'OPERATOR_WRITES'
     ),
     'p2_office_off', (
-      SELECT count(*) = 1 AND pg_catalog.coalesce(
+      SELECT count(*) = 1 AND coalesce(
         pg_catalog.bool_and(enabled = FALSE AND enabled_until IS NULL), FALSE)
       FROM public.wos_qa_p2_office_execution_gate WHERE gate_name = 'OFFICE_WRITES'
     ),
