@@ -4,7 +4,8 @@ import { spawnSync } from 'node:child_process';
 // cryptographic OIDC/Reviewer signatures. No API, secret or live database.
 const checks: Array<[string,string[],string]> = [
   ['python3', ['tests/unit/workshop-order-p1-handoff-cas.test.py'], 'Ran 17 tests'],
-  ['node', ['--test', 'tests/unit/workshop-order-p1-oidc-attestation.test.mjs'], '# pass 25'],
+  ['node', ['--test', 'tests/unit/workshop-order-p1-oidc-attestation.test.mjs'], '# pass 30'],
+  ['node', ['--test', 'tests/unit/workshop-order-p1-github-jwks-live.test.mjs'], '# pass 6'],
 ];
 for (const [runtime,args,marker] of checks) {
   const result = spawnSync(runtime,args,{
@@ -17,4 +18,5 @@ for (const [runtime,args,marker] of checks) {
   }
   console.log('WOS_P1_HANDOFF_OFFLINE_TEST=PASS '+marker);
 }
-console.log('WOS_P1_HANDOFF_OFFLINE_CAS_CRYPTO=PASS sqlite=17 signed=25');
+console.log('WOS_P1_HANDOFF_OFFLINE_CAS_CRYPTO=PASS sqlite=17 signed=30');
+console.log('WOS_P1_GITHUB_ISSUER_JWKS_LIVE_CHECK=PASS');

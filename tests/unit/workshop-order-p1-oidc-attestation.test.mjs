@@ -6,8 +6,9 @@ import { verifyHandoffProof, digest } from '../../src/lib/workshop-orders/qa-clo
 const now=1795096200; // synthetic clock, synthetic keys, no real OIDC
 const repo='lenchenalc-hongda/hongda-new-media-platform';
 const head='598b8db300e43ab7011d1cb383d99af6242441c8';
+const workflowSha='5ac678a50af6391efbdfb0258f037cbdeb2e18d6';
 const workflowRef=repo+'/.github/workflows/wos-p1-qa-handoff-review.yml@refs/heads/master';
-const expected={head,workflowRef,workflowSha:head,runId:33445599,runAttempt:1,
+const expected={head,workflowRef,workflowSha,runId:33445599,runAttempt:1,
  epoch:7,toPr:300,subject:'repo:'+repo+':ref:refs/heads/master'};
 const gh=generateKeyPairSync('rsa',{modulusLength:2048});
 const at=generateKeyPairSync('ed25519');
@@ -19,8 +20,9 @@ const trust={githubJwks:[{...jwk,kid:'github-oidc-test-key',alg:'RS256',use:'sig
 const claims={
  iss:'https://token.actions.githubusercontent.com',aud:'hongda-wos-p1-handoff-v1',
  sub:expected.subject,repository:repo,repository_id:'1286793274',
+ repository_owner_id:'297604134',ref_protected:'true',
  ref:'refs/heads/master',event_name:'workflow_dispatch',
- workflow_ref:workflowRef,workflow_sha:head,sha:head,
+ workflow_ref:workflowRef,workflow_sha:workflowSha,sha:workflowSha,
  run_id:33445599,run_attempt:1,runner_environment:'github-hosted',
  iat:now-20,nbf:now-20,exp:now+120,jti:'synthetic-jti-unique-123456'};
 const b64=s=>Buffer.from(s).toString('base64url');
@@ -37,11 +39,11 @@ function signed(payload,privateKey){
  return {payload,signature:sign(null,Buffer.from(canonical(payload)),privateKey).toString('base64url')};
 }
 const a={kind:'handoff-attestor',version:1,repository:repo,repositoryId:'1286793274',
- resource:'hongda-wos-p1-shared-infra',workflowRef,head,runId:33445599,
+ resource:'hongda-wos-p1-shared-infra',workflowRef,head,workflowSha,runId:33445599,
  runAttempt:1,oidcJti:claims.jti,epoch:7,fromPr:202,toPr:300,
  ownerDecisionDigest:'1'.repeat(64),issuedAt:now-10,expiresAt:now+60};
 const r={kind:'handoff-reviewer',version:1,repository:repo,
- resource:'hongda-wos-p1-shared-infra',head,epoch:7,attestorDigest:digest(a),
+ resource:'hongda-wos-p1-shared-infra',head,workflowSha,epoch:7,attestorDigest:digest(a),
  decision:'PASS',reviewerIdentity:'independent-reviewer',issuedAt:now-10,expiresAt:now+60};
 function proof(c=claims,pa=a,pr=r){
  return {oidcJwt:jwt(c),attestor:signed(pa,at.privateKey),reviewer:signed(pr,rev.privateKey)};
@@ -59,7 +61,7 @@ deny('wrong workflow',()=>verifyHandoffProof(proof({...claims,workflow_ref:'untr
 deny('wrong run',()=>verifyHandoffProof(proof({...claims,run_id:33445598}),trust,expected,now));
 deny('wrong event',()=>verifyHandoffProof(proof({...claims,event_name:'pull_request'}),trust,expected,now));
 deny('wrong branch',()=>verifyHandoffProof(proof({...claims,ref:'refs/heads/dev'}),trust,expected,now));
-deny('wrong head',()=>verifyHandoffProof(proof({...claims,sha:'f'.repeat(40)}),trust,expected,now));
+deny('wrong runtime master SHA',()=>verifyHandoffProof(proof({...claims,sha:'f'.repeat(40)}),trust,expected,now));
 deny('expired JWT',()=>verifyHandoffProof(proof({...claims,exp:now-1}),trust,expected,now));
 deny('overlong JWT',()=>verifyHandoffProof(proof({...claims,exp:now+1600}),trust,expected,now));
 deny('wrong run attempt',()=>verifyHandoffProof(proof({...claims,run_attempt:2}),trust,expected,now));
@@ -85,4 +87,9 @@ deny('expired reviewer',()=>verifyHandoffProof(proof(claims,a,{...r,expiresAt:no
 deny('reviewer receipt absent',()=>verifyHandoffProof({...proof(),reviewer:null},trust,expected,now));
 deny('foreign bot comment citing genuine Run ID only',()=>
  verifyHandoffProof({oidcJwt:'github-actions[bot] run_id=33445599',attestor:null,reviewer:null},trust,expected,now));
+deny('wrong signed workflow SHA',()=>verifyHandoffProof(proof({...claims,workflow_sha:head}),trust,expected,now));
+deny('unprotected git ref',()=>verifyHandoffProof(proof({...claims,ref_protected:'false'}),trust,expected,now));
+deny('foreign repository owner ID',()=>verifyHandoffProof(proof({...claims,repository_owner_id:'123'}),trust,expected,now));
+deny('attestor wrongly binds reviewed head as workflow SHA',()=>verifyHandoffProof(proof(claims,{...a,workflowSha:head}),trust,expected,now));
+deny('reviewer wrong workflow SHA',()=>verifyHandoffProof(proof(claims,a,{...r,workflowSha:head}),trust,expected,now));
 console.log('WOS_P1_SIGNED_WORKFLOW_PROOF_TESTS=COMPLETE');

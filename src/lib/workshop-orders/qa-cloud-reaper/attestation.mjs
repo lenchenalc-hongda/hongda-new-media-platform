@@ -35,6 +35,45 @@ function canonical(v){
 export const digest=v=>createHash('sha256').update(canonical(v)).digest('hex');
 function pub(k){return k?.type==='public'?k:createPublicKey(k)}
 
+/** Fetch ONLY GitHub's published OIDC discovery/JWKS on the trusted issuer.
+ * Never take JWKS, issuer URL or public-key selections from a claim writer.
+ * This loads REAL keys but does not mint GitHub JWTs or attest an independent reviewer.
+ */
+export async function fetchGithubIssuerJwks(httpFetch=fetch){
+ const discoveryUrl=ISSUER+'/.well-known/openid-configuration';
+ const jsonFetch=async url=>{
+   let response;
+   try { response=await httpFetch(url,{
+      redirect:'error',headers:{Accept:'application/json'},signal:AbortSignal.timeout(12000)
+   }); }catch { throw Error('WOS_HANDOFF_PROOF_TRUST_ISSUER_UNAVAILABLE'); }
+   need(response?.ok===true&&response.status===200,'TRUST_ISSUER_HTTP_DENIED');
+   let body;try{body=await response.json()}catch{throw Error('WOS_HANDOFF_PROOF_TRUST_JSON_INVALID')}
+   need(body&&typeof body==='object'&&!Array.isArray(body),'TRUST_JSON_NOT_OBJECT');
+   return body;
+ };
+ const discovery=await jsonFetch(discoveryUrl);
+ need(discovery.issuer===ISSUER&&
+   discovery.jwks_uri===ISSUER+'/.well-known/jwks'&&
+   Array.isArray(discovery.id_token_signing_alg_values_supported)&&
+   discovery.id_token_signing_alg_values_supported.includes('RS256'),
+   'TRUST_DISCOVERY_MISMATCH');
+ const jwks=await jsonFetch(discovery.jwks_uri);
+ need(Array.isArray(jwks.keys)&&jwks.keys.length>=1&&jwks.keys.length<=30,
+   'TRUST_JWKS_INVALID');
+ const kids=new Set();
+ for(const key of jwks.keys){
+   need(key&&key.kty==='RSA'&&key.alg==='RS256'&&key.use==='sig'&&
+     typeof key.kid==='string'&&key.kid.length>=8&&key.kid.length<=160&&
+     typeof key.n==='string'&&key.n.length>=100&&key.e==='AQAB',
+     'TRUST_JWK_KEY_INVALID');
+   need(!kids.has(key.kid),'TRUST_JWK_KID_DUPLICATE');
+   kids.add(key.kid);
+   try{createPublicKey({key,format:'jwk'})}
+   catch{throw Error('WOS_HANDOFF_PROOF_TRUST_JWK_IMPORT_FAILED')}
+ }
+ return Object.freeze({githubJwks:jwks.keys.map(k=>Object.freeze({...k}))});
+}
+
 export function verifyGithubOidc(jwt,trust,expected,now){
  need(typeof jwt==='string'&&jwt.length<=20000,'INVALID_JWT');
  const parts=jwt.split('.');
@@ -55,16 +94,18 @@ export function verifyGithubOidc(jwt,trust,expected,now){
     'EXPIRED_OR_OVERLONG_OIDC');
  const fields=[
     [claim.repository,REPO],[String(claim.repository_id),REPO_ID],
+    [String(claim.repository_owner_id),'297604134'],
     [claim.ref,'refs/heads/master'],[claim.event_name,'workflow_dispatch'],
-    [claim.workflow_ref,expected.workflowRef],[claim.sha,expected.head],
+    [claim.workflow_ref,expected.workflowRef],[claim.sha,expected.workflowSha],
     [String(claim.run_id),String(expected.runId)],
     [String(claim.run_attempt),String(expected.runAttempt)],
     [claim.runner_environment,'github-hosted'],[claim.sub,expected.subject],
+    [String(claim.ref_protected),'true'],
  ];
  need(fields.every(([got,want])=>got===want),'OIDC_WORKFLOW_SCOPE_DENIED');
- if(expected.workflowSha)need(claim.workflow_sha===expected.workflowSha,'OIDC_WORKFLOW_SHA_DENIED');
+ need(sha40(expected.workflowSha)&&claim.workflow_sha===expected.workflowSha,'OIDC_WORKFLOW_SHA_DENIED');
  if(expected.jobWorkflowRef)need(claim.job_workflow_ref===expected.jobWorkflowRef,'OIDC_REUSABLE_WORKFLOW_DENIED');
- need(sha40(expected.head)&&Number.isSafeInteger(expected.runId)&&
+ need(sha40(expected.head)&&sha40(expected.workflowSha)&&Number.isSafeInteger(expected.runId)&&
     Number.isSafeInteger(expected.runAttempt),'INVALID_EXPECTED_CONTEXT');
  need(typeof claim.jti==='string'&&/^[A-Za-z0-9._:-]{12,128}$/.test(claim.jti),'INVALID_OIDC_JTI');
  return claim;
@@ -91,17 +132,20 @@ export function verifyHandoffProof({oidcJwt,attestor,reviewer},trust,expected,no
  const r=verifyEnvelope(reviewer,trust.reviewerPublicKey,'handoff-reviewer',now);
  need(a.repository===REPO&&a.repositoryId===REPO_ID&&a.resource===RESOURCE&&
     a.workflowRef===expected.workflowRef&&a.head===expected.head&&
+    a.workflowSha===expected.workflowSha&&
     a.runId===expected.runId&&a.runAttempt===expected.runAttempt&&
     a.oidcJti===oidc.jti&&a.epoch===expected.epoch&&
     a.fromPr===202&&a.toPr===expected.toPr&&sha64(a.ownerDecisionDigest),
     'ATTESTOR_BINDING_DENIED');
  need(r.repository===REPO&&r.resource===RESOURCE&&r.head===expected.head&&
     r.epoch===expected.epoch&&r.attestorDigest===digest(a)&&
+    r.workflowSha===expected.workflowSha&&
     r.decision==='PASS'&&r.reviewerIdentity==='independent-reviewer',
     'REVIEWER_BINDING_DENIED');
  return Object.freeze({
     oidcJti:oidc.jti,attestorDigest:digest(a),reviewerDigest:digest(r),
     epoch:a.epoch,fromPr:a.fromPr,toPr:a.toPr,head:a.head,
-    runId:a.runId,operationDigest:digest({oidcJti:oidc.jti,attestor:digest(a),reviewer:digest(r)})
+    runId:a.runId,workflowSha:a.workflowSha,
+    operationDigest:digest({oidcJti:oidc.jti,attestor:digest(a),reviewer:digest(r)})
  });
 }
