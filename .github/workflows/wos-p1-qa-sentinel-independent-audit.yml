@@ -1,0 +1,225 @@
+# Independent source/synthetic security reviewer. No business credentials or QA project access.
+name: WOS P1 QA credential sentinel independent source and PG17 audit
+on:
+  push:
+    branches: [audit/wos-p1-qa-sentinel-review-20261119]
+permissions:
+  contents: read
+  pull-requests: read
+concurrency:
+  group: wos-p1-sentinel-source-audit-20261119
+  cancel-in-progress: false
+
+jobs:
+  independent-immutability-and-scope:
+    if: github.repository == 'lenchenalc-hongda/hongda-new-media-platform' && github.ref == 'refs/heads/audit/wos-p1-qa-sentinel-review-20261119'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: \${{ github.token }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: f3140f3cb8c41b6ed8f0fbb08e9bfc56c9c0e377
+          persist-credentials: false
+          path: candidate
+      - name: Verify fixed PR256 head, exact three changed Blobs and unchanged master
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json,os,subprocess,urllib.request,pathlib,re
+          base=pathlib.Path('candidate')
+          repo='lenchenalc-hongda/hongda-new-media-platform'
+          head='f3140f3cb8c41b6ed8f0fbb08e9bfc56c9c0e377'
+          master='adcd645aed13690e0f0c9cce095e6aa88395dabd'
+          expected={
+            'qa/wos-p00202-p1-readonly/SENTINEL_INSTALL_NOT_AUTHORIZED.sql':'ec3801f0fb129a82a08688ae562dd3a623ef1638',
+            'qa/wos-p00202-p1-readonly/SENTINEL_ROLLBACK_NOT_AUTHORIZED.sql':'4aeb505374e3a74abf229f814c4df0c95ac1bc5b',
+            'qa/wos-p00202-p1-readonly/SENTINEL_SECURITY_REVIEW_NOT_AUTHORIZED.md':'ea4bbf6ed6a0c1e17f14c4f204695321ea365bb2',
+          }
+          assert subprocess.check_output(['git','-C','candidate','rev-parse','HEAD'],text=True).strip()==head
+          for p,blob in expected.items():
+            assert subprocess.check_output(['git','-C','candidate','hash-object',p],text=True).strip()==blob,(p,'BLOB_MOVED')
+          def api(endpoint):
+            q=urllib.request.Request('https://api.github.com/repos/'+repo+'/'+endpoint,
+               headers={'Authorization':'Bearer '+os.environ['GH_TOKEN'],'Accept':'application/vnd.github+json'})
+            with urllib.request.urlopen(q,timeout=25) as f: return json.load(f)
+          pr=api('pulls/256')
+          assert pr['head']['sha']==head and pr['base']['sha']==master
+          assert pr['draft'] and not pr['merged'] and pr['changed_files']==3
+          assert {f['filename']:f['sha'] for f in api('pulls/256/files?per_page=100')}==expected
+          assert api('branches/master')['commit']['sha']==master
+          install=(base/'qa/wos-p00202-p1-readonly/SENTINEL_INSTALL_NOT_AUTHORIZED.sql').read_text()
+          rollback=(base/'qa/wos-p00202-p1-readonly/SENTINEL_ROLLBACK_NOT_AUTHORIZED.sql').read_text()
+          notes=(base/'qa/wos-p00202-p1-readonly/SENTINEL_SECURITY_REVIEW_NOT_AUTHORIZED.md').read_text()
+          assert install.startswith('-- WOS P1 QA ONLY: DESIGN')
+          assert rollback.startswith('-- WOS P1 QA ONLY: reviewed rollback design')
+          assert 'NOT AUTHORIZED' in notes and 'separate exact Owner' in notes
+          assert install.count('CREATE FUNCTION wos_p1_preflight_private.enforce_credential_expiry()')==1
+          assert 'SECURITY INVOKER' in install and 'SECURITY DEFINER' not in install
+          assert 'REVOKE ALL ON FUNCTION' in install
+          assert 'wos_qa_readonly_preflight' in install
+          assert 'NOLOGIN PASSWORD NULL' in install
+          assert 'VALID UNTIL' not in install.split('CREATE FUNCTION')[1].split('END\n$guard$;')[0]
+          assert "interval '45 minutes'" in install
+          assert install.count('pg_catalog.pg_terminate_backend(session_pid)')==1
+          assert "WHERE usename='wos_qa_readonly_preflight'" in install
+          assert "RAISE WARNING 'WOS_P1_SENTINEL_SESSIONS_REMAIN'" in install
+          assert "RAISE EXCEPTION 'WOS_P1_SENTINEL_SESSIONS_REMAIN'" not in install
+          assert "REVOKE ALL ON FUNCTION" in install and "pg_catalog.aclexplode(" in install
+          assert install.count('cron.schedule(')==1
+          assert install.count("'wos-p1-qa-readonly-credential-sentinel'")>=2
+          assert rollback.count('cron.unschedule(')==1
+          assert rollback.count('DROP FUNCTION')==1 and ' RESTRICT;' in rollback
+          assert 'CASCADE' not in rollback and 'pg_terminate_backend' not in rollback
+          for x in ('CREATE ROLE ','CREATE POLICY ','ALTER TABLE ','UPDATE storage.','DROP SCHEMA ','DROP ROLE '):
+             assert x not in install,('UNAUTHORIZED_INSTALL_SCOPE',x)
+          for x in ('CREATE ROLE ','CREATE POLICY ','ALTER TABLE ','UPDATE storage.','DROP SCHEMA ','DROP ROLE '):
+             assert x not in rollback,('UNAUTHORIZED_ROLLBACK_SCOPE',x)
+          assert 'password' in notes and 'pg_cron' in notes and 'NOLOGIN' in notes
+          print('WOS_QA_SENTINEL_PR256_THREE_BLOBS_PROTECTED_MASTER=PASS')
+          print('WOS_QA_SENTINEL_NO_PUBLIC_EXECUTE_NO_OTHER_ROLE_TERMINATION=PASS')
+          PY
+
+  independent-pg17-synthetic-role-and-cron-contract:
+    needs: independent-immutability-and-scope
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: postgres
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: qa-synthetic-disposable
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d postgres"
+          --health-interval 3s
+          --health-timeout 3s
+          --health-retries 15
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: 5432
+      PGDATABASE: postgres
+      PGUSER: postgres
+      PGPASSWORD: qa-synthetic-disposable
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: f3140f3cb8c41b6ed8f0fbb08e9bfc56c9c0e377
+          persist-credentials: false
+          path: candidate
+      - name: Set up disposable PostgreSQL 17 mock Cron catalog, no Supabase access
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! command -v psql >/dev/null; then
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq postgresql-client >/dev/null
+          fi
+          psql -X -v ON_ERROR_STOP=1 <<'SQL'
+          CREATE ROLE wos_qa_readonly_preflight NOINHERIT NOLOGIN PASSWORD NULL;
+          CREATE SCHEMA wos_p1_preflight_private;
+          GRANT USAGE ON SCHEMA wos_p1_preflight_private TO wos_qa_readonly_preflight;
+          CREATE FUNCTION wos_p1_preflight_private.readonly_snapshot()
+            RETURNS integer LANGUAGE SQL AS 'SELECT 1';
+          REVOKE ALL ON FUNCTION wos_p1_preflight_private.readonly_snapshot() FROM PUBLIC;
+          GRANT EXECUTE ON FUNCTION wos_p1_preflight_private.readonly_snapshot()
+            TO wos_qa_readonly_preflight;
+          CREATE SCHEMA cron;
+          CREATE TABLE cron.job(
+             jobid bigserial PRIMARY KEY, jobname text NOT NULL UNIQUE,
+             username text NOT NULL, database text NOT NULL,
+             schedule text NOT NULL, command text NOT NULL);
+          CREATE FUNCTION cron.schedule(n text,s text,c text) RETURNS bigint
+          LANGUAGE plpgsql AS $fn$
+          DECLARE result_id bigint;
+          BEGIN
+            INSERT INTO cron.job(jobname,username,database,schedule,command)
+              VALUES(n,session_user,current_database(),s,c)
+              RETURNING jobid INTO result_id;
+            RETURN result_id;
+          END $fn$;
+          CREATE FUNCTION cron.unschedule(i bigint) RETURNS boolean
+          LANGUAGE plpgsql AS $fn$
+          BEGIN
+            DELETE FROM cron.job WHERE jobid=i;
+            RETURN FOUND;
+          END $fn$;
+          INSERT INTO cron.job(jobname,username,database,schedule,command)
+          VALUES('unrelated-existing-job','postgres','postgres','0 * * * *','SELECT 1;');
+          SQL
+          echo 'WOS_QA_SENTINEL_DISPOSABLE_PG17_MOCK_CRON_PREP=PASS'
+      - name: Execute exact candidate SQL with explicit synthetic-only extension adapter
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          path=Path('candidate/qa/wos-p00202-p1-readonly/SENTINEL_INSTALL_NOT_AUTHORIZED.sql')
+          raw=path.read_text()
+          needle="IF NOT EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_cron') THEN"
+          assert raw.count(needle)==1
+          # Test-only adapter: disposable pg17 has no pg_cron extension, but a
+          # synthetic cron.job/schedule/unschedule interface. NOT the live QA SQL.
+          patched=raw.replace(needle,"IF NOT EXISTS (SELECT 1 FROM pg_namespace WHERE nspname = 'cron') THEN")
+          assert patched.count("IF NOT EXISTS (SELECT 1 FROM pg_namespace WHERE nspname = 'cron') THEN")==1
+          Path('/tmp/wos-p1-sentinel-install-SYNTHETIC.sql').write_text(patched)
+          PY
+          psql -X -q -v ON_ERROR_STOP=1 -f /tmp/wos-p1-sentinel-install-SYNTHETIC.sql
+          psql -X -qAt -v ON_ERROR_STOP=1 -c "
+            SELECT count(*) FROM cron.job
+             WHERE jobname='wos-p1-qa-readonly-credential-sentinel'
+               AND username='postgres' AND database='postgres'
+               AND schedule='* * * * *'" | grep -qx 1
+          psql -X -qAt -v ON_ERROR_STOP=1 -c "
+            SELECT has_function_privilege('wos_qa_readonly_preflight',
+              'wos_p1_preflight_private.enforce_credential_expiry()','EXECUTE')::text" \
+              | grep -qx false
+          if psql -X -qAt -v ON_ERROR_STOP=1 -c "
+            SET SESSION AUTHORIZATION wos_qa_readonly_preflight;
+            SELECT wos_p1_preflight_private.enforce_credential_expiry()" >/tmp/sentinel-denied 2>&1; then
+            echo 'UNEXPECTED_QA_ROLE_EXECUTE'; exit 1
+          fi
+          grep -iq 'permission denied' /tmp/sentinel-denied
+          psql -X -q -v ON_ERROR_STOP=1 -c "
+            SELECT wos_p1_preflight_private.enforce_credential_expiry()"
+          echo 'WOS_QA_SENTINEL_PG17_INSTALL_PRIVATE_FUNCTION_CRON_MOCK=PASS'
+      - name: Reject expired/overlong role login and preserve unrelated Cron, restricted rollback
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Superuser fixture-only login and fake password, no real QA credentials.
+          psql -X -q -v ON_ERROR_STOP=1 <<'SQL'
+          ALTER ROLE wos_qa_readonly_preflight LOGIN PASSWORD 'synthetic-only-12345'
+            VALID UNTIL '2099-01-01';
+          SELECT wos_p1_preflight_private.enforce_credential_expiry();
+          SQL
+          psql -X -qAt -v ON_ERROR_STOP=1 -c "
+            SELECT (NOT r.rolcanlogin AND a.rolpassword IS NULL)::text
+            FROM pg_roles r JOIN pg_authid a ON a.oid=r.oid
+            WHERE r.rolname='wos_qa_readonly_preflight'" | grep -qx true
+          psql -X -qAt -v ON_ERROR_STOP=1 -c "
+            SELECT count(*) FROM cron.job WHERE jobname='unrelated-existing-job'" | grep -qx 1
+          psql -X -q -v ON_ERROR_STOP=1 -f \
+            candidate/qa/wos-p00202-p1-readonly/SENTINEL_ROLLBACK_NOT_AUTHORIZED.sql
+          psql -X -qAt -v ON_ERROR_STOP=1 -c "
+            SELECT count(*) FROM cron.job WHERE jobname='unrelated-existing-job'" | grep -qx 1
+          psql -X -qAt -v ON_ERROR_STOP=1 -c "
+            SELECT count(*) FROM cron.job WHERE jobname='wos-p1-qa-readonly-credential-sentinel'" \
+            | grep -qx 0
+          psql -X -qAt -v ON_ERROR_STOP=1 -c "
+            SELECT count(*) FROM pg_proc p
+            JOIN pg_namespace n ON n.oid=p.pronamespace
+            WHERE n.nspname='wos_p1_preflight_private'
+            AND p.proname='readonly_snapshot'" | grep -qx 1
+          psql -X -qAt -v ON_ERROR_STOP=1 -c "
+            SELECT count(*) FROM pg_proc p
+            JOIN pg_namespace n ON n.oid=p.pronamespace
+            WHERE n.nspname='wos_p1_preflight_private'
+            AND p.proname='enforce_credential_expiry'" | grep -qx 0
+          echo 'WOS_QA_SENTINEL_PG17_EXPIRED_PASSWORD_REVOKED_UNRELATED_JOB_UNCHANGED=PASS'
+          echo 'WOS_QA_SENTINEL_PG17_RESTRICTED_ROLLBACK=PASS'
