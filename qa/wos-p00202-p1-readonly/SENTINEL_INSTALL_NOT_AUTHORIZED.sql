@@ -89,16 +89,25 @@ BEGIN
      WHERE usename='wos_qa_readonly_preflight'
        AND pid <> pg_catalog.pg_backend_pid()
   LOOP
-    IF pg_catalog.pg_terminate_backend(session_pid) IS NOT TRUE THEN
-      RAISE EXCEPTION 'WOS_P1_SENTINEL_TERMINATE_DENIED';
-    END IF;
+    BEGIN
+      IF pg_catalog.pg_terminate_backend(session_pid) IS NOT TRUE THEN
+        RAISE WARNING 'WOS_P1_SENTINEL_TERMINATE_DENIED';
+      END IF;
+    EXCEPTION WHEN OTHERS THEN
+      -- Never roll back the prior ALTER ROLE NOLOGIN because a signal failed.
+      -- Existing sessions are rechecked by the next minute's Cron run, and
+      -- independent post-run attestation must still report incomplete cleanup.
+      RAISE WARNING 'WOS_P1_SENTINEL_TERMINATE_FAILED';
+    END;
   END LOOP;
   IF EXISTS (
     SELECT 1 FROM pg_catalog.pg_stat_activity
      WHERE usename='wos_qa_readonly_preflight'
        AND pid <> pg_catalog.pg_backend_pid()
   ) THEN
-    RAISE EXCEPTION 'WOS_P1_SENTINEL_SESSIONS_REMAIN';
+    -- WARNING rather than EXCEPTION: preserve the role's LOGIN/PASSWORD revoke.
+    -- A live run MUST fail overall acceptance while ANY such session persists.
+    RAISE WARNING 'WOS_P1_SENTINEL_SESSIONS_REMAIN';
   END IF;
 END
 $guard$;
@@ -134,9 +143,15 @@ BEGIN
        'wos_p1_preflight_private.enforce_credential_expiry()','EXECUTE') THEN
     RAISE EXCEPTION 'WOS_P1_SENTINEL_QA_ROLE_EXECUTE_FORBIDDEN';
   END IF;
-  IF pg_catalog.has_function_privilege(
-       'public',
-       'wos_p1_preflight_private.enforce_credential_expiry()','EXECUTE') THEN
+  IF EXISTS (
+    SELECT 1 FROM pg_catalog.pg_proc p
+    JOIN pg_catalog.pg_namespace n ON n.oid=p.pronamespace
+    CROSS JOIN LATERAL pg_catalog.aclexplode(
+      coalesce(p.proacl, pg_catalog.acldefault('f',p.proowner))) priv
+    WHERE n.nspname='wos_p1_preflight_private'
+      AND p.proname='enforce_credential_expiry'
+      AND priv.grantee=0 AND priv.privilege_type='EXECUTE'
+  ) THEN
     RAISE EXCEPTION 'WOS_P1_SENTINEL_PUBLIC_EXECUTE_FORBIDDEN';
   END IF;
   IF NOT (SELECT NOT rolcanlogin FROM pg_roles
