@@ -37,6 +37,9 @@ for(const t of [
  'QA_OVERLAY_P1_OWNER_GATE_NOT_OPEN',
  'QA_OVERLAY_P2_GATE_CONFLICT',
  'CREATE TABLE wos_mvp_qa.cpc_order_bindings',
+ 'UNIQUE(order_id,organization_id)',
+ 'REFERENCES wos_mvp_qa.cpc_order_bindings(order_id,organization_id)',
+ 'FOREIGN KEY(actor_profile_id) REFERENCES public.profiles(id)',
  'PERFORM wos_mvp_qa.assert_cpc_link',
  'CREATE TABLE wos_mvp_attestation.private_image_proofs',
  'CREATE TABLE wos_mvp_attestation.office_document_receipts',
@@ -49,6 +52,9 @@ for(const t of [
 assert.equal((sql.match(/^BEGIN;$/gm)||[]).length,1);
 assert.equal((sql.match(/^COMMIT;$/gm)||[]).length,1);
 assert(!/CREATE TABLE public\.wos_|DROP TABLE public\.wos_|DROP TRIGGER wos_qa_|ALTER COLUMN customer_id SET NOT NULL|ALTER COLUMN project_id SET NOT NULL|REVOKE ALL ON storage\.objects|GRANT ALL ON storage\.objects/.test(sql));
+assert(!sql.includes('REFERENCES public.wos_production_orders(id,organization_id)'));
+assert(!sql.includes('REFERENCES public.profiles(id,org_id)'));
+assert.equal((sql.match(/REFERENCES wos_mvp_qa\.cpc_order_bindings\(order_id,organization_id\)/g)||[]).length,2);
 assert(!sql.includes('synthetic_private_image_proofs'));
 assert(!sql.includes('wos.p0_01_ephemeral_rehearsal'));
 assert(!sql.includes('CREATE POLICY wos_mvp_candidate_private_upload'));

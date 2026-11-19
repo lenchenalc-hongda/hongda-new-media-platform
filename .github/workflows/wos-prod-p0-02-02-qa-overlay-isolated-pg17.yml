@@ -130,6 +130,29 @@ jobs:
           diff -u /tmp/wos-fault-before.jsonl /tmp/wos-fault-after.jsonl
           echo WOS_OVERLAY_FAILURE_ATOMIC_ROLLBACK_83_LEGACY=PASS
 
+      - name: Rehearse against actual QA single-column WOS and profile PK shapes
+        shell: bash
+        run: |
+          set -euo pipefail
+          createdb wos_overlay_real_qa_pk
+          psql -v ON_ERROR_STOP=1 -d wos_overlay_real_qa_pk -f tests/sql/wos-prod-p0-01/synthetic-foundation.sql >/dev/null
+          psql -v ON_ERROR_STOP=1 -d wos_overlay_real_qa_pk -f supabase/migrations/20261014102000_workshop_order_system_foundation.sql >/dev/null
+          psql -v ON_ERROR_STOP=1 -d wos_overlay_real_qa_pk -f tests/sql/wos-prod-p0-02-02-qa-overlay/qa-real-fk-constraint-shape.sql
+          psql -v ON_ERROR_STOP=1 -d wos_overlay_real_qa_pk -f tests/sql/wos-prod-p0-01/synthetic-cpc-authorization.sql >/dev/null
+          psql -v ON_ERROR_STOP=1 -d wos_overlay_real_qa_pk -f tests/sql/wos-prod-p0-01/synthetic-storage-metadata.sql >/dev/null
+          psql -v ON_ERROR_STOP=1 -d wos_overlay_real_qa_pk -f tests/sql/wos-prod-p0-02-02-qa-overlay/qa-existing-structure-83-legacy.sql >/dev/null
+          d=docs/workshop-order-system/nonproduction-only/wos-p0-02-02-qa-overlay
+          psql -v ON_ERROR_STOP=1 -d wos_overlay_real_qa_pk -f "$d/01-readonly-preflight.sql"
+          psql -v ON_ERROR_STOP=1 -At -d wos_overlay_real_qa_pk -f "$d/02-readonly-qa-fingerprint.sql" > /tmp/wos-real-before.jsonl
+          psql -v ON_ERROR_STOP=1 -d wos_overlay_real_qa_pk -f "$d/03-qa-overlay-incremental-INSTALL_NOT_AUTHORIZED.sql"
+          psql -v ON_ERROR_STOP=1 -d wos_overlay_real_qa_pk -f "$d/04-readonly-postflight.sql"
+          psql -v ON_ERROR_STOP=1 -At -d wos_overlay_real_qa_pk -f "$d/02-readonly-qa-fingerprint.sql" > /tmp/wos-real-after.jsonl
+          diff -u /tmp/wos-real-before.jsonl /tmp/wos-real-after.jsonl
+          psql -v ON_ERROR_STOP=1 -d wos_overlay_real_qa_pk -f tests/sql/wos-prod-p0-02-02-qa-overlay/overlay-new-cpc-contract.sql
+          psql -v ON_ERROR_STOP=1 -d wos_overlay_real_qa_pk -f tests/sql/wos-prod-p0-02-02-qa-overlay/strict-private-proof-negative.sql
+          psql -v ON_ERROR_STOP=1 -d wos_overlay_real_qa_pk -f tests/sql/wos-prod-p0-01/full-office-form-submit-assertions.sql
+          echo WOS_QA_OVERLAY_REAL_QA_PK_ONLY_FK_FULL_E2E_SYNTHETIC=PASS
+
   app-contract-build:
     runs-on: ubuntu-24.04
     timeout-minutes: 18
