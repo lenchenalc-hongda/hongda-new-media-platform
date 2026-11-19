@@ -1,0 +1,448 @@
+# Independent, hosted, zero-business-secret P1 reviewer. QA Supabase/Vercel NEVER called.
+name: WOS P1 QA isolated environment binding source audit
+on:
+  push:
+    branches: [audit/wos-p00202-p1-qa-environment-binding-20261119]
+permissions:
+  contents: read
+  pull-requests: read
+concurrency:
+  group: wos-p1-oidc-agg-audit-20261119
+  cancel-in-progress: false
+jobs:
+  independent-provenance:
+    if: github.repository == 'lenchenalc-hongda/hongda-new-media-platform' && github.ref == 'refs/heads/audit/wos-p00202-p1-qa-environment-binding-20261119'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: 9f5a9733ac4acc70f0b484c480de4a32d49fab31
+          persist-credentials: false
+          path: candidate
+      - name: Independently verify PR and only four approved design files
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json,os,pathlib,subprocess,urllib.request
+          repo='lenchenalc-hongda/hongda-new-media-platform'
+          master='dd9a9a758795e2699e59182bb69fcfb2d761ec53'
+          head='9f5a9733ac4acc70f0b484c480de4a32d49fab31'
+          expected={
+            '.github/workflows/wos-p00202-p1-protected-readonly-preflight.yml':'bb9d8eac0cf3585ded52616b1e7db6989dfe3d50',
+            'qa/wos-p00202-p1-readonly/INSTALL_NOT_AUTHORIZED.sql':'5d8a3e1b437a309565a8068469c30170e82552db',
+            'qa/wos-p00202-p1-readonly/ROLLBACK_NOT_AUTHORIZED.sql':'22f6fae00911516463957adc5500a245b60d157a',
+            'qa/wos-p00202-p1-readonly/REVIEW_AND_PROVISION_NOT_AUTHORIZED.md':'37ed00d91955da2cfd6739f1de9aa6682d5df0b9',
+          }
+          assert subprocess.check_output(['git','-C','candidate','rev-parse','HEAD'],text=True).strip()==head
+          for path,blob in expected.items():
+              result=subprocess.check_output(['git','-C','candidate','hash-object',path],text=True).strip()
+              assert result==blob,('FILE_BLOB_MOVED',path)
+          def api(endpoint):
+              req=urllib.request.Request('https://api.github.com/repos/'+repo+'/'+endpoint,
+                headers={'Accept':'application/vnd.github+json','Authorization':'Bearer '+os.environ['GH_TOKEN']})
+              with urllib.request.urlopen(req,timeout=25) as resp: return json.load(resp)
+          pr=api('pulls/254')
+          assert pr['head']['sha']==head and pr['base']['sha']==master
+          assert pr['draft'] and not pr['merged'] and pr['state']=='open'
+          assert pr['changed_files']==len(expected)
+          files=api('pulls/254/files?per_page=100')
+          assert len(files)==len(expected)
+          assert {x['filename']:x['sha'] for x in files}==expected
+          commit=api('commits/'+head)
+          assert api('branches/master')['commit']['sha']==master
+          assert api('actions/runs/44444847637')['conclusion']=='success'
+          assert commit['sha']==head
+          print('WOS_P1_PR254_FOUR_BLOBS_FIXED_MASTER_PROVENANCE=PASS')
+          PY
+      - name: Independent static trust and permission restrictions
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import pathlib,re
+          base=pathlib.Path('candidate')
+          wf=(base/'.github/workflows/wos-p00202-p1-protected-readonly-preflight.yml').read_text()
+          install=(base/'qa/wos-p00202-p1-readonly/INSTALL_NOT_AUTHORIZED.sql').read_text()
+          rollback=(base/'qa/wos-p00202-p1-readonly/ROLLBACK_NOT_AUTHORIZED.sql').read_text()
+          review=(base/'qa/wos-p00202-p1-readonly/REVIEW_AND_PROVISION_NOT_AUTHORIZED.md').read_text()
+          for marker in [
+              'workflow_dispatch:','id-token: write',
+              'x-vercel-trusted-oidc-idp-token','token.actions.githubusercontent.com',
+              'repository_id','workflow_ref','environment','run_attempt',
+              'WOS_P1_OIDC_PINNED_QA_PREVIEW_FOUR_APP_503=PASS',
+              'WOS_QA_READONLY_DSN', 'direct_business_privs',
+              'other_secdef_execute','QA_AGGREGATE_PROOF_FAIL_CLOSED',
+              'proof_version','WOS_P1_QA_READONLY_V1',
+              'db.xulmpqaknlwqqculbsek.supabase.co', 'verify-full',
+          ]:
+              assert marker in wf,('WORKFLOW_GUARD_MISSING',marker)
+          for banned in ['WOS_QA_VERCEL_TOKEN','VERCEL_AUTOMATION_BYPASS_SECRET',
+              'x-vercel-protection-bypass','vercel deploy','--prod',
+              'supabase db push','CREATE ROLE ','on:\n  push:',
+              'workflow_run:','environment: production']:
+              assert banned not in wf,('UNSAFE_WORKFLOW_TOKEN',banned)
+          assert wf.count('id-token: write')==1
+          assert wf.count('environment: wos-p1-qa-preflight')==2
+          assert wf.count("expected_env='wos-p1-qa-preflight'")==1
+          assert "environment: hongda-review-dev" not in wf
+          assert "expected_env='hongda-review-dev'" not in wf
+          assert "no human reviewer" in review.lower()
+          assert "wos-p1-qa-preflight" in review
+          assert install.startswith('-- WOS-PROD-READY')
+          assert 'CREATE ROLE wos_qa_readonly_preflight' in install
+          assert 'NOINHERIT NOLOGIN' in install and 'PASSWORD NULL' in install
+          assert 'CREATE SCHEMA wos_p1_preflight_private' in install
+          assert 'SECURITY DEFINER' in install and 'SET search_path = pg_catalog, pg_temp' in install
+          assert 'REVOKE ALL ON FUNCTION' in install
+          assert 'GRANT EXECUTE ON FUNCTION wos_p1_preflight_private.readonly_snapshot()' in install
+          assert 'ALTER TABLE' not in install and 'CREATE POLICY' not in install
+          assert 'EXECUTE ' not in install.split('CREATE FUNCTION wos_p1_preflight_private')[1].split('$snapshot$;')[0]
+          assert 'DROP SCHEMA wos_p1_preflight_private RESTRICT;' in rollback
+          assert 'CASCADE' not in rollback and 'pg_terminate_backend' not in rollback
+          assert 'UNVERIFIED' in review and 'to.slugs' in review
+          assert not re.search(r'(?m)^  (push|pull_request|schedule):',wf)
+          print('WOS_P1_OIDC_NO_STATIC_TOKEN_WRITE_PRODUCTION_PATH=PASS')
+          print('WOS_P1_AGGREGATE_PRIVATE_SECURITY_DEFINER_DESIGN_STATIC=PASS')
+          PY
+  synthetic-postgres17-proof:
+    needs: independent-provenance
+    runs-on: ubuntu-24.04
+    timeout-minutes: 14
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: postgres
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: wos-p1-synthetic-only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d postgres"
+          --health-interval 3s
+          --health-timeout 3s
+          --health-retries 15
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: 5432
+      PGDATABASE: postgres
+      PGUSER: postgres
+      PGPASSWORD: wos-p1-synthetic-only
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: 9f5a9733ac4acc70f0b484c480de4a32d49fab31
+          persist-credentials: false
+          path: candidate
+      - name: Prepare disposable synthetic Postgres 17 tables and RLS (no user data)
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! command -v psql >/dev/null; then
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq postgresql-client >/dev/null
+          fi
+          psql -X -v ON_ERROR_STOP=1 <<'SQL'
+          CREATE SCHEMA wos_mvp_qa;
+          CREATE SCHEMA wos_mvp_attestation;
+          CREATE SCHEMA storage;
+          CREATE TABLE wos_mvp_qa.p1_execution_gate(
+            enabled boolean NOT NULL,enabled_until timestamptz,
+            approved_run_id text,approved_sha text);
+          CREATE TABLE public.wos_qa_p2_execution_gate(
+            gate_name text,enabled boolean,enabled_until timestamptz);
+          CREATE TABLE public.wos_qa_p2_office_execution_gate(
+            gate_name text,enabled boolean,enabled_until timestamptz);
+          CREATE TABLE public.wos_production_orders(customer_id uuid,project_id uuid);
+          CREATE TABLE storage.objects(bucket_id text);
+          CREATE TABLE storage.buckets(id text,public boolean);
+          CREATE TABLE wos_mvp_attestation.private_image_proofs(id int);
+          CREATE TABLE wos_mvp_attestation.office_document_receipts(id int);
+          CREATE TABLE wos_mvp_qa.cpc_order_bindings(id int);
+          INSERT INTO wos_mvp_qa.p1_execution_gate VALUES(FALSE,NULL,NULL,NULL);
+          INSERT INTO public.wos_qa_p2_execution_gate VALUES('OPERATOR_WRITES',FALSE,NULL);
+          INSERT INTO public.wos_qa_p2_office_execution_gate VALUES('OFFICE_WRITES',FALSE,NULL);
+          INSERT INTO public.wos_production_orders
+          SELECT CASE WHEN n=1 THEN '00000000-0000-0000-0000-000000000001'::uuid ELSE NULL END,
+                 CASE WHEN n=1 THEN '00000000-0000-0000-0000-000000000002'::uuid ELSE NULL END
+          FROM generate_series(1,84) n;
+          INSERT INTO storage.objects SELECT 'wos-private' FROM generate_series(1,83);
+          INSERT INTO storage.buckets VALUES('wos-private',FALSE);
+          ALTER TABLE wos_mvp_qa.p1_execution_gate ENABLE ROW LEVEL SECURITY;
+          ALTER TABLE public.wos_production_orders ENABLE ROW LEVEL SECURITY;
+          ALTER TABLE storage.objects ENABLE ROW LEVEL SECURITY;
+          ALTER TABLE public.wos_qa_p2_execution_gate ENABLE ROW LEVEL SECURITY;
+          ALTER TABLE public.wos_qa_p2_office_execution_gate ENABLE ROW LEVEL SECURITY;
+          SQL
+          echo 'WOS_P1_PG17_SYNTHETIC_DATA_ONLY=PASS'
+      - name: Real SQL install and synthetic least privilege / RLS / no-login / wrong actor tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql -X -v ON_ERROR_STOP=1 -f candidate/qa/wos-p00202-p1-readonly/INSTALL_NOT_AUTHORIZED.sql >/tmp/wos-install-log
+          psql -X -q -A -t -v ON_ERROR_STOP=1 -c "
+            SELECT CASE WHEN rolcanlogin OR rolsuper OR rolbypassrls OR rolcreatedb
+              OR rolcreaterole OR rolinherit THEN 1 ELSE 0 END
+            FROM pg_roles WHERE rolname='wos_qa_readonly_preflight'
+          " | grep -qx 0
+          if psql -X -qAt -v ON_ERROR_STOP=1 -c \
+             "SELECT wos_p1_preflight_private.readonly_snapshot()" >/tmp/wos-deny-owner 2>&1; then
+             echo UNEXPECTED_OWNER_PROOF_EXECUTE; exit 1
+          fi
+          grep -Fq 'WOS_QA_PREFLIGHT_CALLER_NOT_AUTHORIZED' /tmp/wos-deny-owner
+          if psql -X -qAt -v ON_ERROR_STOP=1 -c \
+             "SET SESSION AUTHORIZATION wos_qa_readonly_preflight;
+              SELECT wos_p1_preflight_private.readonly_snapshot()" >/tmp/wos-deny-rw 2>&1; then
+             echo UNEXPECTED_WRITEABLE_PROOF_EXECUTE; exit 1
+          fi
+          grep -Fq 'WOS_QA_PREFLIGHT_READ_ONLY_REQUIRED' /tmp/wos-deny-rw
+          if psql -X -qAt -v ON_ERROR_STOP=1 -c \
+             "SET SESSION AUTHORIZATION wos_qa_readonly_preflight;
+              SET default_transaction_read_only=on;
+              SELECT count(*) FROM public.wos_production_orders;" >/tmp/wos-deny-raw 2>&1; then
+             echo UNEXPECTED_RAW_ORDER_READ; exit 1
+          fi
+          grep -Fq 'permission denied' /tmp/wos-deny-raw
+          actual="$(psql -X -qAt -v ON_ERROR_STOP=1 \
+            -c "SET SESSION AUTHORIZATION wos_qa_readonly_preflight" \
+            -c "BEGIN TRANSACTION READ ONLY" \
+            -c "SELECT wos_p1_preflight_private.readonly_snapshot()::text" \
+            -c "ROLLBACK")"
+          printf '%s' "$actual" | python3 -c '
+          import sys,json
+          v=json.load(sys.stdin)
+          assert v["proof_version"]=="WOS_P1_QA_READONLY_V1"
+          assert v["qa_project_ref"]=="xulmpqaknlwqqculbsek"
+          assert v["p1_off"] and v["p2_operator_off"] and v["p2_office_off"]
+          assert (v["orders"],v["null_cpc"],v["private_objects"])==(84,83,83)
+          assert v["private_bucket"] is True
+          assert (v["image_proofs"],v["cpc_bindings"],v["office_receipts"])==(0,0,0)
+          '
+          echo 'WOS_P1_PG17_NOLOGIN_ROLE_OWNER_DENIAL_RLS_AGGREGATE_PASS'
+      - name: Drift detection and restricted SQL rollback on disposable fixture
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql -X -q -v ON_ERROR_STOP=1 -c \
+            "INSERT INTO public.wos_production_orders VALUES(NULL,NULL)"
+          actual="$(psql -X -qAt -v ON_ERROR_STOP=1 \
+            -c "SET SESSION AUTHORIZATION wos_qa_readonly_preflight" \
+            -c "BEGIN TRANSACTION READ ONLY" \
+            -c "SELECT wos_p1_preflight_private.readonly_snapshot()::text" \
+            -c "ROLLBACK")"
+          printf '%s' "$actual" | python3 -c '
+          import json,sys
+          v=json.load(sys.stdin)
+          assert (v["orders"],v["null_cpc"],v["private_objects"])==(85,84,83)
+          '
+          psql -X -v ON_ERROR_STOP=1 -f candidate/qa/wos-p00202-p1-readonly/ROLLBACK_NOT_AUTHORIZED.sql >/tmp/wos-rollback-log
+          psql -X -qAt -v ON_ERROR_STOP=1 -c "
+            SELECT CASE WHEN EXISTS(SELECT 1 FROM pg_roles WHERE rolname='wos_qa_readonly_preflight')
+              OR EXISTS(SELECT 1 FROM pg_namespace WHERE nspname='wos_p1_preflight_private')
+              THEN 1 ELSE 0 END" | grep -qx 0
+          echo 'WOS_P1_PG17_DRIFT_AND_RESTRICT_ROLLBACK=PASS'
+
+  synthetic-identity-and-gate-negative-tests:
+    needs: independent-provenance
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: 9f5a9733ac4acc70f0b484c480de4a32d49fab31
+          persist-credentials: false
+          path: candidate
+      - name: Offline mock OIDC issuer, short-lived claims, HTTP 503 and readonly proof
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import base64,contextlib,copy,datetime,io,json,os,pathlib,re,subprocess,tempfile,time,textwrap,urllib.request
+          wf=pathlib.Path('candidate/.github/workflows/wos-p00202-p1-protected-readonly-preflight.yml').read_text()
+          code_blocks=re.findall(r"(?ms)^          python3 - <<'PY'\n(.*?)^          PY$",wf)
+          assert len(code_blocks)==2,('WORKFLOW_PROBE_EXTRACTION_FAILED',len(code_blocks))
+          oidc_code=textwrap.dedent(code_blocks[0])
+          db_code=textwrap.dedent(code_blocks[1])
+          repo='lenchenalc-hongda/hongda-new-media-platform'
+          branch='refs/heads/master'
+          job=f'{repo}/.github/workflows/wos-p00202-p1-protected-readonly-preflight.yml@{branch}'
+          project_host='hongda-wos-p00202-qa-preview-o22fvh0ib-lens-projects-3fc386bd.vercel.app'
+          codes={
+            'candidate-drafts':'WOS_P1_DRAFT_CANDIDATE_DISABLED',
+            'candidate-office-document':'OFFICE_DOCUMENT_CANDIDATE_DISABLED',
+            'candidate-image-register':'PRIVATE_IMAGE_CANDIDATE_DISABLED',
+            'candidate-submit':'WOS_P1_SUBMIT_CANDIDATE_DISABLED',
+          }
+          when=int(time.time())
+          claims={
+            'iss':'https://token.actions.githubusercontent.com',
+            'aud':'https://github.com/lenchenalc-hongda',
+            'repository':repo,'repository_id':'1286793274','repository_owner_id':'297604134',
+            'ref':branch,'workflow_ref':job,'environment':'wos-p1-qa-preflight',
+            'event_name':'workflow_dispatch','runner_environment':'github-hosted',
+            'sub':f'repo:{repo}:environment:wos-p1-qa-preflight',
+            'run_id':'111','run_attempt':'1','workflow_sha':'dummy-protected-master',
+            'iat':when-1,'nbf':when-1,'exp':when+240,
+          }
+          def pack_token(c):
+            def encoded(x):
+              return base64.urlsafe_b64encode(json.dumps(x,separators=(',',':')).encode()).decode().rstrip('=')
+            return encoded({'typ':'JWT','alg':'none'})+'.'+encoded(c)+'.synthetic'
+          class FakeResponse:
+            def __init__(self,body,status=200,content_type='application/json'):
+              self._body=io.BytesIO(body)
+              self.status=status
+              self.headers={'Content-Type':content_type}
+            def read(self,n=-1): return self._body.read(n)
+            def __enter__(self): return self
+            def __exit__(self,*args): self._body.close()
+          class FakeOpener:
+            def __init__(self,status=503,incorrect_code=False,bad_type=False):
+              self.status=status;self.incorrect_code=incorrect_code;self.bad_type=bad_type
+            def open(self,req,timeout=15):
+              assert req.full_url.startswith('https://'+project_host+'/api/workshop-orders/production/')
+              assert req.get_method()=='POST' and req.data==b'{}'
+              assert req.headers.get('X-vercel-trusted-oidc-idp-token')
+              route=req.full_url.split('/')[-1]
+              code=('BAD_DISABLED' if self.incorrect_code else codes[route])
+              payload=(b'<html>no</html>' if self.bad_type
+                else json.dumps({'ok':False,'code':code,'data':None}).encode())
+              return FakeResponse(payload,status=self.status,
+                content_type='text/html' if self.bad_type else 'application/json')
+          old_env=os.environ.copy()
+          saved_urlopen=urllib.request.urlopen
+          saved_opener=urllib.request.build_opener
+          summary=tempfile.NamedTemporaryFile(delete=False)
+          summary.close()
+          def simulate_oidc(overrides=None,status=503,incorrect_code=False,bad_type=False,missing=False,edited_code=None,changed_env=None):
+            env=old_env.copy()
+            env.update(GITHUB_REPOSITORY=repo,GITHUB_REF=branch,
+              GITHUB_EVENT_NAME='workflow_dispatch',GITHUB_RUN_ATTEMPT='1',
+              GITHUB_RUN_ID='111',GITHUB_SHA='dummy-protected-master',
+              GITHUB_WORKFLOW_REF=job,
+              ACTIONS_ID_TOKEN_REQUEST_URL='https://synthetic-oidc.invalid/issue?request=1',
+              ACTIONS_ID_TOKEN_REQUEST_TOKEN='synthetic-request-token',
+              GITHUB_STEP_SUMMARY=summary.name)
+            env.update(changed_env or {})
+            os.environ.clear();os.environ.update(env)
+            c=claims.copy();c.update(overrides or {})
+            token=pack_token(c)
+            def fake_urlopen(req,timeout=15):
+              assert req.full_url.startswith('https://synthetic-oidc.invalid/issue?request=1&audience=')
+              return FakeResponse(json.dumps({'value':'' if missing else token}).encode())
+            urllib.request.urlopen=fake_urlopen
+            urllib.request.build_opener=lambda *args: FakeOpener(status,incorrect_code,bad_type)
+            passed=False
+            try:
+              with contextlib.redirect_stdout(io.StringIO()):
+                exec(compile(edited_code or oidc_code,'<synthetic-oidc>', 'exec'),{'__name__':'__main__'})
+              passed=True
+            except (Exception,SystemExit):
+              passed=False
+            finally:
+              urllib.request.urlopen=saved_urlopen
+              urllib.request.build_opener=saved_opener
+              os.environ.clear();os.environ.update(old_env)
+            return passed
+          assert simulate_oidc(), 'SYNTHETIC_GOOD_OIDC_MUST_PASS'
+          negatives=[]
+          for key,bad in [
+            ('iss','https://wrong.invalid'),('aud','https://github.com/other'),
+            ('repository','untrusted/project'),('repository_id','99999'),
+            ('repository_owner_id','99999'),('ref','refs/heads/unsafe'),
+            ('workflow_ref',job.replace('protected-readonly','other')),
+            ('environment','production'),('environment','hongda-review-dev'),('event_name','push'),
+            ('runner_environment','self-hosted'),('sub','repo:wrong:environment:production'),
+            ('sub','repo:lenchenalc-hongda/hongda-new-media-platform:environment:hongda-review-dev'),
+            ('run_id','222'),('run_attempt','2'),('workflow_sha','badmaster'),
+            ('exp',when-20),('nbf',when+100),
+          ]:
+            negatives.append((key,{'overrides':{key:bad}}))
+          negatives+= [
+            ('no_token',{'missing':True}),('login_302',{'status':302}),
+            ('vercel_401',{'status':401}),('vercel_403',{'status':403}),
+            ('wrong_http_200',{'status':200}),
+            ('wrong_disabled_code',{'incorrect_code':True}),
+            ('html_body',{'bad_type':True}),
+            ('wrong_hostname',{'edited_code':oidc_code.replace(project_host,'untrusted.vercel.app')}),
+            ('unsafe_branch',{'changed_env':{'GITHUB_REF':'refs/heads/untrusted'}}),
+            ('unauthorized_workflow',{'changed_env':{'GITHUB_WORKFLOW_REF':'other'}}),
+          ]
+          for label,opts in negatives:
+            assert not simulate_oidc(**opts),('OIDC_BYPASS_ACCEPTED',label)
+          print('WOS_P1_OFFLINE_OIDC_HTTP_NEGATIVE_REJECTIONS='+str(len(negatives)))
+          old_run=subprocess.run
+          now=datetime.datetime.now(datetime.timezone.utc)
+          goodproof={
+            'proof_version':'WOS_P1_QA_READONLY_V1',
+            'qa_project_ref':'xulmpqaknlwqqculbsek',
+            'database':'postgres','checked_at':now.isoformat(),
+            'p1_off':True,'p2_operator_off':True,'p2_office_off':True,
+            'orders':84,'null_cpc':83,'private_objects':83,
+            'private_bucket':True,'image_proofs':0,'cpc_bindings':0,'office_receipts':0,
+          }
+          def simulate_db(override=None,dsnhost='db.xulmpqaknlwqqculbsek.supabase.co',
+            sslmode='verify-full',username='wos_qa_readonly_preflight'):
+            env=old_env.copy()
+            env['WOS_QA_READONLY_DSN']=f'postgresql://{username}:synthetic-only@{dsnhost}:5432/postgres?sslmode={sslmode}'
+            env['GITHUB_STEP_SUMMARY']=summary.name
+            os.environ.clear();os.environ.update(env)
+            data={
+              'session_user':'wos_qa_readonly_preflight',
+              'current_user':'wos_qa_readonly_preflight',
+              'read_only':'on','role_safe':True,'no_membership':True,
+              'direct_business_privs':0,'other_secdef_execute':0,
+              'proof':goodproof.copy(),
+            }
+            for k,v in (override or {}).items():
+              if k.startswith('proof.'):data['proof'][k[6:]]=v
+              else:data[k]=v
+            class Completed:
+              returncode=0;stdout=json.dumps(data);stderr=''
+            def fake_run(*args,**kwargs):return Completed()
+            subprocess.run=fake_run
+            passed=False
+            try:
+              with contextlib.redirect_stdout(io.StringIO()):
+                exec(compile(db_code,'<synthetic-db>','exec'),{'__name__':'__main__'})
+              passed=True
+            except (Exception,SystemExit):
+              passed=False
+            finally:
+              subprocess.run=old_run
+              os.environ.clear();os.environ.update(old_env)
+            return passed
+          assert simulate_db(), 'SYNTHETIC_GOOD_DB_PROOF_MUST_PASS'
+          dbnegatives=[
+            ('production_host',dict(dsnhost='db.production.supabase.co')),
+            ('pooler_host',dict(dsnhost='aws-0-us-east-1.pooler.supabase.com')),
+            ('weak_tls',dict(sslmode='require')),
+            ('admin_role',dict(username='postgres')),
+            ('wrong_caller',dict(override={'session_user':'postgres'})),
+            ('writable_transaction',dict(override={'read_only':'off'})),
+            ('privileged_role',dict(override={'role_safe':False})),
+            ('role_membership',dict(override={'no_membership':False})),
+            ('raw_table_granted',dict(override={'direct_business_privs':1})),
+            ('secdef_extra_grant',dict(override={'other_secdef_execute':1})),
+            ('p1_open',dict(override={'proof.p1_off':False})),
+            ('p2_operator_open',dict(override={'proof.p2_operator_off':False})),
+            ('p2_office_open',dict(override={'proof.p2_office_off':False})),
+            ('orders_drift',dict(override={'proof.orders':85})),
+            ('cpc_drift',dict(override={'proof.null_cpc':84})),
+            ('storage_drift',dict(override={'proof.private_objects':84})),
+            ('public_bucket',dict(override={'proof.private_bucket':False})),
+            ('image_proof_nonzero',dict(override={'proof.image_proofs':1})),
+            ('bindings_nonzero',dict(override={'proof.cpc_bindings':1})),
+            ('receipts_nonzero',dict(override={'proof.office_receipts':1})),
+            ('wrong_qa_ref',dict(override={'proof.qa_project_ref':'production'})),
+            ('stale_aggregate',dict(override={'proof.checked_at':'2020-01-01T00:00:00+00:00'})),
+          ]
+          for label,opts in dbnegatives:
+            assert not simulate_db(**opts),('DB_BYPASS_ACCEPTED',label)
+          print('WOS_P1_OFFLINE_AGGREGATE_ROLE_NEGATIVE_REJECTIONS='+str(len(dbnegatives)))
+          print('WOS_P1_SYNTHETIC_IDENTITY_AND_GATE_FAILCLOSED=PASS')
+          PY
