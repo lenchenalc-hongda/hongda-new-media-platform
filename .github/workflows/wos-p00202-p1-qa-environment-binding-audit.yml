@@ -103,7 +103,7 @@ jobs:
           assert 'EXECUTE ' not in install.split('CREATE FUNCTION wos_p1_preflight_private')[1].split('$snapshot$;')[0]
           assert 'DROP SCHEMA wos_p1_preflight_private RESTRICT;' in rollback
           assert 'CASCADE' not in rollback and 'pg_terminate_backend' not in rollback
-          assert 'UNVERIFIED' in review and 'to.slugs' in review
+          assert 'UI **screenshots**' in review and 'cannot verify persisted environment settings' in review and 'to.slugs' in review
           assert not re.search(r'(?m)^  (push|pull_request|schedule):',wf)
           print('WOS_P1_OIDC_NO_STATIC_TOKEN_WRITE_PRODUCTION_PATH=PASS')
           print('WOS_P1_AGGREGATE_PRIVATE_SECURITY_DEFINER_DESIGN_STATIC=PASS')
