@@ -70,7 +70,14 @@ CREATE TABLE wos_mvp_qa.cpc_order_bindings(
  customer_id uuid NOT NULL REFERENCES public.cpc_customer_references(id),
  project_id uuid NOT NULL REFERENCES public.cpc_projects(id),
  actor_profile_id uuid NOT NULL REFERENCES public.profiles(id),
- created_at timestamptz NOT NULL DEFAULT now()
+ created_at timestamptz NOT NULL DEFAULT now(),
+ -- Use a dedicated candidate-scoped composite key; old public WOS orders
+ -- only have PRIMARY KEY(id), not UNIQUE(id,organization_id).
+ UNIQUE(order_id,organization_id),
+ FOREIGN KEY(customer_id,organization_id)
+  REFERENCES public.cpc_customer_references(id,org_id),
+ FOREIGN KEY(project_id,organization_id)
+  REFERENCES public.cpc_projects(id,org_id)
 );
 ALTER TABLE wos_mvp_qa.cpc_order_bindings ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON wos_mvp_qa.cpc_order_bindings FROM PUBLIC,anon,authenticated,service_role;
@@ -213,7 +220,7 @@ CREATE TABLE wos_mvp_attestation.private_image_proofs(
  verified_at timestamptz NOT NULL DEFAULT now(),
  expires_at timestamptz NOT NULL,
  FOREIGN KEY(order_id,organization_id)
-  REFERENCES public.wos_production_orders(id,organization_id),
+  REFERENCES wos_mvp_qa.cpc_order_bindings(order_id,organization_id),
  CHECK(expires_at>verified_at AND expires_at<=verified_at+interval '10 minutes')
 );
 CREATE INDEX wos_mvp_private_proofs_order_version
@@ -565,8 +572,11 @@ CREATE TABLE wos_mvp_attestation.office_document_receipts(
  office_document jsonb NOT NULL CHECK(jsonb_typeof(office_document)='object'),
  result jsonb NOT NULL,
  created_at timestamptz NOT NULL DEFAULT now(),
- FOREIGN KEY(order_id,organization_id) REFERENCES public.wos_production_orders(id,organization_id),
- FOREIGN KEY(actor_profile_id,organization_id) REFERENCES public.profiles(id,org_id),
+ -- Existing QA order/profile tables have only single-column PK(id).
+ -- Candidate-bound pair enforces tenant identity; definer checks live
+ -- authenticated actor org/role and does not expose table DML.
+ FOREIGN KEY(order_id,organization_id) REFERENCES wos_mvp_qa.cpc_order_bindings(order_id,organization_id),
+ FOREIGN KEY(actor_profile_id) REFERENCES public.profiles(id),
  UNIQUE(order_id,new_version)
 );
 ALTER TABLE wos_mvp_attestation.office_document_receipts ENABLE ROW LEVEL SECURITY;
