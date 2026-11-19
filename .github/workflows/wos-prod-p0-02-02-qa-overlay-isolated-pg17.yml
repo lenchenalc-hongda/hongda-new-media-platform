@@ -2,7 +2,7 @@
 name: WOS P0-02-02 QA overlay 83-legacy PG17
 on:
   push:
-    branches: [codex/wos-prod-ready-p0-02-02-qa-overlay-20261119]
+    branches: [codex/wos-prod-ready-p0-02-02-qa-overlay-20261119, codex/wos-p0-02-02-overlay-real-qa-fk-fix-20261119]
   pull_request:
     branches: [codex/wos-prod-ready-p0-01-20261118]
     paths:
