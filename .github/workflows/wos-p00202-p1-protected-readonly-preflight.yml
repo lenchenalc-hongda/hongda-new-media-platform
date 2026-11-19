@@ -191,6 +191,7 @@ jobs:
       contents: read
     env:
       WOS_QA_READONLY_DSN: ${{ secrets.WOS_QA_READONLY_DSN }}
+      WOS_QA_SESSION_POOLER_HOST: ${{ vars.WOS_QA_SESSION_POOLER_HOST }}
     steps:
       - name: Verify QA-only NOLOGIN-origin readonly proof role and aggregate snapshot
         shell: bash
@@ -199,35 +200,54 @@ jobs:
           # Role must be separately Owner-authorised, provisioned and TLS-enabled.
           # Never print DSN, password, private table rows, JWT, headers or signatures.
           python3 - <<'PY'
-          import datetime,hashlib,json,os,subprocess,sys,urllib.parse
+          import datetime,hashlib,json,os,re,subprocess,sys,urllib.parse
           def fail():
               raise SystemExit('WOS_P1_QA_AGGREGATE_PROOF_FAIL_CLOSED')
+          # Shared Supavisor session pooler is IPv4; actual host MUST be copied
+          # from the QA project's Connect > Session Pooler and owner-reviewed.
+          # No invented aws-0/aws-1 host is permitted.
+          CA_BUNDLE='/etc/ssl/certs/ca-certificates.crt'
+          def validate_transport(raw,expected_host,ca_bundle_ready):
+              try:
+                  uri=urllib.parse.urlsplit(raw)
+                  query=urllib.parse.parse_qs(uri.query,strict_parsing=True)
+                  user=urllib.parse.unquote(uri.username or '')
+                  password=urllib.parse.unquote(uri.password or '')
+                  good=(isinstance(expected_host,str)
+                    and re.fullmatch(r'aws-[0-9]+-us-east-2[.]pooler[.]supabase[.]com',expected_host)
+                    and uri.scheme in ('postgres','postgresql')
+                    and uri.hostname==expected_host and uri.port==5432
+                    and uri.username is not None
+                    and user=='wos_qa_readonly_preflight.xulmpqaknlwqqculbsek'
+                    and uri.path=='/postgres' and not uri.fragment
+                    and query=={'sslmode':['verify-full']}
+                    and len(password)>=24 and bool(ca_bundle_ready))
+                  return (uri,user,password) if good else None
+              except (ValueError,AttributeError,TypeError):
+                  return None
           raw=os.environ.get('WOS_QA_READONLY_DSN','')
+          expected_host=os.environ.get('WOS_QA_SESSION_POOLER_HOST','')
+          ca_ready=os.path.isfile(CA_BUNDLE) and os.path.getsize(CA_BUNDLE)>10000
           if not raw or len(raw)>2048: fail()
-          try:
-              uri=urllib.parse.urlsplit(raw)
-              query=urllib.parse.parse_qs(uri.query,strict_parsing=True)
-              user=urllib.parse.unquote(uri.username or '')
-              password=urllib.parse.unquote(uri.password or '')
-              good=(uri.scheme in ('postgres','postgresql')
-                and uri.hostname=='db.xulmpqaknlwqqculbsek.supabase.co'
-                and uri.port in (None,5432)
-                and user=='wos_qa_readonly_preflight'
-                and uri.path=='/postgres' and not uri.fragment
-                and query=={'sslmode':['verify-full']} and bool(password))
-              if not good: fail()
-          except Exception: fail()
+          verified=validate_transport(raw,expected_host,ca_ready)
+          if verified is None: fail()
+          uri,user,password=verified
           pg=os.environ.copy()
           pg.pop('WOS_QA_READONLY_DSN',None)
-          pg.update(PGHOST=uri.hostname,PGPORT=str(uri.port or 5432),
+          pg.update(PGHOST=uri.hostname,PGPORT='5432',
             PGDATABASE='postgres',PGUSER=user,PGPASSWORD=password,
-            PGSSLMODE='verify-full',
-            PGOPTIONS='-c default_transaction_read_only=on -c search_path=pg_catalog')
+            PGSSLMODE='verify-full',PGSSLROOTCERT=CA_BUNDLE,
+            PGGSSENCMODE='disable',PGCONNECT_TIMEOUT='10',
+            PGOPTIONS='-c default_transaction_read_only=on -c search_path=pg_catalog -c statement_timeout=30000 -c idle_in_transaction_session_timeout=30000 -c idle_session_timeout=120000')
           sql="""
           SELECT pg_catalog.jsonb_build_object(
             'session_user',session_user,
             'current_user',current_user,
             'read_only',pg_catalog.current_setting('transaction_read_only'),
+            'login_expiration_valid',(SELECT r.rolcanlogin AND r.rolvaliduntil IS NOT NULL
+              AND r.rolvaliduntil > now()
+              AND r.rolvaliduntil <= now() + interval '45 minutes'
+              FROM pg_catalog.pg_roles r WHERE r.rolname=current_user),
             'role_safe',(SELECT NOT (r.rolsuper OR r.rolbypassrls OR r.rolcreatedb
               OR r.rolcreaterole OR r.rolreplication OR r.rolinherit)
               FROM pg_catalog.pg_roles r WHERE r.rolname=current_user),
@@ -269,6 +289,7 @@ jobs:
               values['session_user']=='wos_qa_readonly_preflight'
               and values['current_user']=='wos_qa_readonly_preflight'
               and values['read_only']=='on'
+              and values['login_expiration_valid'] is True
               and values['role_safe'] is True
               and values['no_membership'] is True
               and values['direct_business_privs']==0
