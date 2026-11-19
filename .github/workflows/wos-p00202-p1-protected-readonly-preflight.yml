@@ -189,6 +189,9 @@ jobs:
     environment: wos-p1-qa-preflight
     permissions:
       contents: read
+    env:
+      WOS_QA_READONLY_DSN: ${{ secrets.WOS_QA_READONLY_DSN }}
+      WOS_QA_SESSION_POOLER_HOST: ${{ vars.WOS_QA_SESSION_POOLER_HOST }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
@@ -197,16 +200,13 @@ jobs:
           persist-credentials: false
           sparse-checkout: |
             qa/wos-p00202-p1-readonly/certs/supabase-root-2021-ca.pem
+          sparse-checkout-cone-mode: false
       - name: Verify pinned Supabase QA Root CA is present
         shell: bash
         run: |
           set -euo pipefail
           test "$(git -C qa-trusted rev-parse HEAD)" = "$GITHUB_SHA"
           test -s qa-trusted/qa/wos-p00202-p1-readonly/certs/supabase-root-2021-ca.pem
-    env:
-      WOS_QA_READONLY_DSN: ${{ secrets.WOS_QA_READONLY_DSN }}
-      WOS_QA_SESSION_POOLER_HOST: ${{ vars.WOS_QA_SESSION_POOLER_HOST }}
-    steps:
       - name: Verify QA-only NOLOGIN-origin readonly proof role and aggregate snapshot
         shell: bash
         run: |
@@ -244,7 +244,7 @@ jobs:
           try:
               with open(CA_BUNDLE,encoding='ascii') as ca_file:
                   pem=ca_file.read()
-              ca_ready=(pem.startswith('-----BEGIN CERTIFICATE-----\\n')
+              ca_ready=(pem.startswith('-----BEGIN CERTIFICATE-----\n')
                   and pem.rstrip().endswith('-----END CERTIFICATE-----')
                   and len(pem)<4096 and hashlib.sha256(
                       ssl.PEM_cert_to_DER_cert(pem)).hexdigest()
