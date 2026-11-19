@@ -129,7 +129,9 @@ function assertBlocker(value: unknown, code: string): void {
 }
 
 function assertPending(value: unknown): void {
+  const original = structuredClone(value);
   const decision = evaluateWosAtomicSubmissionEvidence(value);
+  assert.deepEqual(value, original);
   assert.equal(decision.status, WOS_ATOMIC_SUBMISSION_PENDING_STATUS);
   assert.equal(decision.evidenceShapeConsistent, true);
   assert.deepEqual(decision.blockers, []);
@@ -137,10 +139,15 @@ function assertPending(value: unknown): void {
   assert.equal(decision.databaseCommitVerified, false);
   assert.equal(decision.productionChanged, false);
   assert.equal(decision.serverVerification, 'REQUIRED');
-  assert.equal(
-    JSON.stringify(decision).includes('"persisted":true'),
-    false,
-  );
+  assert.deepEqual(Object.keys(decision).sort(), [
+    'blockers',
+    'databaseCommitVerified',
+    'evidenceShapeConsistent',
+    'persisted',
+    'productionChanged',
+    'serverVerification',
+    'status',
+  ]);
 }
 
 // Serialized, fully self-consistent browser JSON is still not commit proof.
