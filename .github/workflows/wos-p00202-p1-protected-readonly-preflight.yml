@@ -78,7 +78,7 @@ jobs:
     if: needs.fixed-source.result == 'success' && github.event_name == 'workflow_dispatch' && github.run_attempt == 1 && github.ref == 'refs/heads/master'
     runs-on: ubuntu-24.04
     timeout-minutes: 8
-    environment: hongda-review-dev
+    environment: wos-p1-qa-preflight
     permissions:
       contents: read
       id-token: write
@@ -96,7 +96,7 @@ jobs:
           repo='lenchenalc-hongda/hongda-new-media-platform'
           branch='refs/heads/master'
           workflow=f'{repo}/.github/workflows/wos-p00202-p1-protected-readonly-preflight.yml@{branch}'
-          expected_env='hongda-review-dev'
+          expected_env='wos-p1-qa-preflight'
           audience='https://github.com/lenchenalc-hongda'
           hostname='hongda-wos-p00202-qa-preview-o22fvh0ib-lens-projects-3fc386bd.vercel.app'
           expected_codes={
@@ -186,7 +186,7 @@ jobs:
     if: needs.protected-preview-http.result == 'success'
     runs-on: ubuntu-24.04
     timeout-minutes: 8
-    environment: hongda-review-dev
+    environment: wos-p1-qa-preflight
     permissions:
       contents: read
     env:
