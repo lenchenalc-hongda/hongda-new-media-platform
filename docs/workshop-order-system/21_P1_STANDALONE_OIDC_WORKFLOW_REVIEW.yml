@@ -1,0 +1,32 @@
+# REVIEW-ONLY COPY FOR SEPARATE PRIVATE REPOSITORY.
+# Not executable here: stored under docs/, NOT .github/workflows/.
+# Actual new issuer repository must be private and independently protected.
+name: WOS P1 independent OIDC read-only attestation
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+  id-token: write
+concurrency:
+  group: wos-p1-oidc-attestation
+  cancel-in-progress: false
+jobs:
+  verify-real-github-oidc:
+    if: github.repository == 'lenchenalc-hongda/hongda-wos-p1-handoff-attestation' && github.ref == 'refs/heads/main' && github.ref_protected == true && github.run_attempt == 1
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    environment: wos-p1-attestation
+    steps:
+      - name: Checkout protected exact SHA without persisted credentials
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Run verified read-only issuer evidence
+        shell: bash
+        env:
+          WOS_P1_TRUSTED_REPO_ID: ${{ vars.WOS_P1_TRUSTED_REPO_ID }}
+          WOS_P1_TRUSTED_SUB: ${{ vars.WOS_P1_TRUSTED_SUB }}
+        run: |
+          set -euo pipefail
+          node scripts/verify-oidc.mjs
