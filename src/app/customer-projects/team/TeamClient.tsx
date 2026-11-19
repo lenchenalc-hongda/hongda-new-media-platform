@@ -1,6 +1,6 @@
 'use client';
 
-import { type ReactNode } from 'react';
+import { type ReactNode, useState } from 'react';
 import Link from 'next/link';
 import AppLayout from '@/components/layout/AppLayout';
 import PageHeader from '@/components/layout/PageHeader';
@@ -11,6 +11,7 @@ import {
   RISK_LEVEL_LABELS,
   WAITING_ON_LABELS,
   WORK_ITEM_STATUS_LABELS,
+  WORK_ITEM_TYPE_LABELS,
   formatBusinessDateTime,
   projectPriorityTone,
   projectStageLabel,
@@ -19,9 +20,18 @@ import type {
   TeamBoardCommitmentException,
   TeamBoardDecisionItem,
   TeamBoardDueState,
+  TeamBoardPortfolioIdentityState,
+  TeamBoardPortfolioTask,
   TeamBoardProjectException,
+  TeamBoardProjectPortfolioRow,
+  TeamBoardProjectPortfolioLifecycleFilter,
+  TeamBoardProjectPortfolioRiskFilter,
   TeamMemberSupportContext,
   TeamBoardSnapshot,
+} from '@/lib/customer-projects/team-board';
+import {
+  TEAM_PROJECT_PORTFOLIO_LIFECYCLE_FILTERS,
+  selectTeamProjectPortfolioView,
 } from '@/lib/customer-projects/team-board';
 
 const PROJECT_STATE_ORDER = ['active', 'paused', 'won', 'lost', 'cancelled'] as const;
@@ -339,6 +349,250 @@ function MemberCard({ member }: { member: TeamMemberSupportContext }) {
   );
 }
 
+function portfolioIdentityLabel(
+  identity: TeamBoardPortfolioTask['assignee'],
+  state: TeamBoardPortfolioIdentityState,
+): string {
+  if (!identity) return '负责人资料不可用';
+  return identity.displayName + (state === 'inactive' ? '（已停用）' : '');
+}
+
+function portfolioDueLabel(task: TeamBoardPortfolioTask): string {
+  if (!task.dueStateKnown) return '截止时间未知';
+  if (task.dueState === 'no_due') return '未设截止时间';
+  return dueStateLabel(task.dueState)
+    + ' · '
+    + formatBusinessDateTime(task.dueAt);
+}
+
+function portfolioDueTone(task: TeamBoardPortfolioTask): string {
+  if (!task.dueStateKnown) return 'bg-amber-50 text-amber-700';
+  if (task.dueState === 'overdue') return 'bg-red-50 text-red-700';
+  if (task.dueState === 'due_now') return 'bg-amber-50 text-amber-700';
+  return 'bg-gray-100 text-gray-600';
+}
+
+function PortfolioTaskLine({ task }: { task: TeamBoardPortfolioTask }) {
+  return (
+    <div className="rounded-lg border border-gray-200 bg-white px-3 py-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <p className="min-w-0 flex-1 text-xs font-medium text-gray-700">{task.title}</p>
+        <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[11px] text-blue-700">
+          {WORK_ITEM_TYPE_LABELS[task.workItemType]}
+        </span>
+        <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[11px] text-gray-600">
+          {WORK_ITEM_STATUS_LABELS[task.status]}
+        </span>
+        {task.blocked && (
+          <span className="rounded-full bg-red-50 px-2 py-0.5 text-[11px] font-medium text-red-700">
+            受阻
+          </span>
+        )}
+        <span className={'rounded-full px-2 py-0.5 text-[11px] ' + portfolioDueTone(task)}>
+          {portfolioDueLabel(task)}
+        </span>
+      </div>
+      <p className="mt-1 text-[11px] text-gray-500">
+        执行人：{portfolioIdentityLabel(task.assignee, task.assigneeState)}
+        {' · '}
+        优先级：{PROJECT_PRIORITY_LABELS[task.priority]}
+      </p>
+      {task.blockedReason && (
+        <p className="mt-1 text-[11px] text-red-700">受阻原因：{task.blockedReason}</p>
+      )}
+    </div>
+  );
+}
+
+function ProjectPortfolioCard({ project }: { project: TeamBoardProjectPortfolioRow }) {
+  const additionalWork = project.workItems.filter(
+    item => item.id !== project.nextAction?.id,
+  );
+
+  return (
+    <article className="rounded-lg border border-gray-200 bg-gray-50/60 p-3 sm:p-4">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <Link
+              href={'/customer-projects/projects/' + project.id}
+              className="text-sm font-semibold text-gray-800 no-underline hover:text-blue-700"
+            >
+              {project.title}
+            </Link>
+            <span className={'rounded-full px-2 py-0.5 text-[11px] ' + projectPriorityTone(project.priority)}>
+              {PROJECT_PRIORITY_LABELS[project.priority]}
+            </span>
+            <span className="rounded-full bg-white px-2 py-0.5 text-[11px] text-gray-600">
+              {PROJECT_STATUS_LABELS[project.status]}
+            </span>
+            {project.riskLevel && (
+              <span
+                className={
+                  'rounded-full px-2 py-0.5 text-[11px] '
+                  + (project.riskLevel === 'high'
+                    ? 'bg-red-50 text-red-700'
+                    : project.riskLevel === 'medium'
+                      ? 'bg-amber-50 text-amber-700'
+                      : 'bg-blue-50 text-blue-700')
+                }
+              >
+                {RISK_LEVEL_LABELS[project.riskLevel]}
+              </span>
+            )}
+            {!project.riskLevel && (
+              <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[11px] text-gray-500">
+                风险未标记
+              </span>
+            )}
+          </div>
+          <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500">
+            <span>负责人：{portfolioIdentityLabel(project.owner, project.ownerState)}</span>
+            <span>阶段：{projectStageLabel(project.projectType, project.stage)}</span>
+            <span>更新：{formatBusinessDateTime(project.updatedAt)}</span>
+            {project.customer ? (
+              <Link
+                href={'/customer-projects/customers/' + project.customer.id}
+                className="text-gray-600 no-underline hover:text-blue-700"
+              >
+                客户：{project.customer.displayName}
+              </Link>
+            ) : (
+              <span className="text-amber-700">客户资料不可用</span>
+            )}
+          </div>
+          <div className="mt-2 flex flex-wrap gap-2 text-[11px]">
+            <span className="rounded-full bg-white px-2 py-0.5 text-gray-600">
+              开放工作 {project.openWorkItemCount}
+            </span>
+            <span
+              className={
+                'rounded-full px-2 py-0.5 '
+                + (project.overdueWorkItemCount > 0
+                  ? 'bg-red-50 font-medium text-red-700'
+                  : 'bg-white text-gray-600')
+              }
+            >
+              逾期 {project.overdueWorkItemCount}
+            </span>
+            <span
+              className={
+                'rounded-full px-2 py-0.5 '
+                + (project.blockedWorkItemCount > 0
+                  ? 'bg-red-50 font-medium text-red-700'
+                  : 'bg-white text-gray-600')
+              }
+            >
+              受阻 {project.blockedWorkItemCount}
+            </span>
+            {project.waitingOn !== 'none' && (
+              <span
+                className={
+                  'rounded-full px-2 py-0.5 '
+                  + (project.nextCheckDue
+                    ? 'bg-red-50 font-medium text-red-700'
+                    : 'bg-amber-50 text-amber-700')
+                }
+              >
+                等待{WAITING_ON_LABELS[project.waitingOn]}
+                {' · '}
+                {project.nextCheckAt && project.nextCheckDue !== null
+                  ? '检查 ' + formatBusinessDateTime(project.nextCheckAt)
+                  : '检查时间未知'}
+                {project.nextCheckDue ? ' · 已到期' : ''}
+              </span>
+            )}
+            {project.waitingOn === 'none' && (
+              <span className="rounded-full bg-white px-2 py-0.5 text-gray-500">
+                当前无等待检查
+              </span>
+            )}
+          </div>
+        </div>
+        <Link
+          href={'/customer-projects/projects/' + project.id}
+          className="shrink-0 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs text-gray-600 no-underline"
+        >
+          查看项目
+        </Link>
+      </div>
+
+      <div className="mt-3 rounded-lg border border-gray-200 bg-white p-3">
+        <p className="text-[11px] font-medium text-gray-500">下一步 / NEXT_ACTION</p>
+        {project.nextAction ? (
+          <div className="mt-2">
+            <PortfolioTaskLine task={project.nextAction} />
+          </div>
+        ) : (
+          <p
+            className={
+              'mt-1 text-xs '
+              + (project.status === 'active' ? 'text-red-700' : 'text-gray-500')
+            }
+          >
+            {project.status === 'active'
+              ? '缺少开放下一步'
+              : '当前状态无开放下一步'}
+          </p>
+        )}
+      </div>
+
+      {additionalWork.length > 0 && (
+        <details className="mt-2 rounded-lg border border-gray-200 bg-white">
+          <summary className="cursor-pointer px-3 py-2 text-xs font-medium text-gray-600">
+            其他当前工作 {additionalWork.length}
+          </summary>
+          <div className="space-y-2 border-t border-gray-200 p-3">
+            {additionalWork.map(task => (
+              <PortfolioTaskLine key={task.id} task={task} />
+            ))}
+          </div>
+        </details>
+      )}
+    </article>
+  );
+}
+
+function PersonPortfolioCard({
+  person,
+}: {
+  person: ReturnType<typeof selectTeamProjectPortfolioView>['people'][number];
+}) {
+  return (
+    <article className="rounded-lg border border-gray-200 bg-white p-3 sm:p-4">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h3 className="text-sm font-semibold text-gray-800">{person.displayName}</h3>
+          <p className="mt-0.5 text-xs text-gray-500">
+            {person.department || '未设置部门'}
+            {' · '}
+            {person.state === 'unavailable' ? '负责人资料不可用' : person.role}
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2 text-[11px]">
+          <span className="rounded-full bg-blue-50 px-2 py-0.5 text-blue-700">
+            当前项目 {person.projectCount}
+          </span>
+          <span className="rounded-full bg-gray-100 px-2 py-0.5 text-gray-600">
+            当前工作 {person.openWorkItemCount}
+          </span>
+        </div>
+      </div>
+      {person.projects.length === 0 ? (
+        <p className="mt-3 rounded-lg bg-gray-50 px-3 py-3 text-xs text-gray-500">
+          当前筛选下没有由本人负责的项目；该成员仍保留在团队列表中。
+        </p>
+      ) : (
+        <div className="mt-3 space-y-2">
+          {person.projects.map(project => (
+            <ProjectPortfolioCard key={project.id} project={project} />
+          ))}
+        </div>
+      )}
+    </article>
+  );
+}
+
 export default function TeamClient({
   snapshot,
   error,
@@ -346,6 +600,22 @@ export default function TeamClient({
   snapshot: TeamBoardSnapshot | null;
   error: string;
 }) {
+  const [portfolioTab, setPortfolioTab] = useState<'person' | 'project'>('person');
+  const [portfolioQuery, setPortfolioQuery] = useState('');
+  const [employeeKey, setEmployeeKey] = useState('all');
+  const [portfolioLifecycle, setPortfolioLifecycle] =
+    useState<TeamBoardProjectPortfolioLifecycleFilter>('active');
+  const [portfolioRisk, setPortfolioRisk] =
+    useState<TeamBoardProjectPortfolioRiskFilter>('all');
+  const portfolioView = snapshot
+    ? selectTeamProjectPortfolioView(snapshot.projectPortfolio, {
+        query: portfolioQuery,
+        employeeKey,
+        lifecycle: portfolioLifecycle,
+        risk: portfolioRisk,
+      })
+    : { projects: [], people: [] };
+
   return (
     <AppLayout>
       <PageHeader
@@ -423,19 +693,173 @@ export default function TeamClient({
 
           <Section
             id="team-support"
-            title="4. 团队支持 / 工作上下文"
-            description="按姓名展示支持上下文，仅用于工作协调，不生成综合人员指标。"
-            count={snapshot.teamSupport.members.length}
+            title="4. 团队项目组合"
+            description="按人员或项目双向查看真实负责人、当前工作与等待检查；不推断个人评价、SLA、自动进度或项目完成度。"
+            count={
+              portfolioTab === 'person'
+                ? portfolioView.people.length
+                : portfolioView.projects.length
+            }
           >
-            {snapshot.teamSupport.members.length === 0 ? (
-              <EmptyState title="当前没有可显示的同组织团队上下文" />
-            ) : (
-              <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
-                {snapshot.teamSupport.members.map(member => (
-                  <MemberCard key={member.profileId} member={member} />
+            <div
+              className="flex flex-wrap gap-2"
+              role="tablist"
+              aria-label="团队项目组合视图"
+            >
+              <button
+                type="button"
+                role="tab"
+                aria-selected={portfolioTab === 'person'}
+                onClick={() => setPortfolioTab('person')}
+                className={
+                  'rounded-lg px-3 py-1.5 text-sm '
+                  + (portfolioTab === 'person'
+                    ? 'bg-gray-800 font-medium text-white'
+                    : 'border border-gray-300 bg-white text-gray-600')
+                }
+              >
+                按人员
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={portfolioTab === 'project'}
+                onClick={() => setPortfolioTab('project')}
+                className={
+                  'rounded-lg px-3 py-1.5 text-sm '
+                  + (portfolioTab === 'project'
+                    ? 'bg-gray-800 font-medium text-white'
+                    : 'border border-gray-300 bg-white text-gray-600')
+                }
+              >
+                按项目
+              </button>
+            </div>
+
+            <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
+              <label className="text-xs text-gray-600">
+                搜索
+                <input
+                  type="search"
+                  value={portfolioQuery}
+                  onChange={event => setPortfolioQuery(event.target.value)}
+                  placeholder="负责人、项目或客户名称"
+                  className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-800"
+                />
+              </label>
+              <label className="text-xs text-gray-600">
+                员工
+                <select
+                  value={employeeKey}
+                  onChange={event => setEmployeeKey(event.target.value)}
+                  className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-800"
+                >
+                  <option value="all">全部员工</option>
+                  {snapshot.projectPortfolio.people.map(person => (
+                    <option key={person.key} value={person.key}>
+                      {person.displayName}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="text-xs text-gray-600">
+                项目状态
+                <select
+                  value={portfolioLifecycle}
+                  onChange={event => setPortfolioLifecycle(
+                    event.target.value as TeamBoardProjectPortfolioLifecycleFilter,
+                  )}
+                  className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-800"
+                >
+                  {TEAM_PROJECT_PORTFOLIO_LIFECYCLE_FILTERS.map(status => (
+                    <option key={status} value={status}>
+                      {status === 'all' ? '全部状态' : PROJECT_STATUS_LABELS[status]}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="text-xs text-gray-600">
+                风险
+                <select
+                  value={portfolioRisk}
+                  onChange={event => setPortfolioRisk(
+                    event.target.value as TeamBoardProjectPortfolioRiskFilter,
+                  )}
+                  className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-800"
+                >
+                  <option value="all">全部风险</option>
+                  <option value="high">高风险</option>
+                  <option value="medium">中风险</option>
+                  <option value="low">低风险</option>
+                  <option value="unknown">未标记风险</option>
+                </select>
+              </label>
+            </div>
+
+            <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+              <p className="text-xs text-gray-500">
+                默认显示推进中项目；暂停、赢单、流失与取消可通过状态筛选查看。
+                当前结果：{portfolioView.projects.length} 个项目。
+              </p>
+              {(portfolioQuery || employeeKey !== 'all' || portfolioLifecycle !== 'active' || portfolioRisk !== 'all') && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPortfolioQuery('');
+                    setEmployeeKey('all');
+                    setPortfolioLifecycle('active');
+                    setPortfolioRisk('all');
+                  }}
+                  className="text-xs text-blue-700"
+                >
+                  重置筛选
+                </button>
+              )}
+            </div>
+
+            {portfolioTab === 'person' && portfolioView.people.length > 0 ? (
+              <div className="mt-3 grid grid-cols-1 gap-3 xl:grid-cols-2">
+                {portfolioView.people.map(person => (
+                  <PersonPortfolioCard key={person.key} person={person} />
                 ))}
               </div>
+            ) : portfolioTab === 'project' && portfolioView.projects.length > 0 ? (
+              <div className="mt-3 space-y-3">
+                {portfolioView.projects.map(project => (
+                  <ProjectPortfolioCard key={project.id} project={project} />
+                ))}
+              </div>
+            ) : (
+              <div className="mt-3">
+                <EmptyState
+                  title={
+                    snapshot.projectPortfolio.projects.length === 0
+                      ? '同组织暂无正式项目'
+                      : '当前筛选下没有匹配项目'
+                  }
+                  description={
+                    snapshot.projectPortfolio.projects.length === 0
+                      ? '零项目状态不代表员工表现或经营结果；可继续查看下方团队支持上下文。'
+                      : '可调整员工、生命周期、风险或搜索条件。团队成员在无匹配项目时仍会保留。'
+                  }
+                />
+              </div>
             )}
+
+            <details className="mt-4 rounded-lg border border-gray-200 bg-gray-50">
+              <summary className="cursor-pointer px-3 py-2 text-xs font-medium text-gray-600">
+                展开人员支持计数（辅助上下文，不用于人员比较）
+              </summary>
+              <div className="grid grid-cols-1 gap-3 border-t border-gray-200 p-3 xl:grid-cols-2">
+                {snapshot.teamSupport.members.length === 0 ? (
+                  <EmptyState title="当前没有可显示的同组织团队支持上下文" />
+                ) : (
+                  snapshot.teamSupport.members.map(member => (
+                    <MemberCard key={member.profileId} member={member} />
+                  ))
+                )}
+              </div>
+            </details>
           </Section>
 
           <Section

@@ -1,6 +1,8 @@
 import {
   buildTeamBoardSnapshot,
   canAccessTeamBoard,
+  selectTeamProjectPortfolioView,
+  TEAM_PROJECT_PORTFOLIO_LIFECYCLE_FILTERS,
   type TeamBoardCustomerRow,
   type TeamBoardEventRow,
   type TeamBoardProfileRow,
@@ -30,9 +32,15 @@ const OTHER_ORG_ID = '00000000-0000-0000-0000-000000000099';
 const PROJECT_DUE = '00000000-0000-0000-0000-000000000010';
 const PROJECT_WAITING = '00000000-0000-0000-0000-000000000011';
 const PROJECT_MISSING = '00000000-0000-0000-0000-000000000012';
+const PROJECT_PAUSED = '00000000-0000-0000-0000-000000000013';
+const PROJECT_INACTIVE_OWNER = '00000000-0000-0000-0000-000000000014';
+const PROJECT_MISSING_OWNER = '00000000-0000-0000-0000-000000000015';
 const CUSTOMER_ID = '00000000-0000-0000-0000-000000000020';
 const PROFILE_A = '00000000-0000-0000-0000-000000000030';
 const PROFILE_B = '00000000-0000-0000-0000-000000000031';
+const PROFILE_ZERO = '00000000-0000-0000-0000-000000000032';
+const PROFILE_INACTIVE = '00000000-0000-0000-0000-000000000033';
+const PROFILE_MISSING = '00000000-0000-0000-0000-000000000034';
 
 const projects: TeamBoardProjectRow[] = [
   {
@@ -78,6 +86,51 @@ const projects: TeamBoardProjectRow[] = [
     risk_level: null,
     priority: 'medium',
     owner_profile_id: PROFILE_A,
+    updated_at: '2026-10-04T01:00:00.000Z',
+  },
+  {
+    id: PROJECT_PAUSED,
+    org_id: ORG_ID,
+    customer_reference_id: CUSTOMER_ID,
+    title: '暂停项目',
+    project_type: 'transfer_film',
+    status: 'paused',
+    stage: 'sampling_or_plate',
+    waiting_on: 'none',
+    next_check_at: null,
+    risk_level: 'low',
+    priority: 'low',
+    owner_profile_id: PROFILE_B,
+    updated_at: '2026-10-04T01:00:00.000Z',
+  },
+  {
+    id: PROJECT_INACTIVE_OWNER,
+    org_id: ORG_ID,
+    customer_reference_id: CUSTOMER_ID,
+    title: '停用负责人项目',
+    project_type: 'other',
+    status: 'paused',
+    stage: 'solution',
+    waiting_on: 'none',
+    next_check_at: null,
+    risk_level: null,
+    priority: 'medium',
+    owner_profile_id: PROFILE_INACTIVE,
+    updated_at: '2026-10-04T01:00:00.000Z',
+  },
+  {
+    id: PROJECT_MISSING_OWNER,
+    org_id: ORG_ID,
+    customer_reference_id: CUSTOMER_ID,
+    title: '缺失负责人项目',
+    project_type: 'equipment',
+    status: 'paused',
+    stage: 'solution_definition',
+    waiting_on: 'none',
+    next_check_at: null,
+    risk_level: null,
+    priority: 'medium',
+    owner_profile_id: PROFILE_MISSING,
     updated_at: '2026-10-04T01:00:00.000Z',
   },
   {
@@ -174,6 +227,81 @@ const workItems: TeamBoardWorkItemRow[] = [
     updated_at: '2026-10-04T01:00:00.000Z',
   },
   {
+    id: '00000000-0000-0000-0000-000000000045',
+    org_id: ORG_ID,
+    customer_reference_id: null,
+    project_id: PROJECT_DUE,
+    work_item_type: 'INTERNAL_COLLABORATION',
+    title: '协同确认成本',
+    assignee_profile_id: PROFILE_B,
+    created_by_profile_id: PROFILE_A,
+    due_at: null,
+    status: 'in_progress',
+    priority: 'medium',
+    blocked_reason: null,
+    updated_at: '2026-10-04T01:00:00.000Z',
+  },
+  {
+    id: '00000000-0000-0000-0000-000000000052',
+    org_id: ORG_ID,
+    customer_reference_id: CUSTOMER_ID,
+    project_id: PROJECT_WAITING,
+    work_item_type: 'NEXT_ACTION',
+    title: '优先下一步',
+    assignee_profile_id: PROFILE_A,
+    created_by_profile_id: PROFILE_A,
+    due_at: '2026-10-05T01:00:00.000Z',
+    status: 'pending',
+    priority: 'high',
+    blocked_reason: null,
+    updated_at: '2026-10-04T01:00:00.000Z',
+  },
+  {
+    id: '00000000-0000-0000-0000-000000000053',
+    org_id: ORG_ID,
+    customer_reference_id: CUSTOMER_ID,
+    project_id: PROJECT_WAITING,
+    work_item_type: 'NEXT_ACTION',
+    title: '低优先级下一步',
+    assignee_profile_id: PROFILE_A,
+    created_by_profile_id: PROFILE_A,
+    due_at: '2026-10-05T01:00:00.000Z',
+    status: 'pending',
+    priority: 'low',
+    blocked_reason: null,
+    updated_at: '2026-10-04T01:00:00.000Z',
+  },
+  {
+    id: '00000000-0000-0000-0000-000000000054',
+    org_id: ORG_ID,
+    customer_reference_id: CUSTOMER_ID,
+    project_id: PROJECT_WAITING,
+    work_item_type: 'NEXT_ACTION',
+    title: '同优先级后置下一步',
+    assignee_profile_id: PROFILE_B,
+    created_by_profile_id: PROFILE_A,
+    due_at: '2026-10-05T01:00:00.000Z',
+    status: 'pending',
+    priority: 'high',
+    blocked_reason: null,
+    updated_at: '2026-10-04T01:00:00.000Z',
+  },
+  {
+    id: '00000000-0000-0000-0000-000000000055',
+    org_id: ORG_ID,
+    customer_reference_id: CUSTOMER_ID,
+    project_id: PROJECT_WAITING,
+    work_item_type: 'NEXT_ACTION',
+    title: '较晚下一步',
+    assignee_profile_id: PROFILE_ZERO,
+    created_by_profile_id: PROFILE_A,
+    due_at: '2026-10-07T01:00:00.000Z',
+    status: 'pending',
+    priority: 'critical',
+    blocked_reason: null,
+    updated_at: '2026-10-04T01:00:00.000Z',
+  },
+  {
     id: '00000000-0000-0000-0000-000000000049',
     org_id: OTHER_ORG_ID,
     customer_reference_id: null,
@@ -225,6 +353,22 @@ const profiles: TeamBoardProfileRow[] = [
     department: 'Management',
     role: 'manager',
     is_active: true,
+  },
+  {
+    id: PROFILE_ZERO,
+    org_id: ORG_ID,
+    full_name: 'C Zero Projects',
+    department: 'Support',
+    role: 'sales',
+    is_active: true,
+  },
+  {
+    id: PROFILE_INACTIVE,
+    org_id: ORG_ID,
+    full_name: 'Inactive Owner',
+    department: 'Sales',
+    role: 'sales',
+    is_active: false,
   },
   {
     id: '00000000-0000-0000-0000-000000000039',
@@ -367,6 +511,184 @@ assert(
 );
 
 assert(
+  snapshot.projectPortfolio.readOnly === true
+    && snapshot.projectPortfolio.ranking === false
+    && snapshot.projectPortfolio.scoring === false
+    && snapshot.projectPortfolio.ordering === 'project_title_then_id',
+  'project portfolio is a deterministic read-only, non-ranking projection',
+);
+
+const activePortfolio = selectTeamProjectPortfolioView(
+  snapshot.projectPortfolio,
+  { lifecycle: 'active' },
+);
+const activePortfolioTitles = activePortfolio.projects.map(project => project.title);
+assert(
+  activePortfolioTitles.length === 3
+    && ['逾期下一步项目', '等待检查项目', '缺少下一步项目']
+      .every(title => activePortfolioTitles.includes(title)),
+  'By person and By project views receive exact active project names',
+);
+assert(
+  new Set(activePortfolio.projects.map(project => project.id)).size
+    === activePortfolio.projects.length,
+  'project portfolio contains one row per real project, regardless of work-item count',
+);
+
+const activePersonA = activePortfolio.people.find(
+  person => person.profileId === PROFILE_A,
+);
+const activePersonB = activePortfolio.people.find(
+  person => person.profileId === PROFILE_B,
+);
+const activePersonZero = activePortfolio.people.find(
+  person => person.profileId === PROFILE_ZERO,
+);
+assert(
+  !!activePersonA
+    && activePersonA.projects.length === 2
+    && activePersonA.projects.every(project => (
+      project.id === PROJECT_DUE || project.id === PROJECT_MISSING
+    )),
+  'person grouping uses the true owner_profile_id reverse mapping',
+);
+assert(
+  !!activePersonB
+    && activePersonB.projects.length === 1
+    && activePersonB.projects[0].id === PROJECT_WAITING,
+  'reverse owner mapping keeps each project under its actual owner',
+);
+assert(
+  !!activePersonZero
+    && activePersonZero.projectCount === 0
+    && activePersonZero.projects.length === 0,
+  'active team members with zero projects remain represented',
+);
+
+const duePortfolioRow = snapshot.projectPortfolio.projects.find(
+  project => project.id === PROJECT_DUE,
+);
+assert(
+  !!duePortfolioRow
+    && duePortfolioRow.openWorkItemCount === 2
+    && duePortfolioRow.blockedWorkItemCount === 1
+    && duePortfolioRow.overdueWorkItemCount === 1,
+  'linked open work is counted once per actual project with explicit blocked/overdue totals',
+);
+assert(
+  !!duePortfolioRow
+    && duePortfolioRow.owner?.profileId === PROFILE_A
+    && duePortfolioRow.workItems.some(item => (
+      item.id === '00000000-0000-0000-0000-000000000045'
+      && item.assignee?.profileId === PROFILE_B
+    )),
+  'a task assigned to another person is collaboration, not project-owner reassignment',
+);
+assert(
+  !snapshot.projectPortfolio.projects.some(project => (
+    project.workItems.some(item => item.title === '回复客户交期')
+  )),
+  'customer-only work without project_id is not included in any project',
+);
+const noDueTask = duePortfolioRow?.workItems.find(
+  item => item.id === '00000000-0000-0000-0000-000000000045',
+);
+assert(
+  !!noDueTask
+    && noDueTask.dueAt === null
+    && noDueTask.dueState === 'no_due'
+    && noDueTask.dueStateKnown === true,
+  'explicit no-due work remains distinct from an unknown due time',
+);
+
+const waitingPortfolioRow = snapshot.projectPortfolio.projects.find(
+  project => project.id === PROJECT_WAITING,
+);
+assert(
+  waitingPortfolioRow?.nextActionState === 'selected'
+    && waitingPortfolioRow.nextAction?.id === '00000000-0000-0000-0000-000000000052',
+  'NEXT_ACTION selection is deterministic by due time, priority, then id',
+);
+assert(
+  snapshot.projectPortfolio.projects.find(
+    project => project.id === PROJECT_MISSING,
+  )?.nextActionState === 'missing',
+  'projects without linked open NEXT_ACTION expose an explicit missing state',
+);
+
+assert(
+  TEAM_PROJECT_PORTFOLIO_LIFECYCLE_FILTERS.includes('paused'),
+  'paused lifecycle is available in the project portfolio filter',
+);
+const pausedPortfolio = selectTeamProjectPortfolioView(
+  snapshot.projectPortfolio,
+  { lifecycle: 'paused' },
+);
+const pausedTitles = pausedPortfolio.projects.map(project => project.title);
+assert(
+  pausedTitles.length === 3
+    && ['暂停项目', '停用负责人项目', '缺失负责人项目']
+      .every(title => pausedTitles.includes(title)),
+  'paused lifecycle filter returns exact paused projects',
+);
+
+const unavailablePerson = pausedPortfolio.people.find(
+  person => person.state === 'unavailable',
+);
+const inactiveOwnerProject = snapshot.projectPortfolio.projects.find(
+  project => project.id === PROJECT_INACTIVE_OWNER,
+);
+const missingOwnerProject = snapshot.projectPortfolio.projects.find(
+  project => project.id === PROJECT_MISSING_OWNER,
+);
+assert(
+  !!unavailablePerson
+    && unavailablePerson.profileId === null
+    && unavailablePerson.projectCount === 2
+    && unavailablePerson.projects.every(project => (
+      project.id === PROJECT_INACTIVE_OWNER || project.id === PROJECT_MISSING_OWNER
+    )),
+  'inactive and profile-missing owners are grouped in a safe unavailable-owner bucket',
+);
+assert(
+  inactiveOwnerProject?.ownerState === 'inactive'
+    && inactiveOwnerProject.owner?.profileId === PROFILE_INACTIVE
+    && missingOwnerProject?.ownerState === 'missing_profile'
+    && missingOwnerProject.owner === null,
+  'owner availability is explicit without assigning missing profiles to admin',
+);
+
+const ownerSearch = selectTeamProjectPortfolioView(
+  snapshot.projectPortfolio,
+  { lifecycle: 'paused', query: 'Inactive Owner' },
+);
+assert(
+  ownerSearch.people.length === 1
+    && ownerSearch.people[0].state === 'unavailable'
+    && ownerSearch.projects.length === 1
+    && ownerSearch.projects[0].id === PROJECT_INACTIVE_OWNER,
+  'search resolves inactive owner names through the safe unavailable group',
+);
+const customerSearch = selectTeamProjectPortfolioView(
+  snapshot.projectPortfolio,
+  { lifecycle: 'all', query: '测试客户' },
+);
+assert(
+  customerSearch.projects.length === 6
+    && customerSearch.projects.every(project => (
+      project.customer?.displayName === '测试客户'
+    )),
+  'customer search returns all matching same-org projects without cross-org rows',
+);
+assert(
+  snapshot.projectPortfolio.projects.every(project => (
+    project.id !== '00000000-0000-0000-0000-000000000019'
+    && project.workItems.every(item => item.title !== '跨组织决策')
+  )),
+  'project portfolio project and work-item reads fail closed across organizations',
+);
+
+assert(
   snapshot.teamSupport.ranking === false
     && snapshot.teamSupport.scoring === false
     && snapshot.teamSupport.ordering === 'display_name_only',
@@ -374,7 +696,7 @@ assert(
 );
 assert(
   snapshot.teamSupport.members.map(member => member.displayName).join('|')
-    === 'A Manager|B Member',
+    === 'A Manager|B Member|C Zero Projects|Inactive Owner',
   'team support context is ordered by display name only',
 );
 assert(

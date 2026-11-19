@@ -190,6 +190,94 @@ export interface TeamMemberSupportContext {
   } | null;
 }
 
+export type TeamBoardPortfolioIdentityState =
+  | 'active'
+  | 'inactive'
+  | 'missing_profile';
+
+export interface TeamBoardPortfolioTask {
+  id: string;
+  title: string;
+  workItemType: WorkItemType;
+  status: WorkItemStatus;
+  priority: WorkItemPriority;
+  dueAt: string | null;
+  dueState: TeamBoardDueState;
+  dueStateKnown: boolean;
+  blocked: boolean;
+  blockedReason: string | null;
+  assignee: TeamBoardIdentity | null;
+  assigneeState: TeamBoardPortfolioIdentityState;
+}
+
+export interface TeamBoardProjectPortfolioRow {
+  id: string;
+  title: string;
+  projectType: ProjectType;
+  customer: TeamBoardCustomerRef | null;
+  owner: TeamBoardIdentity | null;
+  ownerState: TeamBoardPortfolioIdentityState;
+  stage: string;
+  status: ProjectLifecycleStatus;
+  priority: ProjectPriority;
+  riskLevel: RiskLevel | null;
+  waitingOn: WaitingOn;
+  nextCheckAt: string | null;
+  nextCheckDue: boolean | null;
+  updatedAt: string;
+  openWorkItemCount: number;
+  blockedWorkItemCount: number;
+  overdueWorkItemCount: number;
+  nextAction: TeamBoardPortfolioTask | null;
+  nextActionState: 'selected' | 'missing';
+  workItems: TeamBoardPortfolioTask[];
+}
+
+export interface TeamBoardProjectPortfolioPersonGroup {
+  key: string;
+  profileId: string | null;
+  displayName: string;
+  department: string | null;
+  role: string;
+  state: 'active' | 'unavailable';
+  projectIds: string[];
+}
+
+export const TEAM_PROJECT_PORTFOLIO_LIFECYCLE_FILTERS = [
+  'active',
+  'paused',
+  'won',
+  'lost',
+  'cancelled',
+  'all',
+] as const;
+
+export type TeamBoardProjectPortfolioLifecycleFilter =
+  (typeof TEAM_PROJECT_PORTFOLIO_LIFECYCLE_FILTERS)[number];
+export type TeamBoardProjectPortfolioRiskFilter =
+  | RiskLevel
+  | 'unknown'
+  | 'all';
+
+export interface TeamBoardProjectPortfolioFilters {
+  query: string;
+  employeeKey: string;
+  lifecycle: TeamBoardProjectPortfolioLifecycleFilter;
+  risk: TeamBoardProjectPortfolioRiskFilter;
+}
+
+export interface TeamBoardProjectPortfolioViewPerson
+  extends TeamBoardProjectPortfolioPersonGroup {
+  projects: TeamBoardProjectPortfolioRow[];
+  projectCount: number;
+  openWorkItemCount: number;
+}
+
+export interface TeamBoardProjectPortfolioView {
+  projects: TeamBoardProjectPortfolioRow[];
+  people: TeamBoardProjectPortfolioViewPerson[];
+}
+
 export interface TeamBoardSnapshot {
   businessDate: string;
   generatedAt: string;
@@ -206,6 +294,14 @@ export interface TeamBoardSnapshot {
   managementDecisions: TeamBoardDecisionItem[];
   commitmentExceptions: TeamBoardCommitmentException[];
   projectExceptions: TeamBoardProjectException[];
+  projectPortfolio: {
+    readOnly: true;
+    ranking: false;
+    scoring: false;
+    ordering: 'project_title_then_id';
+    projects: TeamBoardProjectPortfolioRow[];
+    people: TeamBoardProjectPortfolioPersonGroup[];
+  };
   teamSupport: {
     ranking: false;
     scoring: false;
@@ -348,6 +444,237 @@ function projectReference(
   };
 }
 
+function portfolioIdentityState(
+  profileId: string | null,
+  profiles: Map<string, TeamBoardProfileRow>,
+): TeamBoardPortfolioIdentityState {
+  if (!profileId) return 'missing_profile';
+  const profile = profiles.get(profileId);
+  if (!profile) return 'missing_profile';
+  return profile.is_active ? 'active' : 'inactive';
+}
+
+function portfolioTask(
+  item: TeamBoardWorkItemRow,
+  profiles: Map<string, TeamBoardProfileRow>,
+  startMs: number,
+  endMs: number,
+): TeamBoardPortfolioTask {
+  return {
+    id: item.id,
+    title: item.title,
+    workItemType: item.work_item_type,
+    status: item.status,
+    priority: item.priority,
+    dueAt: item.due_at,
+    dueState: dueState(item.due_at, startMs, endMs),
+    dueStateKnown: item.due_at === null || Number.isFinite(toMs(item.due_at)),
+    blocked: item.status === 'blocked',
+    blockedReason: item.blocked_reason,
+    assignee: profileIdentity(item.assignee_profile_id, profiles),
+    assigneeState: portfolioIdentityState(item.assignee_profile_id, profiles),
+  };
+}
+
+function comparePortfolioTasks(
+  left: TeamBoardPortfolioTask,
+  right: TeamBoardPortfolioTask,
+): number {
+  return toMs(left.dueAt) - toMs(right.dueAt)
+    || PRIORITY_WEIGHT[left.priority] - PRIORITY_WEIGHT[right.priority]
+    || left.id.localeCompare(right.id);
+}
+
+function buildProjectPortfolio(
+  projects: TeamBoardProjectRow[],
+  workItems: TeamBoardWorkItemRow[],
+  customers: Map<string, TeamBoardCustomerRow>,
+  profiles: TeamBoardProfileRow[],
+  profilesById: Map<string, TeamBoardProfileRow>,
+  startMs: number,
+  endMs: number,
+  nowMs: number,
+): TeamBoardSnapshot['projectPortfolio'] {
+  const uniqueProjects = [...new Map(
+    projects.map(project => [project.id, project]),
+  ).values()];
+  const openItemsByProject = new Map<string, TeamBoardWorkItemRow[]>();
+  for (const item of workItems) {
+    if (!item.project_id || !isOpenWorkItem(item)) continue;
+    const rows = openItemsByProject.get(item.project_id) ?? [];
+    rows.push(item);
+    openItemsByProject.set(item.project_id, rows);
+  }
+
+  const portfolioProjects = uniqueProjects
+    .map((project): TeamBoardProjectPortfolioRow => {
+      const ownerState = portfolioIdentityState(
+        project.owner_profile_id,
+        profilesById,
+      );
+      const workItemsForProject = (openItemsByProject.get(project.id) ?? [])
+        .map(item => portfolioTask(item, profilesById, startMs, endMs))
+        .sort(comparePortfolioTasks);
+      const nextAction = workItemsForProject.find(
+        item => item.workItemType === 'NEXT_ACTION',
+      ) ?? null;
+      const nextCheckAt = project.waiting_on !== 'none'
+        ? project.next_check_at
+        : null;
+      return {
+        id: project.id,
+        title: project.title,
+        projectType: project.project_type,
+        customer: customerReference(
+          project.customer_reference_id,
+          customers,
+        ),
+        owner: profileIdentity(project.owner_profile_id, profilesById),
+        ownerState,
+        stage: project.stage,
+        status: project.status,
+        priority: project.priority,
+        riskLevel: project.risk_level,
+        waitingOn: project.waiting_on,
+        nextCheckAt,
+        nextCheckDue: nextCheckAt && Number.isFinite(toMs(nextCheckAt))
+          ? toMs(nextCheckAt) <= nowMs
+          : null,
+        updatedAt: project.updated_at,
+        openWorkItemCount: workItemsForProject.length,
+        blockedWorkItemCount: workItemsForProject.filter(
+          item => item.blocked,
+        ).length,
+        overdueWorkItemCount: workItemsForProject.filter(
+          item => item.dueState === 'overdue',
+        ).length,
+        nextAction,
+        nextActionState: nextAction ? 'selected' : 'missing',
+        workItems: workItemsForProject,
+      };
+    })
+    .sort((left, right) => (
+      left.title.localeCompare(right.title, 'zh-CN')
+      || left.id.localeCompare(right.id)
+    ));
+
+  const projectIdsByOwner = new Map<string, string[]>();
+  for (const project of portfolioProjects) {
+    if (project.ownerState !== 'active' || !project.owner) continue;
+    const projectIds = projectIdsByOwner.get(project.owner.profileId) ?? [];
+    projectIds.push(project.id);
+    projectIdsByOwner.set(project.owner.profileId, projectIds);
+  }
+
+  const people = profiles
+    .filter(profile => profile.is_active)
+    .map((profile): TeamBoardProjectPortfolioPersonGroup => ({
+      key: 'profile:' + profile.id,
+      profileId: profile.id,
+      displayName: profile.full_name?.trim() || '未命名用户',
+      department: profile.department,
+      role: profile.role,
+      state: 'active',
+      projectIds: projectIdsByOwner.get(profile.id) ?? [],
+    }))
+    .sort((left, right) => (
+      left.displayName.localeCompare(right.displayName, 'zh-CN')
+      || (left.profileId ?? '').localeCompare(right.profileId ?? '')
+    ));
+  const unavailableProjectIds = portfolioProjects
+    .filter(project => project.ownerState !== 'active')
+    .map(project => project.id);
+  if (unavailableProjectIds.length > 0) {
+    people.push({
+      key: 'owner:unavailable',
+      profileId: null,
+      displayName: '未知或不可用负责人',
+      department: null,
+      role: 'owner_unavailable',
+      state: 'unavailable',
+      projectIds: unavailableProjectIds,
+    });
+  }
+
+  return {
+    readOnly: true,
+    ranking: false,
+    scoring: false,
+    ordering: 'project_title_then_id',
+    projects: portfolioProjects,
+    people,
+  };
+}
+
+function normalizedSearch(value: string | null | undefined): string {
+  return (value ?? '').trim().toLocaleLowerCase('zh-CN');
+}
+
+export function selectTeamProjectPortfolioView(
+  portfolio: TeamBoardSnapshot['projectPortfolio'],
+  filters: Partial<TeamBoardProjectPortfolioFilters> = {},
+): TeamBoardProjectPortfolioView {
+  const query = normalizedSearch(filters.query);
+  const employeeKey = filters.employeeKey ?? 'all';
+  const lifecycle = filters.lifecycle ?? 'active';
+  const risk = filters.risk ?? 'all';
+
+  const projectsMatchingFacts = portfolio.projects.filter(project => (
+    (lifecycle === 'all' || project.status === lifecycle)
+    && (
+      risk === 'all'
+      || (risk === 'unknown' && project.riskLevel === null)
+      || project.riskLevel === risk
+    )
+  ));
+
+  const people = portfolio.people
+    .filter(person => employeeKey === 'all' || person.key === employeeKey)
+    .flatMap((person): TeamBoardProjectPortfolioViewPerson[] => {
+      const projectsForPerson = projectsMatchingFacts.filter(
+        project => person.projectIds.includes(project.id),
+      );
+      const personMatchesSearch = !query
+        || normalizedSearch(person.displayName).includes(query)
+        || normalizedSearch(person.department).includes(query);
+      const matchingProjects = projectsForPerson.filter(project => (
+        personMatchesSearch
+        || normalizedSearch(project.title).includes(query)
+        || normalizedSearch(project.customer?.displayName).includes(query)
+        || normalizedSearch(project.owner?.displayName).includes(query)
+      ));
+      const shouldShowEmptyActivePerson = (
+        !query
+        && person.state === 'active'
+      );
+      if (
+        matchingProjects.length === 0
+        && !shouldShowEmptyActivePerson
+        && !(query && personMatchesSearch)
+      ) {
+        return [];
+      }
+      return [{
+        ...person,
+        projects: matchingProjects,
+        projectCount: matchingProjects.length,
+        openWorkItemCount: matchingProjects.reduce(
+          (total, project) => total + project.openWorkItemCount,
+          0,
+        ),
+      }];
+    });
+
+  const visibleProjectIds = new Set(
+    people.flatMap(person => person.projects.map(project => project.id)),
+  );
+  const projects = projectsMatchingFacts.filter(project => (
+    visibleProjectIds.has(project.id)
+  ));
+
+  return { projects, people };
+}
+
 export function canAccessTeamBoard(
   role: string | null | undefined,
 ): boolean {
@@ -458,7 +785,22 @@ export function buildTeamBoardSnapshot(input: {
       && item.work_item_type === 'NEXT_ACTION'
       && isOpenWorkItem(item)
     ) {
-      openNextActionByProject.set(item.project_id, item);
+      const current = openNextActionByProject.get(item.project_id);
+      if (
+        !current
+        || toMs(item.due_at) < toMs(current.due_at)
+        || (
+          toMs(item.due_at) === toMs(current.due_at)
+          && PRIORITY_WEIGHT[item.priority] < PRIORITY_WEIGHT[current.priority]
+        )
+        || (
+          toMs(item.due_at) === toMs(current.due_at)
+          && PRIORITY_WEIGHT[item.priority] === PRIORITY_WEIGHT[current.priority]
+          && item.id.localeCompare(current.id) < 0
+        )
+      ) {
+        openNextActionByProject.set(item.project_id, item);
+      }
     }
   }
 
@@ -595,6 +937,16 @@ export function buildTeamBoardSnapshot(input: {
       .filter(project => project.status === 'active')
       .map(project => project.customer_reference_id),
   );
+  const projectPortfolio = buildProjectPortfolio(
+    projects,
+    workItems,
+    customersById,
+    profiles,
+    profilesById,
+    startMs,
+    endMs,
+    nowMs,
+  );
   const openCustomerFollowUps = workItems.filter(item => (
     item.work_item_type === 'FOLLOW_UP'
     && item.project_id === null
@@ -678,6 +1030,7 @@ export function buildTeamBoardSnapshot(input: {
     managementDecisions,
     commitmentExceptions,
     projectExceptions,
+    projectPortfolio,
     teamSupport: {
       ranking: false,
       scoring: false,
