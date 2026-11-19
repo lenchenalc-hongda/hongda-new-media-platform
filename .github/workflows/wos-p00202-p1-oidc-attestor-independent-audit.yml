@@ -1,0 +1,242 @@
+# Independent, hosted, zero-business-secret P1 reviewer. QA Supabase/Vercel NEVER called.
+name: WOS P1 QA OIDC and aggregate proof independent audit
+on:
+  push:
+    branches: [audit/wos-p00202-p1-oidc-attestor-20261119]
+permissions:
+  contents: read
+  pull-requests: read
+concurrency:
+  group: wos-p1-oidc-agg-audit-20261119
+  cancel-in-progress: false
+jobs:
+  independent-provenance:
+    if: github.repository == 'lenchenalc-hongda/hongda-new-media-platform' && github.ref == 'refs/heads/audit/wos-p00202-p1-oidc-attestor-20261119'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: f70e8ff62c9fa9ad3c3b7e3eebb4994dc3f0e844
+          persist-credentials: false
+          path: candidate
+      - name: Independently verify PR and only four approved design files
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json,os,pathlib,subprocess,urllib.request
+          repo='lenchenalc-hongda/hongda-new-media-platform'
+          master='dd9a9a758795e2699e59182bb69fcfb2d761ec53'
+          head='f70e8ff62c9fa9ad3c3b7e3eebb4994dc3f0e844'
+          expected={
+            '.github/workflows/wos-p00202-p1-protected-readonly-preflight.yml':'7a4e553aecf897243eadc1bfbe6919e87555cda0',
+            'qa/wos-p00202-p1-readonly/INSTALL_NOT_AUTHORIZED.sql':'5d8a3e1b437a309565a8068469c30170e82552db',
+            'qa/wos-p00202-p1-readonly/ROLLBACK_NOT_AUTHORIZED.sql':'22f6fae00911516463957adc5500a245b60d157a',
+            'qa/wos-p00202-p1-readonly/REVIEW_AND_PROVISION_NOT_AUTHORIZED.md':'dbdc93541c8ea417a41105df1d70f69d4fa36075',
+          }
+          assert subprocess.check_output(['git','-C','candidate','rev-parse','HEAD'],text=True).strip()==head
+          for path,blob in expected.items():
+              result=subprocess.check_output(['git','-C','candidate','hash-object',path],text=True).strip()
+              assert result==blob,('FILE_BLOB_MOVED',path)
+          def api(endpoint):
+              req=urllib.request.Request('https://api.github.com/repos/'+repo+'/'+endpoint,
+                headers={'Accept':'application/vnd.github+json','Authorization':'Bearer '+os.environ['GH_TOKEN']})
+              with urllib.request.urlopen(req,timeout=25) as resp: return json.load(resp)
+          pr=api('pulls/254')
+          assert pr['head']['sha']==head and pr['base']['sha']==master
+          assert pr['draft'] and not pr['merged'] and pr['state']=='open'
+          assert pr['changed_files']==len(expected)
+          files=api('pulls/254/files?per_page=100')
+          assert len(files)==len(expected)
+          assert {x['filename']:x['sha'] for x in files}==expected
+          commit=api('commits/'+head)
+          assert api('branches/master')['commit']['sha']==master
+          assert api('actions/runs/44444847637')['conclusion']=='success'
+          assert commit['sha']==head
+          print('WOS_P1_PR254_FOUR_BLOBS_FIXED_MASTER_PROVENANCE=PASS')
+          PY
+      - name: Independent static trust and permission restrictions
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import pathlib,re
+          base=pathlib.Path('candidate')
+          wf=(base/'.github/workflows/wos-p00202-p1-protected-readonly-preflight.yml').read_text()
+          install=(base/'qa/wos-p00202-p1-readonly/INSTALL_NOT_AUTHORIZED.sql').read_text()
+          rollback=(base/'qa/wos-p00202-p1-readonly/ROLLBACK_NOT_AUTHORIZED.sql').read_text()
+          review=(base/'qa/wos-p00202-p1-readonly/REVIEW_AND_PROVISION_NOT_AUTHORIZED.md').read_text()
+          for marker in [
+              'workflow_dispatch:','id-token: write',
+              'x-vercel-trusted-oidc-idp-token','token.actions.githubusercontent.com',
+              'repository_id','workflow_ref','environment','run_attempt',
+              'WOS_P1_OIDC_PINNED_QA_PREVIEW_FOUR_APP_503=PASS',
+              'WOS_QA_READONLY_DSN', 'direct_business_privs',
+              'other_secdef_execute','QA_AGGREGATE_PROOF_FAIL_CLOSED',
+              'proof_version','WOS_P1_QA_READONLY_V1',
+              'db.xulmpqaknlwqqculbsek.supabase.co', 'verify-full',
+          ]:
+              assert marker in wf,('WORKFLOW_GUARD_MISSING',marker)
+          for banned in ['WOS_QA_VERCEL_TOKEN','VERCEL_AUTOMATION_BYPASS_SECRET',
+              'x-vercel-protection-bypass','vercel deploy','--prod',
+              'supabase db push','CREATE ROLE ','on:\n  push:',
+              'workflow_run:','environment: production']:
+              assert banned not in wf,('UNSAFE_WORKFLOW_TOKEN',banned)
+          assert wf.count('id-token: write')==1
+          assert wf.count('environment: hongda-review-dev')==2
+          assert install.startswith('-- WOS-PROD-READY')
+          assert 'CREATE ROLE wos_qa_readonly_preflight' in install
+          assert 'NOINHERIT NOLOGIN' in install and 'PASSWORD NULL' in install
+          assert 'CREATE SCHEMA wos_p1_preflight_private' in install
+          assert 'SECURITY DEFINER' in install and 'SET search_path = pg_catalog, pg_temp' in install
+          assert 'REVOKE ALL ON FUNCTION' in install
+          assert 'GRANT EXECUTE ON FUNCTION wos_p1_preflight_private.readonly_snapshot()' in install
+          assert 'ALTER TABLE' not in install and 'CREATE POLICY' not in install
+          assert 'EXECUTE ' not in install.split('CREATE FUNCTION wos_p1_preflight_private')[1].split('$snapshot$;')[0]
+          assert 'DROP SCHEMA wos_p1_preflight_private RESTRICT;' in rollback
+          assert 'CASCADE' not in rollback and 'pg_terminate_backend' not in rollback
+          assert 'UNVERIFIED' in review and 'to.slugs' in review
+          assert not re.search(r'(?m)^  (push|pull_request|schedule):',wf)
+          print('WOS_P1_OIDC_NO_STATIC_TOKEN_WRITE_PRODUCTION_PATH=PASS')
+          print('WOS_P1_AGGREGATE_PRIVATE_SECURITY_DEFINER_DESIGN_STATIC=PASS')
+          PY
+  synthetic-postgres17-proof:
+    needs: independent-provenance
+    runs-on: ubuntu-24.04
+    timeout-minutes: 14
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: postgres
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: wos-p1-synthetic-only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d postgres"
+          --health-interval 3s
+          --health-timeout 3s
+          --health-retries 15
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: 5432
+      PGDATABASE: postgres
+      PGUSER: postgres
+      PGPASSWORD: wos-p1-synthetic-only
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: f70e8ff62c9fa9ad3c3b7e3eebb4994dc3f0e844
+          persist-credentials: false
+          path: candidate
+      - name: Prepare disposable synthetic Postgres 17 tables and RLS (no user data)
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! command -v psql >/dev/null; then
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq postgresql-client >/dev/null
+          fi
+          psql -X -v ON_ERROR_STOP=1 <<'SQL'
+          CREATE SCHEMA wos_mvp_qa;
+          CREATE SCHEMA wos_mvp_attestation;
+          CREATE SCHEMA storage;
+          CREATE TABLE wos_mvp_qa.p1_execution_gate(
+            enabled boolean NOT NULL,enabled_until timestamptz,
+            approved_run_id text,approved_sha text);
+          CREATE TABLE public.wos_qa_p2_execution_gate(
+            gate_name text,enabled boolean,enabled_until timestamptz);
+          CREATE TABLE public.wos_qa_p2_office_execution_gate(
+            gate_name text,enabled boolean,enabled_until timestamptz);
+          CREATE TABLE public.wos_production_orders(customer_id uuid,project_id uuid);
+          CREATE TABLE storage.objects(bucket_id text);
+          CREATE TABLE storage.buckets(id text,public boolean);
+          CREATE TABLE wos_mvp_attestation.private_image_proofs(id int);
+          CREATE TABLE wos_mvp_attestation.office_document_receipts(id int);
+          CREATE TABLE wos_mvp_qa.cpc_order_bindings(id int);
+          INSERT INTO wos_mvp_qa.p1_execution_gate VALUES(FALSE,NULL,NULL,NULL);
+          INSERT INTO public.wos_qa_p2_execution_gate VALUES('OPERATOR_WRITES',FALSE,NULL);
+          INSERT INTO public.wos_qa_p2_office_execution_gate VALUES('OFFICE_WRITES',FALSE,NULL);
+          INSERT INTO public.wos_production_orders
+          SELECT CASE WHEN n=1 THEN '00000000-0000-0000-0000-000000000001'::uuid ELSE NULL END,
+                 CASE WHEN n=1 THEN '00000000-0000-0000-0000-000000000002'::uuid ELSE NULL END
+          FROM generate_series(1,84) n;
+          INSERT INTO storage.objects SELECT 'wos-private' FROM generate_series(1,83);
+          INSERT INTO storage.buckets VALUES('wos-private',FALSE);
+          ALTER TABLE wos_mvp_qa.p1_execution_gate ENABLE ROW LEVEL SECURITY;
+          ALTER TABLE public.wos_production_orders ENABLE ROW LEVEL SECURITY;
+          ALTER TABLE storage.objects ENABLE ROW LEVEL SECURITY;
+          ALTER TABLE public.wos_qa_p2_execution_gate ENABLE ROW LEVEL SECURITY;
+          ALTER TABLE public.wos_qa_p2_office_execution_gate ENABLE ROW LEVEL SECURITY;
+          SQL
+          echo 'WOS_P1_PG17_SYNTHETIC_DATA_ONLY=PASS'
+      - name: Real SQL install and synthetic least privilege / RLS / no-login / wrong actor tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql -X -v ON_ERROR_STOP=1 -f candidate/qa/wos-p00202-p1-readonly/INSTALL_NOT_AUTHORIZED.sql >/tmp/wos-install-log
+          psql -X -q -A -t -v ON_ERROR_STOP=1 -c "
+            SELECT CASE WHEN rolcanlogin OR rolsuper OR rolbypassrls OR rolcreatedb
+              OR rolcreaterole OR rolinherit THEN 1 ELSE 0 END
+            FROM pg_roles WHERE rolname='wos_qa_readonly_preflight'
+          " | grep -qx 0
+          if psql -X -qAt -v ON_ERROR_STOP=1 -c \
+             "SELECT wos_p1_preflight_private.readonly_snapshot()" >/tmp/wos-deny-owner 2>&1; then
+             echo UNEXPECTED_OWNER_PROOF_EXECUTE; exit 1
+          fi
+          grep -Fq 'WOS_QA_PREFLIGHT_CALLER_NOT_AUTHORIZED' /tmp/wos-deny-owner
+          if psql -X -qAt -v ON_ERROR_STOP=1 -c \
+             "SET SESSION AUTHORIZATION wos_qa_readonly_preflight;
+              SELECT wos_p1_preflight_private.readonly_snapshot()" >/tmp/wos-deny-rw 2>&1; then
+             echo UNEXPECTED_WRITEABLE_PROOF_EXECUTE; exit 1
+          fi
+          grep -Fq 'WOS_QA_PREFLIGHT_READ_ONLY_REQUIRED' /tmp/wos-deny-rw
+          if psql -X -qAt -v ON_ERROR_STOP=1 -c \
+             "SET SESSION AUTHORIZATION wos_qa_readonly_preflight;
+              SET default_transaction_read_only=on;
+              SELECT count(*) FROM public.wos_production_orders;" >/tmp/wos-deny-raw 2>&1; then
+             echo UNEXPECTED_RAW_ORDER_READ; exit 1
+          fi
+          grep -Fq 'permission denied' /tmp/wos-deny-raw
+          actual="$(psql -X -qAt -v ON_ERROR_STOP=1 -c "
+            SET SESSION AUTHORIZATION wos_qa_readonly_preflight;
+            SET default_transaction_read_only=on;
+            SELECT wos_p1_preflight_private.readonly_snapshot()::text
+          ")"
+          printf '%s' "$actual" | python3 -c '
+          import sys,json
+          v=json.load(sys.stdin)
+          assert v["proof_version"]=="WOS_P1_QA_READONLY_V1"
+          assert v["qa_project_ref"]=="xulmpqaknlwqqculbsek"
+          assert v["p1_off"] and v["p2_operator_off"] and v["p2_office_off"]
+          assert (v["orders"],v["null_cpc"],v["private_objects"])==(84,83,83)
+          assert v["private_bucket"] is True
+          assert (v["image_proofs"],v["cpc_bindings"],v["office_receipts"])==(0,0,0)
+          '
+          echo 'WOS_P1_PG17_NOLOGIN_ROLE_OWNER_DENIAL_RLS_AGGREGATE_PASS'
+      - name: Drift detection and restricted SQL rollback on disposable fixture
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql -X -q -v ON_ERROR_STOP=1 -c \
+            "INSERT INTO public.wos_production_orders VALUES(NULL,NULL)"
+          actual="$(psql -X -qAt -v ON_ERROR_STOP=1 -c "
+            SET SESSION AUTHORIZATION wos_qa_readonly_preflight;
+            SET default_transaction_read_only=on;
+            SELECT wos_p1_preflight_private.readonly_snapshot()::text
+          ")"
+          printf '%s' "$actual" | python3 -c '
+          import json,sys
+          v=json.load(sys.stdin)
+          assert (v["orders"],v["null_cpc"],v["private_objects"])==(85,84,83)
+          '
+          psql -X -v ON_ERROR_STOP=1 -f candidate/qa/wos-p00202-p1-readonly/ROLLBACK_NOT_AUTHORIZED.sql >/tmp/wos-rollback-log
+          psql -X -qAt -v ON_ERROR_STOP=1 -c "
+            SELECT CASE WHEN EXISTS(SELECT 1 FROM pg_roles WHERE rolname='wos_qa_readonly_preflight')
+              OR EXISTS(SELECT 1 FROM pg_namespace WHERE nspname='wos_p1_preflight_private')
+              THEN 1 ELSE 0 END" | grep -qx 0
+          echo 'WOS_P1_PG17_DRIFT_AND_RESTRICT_ROLLBACK=PASS'
