@@ -1,5 +1,5 @@
 # WOS P0-02-02 — QA-only OIDC and private aggregate read-only proof
-**STATUS: DESIGN ONLY — NOT AUTHORIZED TO INSTALL, CONFIGURE, MERGE, DISPATCH OR ISSUE CREDENTIALS.**
+**STATUS: QA aggregate proof role and private function installed under the earlier exact one-time Owner authorization; NOLOGIN / no password. OIDC trust, Environment secrets, workflow merge/dispatch and P1 E2E remain NOT AUTHORIZED without new exact evidence. Do NOT rerun INSTALL_NOT_AUTHORIZED.sql.**
 
 ## Fixed identity
 
@@ -22,7 +22,7 @@ QA WOS orders and Storage use organizational RLS policies, while P1/P2 Gate tabl
 
 Proposed minimal exception: ONE no-argument SECURITY DEFINER aggregate owned by postgres, in private non-exposed wos_p1_preflight_private schema. The function checks session_user and transaction_read_only, fixes search_path and every table identifier, uses no dynamic SQL, and returns only Gate booleans, counts, project reference, proof version and timestamp. Only wos_qa_readonly_preflight can use the private schema and call this one function. PUBLIC EXECUTE is revoked in the same installation transaction. An intentional and narrowly scoped RLS bypass is inherent in the function owner: this requires independent SQL audit and explicit Owner approval.
 
-INSTALL_NOT_AUTHORIZED.sql creates role NOLOGIN PASSWORD NULL NOINHERIT NOBYPASSRLS, no membership and no raw-table privileges, then the private function and minimal USAGE/EXECUTE. It rejects unexpected QA counts, open Gates, existing role/schema or unexpected reachable SECURITY DEFINER functions. ROLLBACK_NOT_AUTHORIZED.sql uses RESTRICT, checks unexpected objects and refuses active role sessions. Neither SQL file is authorized to execute this round.
+The reviewed INSTALL_NOT_AUTHORIZED.sql was **already executed exactly once** on the QA project (role NOLOGIN / no password and private aggregate proof installed), and the installed objects were read-only verified with unchanged Gate OFF and 84/83/83 baseline. The same SQL must NOT be executed again; its idempotency guard rejects reinstallation. ROLLBACK_NOT_AUTHORIZED.sql is retained as a separately authorized RESTRICT rollback only. No temporary LOGIN, password, Vercel Trusted Source or protected workflow dispatch has been configured.
 
 Before future installation:
 1. Validate the actual Supabase project REF through the authenticated management API. Database name postgres by itself is not proof of project identity.
@@ -47,10 +47,10 @@ PROPOSED ONLY for QA project prj_MhozO5QPUuUl8muAAKtkj5napeSp:
 - repository_owner_id: 297604134
 - ref: refs/heads/master
 - workflow_ref: lenchenalc-hongda/hongda-new-media-platform/.github/workflows/wos-p00202-p1-protected-readonly-preflight.yml@refs/heads/master
-- environment: hongda-review-dev
+- environment: wos-p1-qa-preflight
 - event_name: workflow_dispatch
 - runner_environment: github-hosted
-- sub: repo:lenchenalc-hongda/hongda-new-media-platform:environment:hongda-review-dev
+- sub: repo:lenchenalc-hongda/hongda-new-media-platform:environment:wos-p1-qa-preflight
 - Allowed destination: preview ONLY (to.slugs preview).
 - ALL identity claims must be within ONE Vercel Trusted Sources rule. No wildcards, Production or other projects.
 - Read the existing project trustedSources config first. Vercel Update Project API replaces projects and oidcProviders maps; keep every existing approved rule unchanged when updating.
@@ -59,15 +59,24 @@ LIMITATION: OIDC Trusted Sources grant is scoped to the target Vercel PROJECT/EN
 
 GitHub token job permissions must include id-token: write and contents: read, scoped to the protected-preview-http job only. A 302/401/403 login response is NOT an application 503.
 
-## 3. GitHub environment remains UNVERIFIED
+## 3. GitHub environment: isolated, screenshot-verified, no human reviewer
 
-The GitHub connector cannot read settings of the hongda-review-dev Environment. Owner / independent reviewer MUST inspect and prove:
-- Required independent reviewers assigned
-- Prevent self-review enabled
-- Deployment branches restricted to protected master only
-- Exact integration SHA/Run verified before approval
+The owner created a **new** GitHub Environment `wos-p1-qa-preflight` on 2026-11-19. Owner-provided screenshots show:
+- Required reviewers: OFF — deliberate, because the owner has no second independent GitHub identity.
+- Wait timer: OFF.
+- Allow administrators to bypass protection rules: unchecked.
+- Deployment branches: **Selected branches and tags** with only `master`, 0 tags.
+- Environment secrets: EMPTY; environment variables: EMPTY at creation.
 
-Master Ruleset currently has zero required human approving reviews; it does NOT certify independent Environment approval. Treat absent evidence as FAIL/CANNOT_DISPATCH.
+These are UI **screenshots**, not a successful authenticated GitHub Environment API read. The active GitHub connection cannot verify persisted environment settings; a fresh page reload/admin proof must re-confirm them before any new credential provisioning or dispatch. Do not mark a GitHub human Approved Review based on AI technical audit.
+
+**Crucial limitation:** with Required reviewers OFF there is no GitHub-native human approval gate. A user with sufficient repository permissions could dispatch a reviewed workflow on `master` without a separate GitHub approver. Therefore a fresh, explicit Owner authorization, a completed immutable-head GitHub-hosted independent technical audit, protected master CI, the exact restricted QA Preview identity, the minimal-privilege PostgreSQL role and a single QA-only execution are hard prerequisites. The isolation does NOT authorize new writes, bypass signed Owner CAS or permit automatic dispatch.
+
+Keep the existing `hongda-review-dev` Environment, including its unrelated `REVIEW_DEV_*` secrets and reviewers, completely unchanged. None of those secrets or login identities may be copied into `wos-p1-qa-preflight`.
+
+The Vercel Trusted Source must include the new `environment=wos-p1-qa-preflight` and matching `sub` claim; the previous `hongda-review-dev` binding is not authorized. For Vercel Trusted Sources creation, revalidate the existing rules before any modification and use only Preview target.
+
+Prior technical audit Run 44447026099 and PR #254 CI Run 44446563483 belong to the **previous** HEAD and previous environment. They must not be reused as approvals of this revised HEAD.
 
 ## 4. Workflow and immutable evidence
 
