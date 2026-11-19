@@ -3,6 +3,7 @@ import Link from 'next/link';
 import AppLayout from '@/components/layout/AppLayout';
 import PageHeader from '@/components/layout/PageHeader';
 import ProductionOrderForm from '@/components/workshop-orders/ProductionOrderForm';
+import {isWosCpcReadCandidateEnabled} from '@/lib/workshop-orders/prod-cpc-eligibility';
 
 export const metadata: Metadata = {
   title: '生产下单 | 宏达车间',
@@ -10,6 +11,20 @@ export const metadata: Metadata = {
 };
 
 export default function WorkshopProductionOrderNewPage() {
+  // Owner has NOT authorized live QA deployment. Every flag is default OFF;
+  // even accidental flags refuse VERCEL_ENV=production and non-QA Supabase URLs.
+  const candidateLive = process.env.VERCEL_ENV === 'preview'
+    && process.env.WOS_PROD_P1_UI_CANDIDATE_ENABLED === 'true'
+    && process.env.WOS_PROD_P1_DRAFT_CANDIDATE_ENABLED === 'true'
+    && process.env.WOS_PROD_P1_OFFICE_CANDIDATE_ENABLED === 'true'
+    && process.env.WOS_PROD_P1_IMAGE_CANDIDATE_ENABLED === 'true'
+    && process.env.WOS_PROD_P1_SUBMIT_CANDIDATE_ENABLED === 'true'
+    && isWosCpcReadCandidateEnabled({
+      vercelEnv: process.env.VERCEL_ENV,
+      nodeEnv: process.env.NODE_ENV,
+      enabled: process.env.WOS_PROD_CPC_READ_CANDIDATE_ENABLED,
+      supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL,
+    });
   return (
     <AppLayout>
       <PageHeader
@@ -28,8 +43,9 @@ export default function WorkshopProductionOrderNewPage() {
       <section className="mb-5 rounded-lg border border-amber-200 bg-amber-50 p-4">
         <h2 className="text-sm font-semibold text-amber-950">本阶段录入说明</h2>
         <p className="mt-1 max-w-4xl text-xs leading-5 text-amber-900">
-          当前页面用于办公室录入生产单资料和执行本地完整性检查。点击“检查资料完整性”不会连接
-          Supabase、不会写入数据库、不会上传图片，也不会生成或提交正式生产单。
+          {candidateLive
+            ? '已授权的隔离 QA 候选入口：请先选择 CPC 项目、填写完整车间要求，再保存草稿、校验私有图片并提交 Inbox。此处不放行开工。'
+            : '当前页面用于办公室录入生产单资料和执行本地完整性检查。点击“检查资料完整性”不会连接 Supabase、不会写入数据库、不会上传图片，也不会生成或提交正式生产单。'}
         </p>
         <p className="mt-1 max-w-4xl text-xs leading-5 text-amber-900">
           车间确认、资源齐套、当前生产基准图片和正式提交将在后续受控任务中开放。请按客户确认样和
@@ -37,7 +53,7 @@ export default function WorkshopProductionOrderNewPage() {
         </p>
       </section>
 
-      <ProductionOrderForm />
+      <ProductionOrderForm candidateLive={candidateLive} />
     </AppLayout>
   );
 }

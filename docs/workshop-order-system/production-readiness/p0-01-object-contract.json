@@ -1,0 +1,210 @@
+{
+  "document": "WOS-PROD-READY-P0-01",
+  "status": "PROPOSAL_ONLY_NOT_AUTHORIZED_FOR_PRODUCTION",
+  "observed_on": "2026-11-18",
+  "project": {
+    "repo": "lenchenalc-hongda/hongda-new-media-platform",
+    "master_sha": "7a005119303e852e1041f11bec32e5430286c25e",
+    "pr238_sha": "6a72b446ccc517a5ff14e531b8a6663b4a70a77e",
+    "pr241_sha": "89bb408d13e45458c608db29c47e2803d49b3170",
+    "qa_run_id": 44306430920,
+    "production_id": "amqpvxrurenevniilhtl",
+    "qa_id": "xulmpqaknlwqqculbsek"
+  },
+  "required_core": [
+    {
+      "object": "public.organizations",
+      "source": "existing-production",
+      "action": "READ_ONLY_REFERENCE",
+      "key": [
+        "id"
+      ]
+    },
+    {
+      "object": "public.profiles",
+      "source": "existing-production",
+      "action": "READ_ONLY_REFERENCE",
+      "key": [
+        "id",
+        "org_id",
+        "user_id",
+        "role",
+        "is_active"
+      ]
+    },
+    {
+      "object": "public.cpc_customer_references",
+      "source": "existing-production",
+      "action": "READ_ONLY_REFERENCE",
+      "key": [
+        "id",
+        "org_id",
+        "status",
+        "display_name_snapshot"
+      ]
+    },
+    {
+      "object": "public.cpc_projects",
+      "source": "existing-production",
+      "action": "READ_ONLY_REFERENCE",
+      "key": [
+        "id",
+        "org_id",
+        "customer_reference_id",
+        "owner_profile_id",
+        "archived_at",
+        "status"
+      ]
+    },
+    {
+      "object": "public.wos_production_orders",
+      "source": "foundation-draft",
+      "action": "REVIEW_BEFORE_MIGRATION",
+      "key": [
+        "id",
+        "organization_id",
+        "customer_id",
+        "project_id",
+        "workflow_status",
+        "version",
+        "version_label"
+      ]
+    },
+    {
+      "object": "public.wos_reference_images",
+      "source": "foundation-draft",
+      "action": "REVIEW_BEFORE_MIGRATION",
+      "key": [
+        "organization_id",
+        "entity_id",
+        "version_label",
+        "storage_path"
+      ]
+    },
+    {
+      "object": "public.wos_status_history",
+      "source": "foundation-draft",
+      "action": "REVIEW_BEFORE_MIGRATION",
+      "key": [
+        "organization_id",
+        "entity_id",
+        "old_status",
+        "new_status"
+      ]
+    },
+    {
+      "object": "public.wos_office_readiness_receipts",
+      "source": "P7-QA-design",
+      "action": "PRODUCTION_NEUTRAL_REDESIGN"
+    },
+    {
+      "object": "public.wos_submission_receipts",
+      "source": "P7-QA-design",
+      "action": "PRODUCTION_NEUTRAL_REDESIGN"
+    },
+    {
+      "object": "public.wos_workshop_inbox",
+      "source": "P7-QA-design",
+      "action": "PRODUCTION_NEUTRAL_REDESIGN"
+    },
+    {
+      "object": "public.wos_office_revision_receipts",
+      "source": "P2-QA-design",
+      "action": "PROPOSED_NEW_PROD_NAME"
+    },
+    {
+      "object": "public.wos_operator_action_receipts",
+      "source": "P2-QA-design",
+      "action": "PROPOSED_NEW_PROD_NAME"
+    },
+    {
+      "object": "public.wos_operator_review_receipts",
+      "source": "P2-QA-design",
+      "action": "PROPOSED_NEW_PROD_NAME"
+    }
+  ],
+  "deferred": [
+    "public.wos_sampling_requests",
+    "public.wos_sampling_technical_records",
+    "public.wos_visual_baselines",
+    "public.wos_visual_baseline_items",
+    "public.wos_resource_readiness",
+    "public.wos_blockers",
+    "public.wos_confirmations",
+    "production-scheduling",
+    "machine-start",
+    "completion",
+    "shipment"
+  ],
+  "forbidden_in_production": [
+    "wos_qa_* tables/functions",
+    "p2_gate_open_receipts",
+    "p2_gate_close_receipts",
+    "Owner CAS opening SQL",
+    "QA-NONPROD-* data",
+    "QA-CPC-NONPROD-* data",
+    "QA-only Edge URL xulmpqaknlwqqculbsek",
+    "QA-only run credentials",
+    "enabling WOS_P2_QA_MUTATIONS_ENABLED in Production"
+  ],
+  "status_scope": {
+    "allowed": [
+      "DRAFT",
+      "SUBMITTED",
+      "WORKSHOP_REVIEW",
+      "NEEDS_INFORMATION",
+      "WAITING_MATERIAL"
+    ],
+    "never_enable": [
+      "READY_TO_START",
+      "IN_PRODUCTION",
+      "PRODUCTION_COMPLETED",
+      "READY_FOR_SHIPMENT",
+      "CLOSED"
+    ]
+  },
+  "contracts": {
+    "cpc_ref": "wos_production_orders.customer_id -> cpc_customer_references.id; same org_id (schema uses organization_id vs org_id)",
+    "cpc_project": "wos_production_orders.project_id -> cpc_projects.id; same org; project.customer_reference_id MUST equal order.customer_id; rejected if archived",
+    "actor": "profiles.user_id must equal auth.uid(); is_active true; profile.org_id == order.organization_id",
+    "mvp_writes": "No generic client UPDATE/DELETE on WOS business tables; write via audited state-specific transactional RPCs only",
+    "private_image": "private Storage path scoped by org/order/version; verify bytes and requester's current access; reject stale signed samples"
+  },
+  "roles": {
+    "admin": [
+      "own-org-manage",
+      "own-org-read"
+    ],
+    "sales": [
+      "own-or-assigned-order-draft",
+      "submit",
+      "revise"
+    ],
+    "manager": [
+      "own-org-workshop-review",
+      "assign"
+    ],
+    "operator": [
+      "authorized-workshop-receive",
+      "return",
+      "review"
+    ],
+    "viewer": [
+      "own-org-authorized-read-only"
+    ]
+  },
+  "unverified": [
+    "Exact production migration DDL, grants, RLS and RPC design",
+    "Real CPC chain from selectable project to private image and atomic submit",
+    "Employee Operator and Manager identities in Production",
+    "Production Storage/Edge permissions and rollout",
+    "Real-person UAT; PostgreSQL17 migration rollback rehearsal"
+  ],
+  "source_evidence": [
+    "supabase/migrations/20261014102000_workshop_order_system_foundation.sql",
+    "docs/workshop-order-system/nonproduction-only/wos_p7_atomic_submission.sql",
+    "docs/workshop-order-system/nonproduction-only/wos_p7_private_storage.sql",
+    "docs/workshop-order-system/nonproduction-only/wos_p2_operator_actions_QA_ONLY_NOT_INSTALLED.sql",
+    "docs/workshop-order-system/nonproduction-only/wos_p2_office_revision_resubmit_QA_ONLY_NOT_INSTALLED.sql"
+  ]
+}
