@@ -1,0 +1,67 @@
+name: WOS P1 PR258 independent GitHub-hosted static security and unit audit
+on:
+  push:
+    branches:
+      - audit/wos-p1-pr258-cloud-reaper-independent-20261119
+permissions:
+  contents: read
+jobs:
+  audit-only:
+    if: github.repository == 'lenchenalc-hongda/hongda-new-media-platform' && github.ref == 'refs/heads/audit/wos-p1-pr258-cloud-reaper-independent-20261119'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - name: Checkout immutable PR258 HEAD as review data
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: 06696e2bad4c6e0b2da49e4c43f9b59095c9c568
+          path: candidate
+          persist-credentials: false
+      - name: Verify exact SHA and exclusive file scope
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C candidate rev-parse HEAD)" = "06696e2bad4c6e0b2da49e4c43f9b59095c9c568"
+          python3 - <<'PY'
+          from pathlib import Path
+          import ast, subprocess
+          root=Path('candidate')
+          expected={
+            '.github/workflows/wos-p1-qa-cloud-secret-reaper.yml',
+            'tools/wos/wos_p1_cloud_reaper.py',
+            'tools/wos/test_wos_p1_cloud_reaper.py',
+            'tools/wos/WOS_P1_QA_CLOUD_REAPER_README.md'
+          }
+          diff=subprocess.check_output(['git','-C','candidate','diff','--name-only',
+            '5ac678a50af6391efbdfb0258f037cbdeb2e18d6',
+            '06696e2bad4c6e0b2da49e4c43f9b59095c9c568'],text=True)
+          assert set(diff.splitlines())==expected, 'UNEXPECTED_PR_SCOPE'
+          src=(root/'tools/wos/wos_p1_cloud_reaper.py').read_text()
+          wf=(root/'.github/workflows/wos-p1-qa-cloud-secret-reaper.yml').read_text()
+          unit=(root/'tools/wos/test_wos_p1_cloud_reaper.py').read_text()
+          ast.parse(src);ast.parse(unit)
+          assert 'SECRET = "WOS_QA_READONLY_DSN"' in src
+          assert 'ENVIRONMENT = "wos-p1-qa-preflight"' in src
+          assert 'MAX_FUTURE_SECONDS = 35 * 60' in src
+          assert 'DELETE_UNVERIFIED' in src and 'GITHUB_API_SCOPE_DENIED' in src
+          assert 'refs/heads/master' in src
+          assert wf.count('  workflow_dispatch:')==1
+          assert "cron: '3/5 * * * *'" in wf
+          assert 'permission-environments: write' in wf
+          assert 'repositories: hongda-new-media-platform' in wf
+          assert "vars.WOS_P1_CLOUD_REAPER_ENABLED == 'true'" in wf
+          assert 'environment: wos-p1-qa-cloud-reaper' in wf
+          assert 'persist-credentials: false' in wf
+          assert 'private-key: ${{ secrets.WOS_P1_CLEANUP_APP_PRIVATE_KEY }}' in wf
+          assert 'WOS_P1_CLEANUP_APP_TOKEN: ${{ steps.app-token.outputs.token }}' in wf
+          assert 'permissions:\n  contents: read' in wf
+          assert 'postgres' not in src.lower() and 'supabase' not in src.lower()
+          print('WOS_P1_PR258_SECRETLESS_SECURITY_AUDIT=PASS')
+          print('CANDIDATE_SHA=06696e2bad4c6e0b2da49e4c43f9b59095c9c568')
+          print('EXACT_CHANGED_FILES=4')
+          PY
+      - name: Run isolated cloud reaper mock tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s candidate/tools/wos -p test_wos_p1_cloud_reaper.py -v
