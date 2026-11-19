@@ -1,0 +1,101 @@
+name: WOS QA-overlay FK-fix independent technical audit
+on:
+  push:
+    branches: [audit/wos-p0-02-02-qa-fk-hotfix-20261119]
+permissions:
+  contents: read
+  pull-requests: read
+  actions: read
+jobs:
+  independent-fk-source-review:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 18
+    steps:
+      - name: Checkout immutable master audit authority
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: 7a005119303e852e1041f11bec32e5430286c25e
+          path: baseline
+          persist-credentials: false
+      - name: Checkout exact isolated PR251 candidate
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: 3ad29f4a5a6f941d2e49b634f54d65cbbcd4a2e4
+          path: candidate
+          persist-credentials: false
+      - name: Independent source origin, fixed SQL blob, and real QA constraint compatibility
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json,os,urllib.request,pathlib,subprocess,re
+          repo='lenchenalc-hongda/hongda-new-media-platform'
+          expected_head='3ad29f4a5a6f941d2e49b634f54d65cbbcd4a2e4';parent_head='ed1b9eb70ff4d211c3662b75ba32b6c97795d197';master_head='7a005119303e852e1041f11bec32e5430286c25e'
+          expected_files=set([".github/workflows/wos-prod-p0-02-02-qa-overlay-isolated-pg17.yml","docs/workshop-order-system/nonproduction-only/wos-p0-02-02-qa-overlay/03-qa-overlay-incremental-INSTALL_NOT_AUTHORIZED.sql","scripts/wos-prod-readiness/qa-overlay-source-contract.mjs","tests/sql/wos-prod-p0-02-02-qa-overlay/qa-real-fk-constraint-shape.sql"])
+          def git(where,*args):
+            return subprocess.check_output(['git','-C',where,*args],text=True).strip()
+          assert git('candidate','rev-parse','HEAD')==expected_head
+          assert git('baseline','rev-parse','HEAD')==master_head
+          assert os.environ.get('GITHUB_REF')=='refs/heads/audit/wos-p0-02-02-qa-fk-hotfix-20261119'
+          def api(resource):
+            request=urllib.request.Request('https://api.github.com/repos/'+repo+'/'+resource,headers={
+              'Authorization':'Bearer '+os.environ['GH_TOKEN'],
+              'Accept':'application/vnd.github+json'})
+            with urllib.request.urlopen(request,timeout=25) as response:return json.load(response)
+          new=api('pulls/251');old=api('pulls/250')
+          assert new['head']['sha']==expected_head and new['base']['sha']==parent_head
+          assert new['draft'] and new['state']=='open' and not new['merged']
+          assert old['head']['sha']==parent_head and old['draft'] and old['state']=='open'
+          actual_files={f['filename'] for f in api('pulls/251/files?per_page=100')}
+          assert actual_files==expected_files
+          oldlock={f['filename'] for f in api('pulls/202/files?per_page=100')}
+          assert not (actual_files & oldlock)
+          assert not any(x.startswith('supabase/migrations/') or x.startswith('src/') for x in actual_files)
+          print('WOS_QA_FK_AUDIT_FIXED_PR251_HEAD_AND_PROTECTED_PATHS=PASS')
+          build=api('actions/runs/44427113391')
+          assert build['head_sha']==expected_head and build['conclusion']=='success' and build['run_attempt']==1
+          jobs=api('actions/runs/44427113391/jobs?per_page=100')['jobs']
+          assert {j['name'] for j in jobs}=={'pg17-old-qa-compatibility','app-contract-build'}
+          assert all(j['conclusion']=='success' for j in jobs)
+          print('WOS_QA_FK_AUDIT_REAL_PK_PG17_AND_NEXT_BUILD_CI=PASS')
+          path='docs/workshop-order-system/nonproduction-only/wos-p0-02-02-qa-overlay/03-qa-overlay-incremental-INSTALL_NOT_AUTHORIZED.sql'
+          assert git('candidate','hash-object',path)=='0d2bb8d5070e20e4fd29fd3111a058264930395c'
+          sql=pathlib.Path('candidate',path).read_text(encoding='utf-8')
+          assert sql.count('REFERENCES wos_mvp_qa.cpc_order_bindings(order_id,organization_id)')==2
+          assert 'UNIQUE(order_id,organization_id)' in sql
+          assert 'FOREIGN KEY(actor_profile_id) REFERENCES public.profiles(id)' in sql
+          assert 'REFERENCES public.wos_production_orders(id,organization_id)' not in sql
+          assert 'REFERENCES public.profiles(id,org_id)' not in sql
+          assert 'FOREIGN KEY(customer_id,organization_id)' in sql
+          assert 'FOREIGN KEY(project_id,organization_id)' in sql
+          for s in ("VALUES(true,false,'NOT_AUTHORIZED')",'QA_OVERLAY_P1_OWNER_GATE_NOT_OPEN',
+                    'QA_OVERLAY_P2_GATE_CONFLICT','QA_OVERLAY_PROOF_REQUIRES_NEW_CPC_BOUND_ORDER',
+                    'PERFORM wos_mvp_qa.assert_cpc_link'):
+            assert s in sql
+          assert (len(re.findall('^BEGIN;$',sql,re.M)),len(re.findall('^COMMIT;$',sql,re.M)))==(1,1)
+          assert not re.search(r'DROP TABLE public\.wos_|CREATE TABLE public\.wos_|ALTER COLUMN (customer_id|project_id) SET NOT NULL|REVOKE ALL ON storage\.objects',sql,re.I)
+          print('WOS_QA_FK_AUDIT_PRIVATE_ONLY_COMPOSITE_FK_NO_HOSTED_TABLE_ALTER=PASS')
+          fx=pathlib.Path('candidate/tests/sql/wos-prod-p0-02-02-qa-overlay/qa-real-fk-constraint-shape.sql').read_text(encoding='utf-8')
+          for s in ('DROP CONSTRAINT profiles_id_org_id_key','qa_reality_project_owner_id_fk',
+                    'FALSE_QA_WOS_COMPOSITE_UNIQUE_FIXTURE','FALSE_QA_PROFILE_COMPOSITE_UNIQUE_FIXTURE'):
+            assert s in fx
+          wf=pathlib.Path('candidate/.github/workflows/wos-prod-p0-02-02-qa-overlay-isolated-pg17.yml').read_text(encoding='utf-8')
+          assert 'wos_overlay_real_qa_pk' in wf and 'WOS_QA_OVERLAY_REAL_QA_PK_ONLY_FK_FULL_E2E_SYNTHETIC=PASS' in wf
+          assert 'secrets.' not in wf
+          print('WOS_QA_FK_AUDIT_REAL_LIVE_QA_SCHEMA_SHAPE_FIXTURE=PASS')
+          PY
+      - name: Independently run source contracts and safety unit tests
+        working-directory: candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/wos-prod-readiness/qa-overlay-source-contract.mjs
+          corepack enable
+          corepack prepare pnpm@10.11.0 --activate
+          pnpm install --frozen-lockfile
+          pnpm exec tsx tests/unit/workshop-order-prod-private-image-edge.test.ts
+          pnpm exec tsx tests/unit/workshop-order-prod-office-form-candidate.test.ts
+          pnpm exec tsx tests/unit/workshop-order-prod-cpc-eligibility.test.ts
+          echo WOS_QA_FK_FIX_INDEPENDENT_HOSTED_AUDIT=PASS
