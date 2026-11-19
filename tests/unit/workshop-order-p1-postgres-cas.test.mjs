@@ -57,8 +57,10 @@ test('real isolated PostgreSQL two competing UPDATE RETURNING transactions', {ti
         ), proof AS (
           INSERT INTO cas_receipt(op_id,epoch)
           SELECT 'round-${round}-writer-${n}',epoch FROM moved RETURNING op_id
+        ), queued AS (
+          INSERT INTO cas_outbox(op_id) SELECT op_id FROM proof RETURNING op_id
         )
-        INSERT INTO cas_outbox(op_id) SELECT op_id FROM proof RETURNING op_id`;
+        SELECT op_id FROM queued`;
       }
       const [a,b]=await Promise.all([pgAsync(container,transfer(1)),pgAsync(container,transfer(2))]);
       const winners=[a,b].filter(v=>v.length>0);
