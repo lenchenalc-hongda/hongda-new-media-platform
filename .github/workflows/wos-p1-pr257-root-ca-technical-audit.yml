@@ -1,0 +1,76 @@
+name: WOS P1 PR257 independent root CA technical source audit
+on:
+  push:
+    branches:
+      - audit/wos-p1-pr257-root-ca-technical-20261119
+permissions:
+  contents: read
+jobs:
+  root-ca-static-audit:
+    if: github.repository == 'lenchenalc-hongda/hongda-new-media-platform' && github.ref == 'refs/heads/audit/wos-p1-pr257-root-ca-technical-20261119'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - name: Checkout immutable PR257 code as data only
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: 223451d883ca2d25cb8e99d59a126ead74323e38
+          path: candidate
+          persist-credentials: false
+      - name: Verify exact audited commit public CA and fail closed protected workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C candidate rev-parse HEAD)" = "223451d883ca2d25cb8e99d59a126ead74323e38"
+          python3 - <<'PY'
+          from pathlib import Path
+          import ast,hashlib,ssl,textwrap
+          root=Path('candidate')
+          ca=root/'qa/wos-p00202-p1-readonly/certs/supabase-root-2021-ca.pem'
+          wf=root/'.github/workflows/wos-p00202-p1-protected-readonly-preflight.yml'
+          pem=ca.read_text('ascii')
+          assert pem.startswith('-----BEGIN CERTIFICATE-----\n')
+          assert pem.rstrip().endswith('-----END CERTIFICATE-----')
+          digest=hashlib.sha256(ssl.PEM_cert_to_DER_cert(pem)).hexdigest()
+          assert digest=='807025ad50d4ed219d2c9c7d299c004f824eb00cf7f65afef607d07b72e6cafa'
+          doc=wf.read_text()
+          assert doc.count('  qa-readonly-database:')==1
+          dbjob=doc.split('  qa-readonly-database:',1)[1]
+          assert dbjob.count('\n    steps:')==1
+          assert dbjob.count('\n    env:')==1
+          assert "WOS_QA_READONLY_DSN: ${{ secrets.WOS_QA_READONLY_DSN }}" in dbjob
+          assert "WOS_QA_SESSION_POOLER_HOST: ${{ vars.WOS_QA_SESSION_POOLER_HOST }}" in dbjob
+          assert "CA_BUNDLE=os.path.join(os.environ.get('GITHUB_WORKSPACE','')," in dbjob
+          assert "qa-trusted/qa/wos-p00202-p1-readonly/certs/supabase-root-2021-ca.pem" in dbjob
+          assert "hashlib.sha256(" in dbjob and "ssl.PEM_cert_to_DER_cert(pem)" in dbjob
+          assert "PGSSLMODE='verify-full',PGSSLROOTCERT=CA_BUNDLE" in dbjob
+          assert "and query=={'sslmode':['verify-full']}" in dbjob
+          assert "sparse-checkout-cone-mode: false" in dbjob
+          assert "persist-credentials: false" in dbjob
+          assert "test \"$(git -C qa-trusted rev-parse HEAD)\" = \"$GITHUB_SHA\"" in dbjob
+          assert "if not raw or len(raw)>2048: fail()" in dbjob
+          assert "WOS_P1_QA_AGGREGATE_PROOF_FAIL_CLOSED" in dbjob
+          assert "sslmode=require" not in dbjob and "sslmode=verify-ca" not in dbjob
+          assert doc.count("    environment: wos-p1-qa-preflight")==2
+          assert "      id-token: write" in doc
+          assert "github.ref == 'refs/heads/master'" in doc
+          assert "reviewed_sha" in doc
+          lines=doc.splitlines()
+          blocks=[]
+          for index,line in enumerate(lines):
+            if line.strip()!="python3 - <<'PY'": continue
+            prefix=line[:len(line)-len(line.lstrip())]
+            snippets=[]
+            for row in lines[index+1:]:
+              if row==prefix+'PY': break
+              snippets.append(row)
+            else: raise AssertionError('Python here doc is unterminated')
+            source=textwrap.dedent('\n'.join(snippets))
+            ast.parse(source)
+            blocks.append(source)
+          assert len(blocks)==2
+          print('WOS_P1_ROOT_CA_PR257_INDEPENDENT_STATIC_AUDIT=PASS')
+          print('AUDITED_PR_SHA=223451d883ca2d25cb8e99d59a126ead74323e38')
+          print('PINNED_DER_SHA256='+digest)
+          print('CHECKED_EMBEDDED_PYTHON_BLOCKS=2')
+          PY
