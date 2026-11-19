@@ -8,6 +8,7 @@ spec=importlib.util.spec_from_file_location(
     'reaper', str(Path(__file__).parent/'wos_p1_cloud_reaper.py'))
 reaper=importlib.util.module_from_spec(spec)
 spec.loader.exec_module(reaper)
+REAL_REQUEST = reaper.request
 
 class CloudTest(unittest.TestCase):
     def setUp(self):
@@ -103,12 +104,12 @@ class CloudTest(unittest.TestCase):
             [reaper.endpoint('secrets/'+reaper.SECRET)])
 
     def test_unrelated_api_target_denied(self):
-        with mock.patch.object(reaper,'request',wraps=reaper.request):
+        with mock.patch.object(reaper,'request',wraps=REAL_REQUEST):
             with self.assertRaisesRegex(RuntimeError,'GITHUB_API_SCOPE_DENIED'):
                 reaper.request('DELETE','https://api.github.com/repos/other/repo')
 
     def test_other_environment_secret_target_denied(self):
-        with mock.patch.object(reaper,'request',wraps=reaper.request):
+        with mock.patch.object(reaper,'request',wraps=REAL_REQUEST):
             with self.assertRaisesRegex(RuntimeError,'GITHUB_API_SCOPE_DENIED'):
                 reaper.request('DELETE',reaper.endpoint('secrets/UNRELATED'))
 
