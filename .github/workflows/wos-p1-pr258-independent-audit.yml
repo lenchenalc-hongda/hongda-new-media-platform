@@ -16,6 +16,7 @@ jobs:
         with:
           ref: 06696e2bad4c6e0b2da49e4c43f9b59095c9c568
           path: candidate
+          fetch-depth: 0
           persist-credentials: false
       - name: Verify exact SHA and exclusive file scope
         shell: bash
