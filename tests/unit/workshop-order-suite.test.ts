@@ -9,6 +9,7 @@ import './workshop-order-api.test';
 import './workshop-order-p6-atomic-submission.test';
 import './workshop-order-p6-private-image-contract.test';
 import './workshop-order-p1-qa-workflow-security.test';
+import './workshop-order-p1-cloud-reaper-observer.test';
 
 // WOS project-owned test aggregator. Each new WOS test is imported here,
 // so the existing shared CI invokes it without modifying shared workflows.
