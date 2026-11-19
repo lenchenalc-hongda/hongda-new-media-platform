@@ -1,21 +1,13 @@
-import { NextRequest, NextResponse } from 'next/server';
-
-export async function POST(req: NextRequest) {
-  const body = await req.json();
-  const { article_id, schedule_at } = body;
-
-  const mockId = 'mock_pub_' + Date.now();
-  const publishedAt = schedule_at || new Date().toISOString();
-
-  return NextResponse.json({
-    mock_publish_id: mockId,
-    published_at: publishedAt,
-    status: 'published_mock',
-    message: '✅ Mock 发布成功（未接入真实微信API，仅记录发布事件）',
-    article_url: `https://mp.weixin.qq.com/mock/${mockId}`,
-    stats: {
-      mock_views: Math.floor(Math.random() * 500) + 50,
-      mock_likes: Math.floor(Math.random() * 30) + 3,
-    },
-  });
+import { NextRequest } from 'next/server';
+import { guardOaPrivilegedRequest, oaJson } from '@/lib/oa/oa-api-safety';
+import { isOaSimulationAllowed } from '@/lib/oa/oa-access-policy';
+export const dynamic = 'force-dynamic';
+export async function POST(req:NextRequest) {
+  const denied=await guardOaPrivilegedRequest(req);
+  if(denied) return denied;
+  if(!isOaSimulationAllowed(process.env.VERCEL_ENV,process.env.NODE_ENV))
+    return oaJson({ok:false,code:'OA_SIMULATION_PREVIEW_ONLY',error:'正式环境禁止模拟发布'},403);
+  // No fake public URL, invented metrics, in-memory queue or database writes.
+  return oaJson({ok:true,mock:true,simulation:true,durable:false,status:'simulated_only',
+    article_url:null,metrics:null,message:'仅完成 Preview 模拟，无真实公众号草稿或发布记录'});
 }
