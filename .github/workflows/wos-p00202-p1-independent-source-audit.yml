@@ -1,0 +1,172 @@
+# Independently hosted static QA audit. Built-in GITHUB_TOKEN only (read-only).
+# No Vercel/Supabase identity, no stored QA secrets, no business data and no writes.
+name: WOS P0-02-02 P1 independent zero-secret preflight source audit
+on:
+  push:
+    branches: [audit/wos-p00202-p1-independent-source-20261119]
+permissions:
+  contents: read
+  pull-requests: read
+jobs:
+  independent-source-identity:
+    if: github.repository == 'lenchenalc-hongda/hongda-new-media-platform' && github.ref == 'refs/heads/audit/wos-p00202-p1-independent-source-20261119'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: 7a005119303e852e1041f11bec32e5430286c25e
+          path: master
+          persist-credentials: false
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: 8295a298c7b2b99a272f7a5a6e256a7a5f0270ee
+          path: original
+          persist-credentials: false
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: 4c1ac1105c27eddff28fea3ead296e6ff4b2bf4b
+          path: isolated
+          persist-credentials: false
+      - name: Independent fixed SHA, branch isolation, PR file and blob verification
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import os,subprocess,json,urllib.request
+          repo='lenchenalc-hongda/hongda-new-media-platform'
+          original='8295a298c7b2b99a272f7a5a6e256a7a5f0270ee'
+          candidate='4c1ac1105c27eddff28fea3ead296e6ff4b2bf4b'
+          master='7a005119303e852e1041f11bec32e5430286c25e'
+          path='.github/workflows/wos-p00202-p1-protected-readonly-preflight.yml'
+          assert os.environ['GITHUB_REF']=='refs/heads/audit/wos-p00202-p1-independent-source-20261119'
+          assert os.environ['GITHUB_REPOSITORY']==repo
+          for where,sha in [('original',original),('isolated',candidate),('master',master)]:
+            value=subprocess.check_output(['git','-C',where,'rev-parse','HEAD'],text=True).strip()
+            assert value==sha,('UNTRUSTED_SHA',where,value)
+          def api(item):
+            u=f'https://api.github.com/repos/{repo}/{item}'
+            h={'Accept':'application/vnd.github+json','Authorization':'Bearer '+os.environ['GH_TOKEN']}
+            with urllib.request.urlopen(urllib.request.Request(u,headers=h),timeout=25) as response:
+              return json.load(response)
+          old=api('pulls/252'); new=api('pulls/253')
+          assert old['head']['sha']==original and old['base']['sha']=='3ad29f4a5a6f941d2e49b634f54d65cbbcd4a2e4'
+          assert new['head']['sha']==candidate and new['base']['sha']==master
+          assert old['draft'] and new['draft'] and not old['merged'] and not new['merged']
+          assert old['state']=='open' and new['state']=='open'
+          assert new['head']['ref']=='qa/wos-p00202-p1-master-isolated-review-20261119'
+          for prno in (252,253):
+            p=api(f'pulls/{prno}')
+            f=api(f'pulls/{prno}/files?per_page=100')
+            assert p['changed_files']==1 and len(f)==1 and f[0]['filename']==path
+            assert f[0]['status']=='added'
+          src='isolated/'+path;original_file='original/'+path
+          shas=[
+            subprocess.check_output(['git','hash-object',v],text=True).strip()
+            for v in (original_file,src)]
+          assert shas==['cb6b147d778b5e87be1ebbb8ce474f0d3294cd37','cf41e107f6add7e92b9343a53f7c032f1542fbe0'],shas
+          cm=api('commits/'+candidate)
+          assert len(cm['parents'])==1 and cm['parents'][0]['sha']==master
+          assert [f['filename'] for f in cm['files']]==[path]
+          live=api('branches/master')
+          assert live['commit']['sha']==master,'MASTER_MOVED_REAUDIT_REQUIRED'
+          assert not os.path.exists('master/'+path),'MASTER_FILE_UNEXPECTEDLY_ALREADY_PRESENT'
+          print('WOS_P1_SEPARATE_GITHUB_HOSTED_SOURCE_PR252_PR253_SHA_MASTER_PARENT_ONE_FILE=PASS')
+          PY
+  independent-static-negative-tests:
+    needs: independent-source-identity
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: 8295a298c7b2b99a272f7a5a6e256a7a5f0270ee
+          path: original
+          persist-credentials: false
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: 4c1ac1105c27eddff28fea3ead296e6ff4b2bf4b
+          path: isolated
+          persist-credentials: false
+      - name: Independently validate reviewed workflow boundaries and reject tampering
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import pathlib,re,difflib
+          path='.github/workflows/wos-p00202-p1-protected-readonly-preflight.yml'
+          old=(pathlib.Path('original')/path).read_text()
+          new=(pathlib.Path('isolated')/path).read_text()
+          # Audit independently reviews both versions and the precise differences.
+          assert len(old)>8000 and len(new)>10000 and old!=new
+          def safe(src):
+            required=[
+              'on:\n  workflow_dispatch:',
+              "github.ref == 'refs/heads/master'",
+              "environment: hongda-review-dev",
+              'cancel-in-progress: false',
+              'persist-credentials: false',
+              'VERCEL_PROJECT_ID: prj_MhozO5QPUuUl8muAAKtkj5napeSp',
+              'dpl_53tMyB4UvQ47CwxcZfiZeZQZYz2e',
+              '3ad29f4a5a6f941d2e49b634f54d65cbbcd4a2e4',
+              "test \"$VERCEL_CLI_VERSION\" = \"63.1.2\"",
+              '(.project.id // .projectId)==$proj',
+              '.meta.githubCommitRef=="codex/wos-p0-02-02-overlay-real-qa-fk-fix-20261119"',
+              'vercel curl "$base/api/workshop-orders/production/$route"',
+              "test \"$status\" = 503",
+              'candidate-drafts WOS_P1_DRAFT_CANDIDATE_DISABLED',
+              'candidate-office-document OFFICE_DOCUMENT_CANDIDATE_DISABLED',
+              'candidate-image-register PRIVATE_IMAGE_CANDIDATE_DISABLED',
+              'candidate-submit WOS_P1_SUBMIT_CANDIDATE_DISABLED',
+              'QA_ONLY_DSN_REQUIRED',
+              'QA_TLS_REQUIRED',
+              "default_transaction_read_only=on",
+              '.role=="wos_qa_readonly_preflight"',
+              '.role_super==false and .role_bypassrls==false',
+              '.orders_write==false and .storage_write==false',
+              '.p1_gate_write==false and .p2_operator_write==false',
+              '.p2_office_write==false and .privileged_candidate_execute==false',
+              '.p1_off==true',
+              '.p2_operator_off==true and .p2_office_off==true',
+              '.orders==84 and .null_cpc==83 and .objects==83',
+            ]
+            banned=[
+              'vercel deploy','--prod','supabase db push','supabase migration',
+              'CREATE ROLE ', 'DROP TABLE ', 'UPDATE public.', 'INSERT INTO ',
+              'services: write', 'contents: write', 'pull-requests: write',
+              'workflow_run:', 'issue_comment:', 'environment: production',
+              'x-vercel-protection-bypass:', 'get_access_to_vercel_url',
+            ]
+            return all(x in src for x in required) and not any(x in src for x in banned) and not re.search(r'(?m)^  (push|pull_request|schedule):',src)
+          assert not safe(old),'ORIGINAL_CODE_SHOULD_NOT_BE_APPROVED_UNFIXED'
+          assert safe(new),'ISOLATED_CANDIDATE_GUARD_MISSING'
+          negative=[
+            new.replace("  workflow_dispatch:", "  push:",1),
+            new.replace("github.ref == 'refs/heads/master'","github.ref == 'refs/heads/audit'",1),
+            new.replace('environment: hongda-review-dev','environment: production',1),
+            new.replace('test "$VERCEL_CLI_VERSION" = "63.1.2"','test -n "$VERCEL_CLI_VERSION"',1),
+            new.replace('(.project.id // .projectId)==$proj','true',1),
+            new.replace('test "$status" = 503','test "$status" = 200',1),
+            new.replace('QA_ONLY_DSN_REQUIRED','QA_DSN_UNRESTRICTED',1),
+            new.replace('default_transaction_read_only=on','default_transaction_read_only=off',1),
+            new.replace('.role_super==false and .role_bypassrls==false','.role_super==true and .role_bypassrls==true',1),
+            new.replace('.p1_gate_write==false and .p2_operator_write==false','.p1_gate_write==true and .p2_operator_write==false',1),
+            new.replace('vercel curl "$base/api/workshop-orders/production/$route"','curl "$base/api/workshop-orders/production/$route"',1),
+            new+'\n# vercel deploy --prod\n',
+          ]
+          assert all(x!=new for x in negative),'NEGATIVE_FIXTURE_NO_EFFECT'
+          for i,bad in enumerate(negative):
+            assert not safe(bad),('UNSAFE_WORKFLOW_BYPASS_ACCEPTED',i)
+          changed=[]
+          for op,i1,i2,j1,j2 in difflib.SequenceMatcher(None,old.splitlines(),new.splitlines(),autojunk=False).get_opcodes():
+            if op!='equal':
+              changed.append((op,i1+1,i2,j1+1,j2))
+          assert len(changed)<=8,('UNEXPECTED_WIDE_WORKFLOW_CHANGES',changed)
+          print('WOS_P1_INDEPENDENT_REVIEW_ORIGINAL_BLOCKED_AS_EXPECTED=PASS')
+          print('WOS_P1_ISOLATED_MASTER_REVIEWED_WORKFLOW_FAILCLOSED_STATIC=PASS')
+          print('WOS_P1_STATIC_NEGATIVE_TAMPERING_REJECTED='+str(len(negative)))
+          print('WOS_P1_READONLY_PRECHECK_SOURCE_ONLY_NO_BUSINESS_CREDENTIALS=PASS')
+          print('WOS_P1_REQUIRES_NEW_OWNER_GRANT_AND_SEPARATE_RUNTIME_AUTHENTICATION=YES')
+          PY
