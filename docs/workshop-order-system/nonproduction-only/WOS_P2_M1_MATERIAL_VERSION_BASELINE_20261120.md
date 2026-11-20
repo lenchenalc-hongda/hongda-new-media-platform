@@ -18,6 +18,8 @@ Supabase project `xulmpqaknlwqqculbsek`；合成订单 `953d2204-3e65-4b75-b10e-
 
 现存结构（均不得复建）：`wos_resource_readiness` 唯一 `(entity_type,entity_id,resource_type)`，4 类 `FILM/FIXTURE/INCOMING_MATERIAL/SIGNED_SAMPLE`，存在 `expected_at` / `arrived_at` 但旧 P2 Operator SQL `CONFIRM_MATERIAL` 事务并未填充这两个字段；现有只读查询显示其缺失而非虚构时间。实际 RPC 后到货时间、确认人和样品证据如何写入须单独审核。`wos_visual_baselines` 有 CURRENT/SUPERSEDED、双方确认列；`wos_visual_baseline_items` 关联 `wos_reference_images`；私有图片证明存 `wos_qa_verified_image_proofs`。普通 authenticated 角色对 material / baseline / blocker / confirmations 只有 SELECT，无直接 INSERT/UPDATE；现有 Operator RPC `wos_qa_p2_operator_action` 为受 Gate 约束的 SECURITY DEFINER，当前未获调用授权。
 
+**图片枚举与物料枚举不相同（经 QA 数据库 CHECK 约束确认）：** 物料表使用 `FILM`；`wos_reference_images.category` 中花膜图案是 `FILM_PATTERN`，客户确认样是 `CUSTOMER_APPROVED_SAMPLE`，产品图 `PRODUCT`，大货签样 `SIGNED_SAMPLE`。其他实际允许类别为 `SAMPLING_RESULT`、`PACKAGING_LABEL`、`DEFECT_RISK`、`OTHER`。新视觉候选合约严格采用实际图片表类别，不能误用物料 `FILM` 当图片类别。离线合约测试通过也不意味着物理签样已签署。
+
 ## 3. 关键技术限制与设计约束（不可隐瞒）
 
 **两个版本不是同一种东西。**
