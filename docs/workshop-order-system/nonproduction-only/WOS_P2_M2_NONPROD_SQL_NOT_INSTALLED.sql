@@ -263,9 +263,9 @@ BEGIN
   IF pg_catalog.jsonb_typeof(p_payload->'imageIds')<>'array'
    OR pg_catalog.jsonb_array_length(p_payload->'imageIds') NOT BETWEEN 3 AND 12
   THEN RAISE EXCEPTION 'INVALID_IMAGES' USING ERRCODE='22023'; END IF;
-  SELECT pg_catalog.array_agg(k::uuid) INTO v_ids
-    FROM pg_catalog.jsonb_array_elements_text(p_payload->'imageIds') AS k;
-  IF (SELECT count(DISTINCT z) FROM pg_catalog.unnest(v_ids) AS z)<>pg_catalog.array_length(v_ids,1)
+  SELECT pg_catalog.array_agg(img_id.value::uuid) INTO v_ids
+    FROM pg_catalog.jsonb_array_elements_text(p_payload->'imageIds') AS img_id(value);
+  IF (SELECT count(DISTINCT image_id.value) FROM pg_catalog.unnest(v_ids) AS image_id(value))<>pg_catalog.array_length(v_ids,1)
   THEN RAISE EXCEPTION 'DUPLICATE_IMAGES' USING ERRCODE='22023'; END IF;
   -- each supplied image needs its own valid, current private storage proof.
   SELECT count(*) INTO v_count FROM public.wos_reference_images im
