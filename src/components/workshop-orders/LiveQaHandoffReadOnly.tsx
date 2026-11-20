@@ -167,6 +167,15 @@ export default function LiveQaHandoffReadOnly() {
             </li>
           ))}
         </ul>
+        <section className="mt-3 rounded border p-3 text-xs" aria-label="当前签样图片基准及双重确认">
+          <h4 className="font-semibold">当前生产基准与双重确认（只读）</h4>
+          <p className="mt-1">CURRENT 基准：{state.readiness.visualBaseline.currentCount} 条</p>
+          <p>生产版本：{state.readiness.visualBaseline.versionLabel ?? '未登记'} ·
+            {state.readiness.visualBaseline.currentVersionMatched ? ' 当前版本匹配' : ' 当前版本未核实'}</p>
+          <p>办公室签认：{state.readiness.visualBaseline.officeConfirmed ? '时间已登记' : '未登记'} ·
+            车间复核：{state.readiness.visualBaseline.workshopConfirmed ? '时间已登记' : '未登记'}</p>
+          <p className="mt-1 text-amber-900">基准时间记录不等于实物签样、独立人员身份或私有图片证明验收，更不代表批准开工。</p>
+        </section>
         {state.readiness.issues.map((issue,index) => (
           <p key={index} className="mt-2 text-xs text-red-800">{issue}</p>
         ))}
