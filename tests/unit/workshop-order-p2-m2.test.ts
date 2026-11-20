@@ -150,7 +150,7 @@ assert(m2Picker.includes("db.auth.getUser()"));
 assert(m2Picker.includes(".eq('organization_id',p.org_id)"));
 assert(m2Picker.includes("startsWith('QA-')"));
 assert(m2Picker.includes('QA_ORDER_DENIED_OR_UNVERIFIED'));
-assert(!/\\.insert\\s*\\(|\\.upsert\\s*\\(|\\.update\\s*\\(|\\.delete\\s*\\(/.test(m2Picker));
+assert(!/\.insert\s*\(|\.upsert\s*\(|\.update\s*\(|\.delete\s*\(/.test(m2Picker));
 assert(ui.includes('canActOnWosP2M2(actorRole,action)'));
 
 assert(!/\.insert\s*\(|\.upsert\s*\(|\.update\s*\(|\.delete\s*\(/.test(ui));
