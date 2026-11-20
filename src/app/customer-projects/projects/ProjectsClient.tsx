@@ -115,9 +115,17 @@ export default function ProjectsClient({
         title="项目"
         description="一个项目代表一个具体商业机会；先看正在推进、等待和需要处理的项目。"
         actions={
-          <Link href="/customer-projects/projects/new" className="btn-primary no-underline">
-            新建项目
-          </Link>
+          <div className="flex flex-wrap items-center gap-2">
+            <Link
+              href="/customer-projects/projects/reminders"
+              className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-900 no-underline hover:bg-amber-100"
+            >
+              项目推进提醒
+            </Link>
+            <Link href="/customer-projects/projects/new" className="btn-primary no-underline">
+              新建项目
+            </Link>
+          </div>
         }
       />
 
