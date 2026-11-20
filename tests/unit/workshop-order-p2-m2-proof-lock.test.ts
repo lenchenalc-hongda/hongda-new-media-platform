@@ -12,7 +12,7 @@ exactly('CREATE OR REPLACE FUNCTION public.wos_qa_p2_m2_checked_proof_set(',1,'o
 exactly('COMMIT;',1,'one single transaction');
 exactly('CREATE UNIQUE INDEX IF NOT EXISTS wos_p2_m2_one_current_baseline',1,'one CURRENT baseline');
 exactly("PERFORM 1 FROM public.wos_qa_p2_m2_checked_proof_set(",1,'SELECT checks canonical proof');
-exactly('FROM public.wos_qa_p2_m2_checked_proof_set(',3,'SELECT/OFFICE/WORKSHOP share checker');
+exactly('FROM public.wos_qa_p2_m2_checked_proof_set(',4,'SELECT/OFFICE/WORKSHOP/FINAL share verifier');
 for(const token of [
  'NOT INSTALLED','NOT AUTHORIZED','M2_OPERATOR_WRITES','M2_OFFICE_WRITES',
  'pg_advisory_xact_lock','FOR UPDATE','FOR SHARE OF bi,im,pf,ob',
@@ -20,11 +20,14 @@ for(const token of [
  'workshop_proof_set_digest','workshop_post_order_version',
  'v_proof_digest IS DISTINCT FROM v_office_digest',
  'v_office_actor=v_actor.id','v_office_version<>p_expected_version',
+ 'v_workshop_version<>p_expected_version',
+ 'OR v_proof_digest IS DISTINCT FROM v_workshop_digest',
+ 'VERIFIED_IMAGE_PROOF_CHANGED',
  'storage.objects','ob.version=pf.storage_object_version',
  'ob.updated_at=pf.storage_object_updated_at',
  'ob.is_delete_marker IS DISTINCT FROM true',
  'pf.expires_at>pg_catalog.clock_timestamp()',
- "ARRAY['PRODUCT','FILM_PATTERN','SIGNED_SAMPLE']",
+ "ARRAY['PRODUCT','FILM_PATTERN','SIGNED_SAMPLE','CUSTOMER_APPROVED_SAMPLE']",
  "'proofExpiresAt',expires_at","'proofVerifiedAt',verified_at",
  "'objectId',storage_object_id","'objectVersion',storage_object_version",
  "'numericOrderVersion',o.version",
