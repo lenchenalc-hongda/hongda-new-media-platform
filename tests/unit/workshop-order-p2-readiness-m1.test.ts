@@ -136,7 +136,7 @@ const imageIds=[
  '88888888-8888-4888-8888-888888888888',
  '99999999-9999-4999-8999-999999999999',
 ];
-const cats=['PRODUCT','FILM','SIGNED_SAMPLE'] as const;
+const cats=['PRODUCT','FILM_PATTERN','SIGNED_SAMPLE'] as const;
 const visual:WosP2VisualEvidenceInput={
  orderId:order,organizationId:org,productionVersionLabel:'QA-R6',
  readVerified:true, nowIso:now, requiredCategories:[...cats],
@@ -179,7 +179,7 @@ const badVisual:Array<[string,WosP2VisualEvidenceInput]>=[
  ['office signed before baseline created',{...visual,baselines:[{...visual.baselines[0],office_confirmed_at:'2026-11-20T00:00:00.000Z'}]}],
  ['future workshop acknowledgment',{...visual,baselines:[{...visual.baselines[0],workshop_confirmed_at:'2026-11-21T00:00:00.000Z'}]}],
  ['missing required signed sample',{...visual,items:visual.items.slice(0,2)}],
- ['missing required product image',{...visual,requiredCategories:['PRODUCT','FILM','SIGNED_SAMPLE'],items:visual.items.slice(1)}],
+ ['missing required product image',{...visual,requiredCategories:['PRODUCT','FILM_PATTERN','SIGNED_SAMPLE'],items:visual.items.slice(1)}],
  ['image only uploaded not READY',{...visual,images:visual.images.map((x,i)=>i===0?{...x,image_status:'UPLOADING'}:x)}],
  ['superseded image re-used',{...visual,images:visual.images.map((x,i)=>i===0?{...x,superseded_at:at}:x)}],
  ['image from another organization',{...visual,images:visual.images.map((x,i)=>i===0?{...x,organization_id:office}:x)}],
@@ -193,6 +193,7 @@ const badVisual:Array<[string,WosP2VisualEvidenceInput]>=[
  ['duplicate proof',{...visual,proofs:[...visual.proofs,visual.proofs[0]]}],
  ['missing required category definition',{...visual,requiredCategories:[]}],
  ['invalid required category',{...visual,requiredCategories:['UNKNOWN']}],
+ ['material resource type FILM is not reference image category',{...visual,requiredCategories:['FILM']}],
 ];
 for(const [label,data] of badVisual){
  const r=assessWosP2VisualEvidence(data);
