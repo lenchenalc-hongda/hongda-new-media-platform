@@ -168,6 +168,7 @@ AS $fn$
  SELECT pg_catalog.encode(pg_catalog.sha256(pg_catalog.convert_to(
    pg_catalog.jsonb_build_object(
     'orderId',o.id,'orgId',o.organization_id,'label',o.version_label,
+    'numericOrderVersion',o.version,
     'customerId',o.customer_id,'customer',o.customer_name_snapshot,
     'product',o.product_name,'productMaterial',o.product_material,
     'surface',o.surface_treatment,'pattern',o.pattern_scope,
@@ -181,7 +182,11 @@ AS $fn$
  LEFT JOIN LATERAL (
    SELECT pg_catalog.jsonb_agg(
     pg_catalog.jsonb_build_object('id',im.id,'category',im.category,
-      'version',im.version_label,'path',im.storage_path,'proofSha',pf.verified_sha256)
+      'version',im.version_label,'bucket',im.storage_bucket,
+      'path',im.storage_path,'proofSha',pf.verified_sha256,
+      'objectId',pf.storage_object_id,'objectVersion',pf.storage_object_version,
+      'objectUpdatedAt',pf.storage_object_updated_at,
+      'proofVerifiedAt',pf.verified_at,'proofExpiresAt',pf.expires_at)
     ORDER BY im.id
    ) AS image_proof_set
    FROM public.wos_visual_baselines vb
@@ -224,6 +229,12 @@ DECLARE
  v_expected_at timestamptz;
  v_arrived_at timestamptz;
  v_baseline_id uuid;
+ v_proof_digest text;
+ v_proof_verified_at timestamptz;
+ v_office_digest text;
+ v_office_version integer;
+ v_office_time timestamptz;
+ v_office_actor uuid;
  v_image_id uuid;
  v_ids uuid[];
  v_n integer;
@@ -416,6 +427,8 @@ BEGIN
   INSERT INTO public.wos_visual_baseline_items(baseline_id,reference_image_id,display_order,is_required)
   SELECT v_baseline_id, z, ord::integer-1,true
     FROM pg_catalog.unnest(v_ids) WITH ORDINALITY AS selected(z,ord);
+  PERFORM 1 FROM public.wos_qa_p2_m2_checked_proof_set(
+    p_order_id,v_actor.org_id,v_baseline_id,v_label);
 
  ELSIF p_action='BASELINE_OFFICE_CONFIRM' THEN
   v_baseline_id:=(p_payload->>'baselineId')::uuid;
