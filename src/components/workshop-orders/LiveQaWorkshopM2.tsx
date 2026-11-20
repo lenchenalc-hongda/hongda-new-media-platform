@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import {
-  M2_MATERIAL_STATES, parseWosP2M2Action, type WosP2M2Action,
+  M2_MATERIAL_STATES, parseWosP2M2Action, canActOnWosP2M2, type WosP2M2Action,
 } from '@/lib/workshop-orders/p2-m2-action-contract';
 
 type Resource = keyof typeof M2_MATERIAL_STATES;
@@ -11,12 +11,12 @@ type Action = WosP2M2Action['action'];
 interface Props {
  readonly orderId:string; readonly organizationId:string;
  readonly productionVersionLabel:string;readonly expectedVersion:number;
- readonly onSuccess:()=>void;
+ readonly onSuccess:()=>void; readonly actorRole?:string;
 }
 type ImageOption={id:string;category:string;file_name:string;image_status:string;version_label:string};
 type BaselineOption={id:string;status:string;version_label:string};
 
-export default function LiveQaWorkshopM2({orderId,organizationId,productionVersionLabel,expectedVersion,onSuccess}:Props) {
+export default function LiveQaWorkshopM2({orderId,organizationId,productionVersionLabel,expectedVersion,onSuccess,actorRole}:Props) {
  // This flag is NOT set in any currently authorised QA Preview. Server and
  // database impose independent, stronger gates. No fallback to P2/P7.
  const enabled=process.env.NEXT_PUBLIC_WOS_P2_M2_QA_MUTATIONS_ENABLED==='true';
@@ -70,13 +70,18 @@ export default function LiveQaWorkshopM2({orderId,organizationId,productionVersi
   }
   void load();return()=>{active=false;};
  },[enabled,orderId,organizationId,productionVersionLabel,expectedVersion]);
+ useEffect(()=>{
+  if(actorRole && !canActOnWosP2M2(actorRole,action)){
+   setAction(canActOnWosP2M2(actorRole,'BASELINE_SELECT')?'BASELINE_SELECT':'MATERIAL_RECORD');
+  }
+ },[actorRole,action]);
  if(!enabled)return null;
 
  const chooseStatus=(r:Resource)=>{
   setResource(r);setStatus(M2_MATERIAL_STATES[r][0]);pending.current=null;setResult('');
  };
  async function submit(){
-  if(sending||loading)return;
+  if(sending||loading||(actorRole&&!canActOnWosP2M2(actorRole,action)))return;
   const core={
     orderId,expectedVersion,productionVersionLabel,note:note.trim(),action,
     ...(action==='MATERIAL_RECORD'?{
@@ -124,10 +129,14 @@ export default function LiveQaWorkshopM2({orderId,organizationId,productionVersi
    <label className="block">操作
     <select className="mt-1 w-full border p-2" disabled={sending} value={action}
       onChange={e=>{setAction(e.target.value as Action);pending.current=null;}}>
-     <option value="MATERIAL_RECORD">四项物料登记</option>
-     <option value="BASELINE_SELECT">办公室选择待确认 CURRENT 图片候选</option>
-     <option value="BASELINE_OFFICE_CONFIRM">办公室确认图片基准</option>
-     <option value="BASELINE_WORKSHOP_CONFIRM">车间独立复核图片基准</option>
+     {(!actorRole||canActOnWosP2M2(actorRole,'MATERIAL_RECORD'))&&
+       <option value="MATERIAL_RECORD">四项物料登记</option>}
+     {(!actorRole||canActOnWosP2M2(actorRole,'BASELINE_SELECT'))&&
+       <option value="BASELINE_SELECT">办公室选择待确认 CURRENT 图片候选</option>}
+     {(!actorRole||canActOnWosP2M2(actorRole,'BASELINE_OFFICE_CONFIRM'))&&
+       <option value="BASELINE_OFFICE_CONFIRM">办公室确认图片基准</option>}
+     {(!actorRole||canActOnWosP2M2(actorRole,'BASELINE_WORKSHOP_CONFIRM'))&&
+       <option value="BASELINE_WORKSHOP_CONFIRM">车间独立复核图片基准</option>}
     </select>
    </label>
    {action==='MATERIAL_RECORD'&&<div className="grid grid-cols-2 gap-2">
