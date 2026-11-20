@@ -73,7 +73,8 @@ export interface WosP2VisualEvidenceAssessment {
 }
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const sha256 = /^[0-9a-f]{64}$/;
-const categorySet = new Set(['PRODUCT','FILM','CUSTOMER_SAMPLE','SIGNED_SAMPLE']);
+// Image categories are NOT material resource_types; mirror live QA CHECK constraint.
+const categorySet = new Set(['PRODUCT','FILM_PATTERN','CUSTOMER_APPROVED_SAMPLE','SIGNED_SAMPLE','SAMPLING_RESULT','PACKAGING_LABEL','DEFECT_RISK','OTHER']);
 
 function millis(x: unknown): number {
   return typeof x === 'string' && x.length > 0 ? Date.parse(x) : Number.NaN;
