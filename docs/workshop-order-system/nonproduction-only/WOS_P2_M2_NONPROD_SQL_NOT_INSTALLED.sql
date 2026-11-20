@@ -53,6 +53,17 @@ CREATE UNIQUE INDEX IF NOT EXISTS wos_p2_m2_one_current_baseline_per_entity
  ON public.wos_visual_baselines(organization_id,entity_type,entity_id)
  WHERE status='CURRENT';
 
+-- Non-production, NOT INSTALLED: immutable Office/Workshop proof commitments.
+ALTER TABLE public.wos_visual_baselines
+ ADD COLUMN IF NOT EXISTS office_proof_set_digest text
+   CHECK (office_proof_set_digest IS NULL OR office_proof_set_digest ~ '^[a-f0-9]{64}$'),
+ ADD COLUMN IF NOT EXISTS office_post_order_version integer
+   CHECK (office_post_order_version IS NULL OR office_post_order_version>0),
+ ADD COLUMN IF NOT EXISTS workshop_proof_set_digest text
+   CHECK (workshop_proof_set_digest IS NULL OR workshop_proof_set_digest ~ '^[a-f0-9]{64}$'),
+ ADD COLUMN IF NOT EXISTS workshop_post_order_version integer
+   CHECK (workshop_post_order_version IS NULL OR workshop_post_order_version>0);
+
 -- Private helper: only the reviewed SECURITY DEFINER M2 action can call.
 -- Digest is computed *server-side* from order specifications and the
 -- currently selected image IDs; never trust a browser-supplied digest.
