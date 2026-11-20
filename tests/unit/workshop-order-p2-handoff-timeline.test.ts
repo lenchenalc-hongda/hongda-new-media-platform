@@ -1,0 +1,100 @@
+import assert from 'node:assert/strict';
+import {
+  evaluateWosP2HandoffTimeline,
+  WOS_P2_HANDOFF_STEPS,
+  WOS_P2_QA_PROVEN_HANDOFF_VERSION,
+  type WosP2HandoffHistory,
+  type WosP2HandoffInput,
+} from '../../src/lib/workshop-orders/p2-handoff-timeline';
+
+// Read-only, synthetic reconstruction of the six observed QA state-history
+// transitions. NO network requests, no privileged role, no QA writes.
+const seed: WosP2HandoffHistory[] = WOS_P2_HANDOFF_STEPS.map((step,i) => ({
+  previous_status: step.from,
+  next_status: step.to,
+  actor_role: i===1 || i===2 || i===5 ? 'operator' : 'admin',
+  reason_code: step.reason,
+  created_at: new Date(Date.UTC(2026,10,18,12,0,i)).toISOString(),
+}));
+const current: WosP2HandoffInput = {
+  history: [...seed].reverse(), // real client loads newest-first
+  currentStatus: 'WAITING_MATERIAL', currentVersion: 7, readVerified:true,
+};
+const good = evaluateWosP2HandoffTimeline(current);
+assert.equal(WOS_P2_QA_PROVEN_HANDOFF_VERSION,7);
+assert.equal(good.historySequenceVerified,true,'valid ordered six-stage v7 history should match');
+assert.equal(good.steps.filter(x=>x.verifiedByHistory).length,6);
+assert.equal(good.canStart,false,'no P2 history permits production start');
+assert.equal(good.source,'QA_RLS_STATUS_HISTORY_ONLY');
+assert(good.nextAction.includes('花膜'));
+assert(good.nextAction.includes('签样'));
+assert.equal(good.steps[5].label,'车间复核修订');
+
+const negative: Array<[string,WosP2HandoffInput]> = [
+  ['network/RLS unverified', {...current,readVerified:false}],
+  ['missing submission', {...current,history:seed.slice(1)}],
+  ['missing accept', {...current,history:seed.filter(x=>x.reason_code!=='QA_P2_ACCEPT')}],
+  ['missing return', {...current,history:seed.filter(x=>x.reason_code!=='QA_P2_RETURN_FOR_INFORMATION')}],
+  ['missing office save', {...current,history:seed.filter(x=>x.reason_code!=='QA_P2_OFFICE_SAVE_CORRECTION')}],
+  ['missing office resubmit', {...current,history:seed.filter(x=>x.reason_code!=='QA_P2_OFFICE_RESUBMIT_CORRECTION')}],
+  ['missing operator review', {...current,history:seed.slice(0,5)}],
+  ['duplicate review', {...current,history:[...seed,seed[5]]}],
+  ['contradictory transition inserted between accept and return', {
+    ...current,history:[...seed.slice(0,2),{
+      ...seed[1],reason_code:'QA_UNEXPECTED_TRANSITION',
+      previous_status:'WORKSHOP_REVIEW',next_status:'DRAFT',
+      created_at:'2026-11-18T12:00:01.500Z',
+    },...seed.slice(2)]
+  }],
+  ['contradictory transition inserted before final workshop review', {
+    ...current,history:[...seed.slice(0,5),{
+      ...seed[4],reason_code:'QA_UNEXPECTED_RETURN',
+      previous_status:'WORKSHOP_REVIEW',next_status:'NEEDS_INFORMATION',
+      created_at:'2026-11-18T12:00:04.500Z',
+    },seed[5]]
+  }],
+
+  ['duplicate correction', {...current,history:[...seed,seed[3]]}],
+  ['wrong operator role', {...current,history:seed.map((x,i)=>i===1?{...x,actor_role:'sales'}:x)}],
+  ['wrong office role', {...current,history:seed.map((x,i)=>i===4?{...x,actor_role:'operator'}:x)}],
+  ['wrong status transition', {...current,history:seed.map((x,i)=>i===3?{...x,next_status:'WORKSHOP_REVIEW'}:x)}],
+  ['wrong transition reason', {...current,history:seed.map((x,i)=>i===5?{...x,reason_code:'QA_P2_ACCEPT'}:x)}],
+  ['conflicting chronology', {...current,history:seed.map((x,i)=>i===5?{...x,created_at:seed[2].created_at}:x)}],
+  ['unparseable timestamp', {...current,history:seed.map((x,i)=>i===5?{...x,created_at:'not-a-time'}:x)}],
+  // Replayed v7 history cannot certify any later numeric revision.
+  ['v8 reuses identical old v7 events and WAITING_MATERIAL', {...current,currentVersion:8}],
+  ['v9 reuses identical old v7 events and WAITING_MATERIAL', {...current,currentVersion:9}],
+  ['v8 using stale v7 reversed status-history rows', {...current,currentVersion:8,history:seed}],
+  ['v8 old history with new status still WAITING_MATERIAL', {...current,currentVersion:8,currentStatus:'WAITING_MATERIAL'}],
+  ['v8 attempts duplicated prior review', {...current,currentVersion:8,history:[...seed,seed[5]]}],
+  ['v8 attempts to append old v7 events', {...current,currentVersion:8,history:[...seed, ...seed.map((x,i)=>({...x,created_at:new Date(Date.UTC(2026,10,19,12,0,i)).toISOString()}))]}],
+  ['fractional order revision cannot be trusted', {...current,currentVersion:7.5}],
+  ['unsafe numeric order version rejected', {...current,currentVersion:Number.MAX_SAFE_INTEGER+1}],
+  ['source version still v2', {...current,currentVersion:2}],
+  ['current order back to needs information', {...current,currentStatus:'NEEDS_INFORMATION'}],
+  ['no QA data', {...current,history:[]}],
+  ['too many rows / truncated', {...current,history:Array(100).fill(seed[0])}],
+  ['extra latest transition', {...current,history:[...seed,{
+    ...seed[0],reason_code:'QA_P2_MATERIAL_CONFIRM',
+    previous_status:'WAITING_MATERIAL',next_status:'READINESS_CHECK',
+    created_at:new Date(Date.UTC(2026,10,18,12,1,1)).toISOString()
+  }]}],
+];
+for(const [label,input] of negative) {
+  const result=evaluateWosP2HandoffTimeline(input);
+  assert.equal(result.historySequenceVerified,false,label);
+  assert(result.steps.every(step=>!step.verifiedByHistory),
+    'invalid history must not display any green step: '+label);
+  // None of the six historical v7 steps may be shown as green on a v8+ order.
+  if (input.currentVersion > WOS_P2_QA_PROVEN_HANDOFF_VERSION) {
+    assert(result.steps.every(x=>!x.verifiedByHistory),
+      'future versions must not visually reuse old v7 historical steps: '+label);
+  }
+  assert.equal(result.canStart,false,label);
+}
+const orig=JSON.stringify(current);
+evaluateWosP2HandoffTimeline(current);
+assert.equal(JSON.stringify(current),orig,'pure history evaluator must not mutate RLS rows');
+
+console.log('WOS_P2_CONTIGUOUS_HANDOFF_CONTRADICTORY_TRANSITIONS_REJECTED=PASS');
+console.log('WOS_P2_HANDOFF_NO_AUTO_START=PASS');
