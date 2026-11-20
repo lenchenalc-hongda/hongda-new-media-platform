@@ -215,6 +215,12 @@ BEGIN
   v_arrived_at:=NULLIF(p_payload->>'arrivedAt','')::timestamptz;
   IF v_final AND v_arrived_at IS NULL
   THEN RAISE EXCEPTION 'ARRIVAL_REQUIRED' USING ERRCODE='22023'; END IF;
+  IF v_status IN('PARTIALLY_ARRIVED','ARRIVED','PHYSICAL_SAMPLE_RECEIVED')
+     AND v_arrived_at IS NULL
+  THEN RAISE EXCEPTION 'ARRIVAL_TIME_REQUIRED' USING ERRCODE='22023'; END IF;
+  IF v_status IN('NOT_ARRIVED','NOT_AVAILABLE','MISSING','IN_PRODUCTION','UPLOADED')
+     AND v_arrived_at IS NOT NULL
+  THEN RAISE EXCEPTION 'NO_ARRIVAL_FOR_PENDING_STATUS' USING ERRCODE='22023'; END IF;
   v_qty_expected:=(p_payload->>'quantityExpected')::integer;
   v_qty_arrived:=(p_payload->>'quantityArrived')::integer;
   IF v_resource='INCOMING_MATERIAL' THEN
