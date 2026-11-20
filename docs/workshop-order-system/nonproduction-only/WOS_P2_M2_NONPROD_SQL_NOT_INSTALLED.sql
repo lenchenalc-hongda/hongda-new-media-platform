@@ -437,31 +437,23 @@ BEGIN
      AND b.organization_id=v_actor.org_id AND b.entity_type='PRODUCTION_ORDER'
      AND b.version_label=v_label AND b.status='DRAFT' FOR UPDATE;
   IF NOT FOUND THEN RAISE EXCEPTION 'INVALID_BASELINE' USING ERRCODE='PT409'; END IF;
-  -- Revalidate *every* selected image and private SHA proof at confirmation,
-  -- including the exact version. Selection alone was never authorisation.
-  IF EXISTS(
-    SELECT 1 FROM public.wos_visual_baseline_items bi
-    JOIN public.wos_reference_images im ON im.id=bi.reference_image_id
-    LEFT JOIN public.wos_qa_verified_image_proofs pf
-      ON pf.image_id=im.id AND pf.order_id=p_order_id
-      AND pf.organization_id=v_actor.org_id
-      AND pf.storage_bucket=im.storage_bucket AND pf.storage_path=im.storage_path
-    WHERE bi.baseline_id=v_baseline_id
-      AND (im.organization_id<>v_actor.org_id OR im.entity_id<>p_order_id
-       OR im.version_label<>v_label OR im.image_status<>'READY'
-       OR im.superseded_at IS NOT NULL OR im.storage_bucket<>'wos-private'
-       OR pf.image_id IS NULL OR pf.expires_at<=pg_catalog.clock_timestamp())
-  ) OR NOT EXISTS(SELECT 1 FROM public.wos_visual_baseline_items
-                   WHERE baseline_id=v_baseline_id)
-  THEN RAISE EXCEPTION 'BASELINE_PROOF_STALE' USING ERRCODE='PT409'; END IF;
+  -- Sign only the immutable, currently verified private image/object proof set.
+  SELECT proof_digest,last_verified_at INTO v_proof_digest,v_proof_verified_at
+    FROM public.wos_qa_p2_m2_checked_proof_set(
+      p_order_id,v_actor.org_id,v_baseline_id,v_label);
+  IF v_proof_digest IS NULL OR v_proof_verified_at>=pg_catalog.clock_timestamp()
+  THEN RAISE EXCEPTION 'OFFICE_PROOF_NOT_VERIFIED' USING ERRCODE='PT409'; END IF;
   UPDATE public.wos_visual_baselines SET
     status='SUPERSEDED',superseded_at=pg_catalog.now()
   WHERE organization_id=v_actor.org_id AND entity_id=p_order_id
    AND entity_type='PRODUCTION_ORDER' AND status='CURRENT';
   UPDATE public.wos_visual_baselines SET
     status='CURRENT',confirmed_by_office_profile_id=v_actor.id,
-    office_confirmed_at=pg_catalog.now(),confirmed_by_workshop_profile_id=NULL,
-    workshop_confirmed_at=NULL
+    office_confirmed_at=pg_catalog.clock_timestamp(),
+    office_proof_set_digest=v_proof_digest,
+    office_post_order_version=p_expected_version+1,
+    confirmed_by_workshop_profile_id=NULL,workshop_confirmed_at=NULL,
+    workshop_proof_set_digest=NULL,workshop_post_order_version=NULL
   WHERE id=v_baseline_id;
   -- Current image baseline changed. Prevent stale material green checks.
   UPDATE public.wos_resource_readiness SET
@@ -474,38 +466,51 @@ BEGIN
 
  ELSIF p_action='BASELINE_WORKSHOP_CONFIRM' THEN
   v_baseline_id:=(p_payload->>'baselineId')::uuid;
-  -- The Office-approved picture can become stale before Workshop review.
-  -- Reverify real image+SHA/expiry now, not just a previously stored flag.
-  IF NOT EXISTS(SELECT 1 FROM public.wos_visual_baseline_items
-       WHERE baseline_id=v_baseline_id)
-     OR EXISTS(
-      SELECT 1 FROM public.wos_visual_baseline_items bi
-      JOIN public.wos_reference_images im ON im.id=bi.reference_image_id
-      LEFT JOIN public.wos_qa_verified_image_proofs pf
-        ON pf.image_id=im.id AND pf.order_id=p_order_id
-        AND pf.organization_id=v_actor.org_id
-        AND pf.storage_bucket=im.storage_bucket AND pf.storage_path=im.storage_path
-      WHERE bi.baseline_id=v_baseline_id
-        AND (im.organization_id<>v_actor.org_id OR im.entity_id<>p_order_id
-         OR im.entity_type<>'PRODUCTION_ORDER' OR im.version_label<>v_label
-         OR im.image_status<>'READY' OR im.superseded_at IS NOT NULL
-         OR im.storage_bucket<>'wos-private' OR pf.image_id IS NULL
-         OR pf.expires_at<=pg_catalog.clock_timestamp()
-         OR pf.verified_sha256 !~ '^[a-f0-9]{64}$')
-     )
-  THEN RAISE EXCEPTION 'WORKSHOP_IMAGE_PROOF_STALE' USING ERRCODE='PT409'; END IF;
+  SELECT b.office_proof_set_digest,b.office_post_order_version,
+    b.office_confirmed_at,b.confirmed_by_office_profile_id
+  INTO v_office_digest,v_office_version,v_office_time,v_office_actor
+  FROM public.wos_visual_baselines b
+  WHERE b.id=v_baseline_id AND b.entity_id=p_order_id
+    AND b.organization_id=v_actor.org_id AND b.entity_type='PRODUCTION_ORDER'
+    AND b.version_label=v_label AND b.status='CURRENT'
+    AND b.superseded_at IS NULL FOR UPDATE;
+  IF NOT FOUND OR v_office_digest IS NULL OR v_office_version<>p_expected_version
+    OR v_office_actor IS NULL OR v_office_actor=v_actor.id OR v_office_time IS NULL
+  THEN RAISE EXCEPTION 'OFFICE_SIGNOFF_STALE' USING ERRCODE='PT409'; END IF;
+  -- Revalidate the LIVE proof set and compare it with Office's saved snapshot.
+  SELECT proof_digest,last_verified_at INTO v_proof_digest,v_proof_verified_at
+    FROM public.wos_qa_p2_m2_checked_proof_set(
+      p_order_id,v_actor.org_id,v_baseline_id,v_label);
+  IF v_proof_digest IS DISTINCT FROM v_office_digest
+     OR v_proof_verified_at>v_office_time
+     OR v_proof_verified_at>=pg_catalog.clock_timestamp()
+  THEN RAISE EXCEPTION 'WORKSHOP_PROOF_CHANGED' USING ERRCODE='PT409'; END IF;
   UPDATE public.wos_visual_baselines SET
-    confirmed_by_workshop_profile_id=v_actor.id,workshop_confirmed_at=pg_catalog.now()
+    confirmed_by_workshop_profile_id=v_actor.id,
+    workshop_confirmed_at=pg_catalog.clock_timestamp(),
+    workshop_proof_set_digest=v_proof_digest,
+    workshop_post_order_version=p_expected_version+1
   WHERE id=v_baseline_id AND organization_id=v_actor.org_id
     AND entity_type='PRODUCTION_ORDER' AND entity_id=p_order_id
     AND version_label=v_label AND status='CURRENT'
-    AND confirmed_by_office_profile_id IS NOT NULL
-    AND office_confirmed_at IS NOT NULL
-    AND confirmed_by_office_profile_id<>v_actor.id
+    AND confirmed_by_office_profile_id=v_office_actor
+    AND office_proof_set_digest=v_office_digest
+    AND office_post_order_version=p_expected_version
     AND confirmed_by_workshop_profile_id IS NULL
     AND superseded_at IS NULL;
   GET DIAGNOSTICS v_count=ROW_COUNT;
   IF v_count<>1 THEN RAISE EXCEPTION 'WORKSHOP_CONFIRM_DENIED' USING ERRCODE='PT409'; END IF;
+ END IF;
+
+ -- Any material change or a new selected baseline revokes prior confirmation.
+ IF p_action IN ('MATERIAL_RECORD','BASELINE_SELECT') THEN
+  UPDATE public.wos_visual_baselines SET
+    confirmed_by_office_profile_id=NULL,office_confirmed_at=NULL,
+    office_proof_set_digest=NULL,office_post_order_version=NULL,
+    confirmed_by_workshop_profile_id=NULL,workshop_confirmed_at=NULL,
+    workshop_proof_set_digest=NULL,workshop_post_order_version=NULL
+  WHERE organization_id=v_actor.org_id AND entity_type='PRODUCTION_ORDER'
+    AND entity_id=p_order_id AND status='CURRENT';
  END IF;
 
  UPDATE public.wos_production_orders SET version=version+1,
