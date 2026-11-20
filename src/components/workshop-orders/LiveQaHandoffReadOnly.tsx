@@ -62,7 +62,7 @@ export default function LiveQaHandoffReadOnly() {
             .select('organization_id,entity_id,entity_type,previous_status,next_status,actor_role,reason_code,created_at'))
             .order('created_at',{ ascending:false }),
           filter(client.from('wos_resource_readiness')
-            .select('organization_id,entity_id,entity_type,resource_type,status,version_label,quantity_expected,quantity_arrived,confirmed_by_profile_id,confirmed_at,note')),
+            .select('organization_id,entity_id,entity_type,resource_type,status,version_label,quantity_expected,quantity_arrived,expected_at,arrived_at,confirmed_by_profile_id,confirmed_at,note')),
           filter(client.from('wos_blockers')
             .select('organization_id,entity_id,entity_type,blocker_code,description,status')),
           filter(client.from('wos_visual_baselines')
@@ -148,9 +148,34 @@ export default function LiveQaHandoffReadOnly() {
             <li key={material.code} className="rounded border p-2 text-xs">
               <strong>{material.title}</strong> · {material.ready ? '记录符合核验条件' : '尚未齐套'}
               <p>{material.message}</p>
+              {material.evidence ? (
+                <dl className="mt-2 grid grid-cols-2 gap-1 border-t pt-2 text-xs">
+                  <dt>生产资料版本</dt><dd>{material.evidence.versionLabel ?? '未登记'}</dd>
+                  <dt>预计到位</dt><dd>{material.evidence.expectedAt ?? '未登记'}</dd>
+                  <dt>实际到位</dt><dd>{material.evidence.arrivedAt ?? '未登记'}</dd>
+                  {material.code === 'INCOMING_MATERIAL' && (
+                    <>
+                      <dt>应到 / 实到</dt><dd>{material.evidence.quantityExpected ?? '未知'} / {material.evidence.quantityArrived ?? '未知'}</dd>
+                      <dt>数量缺口</dt><dd>{material.evidence.quantityShortfall ?? '未核实'}</dd>
+                    </>
+                  )}
+                  <dt>车间核对人</dt><dd>{material.evidence.confirmedBy ? '已登记' : '未登记'}</dd>
+                  <dt>核对时间</dt><dd>{material.evidence.confirmedAt ?? '未登记'}</dd>
+                  <dt>异常说明</dt><dd>{material.evidence.note ?? '无说明'}</dd>
+                </dl>
+              ) : <p className="mt-1 text-amber-900">尚无有效的物料登记证据</p>}
             </li>
           ))}
         </ul>
+        <section className="mt-3 rounded border p-3 text-xs" aria-label="当前签样图片基准及双重确认">
+          <h4 className="font-semibold">当前生产基准与双重确认（只读）</h4>
+          <p className="mt-1">CURRENT 基准：{state.readiness.visualBaseline.currentCount} 条</p>
+          <p>生产版本：{state.readiness.visualBaseline.versionLabel ?? '未登记'} ·
+            {state.readiness.visualBaseline.currentVersionMatched ? ' 当前版本匹配' : ' 当前版本未核实'}</p>
+          <p>办公室签认：{state.readiness.visualBaseline.officeConfirmed ? '时间已登记' : '未登记'} ·
+            车间复核：{state.readiness.visualBaseline.workshopConfirmed ? '时间已登记' : '未登记'}</p>
+          <p className="mt-1 text-amber-900">基准时间记录不等于实物签样、独立人员身份或私有图片证明验收，更不代表批准开工。</p>
+        </section>
         {state.readiness.issues.map((issue,index) => (
           <p key={index} className="mt-2 text-xs text-red-800">{issue}</p>
         ))}

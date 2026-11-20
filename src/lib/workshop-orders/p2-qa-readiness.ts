@@ -19,6 +19,8 @@ export interface WosP2ResourceRow {
   readonly confirmed_by_profile_id: string | null;
   readonly confirmed_at: string | null;
   readonly note: string | null;
+  readonly expected_at?: string | null;
+  readonly arrived_at?: string | null;
 }
 
 export interface WosP2BlockerRow {
@@ -48,14 +50,38 @@ export interface WosP2MaterialAssessment {
   readonly status: string;
   readonly ready: boolean;
   readonly message: string;
+  readonly evidence: Readonly<{
+    versionLabel: string | null;
+    quantityExpected: number | null;
+    quantityArrived: number | null;
+    quantityShortfall: number | null;
+    expectedAt: string | null;
+    arrivedAt: string | null;
+    confirmedBy: string | null;
+    confirmedAt: string | null;
+    note: string | null;
+  }> | null;
 }
 export interface WosP2ReadinessResult {
+  /** Display-only DB baseline timestamp summary; NOT signed-image proof. */
+  readonly visualBaseline: Readonly<{
+    currentCount: number;
+    versionLabel: string | null;
+    currentVersionMatched: boolean;
+    officeConfirmed: boolean;
+    workshopConfirmed: boolean;
+  }>;
   readonly materials: readonly WosP2MaterialAssessment[];
   readonly issues: readonly string[];
   readonly materialsVerified: boolean;
   readonly canStart: false;
   readonly source: 'QA_RLS_READ_ONLY';
 }
+
+const emptyVisualBaseline = {
+  currentCount: 0, versionLabel: null, currentVersionMatched: false,
+  officeConfirmed: false, workshopConfirmed: false,
+} as const;
 
 export function evaluateWosP2Readiness(input: WosP2ReadinessInput): WosP2ReadinessResult {
   const issues: string[] = [];
@@ -70,9 +96,10 @@ export function evaluateWosP2Readiness(input: WosP2ReadinessInput): WosP2Readine
     return {
       materials: WOS_P2_MATERIALS.map(row => ({
         code: row.code, title: row.title, status: 'UNKNOWN',
-        ready: false, message: '未取得有效的真实 QA 数据',
+        ready: false, message: '未取得有效的真实 QA 数据', evidence: null,
       })),
       issues: ['齐套数据结构不完整，禁止开工'], materialsVerified: false,
+      visualBaseline: emptyVisualBaseline,
       canStart: false, source: 'QA_RLS_READ_ONLY',
     };
   }
@@ -89,12 +116,14 @@ export function evaluateWosP2Readiness(input: WosP2ReadinessInput): WosP2Readine
       return {
         code: spec.code, title: spec.title, status: 'NOT_VERIFIED',
         ready: false, message: rows.length === 0 ? '尚无车间物料登记' : '存在重复的物料记录',
+        evidence: null,
       };
     }
     const row = rows[0];
     const confirms = typeof row.confirmed_by_profile_id === 'string' &&
       row.confirmed_by_profile_id.length > 0 &&
-      typeof row.confirmed_at === 'string' && row.confirmed_at.length > 0;
+      typeof row.confirmed_at === 'string' &&
+      Number.isFinite(Date.parse(row.confirmed_at));
     const correctVersion = validVersion && row.version_label === input.versionLabel;
     const quantityReady = spec.code !== 'INCOMING_MATERIAL' ||
       (validQty && Number.isSafeInteger(row.quantity_expected) &&
@@ -110,9 +139,26 @@ export function evaluateWosP2Readiness(input: WosP2ReadinessInput): WosP2Readine
     else if (!correctVersion) message = '物料与当前订单版本不一致';
     else if (!confirms) message = '缺少车间操作人和确认时间';
     else if (!quantityReady) message = '来料数量不足本批生产数量';
+    const count = Number.isSafeInteger(row.quantity_arrived) && Number(row.quantity_arrived) >= 0
+      ? Number(row.quantity_arrived) : null;
+    const expected = Number.isSafeInteger(row.quantity_expected) && Number(row.quantity_expected) >= 0
+      ? Number(row.quantity_expected) : null;
     return {
       code: spec.code, title: spec.title, status: row.status || 'UNKNOWN',
       ready, message,
+      evidence: {
+        versionLabel: typeof row.version_label === 'string' ? row.version_label : null,
+        quantityExpected: expected,
+        quantityArrived: count,
+        quantityShortfall: spec.code === 'INCOMING_MATERIAL' && validQty && count !== null
+          ? Math.max(0,Math.max(input.currentBatchQuantity,expected ?? input.currentBatchQuantity)-count)
+          : null,
+        expectedAt: typeof row.expected_at === 'string' && Number.isFinite(Date.parse(row.expected_at)) ? row.expected_at : null,
+        arrivedAt: typeof row.arrived_at === 'string' && Number.isFinite(Date.parse(row.arrived_at)) ? row.arrived_at : null,
+        confirmedBy: typeof row.confirmed_by_profile_id === 'string' ? row.confirmed_by_profile_id : null,
+        confirmedAt: typeof row.confirmed_at === 'string' && Number.isFinite(Date.parse(row.confirmed_at)) ? row.confirmed_at : null,
+        note: typeof row.note === 'string' ? row.note : null,
+      },
     };
   });
   for (const blocker of input.blockers) {
@@ -121,11 +167,28 @@ export function evaluateWosP2Readiness(input: WosP2ReadinessInput): WosP2Readine
     }
   }
   const baseline = input.baselines.filter(row => row?.status === 'CURRENT');
-  if (baseline.length !== 1 || baseline[0]?.version_label !== input.versionLabel ||
-      !baseline[0]?.office_confirmed_at || !baseline[0]?.workshop_confirmed_at) {
+  const oneCurrent = baseline.length === 1;
+  const versionMatched = oneCurrent && validVersion &&
+    baseline[0].version_label === input.versionLabel;
+  const visualBaseline = {
+    currentCount: baseline.length,
+    versionLabel: oneCurrent ? baseline[0].version_label : null,
+    currentVersionMatched: versionMatched,
+    officeConfirmed: versionMatched &&
+      typeof baseline[0].office_confirmed_at === 'string' &&
+      Number.isFinite(Date.parse(baseline[0].office_confirmed_at)),
+    workshopConfirmed: versionMatched &&
+      typeof baseline[0].workshop_confirmed_at === 'string' &&
+      Number.isFinite(Date.parse(baseline[0].workshop_confirmed_at)),
+  };
+  if (!visualBaseline.currentVersionMatched ||
+      !visualBaseline.officeConfirmed || !visualBaseline.workshopConfirmed) {
     issues.push('缺少当前版本经办公室与车间共同确认的签样 / 视觉基准');
   }
   const materialsVerified = input.readVerified && validVersion && validQty &&
     materials.every(row => row.ready) && issues.length === 0;
-  return { materials, issues, materialsVerified, canStart: false, source: 'QA_RLS_READ_ONLY' };
+  // Only timestamp/label data are available here. The separate candidate
+  // evaluator checks independent actor IDs and private image proof;
+  // neither authorizes start without a reviewed writer + official Gate.
+  return { materials, issues, visualBaseline, materialsVerified, canStart: false, source: 'QA_RLS_READ_ONLY' };
 }

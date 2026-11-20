@@ -14,11 +14,11 @@ interface Props {
   readonly onSuccess: () => void;
 }
 type Resource = (typeof WOS_P2_RESOURCE_TYPES)[number];
-const resourceChoices: Array<{code:Resource;label:string;statuses:string[]}> = [
-  { code:'FILM',label:'花膜',statuses:['NOT_ARRIVED','PARTIALLY_ARRIVED','ARRIVED','VERSION_VERIFIED'] },
-  { code:'FIXTURE',label:'夹具',statuses:['NOT_AVAILABLE','IN_PRODUCTION','ARRIVED','FIT_VERIFIED'] },
-  { code:'INCOMING_MATERIAL',label:'来料及产品',statuses:['NOT_ARRIVED','PARTIALLY_ARRIVED','ARRIVED','QUANTITY_VERIFIED'] },
-  { code:'SIGNED_SAMPLE',label:'客户确认样 / 大货签样',statuses:['MISSING','UPLOADED','PHYSICAL_SAMPLE_RECEIVED','VERIFIED'] },
+const resourceChoices: Array<{code:Resource;label:string;statuses:string[];guidance:string}> = [
+  { code:'FILM',label:'花膜',statuses:['NOT_ARRIVED','PARTIALLY_ARRIVED','ARRIVED','VERSION_VERIFIED'],guidance:'先核对花膜图案和订单当前生产资料版本；仅到货不能标记版本已核实。' },
+  { code:'FIXTURE',label:'夹具',statuses:['NOT_AVAILABLE','IN_PRODUCTION','ARRIVED','FIT_VERIFIED'],guidance:'到货不等于可用；必须实际试装并核验产品定位、夹具适配及损伤风险。' },
+  { code:'INCOMING_MATERIAL',label:'来料及产品',statuses:['NOT_ARRIVED','PARTIALLY_ARRIVED','ARRIVED','QUANTITY_VERIFIED'],guidance:'核实当前批次应到和实到数量。数量不足不得选择 QUANTITY_VERIFIED。' },
+  { code:'SIGNED_SAMPLE',label:'客户确认样 / 大货签样',statuses:['MISSING','UPLOADED','PHYSICAL_SAMPLE_RECEIVED','VERIFIED'],guidance:'已上传图片不等于实物签样已核对；必须匹配当前版本并完成独立确认。' },
 ];
 
 export default function LiveQaWorkshopActions({orderId,expectedVersion,workflowStatus,onSuccess}:Props) {
@@ -125,6 +125,13 @@ export default function LiveQaWorkshopActions({orderId,expectedVersion,workflowS
               {choices.statuses.map(v=><option key={v} value={v}>{v}</option>)}
             </select>
           </label>
+          <p className="col-span-full rounded border border-blue-200 bg-white p-2 text-xs text-blue-950">
+            {choices.guidance}
+            <span className="mt-1 block text-amber-900">
+              预计到货和实际到货时间目前只支持读取既有数据库记录；
+              本次不添加未审计的写入参数，也不启用任何确认按钮。
+            </span>
+          </p>
           {resource==='INCOMING_MATERIAL' && (
             <>
               <label className="text-xs font-medium">应到数量
@@ -138,6 +145,14 @@ export default function LiveQaWorkshopActions({orderId,expectedVersion,workflowS
             </>
           )}
         </div>
+      )}
+      {action==='CONFIRM_MATERIAL' && resource==='INCOMING_MATERIAL' &&
+        Number.isFinite(Number(quantityArrived)) && Number.isFinite(Number(quantityExpected)) &&
+        quantityExpected.trim()!=='' && quantityArrived.trim()!=='' && (
+        <p role="status" className="rounded bg-white p-2 text-xs text-amber-950">
+          填写数量核对（仅本地预览，尚未保存）：应到 {quantityExpected} · 实到 {quantityArrived} ·
+          差额 {Math.max(0,Number(quantityExpected)-Number(quantityArrived))}。
+        </p>
       )}
       {action==='REVIEW_CORRECTION' && <p className="rounded border border-amber-300 bg-white p-2 text-xs text-amber-950">
         请先核对订单最新字段与对应图片版本；审核仅解除资料退回阻塞，不会继承旧签样、花膜确认或放行生产。

@@ -59,7 +59,7 @@ export default function LiveQaWorkshopReadiness({
       // organization RLS, exact order id and entity type. No service role key.
       const [resources, blockers, baselines, confirmations, history] = await Promise.all([
         db.from('wos_resource_readiness')
-          .select('organization_id,entity_id,entity_type,resource_type,status,version_label,quantity_expected,quantity_arrived,confirmed_by_profile_id,confirmed_at,note')
+          .select('organization_id,entity_id,entity_type,resource_type,status,version_label,quantity_expected,quantity_arrived,expected_at,arrived_at,confirmed_by_profile_id,confirmed_at,note')
           .eq('organization_id',organizationId).eq('entity_id',orderId)
           .eq('entity_type','PRODUCTION_ORDER').limit(100),
         db.from('wos_blockers')
@@ -196,9 +196,41 @@ export default function LiveQaWorkshopReadiness({
               <div key={row.code} className="rounded border border-amber-200 bg-white p-3">
                 <p className="text-xs font-semibold">{row.title} · {row.ready ? '已核实' : '未齐套'}</p>
                 <p className="mt-1 text-xs text-gray-600">{row.status} · {row.message}</p>
+                {row.evidence ? (
+                  <dl className="mt-2 grid grid-cols-2 gap-x-2 gap-y-1 border-t pt-2 text-xs text-gray-700">
+                    <dt>物料版本</dt><dd>{row.evidence.versionLabel ?? '未登记'}</dd>
+                    <dt>预计到位</dt><dd>{row.evidence.expectedAt ?? '未登记'}</dd>
+                    <dt>实际到位</dt><dd>{row.evidence.arrivedAt ?? '未登记'}</dd>
+                    {row.code === 'INCOMING_MATERIAL' && (
+                      <>
+                        <dt>应到 / 实到</dt><dd>{row.evidence.quantityExpected ?? '未知'} / {row.evidence.quantityArrived ?? '未知'}</dd>
+                        <dt>本批数量缺口</dt><dd>{row.evidence.quantityShortfall ?? '未核实'}</dd>
+                      </>
+                    )}
+                    <dt>核对人员</dt><dd>{row.evidence.confirmedBy ? '已有人员记录' : '未登记'}</dd>
+                    <dt>核对时间</dt><dd>{row.evidence.confirmedAt ?? '未登记'}</dd>
+                    <dt>异常说明</dt><dd>{row.evidence.note ?? '无补充说明'}</dd>
+                  </dl>
+                ) : (
+                  <p className="mt-2 text-xs text-amber-900">无有效物料记录，不得按默认值视为齐套。</p>
+                )}
               </div>
             ))}
           </div>
+          <section className="rounded border border-amber-300 bg-white p-3" aria-label="当前生产图片基准与办公室车间双重核对">
+            <h5 className="text-xs font-semibold">当前图片 / 签样基准（只读证据）</h5>
+            <div className="mt-2 grid gap-1 text-xs text-gray-700 sm:grid-cols-2">
+              <p>CURRENT 基准记录：{readState.result.visualBaseline.currentCount}</p>
+              <p>基准版本：{readState.result.visualBaseline.versionLabel ?? '未登记'}</p>
+              <p>当前生产版本匹配：{readState.result.visualBaseline.currentVersionMatched ? '记录匹配' : '未核实'}</p>
+              <p>办公室签认：{readState.result.visualBaseline.officeConfirmed ? '时间已登记' : '未登记'}</p>
+              <p>车间签认：{readState.result.visualBaseline.workshopConfirmed ? '时间已登记' : '未登记'}</p>
+            </div>
+            <p className="mt-2 text-xs text-amber-900">
+              时间戳与版本标签不等于独立人员签名、私有图片 SHA-256 完整性证明或实物签样核验；
+              后续必须通过受审核的独立证据链及人工放行。
+            </p>
+          </section>
           {readState.result.issues.length > 0 && (
             <section className="rounded border border-red-200 bg-white p-3">
               <h5 className="text-xs font-semibold text-red-900">当前阻断项</h5>
@@ -208,7 +240,9 @@ export default function LiveQaWorkshopReadiness({
             </section>
           )}
           <p role="status" className="rounded border border-amber-400 bg-white p-3 text-xs font-medium text-amber-950">
-            {readState.result.materialsVerified ? '物料资料可提交人工齐套审核；尚未放行开工。' : '资料或物料尚未核实，禁止开工。'}
+            {readState.result.materialsVerified && readState.handoff.historySequenceVerified
+              ? '物料与当前订单的交接历史均已匹配，仅可提交人工齐套审核；尚未放行开工。'
+              : '物料、签样或当前事务版本交接证明未全部核实，禁止排期放行或开工。'}
           </p>
           {readState.history.length > 0 && (
             <section className="rounded border border-amber-200 bg-white p-3">
