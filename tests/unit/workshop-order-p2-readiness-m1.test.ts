@@ -44,6 +44,16 @@ const complete=evaluateWosP2Readiness(goodMaterial);
 assert.equal(complete.materialsVerified,true);
 assert.equal(complete.canStart,false);
 assert.equal(complete.materials.length,4);
+assert.equal(complete.visualBaseline.currentCount,1);
+assert.equal(complete.visualBaseline.versionLabel,'QA-R6');
+assert.equal(complete.visualBaseline.currentVersionMatched,true);
+assert.equal(complete.visualBaseline.officeConfirmed,true);
+assert.equal(complete.visualBaseline.workshopConfirmed,true);
+const missingVisual=evaluateWosP2Readiness({...goodMaterial,baselines:[]});
+assert.equal(missingVisual.visualBaseline.currentCount,0);
+assert.equal(missingVisual.visualBaseline.officeConfirmed,false);
+assert.equal(missingVisual.visualBaseline.workshopConfirmed,false);
+assert.equal(missingVisual.canStart,false);
 assert(complete.materials.every(x=>x.evidence?.expectedAt===at && x.evidence?.arrivedAt===at));
 assert.equal(complete.materials.find(x=>x.code==='INCOMING_MATERIAL')?.evidence?.quantityShortfall,0);
 
@@ -214,6 +224,12 @@ for(const path of [
  assert(!/\.insert\s*\(|\.upsert\s*\(|\.update\s*\(|\.delete\s*\(|\.rpc\s*\(/.test(source),path);
 }
 const readinessUi=readFileSync('src/components/workshop-orders/LiveQaWorkshopReadiness.tsx','utf8');
+const handoffUi=readFileSync('src/components/workshop-orders/LiveQaHandoffReadOnly.tsx','utf8');
+assert(readinessUi.includes('result.visualBaseline.currentCount'));
+assert(readinessUi.includes('result.visualBaseline.officeConfirmed'));
+assert(readinessUi.includes('result.visualBaseline.workshopConfirmed'));
+assert(handoffUi.includes('readiness.visualBaseline.currentCount'));
+assert(handoffUi.includes('readiness.visualBaseline.workshopConfirmed'));
 assert(readinessUi.includes('readState.result.materialsVerified && readState.handoff.historySequenceVerified'),
   'a newer unproved transaction revision must not look ready for human review');
 
