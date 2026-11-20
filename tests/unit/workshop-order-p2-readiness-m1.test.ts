@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
+  parseWosP2Action, canActOnWosP2, isWosP2QaMutationEnabled, isWosP2RpcResult,
+} from '../../src/lib/workshop-orders/p2-action-contract';
+import {
   WOS_P2_MATERIALS, evaluateWosP2Readiness,
   type WosP2ReadinessInput,
 } from '../../src/lib/workshop-orders/p2-qa-readiness';
@@ -216,6 +219,61 @@ assert(readinessUi.includes('readState.result.materialsVerified && readState.han
 const actionUi=readFileSync('src/components/workshop-orders/LiveQaWorkshopActions.tsx','utf8');
 assert(actionUi.includes("NEXT_PUBLIC_WOS_P2_QA_MUTATIONS_ENABLED === 'true'"));
 assert(actionUi.includes('choices.guidance'));
+// Exercise the REAL existing Zod P2 operator action contract, not only source
+// string assertions. These tests do NOT call the database or simulate a
+// privileged SQL transaction and cannot establish actual replay acceptance.
+const materialAction={
+  orderId:order,expectedVersion:7,requestId:event,
+  action:'CONFIRM_MATERIAL' as const,resourceType:'INCOMING_MATERIAL' as const,
+  resourceStatus:'QUANTITY_VERIFIED' as const,quantityExpected:200,quantityArrived:200,
+  note:'真实 QA 素材核对：已记录当前批次来料状态',
+};
+const parsed=parseWosP2Action(materialAction);
+assert(parsed);
+const validResponse={status:'APPLIED',orderId:order,requestId:event,version:8,workflowStatus:'WAITING_MATERIAL'};
+assert(isWosP2RpcResult(validResponse,parsed));
+assert(isWosP2RpcResult({...validResponse,status:'REPLAYED'},parsed),
+  'same-request replay may only be accepted after SQL checks its immutable fingerprint');
+assert(!isWosP2RpcResult({...validResponse,requestId:office},parsed));
+assert(!isWosP2RpcResult({...validResponse,version:9},parsed),
+  'server response cannot advance beyond requested version+1');
+assert(!isWosP2RpcResult({...validResponse,workflowStatus:'IN_PRODUCTION'},parsed));
+for(const malformed of [
+  {...materialAction,quantityArrived:190},
+  {...materialAction,quantityExpected:0},
+  {...materialAction,resourceStatus:'FIT_VERIFIED'},
+  {...materialAction,expectedVersion:0},
+  {...materialAction,expectedVersion:7.5},
+  {...materialAction,quantityArrived:-1},
+  {...materialAction,note:'short'},
+]) {
+ assert.equal(parseWosP2Action(malformed),null,
+   'P2 action parser must deny invalid quantity/status/revision/note');
+}
+assert.equal(canActOnWosP2('viewer'),false);
+assert.equal(canActOnWosP2('sales'),false);
+assert.equal(canActOnWosP2('operator'),true);
+assert.equal(canActOnWosP2('manager'),true);
+const qaURL='https://xulmpqaknlwqqculbsek.supabase.co';
+assert.equal(isWosP2QaMutationEnabled({
+  vercelEnv:'preview',flag:'false',supabaseUrl:qaURL,
+}),false);
+assert.equal(isWosP2QaMutationEnabled({
+  vercelEnv:'production',flag:'true',supabaseUrl:qaURL,
+}),false);
+assert.equal(isWosP2QaMutationEnabled({
+  vercelEnv:'preview',flag:'true',supabaseUrl:'https://other.supabase.co',
+}),false);
+const conflictingSecond={...receipt,request_id:event,expected_version:8,
+  payload_fingerprint:'b'.repeat(64),
+  response_json:{...receipt.response_json,version:9}};
+const conflict=assessWosP2MaterialVersionLineage({
+  ...v8,currentTransactionVersion:9,receipts:[receipt,conflictingSecond],
+});
+assert.equal(conflict.candidateReceiptChainConsistent,false,
+  'same requestId and different payload cannot certify two different material transactions');
+assert.equal(conflict.canStart,false);
+
 const versionSource=readFileSync('src/lib/workshop-orders/p2-material-version-evidence.ts','utf8');
 assert(versionSource.includes('currentRevisionHandoffProven: false'));
 console.log('workshop-order-p2-readiness-m1.test.ts: PASS');
