@@ -88,7 +88,7 @@ BEGIN
  ) THEN RAISE EXCEPTION 'INVALID_BASELINE' USING ERRCODE='PT409'; END IF;
  SELECT count(*) INTO v_total FROM public.wos_visual_baseline_items bi
   WHERE bi.baseline_id=p_baseline_id;
- IF v_total NOT BETWEEN 3 AND 12 THEN
+ IF v_total NOT BETWEEN 4 AND 12 THEN
   RAISE EXCEPTION 'BASELINE_IMAGE_COUNT_INVALID' USING ERRCODE='PT409'; END IF;
  WITH locked_proofs AS MATERIALIZED (
   SELECT im.id AS image_id,im.category,im.version_label,
@@ -133,7 +133,7 @@ BEGIN
     ) ORDER BY image_id),max(verified_at)
  INTO v_count,v_categories,v_images,v_verified FROM locked_proofs;
  IF v_count<>v_total OR NOT COALESCE(
-   ARRAY['PRODUCT','FILM_PATTERN','SIGNED_SAMPLE']::text[]<@v_categories,false)
+   ARRAY['PRODUCT','FILM_PATTERN','SIGNED_SAMPLE','CUSTOMER_APPROVED_SAMPLE']::text[]<@v_categories,false)
  THEN RAISE EXCEPTION 'UNVERIFIED_OR_INCOMPLETE_PROOF_SET'
    USING ERRCODE='PT409'; END IF;
  SELECT pg_catalog.jsonb_build_object(
@@ -235,6 +235,10 @@ DECLARE
  v_office_version integer;
  v_office_time timestamptz;
  v_office_actor uuid;
+ v_workshop_digest text;
+ v_workshop_version integer;
+ v_workshop_time timestamptz;
+ v_workshop_actor uuid;
  v_image_id uuid;
  v_ids uuid[];
  v_n integer;
@@ -349,33 +353,41 @@ BEGIN
   ELSIF v_qty_expected IS NOT NULL OR v_qty_arrived IS NOT NULL THEN
     RAISE EXCEPTION 'UNEXPECTED_QUANTITIES' USING ERRCODE='22023';
   END IF;
-  -- Film and signed-sample "VERIFIED" requires real image and current valid
-  -- private-object SHA proof; a browser checkbox alone cannot create proof.
-  -- Final FILM and SIGNED_SAMPLE must be linked to an independently
-  -- double-confirmed CURRENT baseline with an unexpired private SHA proof.
-  IF v_final AND v_resource IN ('FILM','SIGNED_SAMPLE') AND NOT EXISTS(
-    SELECT 1 FROM public.wos_visual_baselines b
-      JOIN public.wos_visual_baseline_items bi ON bi.baseline_id=b.id
-      JOIN public.wos_reference_images im ON im.id=bi.reference_image_id
-      JOIN public.wos_qa_verified_image_proofs pf
-       ON pf.image_id=im.id AND pf.order_id=v_order.id
-       AND pf.organization_id=v_actor.org_id
-       AND pf.storage_bucket=im.storage_bucket AND pf.storage_path=im.storage_path
-    WHERE b.organization_id=v_actor.org_id AND b.entity_id=v_order.id
+  -- Before FINAL FILM or SIGNED_SAMPLE, re-check the exact same signed
+  -- private-object proof set. Historical signoff timestamps are not proof.
+  IF v_final AND v_resource IN ('FILM','SIGNED_SAMPLE') THEN
+    SELECT b.id,b.office_proof_set_digest,b.workshop_proof_set_digest,
+      b.office_post_order_version,b.workshop_post_order_version,
+      b.confirmed_by_office_profile_id,b.confirmed_by_workshop_profile_id,
+      b.office_confirmed_at,b.workshop_confirmed_at
+    INTO v_baseline_id,v_office_digest,v_workshop_digest,
+      v_office_version,v_workshop_version,v_office_actor,v_workshop_actor,
+      v_office_time,v_workshop_time
+    FROM public.wos_visual_baselines b
+    WHERE b.organization_id=v_actor.org_id AND b.entity_id=p_order_id
       AND b.entity_type='PRODUCTION_ORDER' AND b.version_label=v_label
       AND b.status='CURRENT' AND b.superseded_at IS NULL
-      AND b.office_confirmed_at IS NOT NULL AND b.workshop_confirmed_at IS NOT NULL
-      AND b.confirmed_by_office_profile_id IS NOT NULL
-      AND b.confirmed_by_workshop_profile_id IS NOT NULL
-      AND b.confirmed_by_office_profile_id<>b.confirmed_by_workshop_profile_id
-      AND im.organization_id=v_actor.org_id AND im.entity_id=v_order.id
-      AND im.entity_type='PRODUCTION_ORDER' AND im.version_label=v_label
-      AND im.image_status='READY' AND im.superseded_at IS NULL
-      AND im.storage_bucket='wos-private'
-      AND im.category=CASE WHEN v_resource='FILM' THEN 'FILM_PATTERN' ELSE 'SIGNED_SAMPLE' END
-      AND pf.expires_at>pg_catalog.clock_timestamp()
-      AND pf.verified_sha256 ~ '^[a-f0-9]{64}$'
-  ) THEN RAISE EXCEPTION 'VERIFIED_IMAGE_REQUIRED' USING ERRCODE='PT409'; END IF;
+    FOR UPDATE;
+    IF NOT FOUND OR v_office_digest IS NULL OR v_workshop_digest IS NULL
+      OR v_office_digest IS DISTINCT FROM v_workshop_digest
+      OR v_office_version IS NULL OR v_workshop_version IS NULL
+      OR v_office_version+1<>v_workshop_version
+      OR v_workshop_version<>p_expected_version
+      OR v_office_actor IS NULL OR v_workshop_actor IS NULL
+      OR v_office_actor=v_workshop_actor
+      OR v_office_time IS NULL OR v_workshop_time IS NULL
+      OR v_office_time>v_workshop_time
+    THEN RAISE EXCEPTION 'VERIFIED_IMAGE_REQUIRED' USING ERRCODE='PT409'; END IF;
+    SELECT proof_digest,last_verified_at
+      INTO v_proof_digest,v_proof_verified_at
+    FROM public.wos_qa_p2_m2_checked_proof_set(
+      p_order_id,v_actor.org_id,v_baseline_id,v_label);
+    IF v_proof_digest IS NULL
+      OR v_proof_digest IS DISTINCT FROM v_office_digest
+      OR v_proof_digest IS DISTINCT FROM v_workshop_digest
+      OR v_proof_verified_at>v_office_time
+    THEN RAISE EXCEPTION 'VERIFIED_IMAGE_PROOF_CHANGED' USING ERRCODE='PT409'; END IF;
+  END IF;
   INSERT INTO public.wos_resource_readiness(
     organization_id,entity_type,entity_id,resource_type,status,
     expected_at,arrived_at,quantity_expected,quantity_arrived,
@@ -395,7 +407,7 @@ BEGIN
 
  ELSIF p_action='BASELINE_SELECT' THEN
   IF pg_catalog.jsonb_typeof(p_payload->'imageIds')<>'array'
-   OR pg_catalog.jsonb_array_length(p_payload->'imageIds') NOT BETWEEN 3 AND 12
+   OR pg_catalog.jsonb_array_length(p_payload->'imageIds') NOT BETWEEN 4 AND 12
   THEN RAISE EXCEPTION 'INVALID_IMAGES' USING ERRCODE='22023'; END IF;
   SELECT pg_catalog.array_agg(img_id.value::uuid) INTO v_ids
     FROM pg_catalog.jsonb_array_elements_text(p_payload->'imageIds') AS img_id(value);
@@ -416,7 +428,7 @@ BEGIN
   IF v_count<>pg_catalog.array_length(v_ids,1)
   THEN RAISE EXCEPTION 'UNVERIFIED_IMAGES' USING ERRCODE='PT409'; END IF;
   IF EXISTS(
-   SELECT 1 FROM pg_catalog.unnest(ARRAY['PRODUCT','FILM_PATTERN','SIGNED_SAMPLE']) AS needed(category)
+   SELECT 1 FROM pg_catalog.unnest(ARRAY['PRODUCT','FILM_PATTERN','SIGNED_SAMPLE','CUSTOMER_APPROVED_SAMPLE']) AS needed(category)
    WHERE NOT EXISTS(SELECT 1 FROM public.wos_reference_images im
      WHERE im.id=ANY(v_ids) AND im.category=needed.category)
   ) THEN RAISE EXCEPTION 'REQUIRED_CATEGORIES_MISSING' USING ERRCODE='PT409'; END IF;
