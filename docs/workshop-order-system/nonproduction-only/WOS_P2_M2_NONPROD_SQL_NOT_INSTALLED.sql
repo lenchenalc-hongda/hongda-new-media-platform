@@ -234,13 +234,25 @@ BEGIN
   END IF;
   -- Film and signed-sample "VERIFIED" requires real image and current valid
   -- private-object SHA proof; a browser checkbox alone cannot create proof.
+  -- Final FILM/SIGNED_SAMPLE cannot rely on any READY file: the exact
+  -- reference image MUST be included in the current independently
+  -- Office+Workshop-confirmed baseline for the SAME production spec.
   IF v_final AND v_resource IN ('FILM','SIGNED_SAMPLE') AND NOT EXISTS(
-     SELECT 1 FROM public.wos_reference_images im
+     SELECT 1 FROM public.wos_visual_baselines b
+      JOIN public.wos_visual_baseline_items bi ON bi.baseline_id=b.id
+      JOIN public.wos_reference_images im ON im.id=bi.reference_image_id
       JOIN public.wos_qa_verified_image_proofs pf
        ON pf.image_id=im.id AND pf.order_id=v_order.id
        AND pf.organization_id=v_actor.org_id
        AND pf.storage_bucket=im.storage_bucket AND pf.storage_path=im.storage_path
-     WHERE im.organization_id=v_actor.org_id AND im.entity_id=v_order.id
+     WHERE b.organization_id=v_actor.org_id AND b.entity_id=v_order.id
+       AND b.entity_type='PRODUCTION_ORDER' AND b.version_label=v_label
+       AND b.status='CURRENT' AND b.superseded_at IS NULL
+       AND b.office_confirmed_at IS NOT NULL AND b.workshop_confirmed_at IS NOT NULL
+       AND b.confirmed_by_office_profile_id IS NOT NULL
+       AND b.confirmed_by_workshop_profile_id IS NOT NULL
+       AND b.confirmed_by_office_profile_id<>b.confirmed_by_workshop_profile_id
+       AND im.organization_id=v_actor.org_id AND im.entity_id=v_order.id
        AND im.entity_type='PRODUCTION_ORDER' AND im.version_label=v_label
        AND im.image_status='READY' AND im.superseded_at IS NULL
        AND im.storage_bucket='wos-private'
@@ -344,6 +356,84 @@ BEGIN
 
  ELSIF p_action='BASELINE_WORKSHOP_CONFIRM' THEN
   v_baseline_id:=(p_payload->>'baselineId')::uuid;
+  -- Objects, proof expiry, SHA, supersession, org and production version can
+  -- change after Office confirmed. Reverify at the actual Workshop step.
+  IF NOT EXISTS(SELECT 1 FROM public.wos_visual_baseline_items
+       WHERE baseline_id=v_baseline_id)
+     OR EXISTS(
+      SELECT 1 FROM public.wos_visual_baseline_items bi
+      JOIN public.wos_reference_images im ON im.id=bi.reference_image_id
+      LEFT JOIN public.wos_qa_verified_image_proofs pf
+        ON pf.image_id=im.id AND pf.order_id=p_order_id
+        AND pf.organization_id=v_actor.org_id
+        AND pf.storage_bucket=im.storage_bucket AND pf.storage_path=im.storage_path
+      WHERE bi.baseline_id=v_baseline_id
+        AND (im.organization_id<>v_actor.org_id OR im.entity_id<>p_order_id
+         OR im.entity_type<>'PRODUCTION_ORDER' OR im.version_label<>v_label
+         OR im.image_status<>'READY' OR im.superseded_at IS NOT NULL
+         OR im.storage_bucket<>'wos-private' OR pf.image_id IS NULL
+         OR pf.expires_at<=pg_catalog.clock_timestamp()
+         OR pf.verified_sha256 !~ '^[a-f0-9]{64}
+    confirmed_by_workshop_profile_id=v_actor.id,workshop_confirmed_at=pg_catalog.now()
+  WHERE id=v_baseline_id AND organization_id=v_actor.org_id
+    AND entity_type='PRODUCTION_ORDER' AND entity_id=p_order_id
+    AND version_label=v_label AND status='CURRENT'
+    AND confirmed_by_office_profile_id IS NOT NULL
+    AND office_confirmed_at IS NOT NULL
+    AND confirmed_by_office_profile_id<>v_actor.id
+    AND confirmed_by_workshop_profile_id IS NULL
+    AND superseded_at IS NULL;
+  GET DIAGNOSTICS v_count=ROW_COUNT;
+  IF v_count<>1 THEN RAISE EXCEPTION 'WORKSHOP_CONFIRM_DENIED' USING ERRCODE='PT409'; END IF;
+ END IF;
+
+ UPDATE public.wos_production_orders SET version=version+1,
+    updated_at=pg_catalog.now()
+  WHERE id=p_order_id AND organization_id=v_actor.org_id AND version=p_expected_version
+    AND workflow_status IN('WAITING_MATERIAL','READINESS_CHECK');
+ GET DIAGNOSTICS v_count=ROW_COUNT;
+ IF v_count<>1 THEN RAISE EXCEPTION 'CAS_CONFLICT' USING ERRCODE='PT409'; END IF;
+
+ -- Include the canonical server-generated spec digest, but mark the whole
+ -- v8+ lineage UNVERIFIED until a separate authenticated anchor has been
+ -- installed after independent review. No auto start or readiness promotion.
+ v_after:=public.wos_qa_p2_m2_spec_digest(p_order_id);
+ v_next:=p_expected_version+1;
+ v_receipt:=pg_catalog.encode(pg_catalog.sha256(pg_catalog.convert_to(
+   pg_catalog.jsonb_build_object(
+     'requestId',p_request_id,'actorProfile',v_actor.id,'orderId',p_order_id,
+     'expectedVersion',p_expected_version,'version',v_next,'action',p_action,
+     'payloadHash',v_hash,'beforeDigest',v_before,'afterDigest',v_after
+   )::text,'UTF8')),'hex');
+ v_response:=pg_catalog.jsonb_build_object(
+   'status','APPLIED','orderId',p_order_id,'requestId',p_request_id,
+   'version',v_next,'productionVersionLabel',v_label,'preSpecDigest',v_before,
+   'postSpecDigest',v_after,'receiptDigest',v_receipt,
+   'proofStatus','UNVERIFIED','canStart',false,'workflowStatus',v_order.workflow_status,
+   'baselineId',v_baseline_id);
+ INSERT INTO public.wos_qa_p2_m2_receipts(
+  request_id,organization_id,order_id,actor_profile_id,action,
+  expected_version,payload_fingerprint,before_spec_digest,after_spec_digest,
+  receipt_digest,production_version_label,result_json)
+ VALUES(p_request_id,v_actor.org_id,p_order_id,v_actor.id,p_action,p_expected_version,
+     v_hash,v_before,v_after,v_receipt,v_label,v_response);
+ RETURN v_response;
+EXCEPTION WHEN NO_DATA_FOUND OR TOO_MANY_ROWS THEN
+  RAISE EXCEPTION 'NOT_AUTHORIZED' USING ERRCODE='42501';
+END;
+$fn$;
+REVOKE ALL ON FUNCTION public.wos_qa_p2_m2_action(uuid,integer,uuid,text,jsonb)
+ FROM PUBLIC,anon,authenticated;
+-- Separate Owner-approved installation/review would have to explicitly:
+-- GRANT EXECUTE ON FUNCTION public.wos_qa_p2_m2_action(uuid,integer,uuid,text,jsonb)
+--   TO authenticated;
+-- That GRANT is INTENTIONALLY OMITTED. Even an accidental SQL installation
+-- remains inaccessible until separate privilege and QA Gate approvals.
+COMMIT;
+-- NOT_INSTALLED_AND_NOT_AUTHORIZED -- no execution permitted this turn.
+)
+     )
+  THEN RAISE EXCEPTION 'WORKSHOP_IMAGE_PROOF_STALE' USING ERRCODE='PT409'; END IF;
   UPDATE public.wos_visual_baselines SET
     confirmed_by_workshop_profile_id=v_actor.id,workshop_confirmed_at=pg_catalog.now()
   WHERE id=v_baseline_id AND organization_id=v_actor.org_id
