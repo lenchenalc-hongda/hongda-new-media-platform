@@ -209,6 +209,10 @@ for(const path of [
  assert(source.includes('confirmedAt'),path);
  assert(!/\.insert\s*\(|\.upsert\s*\(|\.update\s*\(|\.delete\s*\(|\.rpc\s*\(/.test(source),path);
 }
+const readinessUi=readFileSync('src/components/workshop-orders/LiveQaWorkshopReadiness.tsx','utf8');
+assert(readinessUi.includes('readState.result.materialsVerified && readState.handoff.historySequenceVerified'),
+  'a newer unproved transaction revision must not look ready for human review');
+
 const actionUi=readFileSync('src/components/workshop-orders/LiveQaWorkshopActions.tsx','utf8');
 assert(actionUi.includes("NEXT_PUBLIC_WOS_P2_QA_MUTATIONS_ENABLED === 'true'"));
 assert(actionUi.includes('choices.guidance'));
