@@ -59,7 +59,7 @@ export default function LiveQaWorkshopReadiness({
       // organization RLS, exact order id and entity type. No service role key.
       const [resources, blockers, baselines, confirmations, history] = await Promise.all([
         db.from('wos_resource_readiness')
-          .select('organization_id,entity_id,entity_type,resource_type,status,version_label,quantity_expected,quantity_arrived,confirmed_by_profile_id,confirmed_at,note')
+          .select('organization_id,entity_id,entity_type,resource_type,status,version_label,quantity_expected,quantity_arrived,expected_at,arrived_at,confirmed_by_profile_id,confirmed_at,note')
           .eq('organization_id',organizationId).eq('entity_id',orderId)
           .eq('entity_type','PRODUCTION_ORDER').limit(100),
         db.from('wos_blockers')
@@ -196,6 +196,24 @@ export default function LiveQaWorkshopReadiness({
               <div key={row.code} className="rounded border border-amber-200 bg-white p-3">
                 <p className="text-xs font-semibold">{row.title} · {row.ready ? '已核实' : '未齐套'}</p>
                 <p className="mt-1 text-xs text-gray-600">{row.status} · {row.message}</p>
+                {row.evidence ? (
+                  <dl className="mt-2 grid grid-cols-2 gap-x-2 gap-y-1 border-t pt-2 text-xs text-gray-700">
+                    <dt>物料版本</dt><dd>{row.evidence.versionLabel ?? '未登记'}</dd>
+                    <dt>预计到位</dt><dd>{row.evidence.expectedAt ?? '未登记'}</dd>
+                    <dt>实际到位</dt><dd>{row.evidence.arrivedAt ?? '未登记'}</dd>
+                    {row.code === 'INCOMING_MATERIAL' && (
+                      <>
+                        <dt>应到 / 实到</dt><dd>{row.evidence.quantityExpected ?? '未知'} / {row.evidence.quantityArrived ?? '未知'}</dd>
+                        <dt>本批数量缺口</dt><dd>{row.evidence.quantityShortfall ?? '未核实'}</dd>
+                      </>
+                    )}
+                    <dt>核对人员</dt><dd>{row.evidence.confirmedBy ? '已有人员记录' : '未登记'}</dd>
+                    <dt>核对时间</dt><dd>{row.evidence.confirmedAt ?? '未登记'}</dd>
+                    <dt>异常说明</dt><dd>{row.evidence.note ?? '无补充说明'}</dd>
+                  </dl>
+                ) : (
+                  <p className="mt-2 text-xs text-amber-900">无有效物料记录，不得按默认值视为齐套。</p>
+                )}
               </div>
             ))}
           </div>
