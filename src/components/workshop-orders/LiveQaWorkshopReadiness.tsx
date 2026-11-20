@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import LiveQaWorkshopActions from './LiveQaWorkshopActions';
+import LiveQaWorkshopM2 from './LiveQaWorkshopM2';
 import {
   evaluateWosP2Readiness,
   type WosP2ReadinessResult,
@@ -273,6 +274,13 @@ export default function LiveQaWorkshopReadiness({
         orderId={orderId}
         expectedVersion={expectedVersion}
         workflowStatus={workflowStatus}
+        onSuccess={onAfterAction}
+      />
+      <LiveQaWorkshopM2
+        orderId={orderId}
+        organizationId={organizationId}
+        productionVersionLabel={versionLabel}
+        expectedVersion={expectedVersion}
         onSuccess={onAfterAction}
       />
       <p className="text-xs font-medium text-amber-900">
