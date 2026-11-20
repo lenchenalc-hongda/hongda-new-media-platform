@@ -226,7 +226,9 @@ export default function LiveQaWorkshopReadiness({
             </section>
           )}
           <p role="status" className="rounded border border-amber-400 bg-white p-3 text-xs font-medium text-amber-950">
-            {readState.result.materialsVerified ? '物料资料可提交人工齐套审核；尚未放行开工。' : '资料或物料尚未核实，禁止开工。'}
+            {readState.result.materialsVerified && readState.handoff.historySequenceVerified
+              ? '物料与当前订单的交接历史均已匹配，仅可提交人工齐套审核；尚未放行开工。'
+              : '物料、签样或当前事务版本交接证明未全部核实，禁止排期放行或开工。'}
           </p>
           {readState.history.length > 0 && (
             <section className="rounded border border-amber-200 bg-white p-3">
