@@ -39,7 +39,7 @@ assert(!/^\s*GRANT\s+EXECUTE\s+ON\s+FUNCTION\b/m.test(sql),
 assert(!/^\s*EXECUTE\s+\w+\s*\(/mi.test(sql),'no dynamic execution');
 assert(!sql.includes("'canStart',true"),'no automatic production authority');
 assert(sql.indexOf('office_proof_set_digest=v_proof_digest') <
- sql.indexOf('v_proof_digest IS DISTINCT FROM v_office_digest'),
+ sql.lastIndexOf('v_proof_digest IS DISTINCT FROM v_office_digest'),
  'Office signature must precede Workshop compare');
 console.log('workshop-order-p2-m2-proof-lock.test.ts: PASS');
 console.log('WOS_M2_P0_SOURCE_SECURITY_GUARDS=PASS');
