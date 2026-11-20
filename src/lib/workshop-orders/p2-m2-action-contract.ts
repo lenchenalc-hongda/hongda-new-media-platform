@@ -47,6 +47,11 @@ const material = z.object({
   if(v.arrivedAt && v.expectedAt && Date.parse(v.arrivedAt)<Date.parse(v.expectedAt) &&
      v.resourceStatus==='NOT_ARRIVED') c.addIssue({code:'custom',path:['arrivedAt'],message:'ARRIVAL_CONFLICT'});
   if(final && !v.arrivedAt) c.addIssue({code:'custom',path:['arrivedAt'],message:'REAL_ARRIVAL_REQUIRED'});
+  const arrivalClaim=['PARTIALLY_ARRIVED','ARRIVED','PHYSICAL_SAMPLE_RECEIVED'].includes(v.resourceStatus);
+  if(arrivalClaim&&!v.arrivedAt)
+    c.addIssue({code:'custom',path:['arrivedAt'],message:'ARRIVAL_TIME_REQUIRED_FOR_ARRIVED_STATUS'});
+  if(['NOT_ARRIVED','NOT_AVAILABLE','MISSING','IN_PRODUCTION','UPLOADED'].includes(v.resourceStatus)&&v.arrivedAt)
+    c.addIssue({code:'custom',path:['arrivedAt'],message:'NO_ARRIVAL_ON_PENDING_STATUS'});
 });
 const select = z.object({
   ...actor, action:z.literal('BASELINE_SELECT'),
