@@ -64,6 +64,101 @@ ALTER TABLE public.wos_visual_baselines
  ADD COLUMN IF NOT EXISTS workshop_post_order_version integer
    CHECK (workshop_post_order_version IS NULL OR workshop_post_order_version>0);
 
+-- One server-generated canonical proof set used at selection and both signatures.
+-- NOTE: this remains an UNINSTALLED SQL review proposal; never grant EXECUTE
+-- or activate a QA database gate based on this source alone.
+CREATE OR REPLACE FUNCTION public.wos_qa_p2_m2_checked_proof_set(
+ p_order_id uuid,p_org_id uuid,p_baseline_id uuid,p_version_label text
+) RETURNS TABLE(proof_digest text,last_verified_at timestamptz)
+LANGUAGE plpgsql SECURITY INVOKER SET search_path='' VOLATILE AS $proof$
+DECLARE
+ v_total integer;
+ v_count integer;
+ v_categories text[];
+ v_images jsonb;
+ v_verified timestamptz;
+ v_spec jsonb;
+BEGIN
+ IF NOT EXISTS (
+   SELECT 1 FROM public.wos_visual_baselines vb
+   WHERE vb.id=p_baseline_id AND vb.organization_id=p_org_id
+     AND vb.entity_type='PRODUCTION_ORDER' AND vb.entity_id=p_order_id
+     AND vb.version_label=p_version_label AND vb.status IN('DRAFT','CURRENT')
+     AND vb.superseded_at IS NULL
+ ) THEN RAISE EXCEPTION 'INVALID_BASELINE' USING ERRCODE='PT409'; END IF;
+ SELECT count(*) INTO v_total FROM public.wos_visual_baseline_items bi
+  WHERE bi.baseline_id=p_baseline_id;
+ IF v_total NOT BETWEEN 3 AND 12 THEN
+  RAISE EXCEPTION 'BASELINE_IMAGE_COUNT_INVALID' USING ERRCODE='PT409'; END IF;
+ WITH locked_proofs AS MATERIALIZED (
+  SELECT im.id AS image_id,im.category,im.version_label,
+    im.storage_bucket,im.storage_path,pf.storage_object_id,
+    pf.storage_object_version,pf.storage_object_updated_at,
+    pf.verified_sha256,pf.verified_at,pf.expires_at
+  FROM public.wos_visual_baseline_items bi
+  JOIN public.wos_reference_images im ON im.id=bi.reference_image_id
+  JOIN public.wos_qa_verified_image_proofs pf
+    ON pf.image_id=im.id AND pf.order_id=p_order_id
+    AND pf.organization_id=p_org_id
+    AND pf.storage_bucket=im.storage_bucket AND pf.storage_path=im.storage_path
+  JOIN storage.objects ob ON ob.id=pf.storage_object_id
+    AND ob.bucket_id=pf.storage_bucket AND ob.name=pf.storage_path
+    AND ob.version=pf.storage_object_version
+    AND ob.updated_at=pf.storage_object_updated_at
+    AND ob.archived_at IS NULL AND ob.is_delete_marker IS DISTINCT FROM true
+  WHERE bi.baseline_id=p_baseline_id
+    AND im.organization_id=p_org_id AND im.entity_id=p_order_id
+    AND im.entity_type='PRODUCTION_ORDER'
+    AND im.version_label=p_version_label
+    AND im.image_status='READY' AND im.superseded_at IS NULL
+    AND im.storage_bucket='wos-private'
+    AND pf.storage_object_id IS NOT NULL
+    AND pg_catalog.btrim(COALESCE(pf.storage_object_version,''))<>''
+    AND pf.verified_sha256 ~ '^[a-f0-9]{64}$'
+    AND pf.verified_at<=pg_catalog.clock_timestamp()
+    AND pf.expires_at>pg_catalog.clock_timestamp()
+    AND NOT EXISTS (
+      SELECT 1 FROM public.wos_reference_images newer
+      WHERE newer.supersedes_image_id=im.id AND newer.image_status='READY'
+    )
+  FOR SHARE OF bi,im,pf,ob
+ )
+ SELECT count(*)::integer,pg_catalog.array_agg(DISTINCT category),
+    pg_catalog.jsonb_agg(pg_catalog.jsonb_build_object(
+      'imageId',image_id,'category',category,'productionVersion',version_label,
+      'bucket',storage_bucket,'path',storage_path,
+      'objectId',storage_object_id,'objectVersion',storage_object_version,
+      'objectUpdatedAt',storage_object_updated_at,'sha256',verified_sha256,
+      'proofVerifiedAt',verified_at,'proofExpiresAt',expires_at
+    ) ORDER BY image_id),max(verified_at)
+ INTO v_count,v_categories,v_images,v_verified FROM locked_proofs;
+ IF v_count<>v_total OR NOT COALESCE(
+   ARRAY['PRODUCT','FILM_PATTERN','SIGNED_SAMPLE']::text[]<@v_categories,false)
+ THEN RAISE EXCEPTION 'UNVERIFIED_OR_INCOMPLETE_PROOF_SET'
+   USING ERRCODE='PT409'; END IF;
+ SELECT pg_catalog.jsonb_build_object(
+  'org',o.organization_id,'order',o.id,'productionVersion',o.version_label,
+  'customerId',o.customer_id,'customer',o.customer_name_snapshot,
+  'product',o.product_name,'material',o.product_material,
+  'surface',o.surface_treatment,'pattern',o.pattern_scope,
+  'seam',o.seam_tolerance,'position',o.position_reference,
+  'acceptance',o.customer_acceptance_standard,'packaging',o.packaging_method,
+  'cartonQty',o.carton_quantity,'labelRule',o.label_marking_rule,
+  'requestedQty',o.requested_quantity,'batchQty',o.current_batch_quantity
+ ) INTO v_spec FROM public.wos_production_orders o
+ WHERE o.id=p_order_id AND o.organization_id=p_org_id AND o.version_label=p_version_label;
+ IF v_spec IS NULL OR v_images IS NULL
+ THEN RAISE EXCEPTION 'PRODUCTION_SPEC_UNAVAILABLE' USING ERRCODE='PT409'; END IF;
+ proof_digest:=pg_catalog.encode(pg_catalog.sha256(pg_catalog.convert_to(
+   pg_catalog.jsonb_build_object('baselineId',p_baseline_id,
+     'productionSpec',v_spec,'imageProofSet',v_images)::text,'UTF8')),'hex');
+ last_verified_at:=v_verified;
+ RETURN NEXT;
+END;
+$proof$;
+REVOKE ALL ON FUNCTION public.wos_qa_p2_m2_checked_proof_set(uuid,uuid,uuid,text)
+ FROM PUBLIC,anon,authenticated;
+
 -- Private helper: only the reviewed SECURITY DEFINER M2 action can call.
 -- Digest is computed *server-side* from order specifications and the
 -- currently selected image IDs; never trust a browser-supplied digest.
