@@ -217,6 +217,20 @@ export default function LiveQaWorkshopReadiness({
               </div>
             ))}
           </div>
+          <section className="rounded border border-amber-300 bg-white p-3" aria-label="当前生产图片基准与办公室车间双重核对">
+            <h5 className="text-xs font-semibold">当前图片 / 签样基准（只读证据）</h5>
+            <div className="mt-2 grid gap-1 text-xs text-gray-700 sm:grid-cols-2">
+              <p>CURRENT 基准记录：{readState.result.visualBaseline.currentCount}</p>
+              <p>基准版本：{readState.result.visualBaseline.versionLabel ?? '未登记'}</p>
+              <p>当前生产版本匹配：{readState.result.visualBaseline.currentVersionMatched ? '记录匹配' : '未核实'}</p>
+              <p>办公室签认：{readState.result.visualBaseline.officeConfirmed ? '时间已登记' : '未登记'}</p>
+              <p>车间签认：{readState.result.visualBaseline.workshopConfirmed ? '时间已登记' : '未登记'}</p>
+            </div>
+            <p className="mt-2 text-xs text-amber-900">
+              时间戳与版本标签不等于独立人员签名、私有图片 SHA-256 完整性证明或实物签样核验；
+              后续必须通过受审核的独立证据链及人工放行。
+            </p>
+          </section>
           {readState.result.issues.length > 0 && (
             <section className="rounded border border-red-200 bg-white p-3">
               <h5 className="text-xs font-semibold text-red-900">当前阻断项</h5>
