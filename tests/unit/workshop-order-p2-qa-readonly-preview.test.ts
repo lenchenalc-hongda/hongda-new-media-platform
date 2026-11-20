@@ -57,6 +57,12 @@ const orders = [
   {...order,organization_id:userId},
   {...order,id:userId},
   {...order,version:2},
+  {...order,version:8}, // old six v7 steps cannot certify current v8
+  {...order,version:9}, // no future version inherited from v7
+  {...order,version:8,version_label:'QA-R6'}, // same label does not prove revision
+  {...order,version:9,version_label:'QA-R9'}, // new label alone not evidence
+  {...order,version:7.5},
+  {...order,version:Number.MAX_SAFE_INTEGER+1},
   {...order,workflow_status:'SUBMITTED'},
   {...order,workflow_status:'COMPLETED'},
   {...order,version_label:''},
@@ -65,6 +71,20 @@ const orders = [
   null,
 ];
 for(const record of orders) assert.equal(isScopedP2QaOrder(record,orderId,orgId),false);
+
+// A fixed-order read gate must reject even an otherwise-identical v8/v9
+// record before fetching/displaying stale six-step history. No new version
+// can silently ride on a previous v7 history or current workflow_status.
+for (const unsupported of [8,9,10,99]) {
+  assert.equal(isScopedP2QaOrder({...order,version:unsupported},orderId,orgId),false,
+    'old v7 history must not be reused by a future version '+unsupported);
+}
+const guardSource=readFileSync('src/lib/workshop-orders/p2-qa-readonly-preview.ts','utf8');
+const timelineSource=readFileSync('src/lib/workshop-orders/p2-handoff-timeline.ts','utf8');
+assert(guardSource.includes('row.version === WOS_P2_QA_PROVEN_HANDOFF_VERSION'));
+assert(timelineSource.includes('input.currentVersion !== WOS_P2_QA_PROVEN_HANDOFF_VERSION'));
+assert(!guardSource.includes('Number(row.version) >= 7'));
+assert(!timelineSource.includes('input.currentVersion >= 7'));
 
 const page=readFileSync('src/app/workshop-orders/qa-handoff-readonly/page.tsx','utf8');
 const client=readFileSync('src/components/workshop-orders/LiveQaHandoffReadOnly.tsx','utf8');
