@@ -141,6 +141,18 @@ assert(!route.includes("client.rpc('wos_qa_p2_operator_action'"));
 assert(route.includes("client.rpc('wos_qa_p2_m2_action'"));
 assert(ui.includes('NEXT_PUBLIC_WOS_P2_M2_QA_MUTATIONS_ENABLED'));
 assert(parent.includes('LiveQaWorkshopM2'));
+const m2Page=readFileSync('src/app/workshop-orders/qa-m2/page.tsx','utf8');
+const m2Picker=readFileSync('src/components/workshop-orders/LiveQaM2OrderPicker.tsx','utf8');
+assert(m2Page.includes("process.env.AUTH_MODE==='supabase'"));
+assert(m2Page.includes('WOS_P2_M2_QA_MUTATIONS_ENABLED'));
+assert(m2Page.includes('NEXT_PUBLIC_WOS_P2_M2_QA_MUTATIONS_ENABLED'));
+assert(m2Picker.includes("db.auth.getUser()"));
+assert(m2Picker.includes(".eq('organization_id',p.org_id)"));
+assert(m2Picker.includes("startsWith('QA-')"));
+assert(m2Picker.includes('QA_ORDER_DENIED_OR_UNVERIFIED'));
+assert(!/\\.insert\\s*\\(|\\.upsert\\s*\\(|\\.update\\s*\\(|\\.delete\\s*\\(/.test(m2Picker));
+assert(ui.includes('canActOnWosP2M2(actorRole,action)'));
+
 assert(!/\.insert\s*\(|\.upsert\s*\(|\.update\s*\(|\.delete\s*\(/.test(ui));
 console.log('workshop-order-p2-m2.test.ts: PASS');
 console.log('WOS_P2_M2_REQUEST_NEGATIVE_CASES='+negative.length);
