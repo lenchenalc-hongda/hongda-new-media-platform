@@ -10,6 +10,11 @@ import {
   type WosP2BlockerRow,
   type WosP2BaselineRow,
 } from '@/lib/workshop-orders/p2-qa-readiness';
+import {
+  evaluateWosP2HandoffTimeline,
+  type WosP2HandoffResult,
+  type WosP2HandoffHistory,
+} from '@/lib/workshop-orders/p2-handoff-timeline';
 
 type Props = {
   orderId: string;
@@ -23,6 +28,7 @@ type Props = {
 
 type ReadState = {
   result: WosP2ReadinessResult;
+  handoff: WosP2HandoffResult;
   lastRead: string;
   confirmations: Array<{
     confirmation_type:string; decision:string; profile_id:string;
@@ -97,8 +103,14 @@ export default function LiveQaWorkshopReadiness({
         baselines: baselines.data as WosP2BaselineRow[],
         readVerified: true,
       });
+      const handoff = evaluateWosP2HandoffTimeline({
+        history: history.data as WosP2HandoffHistory[],
+        currentStatus: workflowStatus,
+        currentVersion: expectedVersion,
+        readVerified: true,
+      });
       setReadState({
-        result, lastRead: new Date().toLocaleString('zh-CN'),
+        result, handoff, lastRead: new Date().toLocaleString('zh-CN'),
         confirmations: (confirmations.data ?? []).map(row => ({
           confirmation_type:row.confirmation_type,
           decision:row.decision,
@@ -124,7 +136,7 @@ export default function LiveQaWorkshopReadiness({
     } finally {
       setLoading(false);
     }
-  }, [orderId, organizationId, versionLabel, currentBatchQuantity]);
+  }, [orderId, organizationId, versionLabel, currentBatchQuantity, expectedVersion, workflowStatus]);
 
   useEffect(() => {
     void fetchActualReadiness();
@@ -153,6 +165,32 @@ export default function LiveQaWorkshopReadiness({
           <p className="text-xs text-amber-900">
             最后核对：{readState.lastRead} · 来源：{readState.result.source}
           </p>
+          <section aria-label="办公室与车间交接进度" className="rounded border border-amber-200 bg-white p-3">
+            <h5 className="text-xs font-semibold text-gray-900">
+              办公室 → 车间交接进度（真实 QA 状态历史）
+            </h5>
+            <p className="mt-1 text-xs text-gray-700">
+              当前版本 v{expectedVersion} · 当前状态：{workflowStatus} ·
+              来源：QA_RLS_STATUS_HISTORY_ONLY。
+              本进度只核对状态历史，不等同于独立回执验收或开工授权。
+            </p>
+            <ol className="mt-2 grid gap-2 sm:grid-cols-2">
+              {readState.handoff.steps.map(stage => (
+                <li key={stage.code} className="rounded border border-gray-200 px-3 py-2 text-xs">
+                  <span className={stage.verifiedByHistory ? 'font-semibold text-emerald-800' : 'font-semibold text-amber-950'}>
+                    {stage.verifiedByHistory ? '历史已匹配' : '历史待核验'} · {stage.label}
+                  </span>
+                  {stage.recordedAt && <span className="mt-1 block text-gray-600">{stage.recordedAt}</span>}
+                </li>
+              ))}
+            </ol>
+            <p role="status" className="mt-2 rounded bg-amber-50 p-2 text-xs text-amber-950">
+              {readState.handoff.historySequenceVerified
+                ? '六项交接状态历史匹配完成；不代表物料齐套或车间开工放行。'
+                : '交接历史证据不完整或与订单版本不匹配；本页不作完成判定。'}
+            </p>
+            <p className="mt-2 text-xs text-gray-700">{readState.handoff.nextAction}</p>
+          </section>
           <div className="grid gap-2 sm:grid-cols-2">
             {readState.result.materials.map(row => (
               <div key={row.code} className="rounded border border-amber-200 bg-white p-3">
