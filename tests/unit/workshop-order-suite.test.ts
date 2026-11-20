@@ -16,6 +16,7 @@ import './workshop-order-p2-qa-readiness.test';
 import './workshop-order-p2-handoff-timeline.test';
 import './workshop-order-p2-qa-readonly-preview.test';
 import './workshop-order-p2-readiness-m1.test';
+import './workshop-order-p2-m2.test';
 import './workshop-order-p2-actions-contract.test';
 import './workshop-order-p2-office-returns.test';
 import './workshop-order-p2-office-revision-contract.test';
