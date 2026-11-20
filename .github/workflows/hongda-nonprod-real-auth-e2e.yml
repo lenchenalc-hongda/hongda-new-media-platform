@@ -1,0 +1,208 @@
+name: Isolated Hongda Real Auth CSO GLH E2E
+on:
+  push:
+    branches: [qa/real-auth-cso-glh-20261107]
+    paths:
+      - '.github/workflows/hongda-nonprod-real-auth-e2e.yml'
+      - 'tests/e2e/commercial-supplier-order-nonprod.spec.ts'
+      - 'tests/e2e/glh-real-auth-nonprod.spec.ts'
+      - 'tests/e2e/wos-real-auth-storage-nonprod.spec.ts'
+      - 'tests/e2e/qa-protected-credential-readonly.spec.ts'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hongda-isolated-real-auth-e2e
+  cancel-in-progress: false
+
+jobs:
+  protected-secret-preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    environment: hongda-review-dev
+    env:
+      REVIEW_DEV_SUPABASE_ANON_KEY: ${{ secrets.REVIEW_DEV_SUPABASE_ANON_KEY }}
+      REVIEW_DEV_EXPECTED_ORG_ID: ${{ secrets.REVIEW_DEV_EXPECTED_ORG_ID }}
+      REVIEW_DEV_ADMIN_EMAIL: ${{ secrets.REVIEW_DEV_ADMIN_EMAIL }}
+      REVIEW_DEV_ADMIN_PASSWORD: ${{ secrets.REVIEW_DEV_ADMIN_PASSWORD }}
+      REVIEW_DEV_VIEWER_EMAIL: ${{ secrets.REVIEW_DEV_VIEWER_EMAIL }}
+      REVIEW_DEV_VIEWER_PASSWORD: ${{ secrets.REVIEW_DEV_VIEWER_PASSWORD }}
+      REVIEW_DEV_SALES_EMAIL: ${{ secrets.REVIEW_DEV_SALES_EMAIL }}
+      REVIEW_DEV_SALES_PASSWORD: ${{ secrets.REVIEW_DEV_SALES_PASSWORD }}
+      REVIEW_DEV_FOREIGN_EMAIL: ${{ secrets.REVIEW_DEV_FOREIGN_EMAIL }}
+      REVIEW_DEV_FOREIGN_PASSWORD: ${{ secrets.REVIEW_DEV_FOREIGN_PASSWORD }}
+      REVIEW_DEV_OPERATOR_EMAIL: ${{ secrets.REVIEW_DEV_OPERATOR_EMAIL }}
+      REVIEW_DEV_OPERATOR_PASSWORD: ${{ secrets.REVIEW_DEV_OPERATOR_PASSWORD }}
+    steps:
+      - name: Validate protected QA environment names without reading or printing values
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import os,sys
+          required = [
+              'REVIEW_DEV_SUPABASE_ANON_KEY',
+              'REVIEW_DEV_EXPECTED_ORG_ID',
+              'REVIEW_DEV_ADMIN_EMAIL',
+              'REVIEW_DEV_ADMIN_PASSWORD',
+              'REVIEW_DEV_VIEWER_EMAIL',
+              'REVIEW_DEV_VIEWER_PASSWORD',
+              'REVIEW_DEV_SALES_EMAIL',
+              'REVIEW_DEV_SALES_PASSWORD',
+              'REVIEW_DEV_FOREIGN_EMAIL',
+              'REVIEW_DEV_FOREIGN_PASSWORD',
+              'REVIEW_DEV_OPERATOR_EMAIL',
+              'REVIEW_DEV_OPERATOR_PASSWORD',
+          ]
+          missing = [name for name in required if not os.environ.get(name, '').strip()]
+          if missing:
+              print('QA_PROTECTED_SECRET_NAMES_MISSING=' + ','.join(missing))
+              sys.exit(1)
+          print('QA_PROTECTED_SECRETS_PRESENT=YES')
+          PY
+
+
+  protected-auth-credentials-readonly:
+    if: github.ref == 'refs/heads/qa/real-auth-cso-glh-20261107'
+    needs: [protected-secret-preflight]
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    environment: hongda-review-dev
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - run: pnpm install --frozen-lockfile
+      - name: Read-only real Auth sign-in and role/org checks (no account details printed)
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: 'https://xulmpqaknlwqqculbsek.supabase.co'
+          REVIEW_DEV_SUPABASE_ANON_KEY: ${{ secrets.REVIEW_DEV_SUPABASE_ANON_KEY }}
+          REVIEW_DEV_EXPECTED_ORG_ID: ${{ secrets.REVIEW_DEV_EXPECTED_ORG_ID }}
+          REVIEW_DEV_ADMIN_EMAIL: ${{ secrets.REVIEW_DEV_ADMIN_EMAIL }}
+          REVIEW_DEV_ADMIN_PASSWORD: ${{ secrets.REVIEW_DEV_ADMIN_PASSWORD }}
+          REVIEW_DEV_VIEWER_EMAIL: ${{ secrets.REVIEW_DEV_VIEWER_EMAIL }}
+          REVIEW_DEV_VIEWER_PASSWORD: ${{ secrets.REVIEW_DEV_VIEWER_PASSWORD }}
+          REVIEW_DEV_SALES_EMAIL: ${{ secrets.REVIEW_DEV_SALES_EMAIL }}
+          REVIEW_DEV_SALES_PASSWORD: ${{ secrets.REVIEW_DEV_SALES_PASSWORD }}
+          REVIEW_DEV_OPERATOR_EMAIL: ${{ secrets.REVIEW_DEV_OPERATOR_EMAIL }}
+          REVIEW_DEV_OPERATOR_PASSWORD: ${{ secrets.REVIEW_DEV_OPERATOR_PASSWORD }}
+          REVIEW_DEV_FOREIGN_EMAIL: ${{ secrets.REVIEW_DEV_FOREIGN_EMAIL }}
+          REVIEW_DEV_FOREIGN_PASSWORD: ${{ secrets.REVIEW_DEV_FOREIGN_PASSWORD }}
+        run: node --import tsx tests/e2e/qa-protected-credential-readonly.spec.ts
+
+  cso-real-auth-two-session:
+    if: github.ref == 'refs/heads/qa/real-auth-cso-glh-20261107'
+    needs: [protected-secret-preflight, protected-auth-credentials-readonly]
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    environment: hongda-review-dev
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - run: pnpm install --frozen-lockfile
+      - name: Isolated real Auth and V1 V2 V3 archived print parity
+        shell: bash
+        env:
+          LIVE_TEST: 'true'
+          LIVE_TEST_ACKNOWLEDGE_IMMUTABLE_TEST_VERSIONS: 'true'
+          NEXT_PUBLIC_SUPABASE_URL: 'https://xulmpqaknlwqqculbsek.supabase.co'
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.REVIEW_DEV_SUPABASE_ANON_KEY }}
+          LIVE_TEST_EXPECTED_ORG_ID: ${{ secrets.REVIEW_DEV_EXPECTED_ORG_ID }}
+          LIVE_TEST_ADMIN_EMAIL: ${{ secrets.REVIEW_DEV_ADMIN_EMAIL }}
+          LIVE_TEST_ADMIN_PASSWORD: ${{ secrets.REVIEW_DEV_ADMIN_PASSWORD }}
+          LIVE_TEST_VIEWER_EMAIL: ${{ secrets.REVIEW_DEV_VIEWER_EMAIL }}
+          LIVE_TEST_VIEWER_PASSWORD: ${{ secrets.REVIEW_DEV_VIEWER_PASSWORD }}
+        run: |
+          set -euo pipefail
+          umask 077
+          output="$RUNNER_TEMP/cso-auth-qa-evidence.txt"
+          if ! node --import tsx tests/e2e/commercial-supplier-order-nonprod.spec.ts > "$output" 2>&1; then
+            grep -E '^(LIVE_E2E:|CSO_NONPROD_E2E_RESULT=|MATRIX:)' "$output" || true
+            echo 'CSO_REAL_AUTH=FAIL_OR_NOT_VERIFIED'
+            exit 1
+          fi
+          grep -E '^(LIVE_E2E:|CSO_NONPROD_E2E_RESULT=|MATRIX:)' "$output" || true
+          if ! grep -q '^LIVE_E2E: PASS$' "$output"; then
+            echo 'CSO_REAL_AUTH=NOT_VERIFIED'
+            exit 1
+          fi
+          echo 'CSO_REAL_AUTH=PASS'
+
+  glh-real-auth-three-account:
+    # Serialize synthetic database writes. Continue even if CSO fails, provided
+    # the protected real Auth preflight passed; never bypass secret/role gates.
+    if: ${{ !cancelled() && github.ref == 'refs/heads/qa/real-auth-cso-glh-20261107' && needs.protected-auth-credentials-readonly.result == 'success' }}
+    needs: [protected-secret-preflight, protected-auth-credentials-readonly, cso-real-auth-two-session]
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    environment: hongda-review-dev
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - run: pnpm install --frozen-lockfile
+      - name: GLH real password JWT sign-in and manual lead handoff
+        env:
+          LIVE_TEST: 'true'
+          GLH_ACK_SYNTHETIC_LEAD: 'true'
+          NEXT_PUBLIC_SUPABASE_URL: 'https://xulmpqaknlwqqculbsek.supabase.co'
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.REVIEW_DEV_SUPABASE_ANON_KEY }}
+          LIVE_TEST_ADMIN_EMAIL: ${{ secrets.REVIEW_DEV_ADMIN_EMAIL }}
+          LIVE_TEST_ADMIN_PASSWORD: ${{ secrets.REVIEW_DEV_ADMIN_PASSWORD }}
+          LIVE_TEST_SALES_EMAIL: ${{ secrets.REVIEW_DEV_SALES_EMAIL }}
+          LIVE_TEST_SALES_PASSWORD: ${{ secrets.REVIEW_DEV_SALES_PASSWORD }}
+          LIVE_TEST_FOREIGN_EMAIL: ${{ secrets.REVIEW_DEV_FOREIGN_EMAIL }}
+          LIVE_TEST_FOREIGN_PASSWORD: ${{ secrets.REVIEW_DEV_FOREIGN_PASSWORD }}
+        run: node --import tsx tests/e2e/glh-real-auth-nonprod.spec.ts
+
+  wos-real-auth-private-storage:
+    # Never overlap GLH and WOS real writes on the small isolated PostgREST pool.
+    # A GLH assertion failure must not silently suppress independent WOS QA.
+    if: ${{ !cancelled() && github.ref == 'refs/heads/qa/real-auth-cso-glh-20261107' && needs.protected-auth-credentials-readonly.result == 'success' }}
+    needs: [protected-secret-preflight, protected-auth-credentials-readonly, glh-real-auth-three-account]
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    environment: hongda-review-dev
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - run: pnpm install --frozen-lockfile
+      - name: WOS real JWT private binary + atomic receipt
+        env:
+          LIVE_TEST: 'true'
+          WOS_ACK_PERSISTENT_NONPROD_QA_ORDER: 'true'
+          NEXT_PUBLIC_SUPABASE_URL: 'https://xulmpqaknlwqqculbsek.supabase.co'
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.REVIEW_DEV_SUPABASE_ANON_KEY }}
+          LIVE_TEST_ADMIN_EMAIL: ${{ secrets.REVIEW_DEV_ADMIN_EMAIL }}
+          LIVE_TEST_ADMIN_PASSWORD: ${{ secrets.REVIEW_DEV_ADMIN_PASSWORD }}
+          LIVE_TEST_OPERATOR_EMAIL: ${{ secrets.REVIEW_DEV_OPERATOR_EMAIL }}
+          LIVE_TEST_OPERATOR_PASSWORD: ${{ secrets.REVIEW_DEV_OPERATOR_PASSWORD }}
+          LIVE_TEST_FOREIGN_EMAIL: ${{ secrets.REVIEW_DEV_FOREIGN_EMAIL }}
+          LIVE_TEST_FOREIGN_PASSWORD: ${{ secrets.REVIEW_DEV_FOREIGN_PASSWORD }}
+        run: node --import tsx tests/e2e/wos-real-auth-storage-nonprod.spec.ts
