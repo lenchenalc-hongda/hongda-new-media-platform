@@ -89,6 +89,20 @@ const under=evaluateWosP2Readiness({
 });
 assert.equal(under.materials.find(x=>x.code==='INCOMING_MATERIAL')?.evidence?.quantityShortfall,100);
 assert.equal(under.materials.find(x=>x.code==='INCOMING_MATERIAL')?.ready,false);
+const unknownArrivals=evaluateWosP2Readiness({
+ ...goodMaterial,resources:goodMaterial.resources.map(r=>r.resource_type==='INCOMING_MATERIAL'
+   ? {...r,quantity_arrived:null}:r),
+});
+assert.equal(unknownArrivals.materials.find(x=>x.code==='INCOMING_MATERIAL')?.evidence?.quantityShortfall,null,
+  'unknown arrivals must not be counted as zero to invent a precise shortage');
+const partiallyExpected=evaluateWosP2Readiness({
+ ...goodMaterial,resources:goodMaterial.resources.map(r=>r.resource_type==='INCOMING_MATERIAL'
+   ? {...r,quantity_expected:300,quantity_arrived:250}:r),
+});
+assert.equal(partiallyExpected.materials.find(x=>x.code==='INCOMING_MATERIAL')?.evidence?.quantityShortfall,50,
+  'shortfall uses the larger of current batch quantity and declared expected quantity');
+assert.equal(partiallyExpected.canStart,false);
+
 
 // Numeric transaction version may advance for materials; production version
 // does not automatically change. Existing P2 receipts lack immutable digest.
