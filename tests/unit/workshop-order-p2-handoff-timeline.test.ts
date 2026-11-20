@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import {
   evaluateWosP2HandoffTimeline,
   WOS_P2_HANDOFF_STEPS,
+  WOS_P2_QA_PROVEN_HANDOFF_VERSION,
   type WosP2HandoffHistory,
   type WosP2HandoffInput,
 } from '../../src/lib/workshop-orders/p2-handoff-timeline';
@@ -21,7 +22,8 @@ const current: WosP2HandoffInput = {
   currentStatus: 'WAITING_MATERIAL', currentVersion: 7, readVerified:true,
 };
 const good = evaluateWosP2HandoffTimeline(current);
-assert.equal(good.historySequenceVerified,true,'valid ordered six-stage history should match');
+assert.equal(WOS_P2_QA_PROVEN_HANDOFF_VERSION,7);
+assert.equal(good.historySequenceVerified,true,'valid ordered six-stage v7 history should match');
 assert.equal(good.steps.filter(x=>x.verifiedByHistory).length,6);
 assert.equal(good.canStart,false,'no P2 history permits production start');
 assert.equal(good.source,'QA_RLS_STATUS_HISTORY_ONLY');
@@ -45,6 +47,15 @@ const negative: Array<[string,WosP2HandoffInput]> = [
   ['wrong transition reason', {...current,history:seed.map((x,i)=>i===5?{...x,reason_code:'QA_P2_ACCEPT'}:x)}],
   ['conflicting chronology', {...current,history:seed.map((x,i)=>i===5?{...x,created_at:seed[2].created_at}:x)}],
   ['unparseable timestamp', {...current,history:seed.map((x,i)=>i===5?{...x,created_at:'not-a-time'}:x)}],
+  // Replayed v7 history cannot certify any later numeric revision.
+  ['v8 reuses identical old v7 events and WAITING_MATERIAL', {...current,currentVersion:8}],
+  ['v9 reuses identical old v7 events and WAITING_MATERIAL', {...current,currentVersion:9}],
+  ['v8 using stale v7 reversed status-history rows', {...current,currentVersion:8,history:seed}],
+  ['v8 old history with new status still WAITING_MATERIAL', {...current,currentVersion:8,currentStatus:'WAITING_MATERIAL'}],
+  ['v8 attempts duplicated prior review', {...current,currentVersion:8,history:[...seed,seed[5]]}],
+  ['v8 attempts to append old v7 events', {...current,currentVersion:8,history:[...seed, ...seed.map((x,i)=>({...x,created_at:new Date(Date.UTC(2026,10,19,12,0,i)).toISOString()}))]}],
+  ['fractional order revision cannot be trusted', {...current,currentVersion:7.5}],
+  ['unsafe numeric order version rejected', {...current,currentVersion:Number.MAX_SAFE_INTEGER+1}],
   ['source version still v2', {...current,currentVersion:2}],
   ['current order back to needs information', {...current,currentStatus:'NEEDS_INFORMATION'}],
   ['no QA data', {...current,history:[]}],
@@ -58,6 +69,11 @@ const negative: Array<[string,WosP2HandoffInput]> = [
 for(const [label,input] of negative) {
   const result=evaluateWosP2HandoffTimeline(input);
   assert.equal(result.historySequenceVerified,false,label);
+  // None of the six historical v7 steps may be shown as green on a v8+ order.
+  if (input.currentVersion > WOS_P2_QA_PROVEN_HANDOFF_VERSION) {
+    assert(result.steps.every(x=>!x.verifiedByHistory),
+      'future versions must not visually reuse old v7 historical steps: '+label);
+  }
   assert.equal(result.canStart,false,label);
 }
 const orig=JSON.stringify(current);
