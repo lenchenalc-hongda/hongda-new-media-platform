@@ -5,6 +5,17 @@
  * verifier, role authorization, materials clearance or a production-start gate.
  * Ambiguous/missing/stale evidence always remains incomplete.
  */
+/**
+ * The six-step state-history sequence has been independently witnessed for one
+ * fixed nonproduction QA order at numeric revision v7 only. No history row in
+ * this contract carries a trustworthy per-revision receipt. Consequently a
+ * later v8+ order must NEVER inherit historical v7 completion.
+ *
+ * A future generic multi-version implementation requires version-bound,
+ * independently verified receipts; it must not loosen this guard.
+ */
+export const WOS_P2_QA_PROVEN_HANDOFF_VERSION = 7 as const;
+
 export const WOS_P2_HANDOFF_STEPS = [
   { code: 'SUBMIT', label: '办公室提交', from: 'DRAFT', to: 'SUBMITTED',
     reason: 'OFFICE_SUBMISSION_COMMITTED', roles: ['admin', 'manager', 'sales'] },
@@ -65,8 +76,9 @@ export function evaluateWosP2HandoffTimeline(input: WosP2HandoffInput): WosP2Han
   if (!input || input.readVerified !== true ||
       !Array.isArray(input.history) || input.history.length === 0 ||
       input.history.length >= 100 ||
-      !Number.isSafeInteger(input.currentVersion) || input.currentVersion < 1) {
-    return missing('无法核实完整的真实订单历史；请重新读取当前订单，禁止按历史推断开工。');
+      !Number.isSafeInteger(input.currentVersion) ||
+      input.currentVersion !== WOS_P2_QA_PROVEN_HANDOFF_VERSION) {
+    return missing('缺少本订单当前版本的可信交接证明；只核验既有 QA v7，v8+ 不得沿用旧六步历史或据此开工。');
   }
 
   const rows = input.history.map(row => ({
@@ -119,10 +131,10 @@ export function evaluateWosP2HandoffTimeline(input: WosP2HandoffInput): WosP2Han
   const newest = chronological[chronological.length - 1].row.next_status;
   const consistentNow = input.currentStatus === 'WAITING_MATERIAL' &&
     newest === input.currentStatus &&
-    input.currentVersion >= 7 &&
+    input.currentVersion === WOS_P2_QA_PROVEN_HANDOFF_VERSION &&
     stages.every(stage => stage.verifiedByHistory);
-  // An extra later transition or a differently versioned order is never
-  // silently treated as the same completed QA handoff.
+  // This verifies only the fixed QA v7 history, not a reusable proof for any
+  // future order version. Extra or later transitions must still fail closed.
   const historySequenceVerified = !evidenceIncomplete && consistentNow;
   return {
     steps: stages,
