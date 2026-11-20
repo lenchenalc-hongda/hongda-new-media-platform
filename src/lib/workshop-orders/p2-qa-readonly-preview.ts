@@ -3,6 +3,7 @@
  * P7 submission, P2 operator/office mutations and production readiness.
  */
 import { isApprovedWosSandboxUrl, WOS_READ_ROLES } from './api-contract';
+import { WOS_P2_QA_PROVEN_HANDOFF_VERSION } from './p2-handoff-timeline';
 
 export interface P2QaReadonlyPreviewEnv {
   readonly vercelEnv?: string;
@@ -54,7 +55,9 @@ export function isScopedP2QaOrder(
   return row.id === orderId
     && row.organization_id === organizationId
     && row.workflow_status === 'WAITING_MATERIAL'
-    && Number.isSafeInteger(row.version) && Number(row.version) >= 7
+    // The existing six event history was witnessed for v7 only; it does NOT
+    // attest any future v8+ order revision, even if its status is unchanged.
+    && Number.isSafeInteger(row.version) && row.version === WOS_P2_QA_PROVEN_HANDOFF_VERSION
     && typeof row.version_label === 'string' && row.version_label.trim().length > 0
     && Number.isSafeInteger(row.current_batch_quantity) && Number(row.current_batch_quantity) > 0;
 }
