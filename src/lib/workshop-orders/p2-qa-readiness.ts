@@ -150,8 +150,8 @@ export function evaluateWosP2Readiness(input: WosP2ReadinessInput): WosP2Readine
         versionLabel: typeof row.version_label === 'string' ? row.version_label : null,
         quantityExpected: expected,
         quantityArrived: count,
-        quantityShortfall: spec.code === 'INCOMING_MATERIAL' && validQty
-          ? (count === null ? input.currentBatchQuantity : Math.max(0,input.currentBatchQuantity-count))
+        quantityShortfall: spec.code === 'INCOMING_MATERIAL' && validQty && count !== null
+          ? Math.max(0,Math.max(input.currentBatchQuantity,expected ?? input.currentBatchQuantity)-count)
           : null,
         expectedAt: typeof row.expected_at === 'string' && Number.isFinite(Date.parse(row.expected_at)) ? row.expected_at : null,
         arrivedAt: typeof row.arrived_at === 'string' && Number.isFinite(Date.parse(row.arrived_at)) ? row.arrived_at : null,
