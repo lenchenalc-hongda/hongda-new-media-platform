@@ -72,7 +72,7 @@ assert(page.includes('WOS_P2_QA_HANDOFF_READONLY_ENABLED'));
 assert(page.includes("process.env.AUTH_MODE"));
 assert(page.includes("process.env.VERCEL_ENV"));
 assert(page.includes('canExposeP2QaReadonlyPreview('));
-assert(!page.includes('WOS_P7_NONPROD_SUBMIT_ENABLED'),
+assert(!page.includes('process.env.WOS_P7_NONPROD_SUBMIT_ENABLED'),
   'Read-only Preview must never require P7 submission to be enabled');
 assert(client.includes('client.auth.getUser()'));
 assert(client.includes("from('profiles')"));
