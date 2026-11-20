@@ -8,6 +8,7 @@
 
 - 复用 `LiveQaWorkshopReadiness`、`LiveQaHandoffReadOnly` 及 `evaluateWosP2Readiness`，增加读取现有 RLS `wos_resource_readiness` 的 `expected_at`、`arrived_at`、`version_label`、`quantity_expected`、`quantity_arrived`、`confirmed_by_profile_id`、`confirmed_at`、`note`，显示真实预期到货、实际到货、来料数量缺口及异常备注。无值显示“未登记”；单纯显示不改变原记录，不写数据库。
 - 复用 `LiveQaWorkshopActions` 已有 `CONFIRM_MATERIAL` 控件和 4 类状态；增加每种物料核对指导、来料数量差额的本地预览，不扩大网络请求的字段、RPC、客户端标志或操作权限。未单独开启 QA 写授权前操作按钮仍不可用。
+- 现有齐套工作台及独立只读 QA 页面分别展示 CURRENT 基准数量、生产版本标签、办公室确认时间是否已记录、车间确认时间是否已记录；上述时间摘要**不等于**独立人员或图像 SHA-256 的证明，UI 明确保持人工放行拦截。若当前数字事务版本没有可接受的交接历史，即使四项物料数据满足条件也不显示可提交人工齐套审核。
 - 新 `p2-material-version-evidence.ts`：审查旧 v7 交接与后续 `wos_qa_p2_action_receipts` 数字事务版本（CAS）是否**候选连续**。验证同组织、订单、唯一 request ID、指纹、expected_version→response.version、动作 `CONFIRM_MATERIAL`、返回状态和缺口。不允许仅凭这条链给 v8/v9 当前交接“已验收”：无不可变生产资料摘要与独立回执认证，恒为 `currentRevisionHandoffProven=false`、`canStart=false`。
 - 新 `p2-visual-evidence.ts`：仅离线校验 `wos_visual_baselines` / `wos_visual_baseline_items` / `wos_reference_images` / `wos_qa_verified_image_proofs` 所组成的**候选**证据。必须唯一 CURRENT、组织/订单/版本匹配、无 superseded、办公室与车间两名不同 ID 且在基准建立后分别确认、必需分类图片 READY+私有路径、证明 SHA-256/对象版本/未过期。即使候选齐全，仍 `canStart=false`，且不能代替实物签样和技术主管放行。
 - 新单元测试运行真实 TypeScript 纯函数：四项物料缺失/不齐、数量短缺、旧生产版本、签样只上传、重复/越权 CAS、错误 payload、v8/v9 候选链、CURRENT 双确认、图片证明过期/替代/错误组织等。覆盖读取组件无直接 DML/RPC 的源码负向限制。没有数据库事务或真实浏览器写测试。
