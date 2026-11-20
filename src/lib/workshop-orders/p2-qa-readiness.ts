@@ -63,12 +63,25 @@ export interface WosP2MaterialAssessment {
   }> | null;
 }
 export interface WosP2ReadinessResult {
+  /** Display-only DB baseline timestamp summary; NOT signed-image proof. */
+  readonly visualBaseline: Readonly<{
+    currentCount: number;
+    versionLabel: string | null;
+    currentVersionMatched: boolean;
+    officeConfirmed: boolean;
+    workshopConfirmed: boolean;
+  }>;
   readonly materials: readonly WosP2MaterialAssessment[];
   readonly issues: readonly string[];
   readonly materialsVerified: boolean;
   readonly canStart: false;
   readonly source: 'QA_RLS_READ_ONLY';
 }
+
+const emptyVisualBaseline = {
+  currentCount: 0, versionLabel: null, currentVersionMatched: false,
+  officeConfirmed: false, workshopConfirmed: false,
+} as const;
 
 export function evaluateWosP2Readiness(input: WosP2ReadinessInput): WosP2ReadinessResult {
   const issues: string[] = [];
@@ -86,6 +99,7 @@ export function evaluateWosP2Readiness(input: WosP2ReadinessInput): WosP2Readine
         ready: false, message: '未取得有效的真实 QA 数据', evidence: null,
       })),
       issues: ['齐套数据结构不完整，禁止开工'], materialsVerified: false,
+      visualBaseline: emptyVisualBaseline,
       canStart: false, source: 'QA_RLS_READ_ONLY',
     };
   }
@@ -153,11 +167,28 @@ export function evaluateWosP2Readiness(input: WosP2ReadinessInput): WosP2Readine
     }
   }
   const baseline = input.baselines.filter(row => row?.status === 'CURRENT');
-  if (baseline.length !== 1 || baseline[0]?.version_label !== input.versionLabel ||
-      !baseline[0]?.office_confirmed_at || !baseline[0]?.workshop_confirmed_at) {
+  const oneCurrent = baseline.length === 1;
+  const versionMatched = oneCurrent && validVersion &&
+    baseline[0].version_label === input.versionLabel;
+  const visualBaseline = {
+    currentCount: baseline.length,
+    versionLabel: oneCurrent ? baseline[0].version_label : null,
+    currentVersionMatched: versionMatched,
+    officeConfirmed: versionMatched &&
+      typeof baseline[0].office_confirmed_at === 'string' &&
+      Number.isFinite(Date.parse(baseline[0].office_confirmed_at)),
+    workshopConfirmed: versionMatched &&
+      typeof baseline[0].workshop_confirmed_at === 'string' &&
+      Number.isFinite(Date.parse(baseline[0].workshop_confirmed_at)),
+  };
+  if (!visualBaseline.currentVersionMatched ||
+      !visualBaseline.officeConfirmed || !visualBaseline.workshopConfirmed) {
     issues.push('缺少当前版本经办公室与车间共同确认的签样 / 视觉基准');
   }
   const materialsVerified = input.readVerified && validVersion && validQty &&
     materials.every(row => row.ready) && issues.length === 0;
-  return { materials, issues, materialsVerified, canStart: false, source: 'QA_RLS_READ_ONLY' };
+  // Only timestamp/label data are available here. The separate candidate
+  // evaluator checks independent actor IDs and private image proof;
+  // neither authorizes start without a reviewed writer + official Gate.
+  return { materials, issues, visualBaseline, materialsVerified, canStart: false, source: 'QA_RLS_READ_ONLY' };
 }
