@@ -4,7 +4,11 @@ import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { evaluateWosP2HandoffTimeline, type WosP2HandoffResult, type WosP2HandoffHistory } from '@/lib/workshop-orders/p2-handoff-timeline';
 import { evaluateWosP2Readiness, type WosP2ReadinessResult, type WosP2ResourceRow, type WosP2BlockerRow, type WosP2BaselineRow } from '@/lib/workshop-orders/p2-qa-readiness';
-import { isVerifiedP2QaReadActor, isScopedP2QaOrder } from '@/lib/workshop-orders/p2-qa-readonly-preview';
+import {
+  isVerifiedP2QaReadActor,
+  isScopedP2QaOrder,
+  WOS_P2_QA_V11_HISTORY_EVENT_COUNT,
+} from '@/lib/workshop-orders/p2-qa-readonly-preview';
 
 // One synthetic order only. The client never accepts an arbitrary order ID,
 // organization ID or user-defined role from query strings or local storage.
@@ -14,6 +18,7 @@ type ReadOnlyState = {
   readonly kind: 'PASS';
   readonly status: string;
   readonly version: number;
+  readonly historyEventCount: number;
   readonly handoff: WosP2HandoffResult;
   readonly readiness: WosP2ReadinessResult;
 };
@@ -59,7 +64,7 @@ export default function LiveQaHandoffReadOnly() {
 
         const [history, resources, blockers, baselines] = await Promise.all([
           filter(client.from('wos_status_history')
-            .select('organization_id,entity_id,entity_type,previous_status,next_status,actor_role,reason_code,created_at'))
+            .select('organization_id,entity_id,entity_type,previous_status,next_status,actor_role,reason_code,created_at,metadata'))
             .order('created_at',{ ascending:false }),
           filter(client.from('wos_resource_readiness')
             .select('organization_id,entity_id,entity_type,resource_type,status,version_label,quantity_expected,quantity_arrived,expected_at,arrived_at,confirmed_by_profile_id,confirmed_at,note')),
@@ -71,6 +76,9 @@ export default function LiveQaHandoffReadOnly() {
         const batches = [history, resources, blockers, baselines];
         if (batches.some(batch => batch.error || !Array.isArray(batch.data) ||
             batch.data.length >= 100)) throw new Error('QA_RLS_READ_INCOMPLETE');
+        if (history.data?.length !== WOS_P2_QA_V11_HISTORY_EVENT_COUNT) {
+          throw new Error('QA_V11_HISTORY_EVENT_COUNT_MISMATCH');
+        }
         for (const batch of batches) {
           for (const row of batch.data ?? []) {
             if (row.organization_id !== organizationId ||
@@ -96,6 +104,7 @@ export default function LiveQaHandoffReadOnly() {
         });
         if (active) setState({
           kind:'PASS', status:order.workflow_status, version:order.version,
+          historyEventCount:history.data.length,
           handoff, readiness,
         });
       } catch {
@@ -120,7 +129,10 @@ export default function LiveQaHandoffReadOnly() {
     <section className="space-y-4" aria-label="WOS 订单交接只读验收结果">
       <header className="rounded border border-blue-300 bg-blue-50 p-4">
         <h2 className="text-sm font-semibold">固定合成订单 · 只读查看</h2>
-        <p className="mt-2 text-xs">当前：{state.status} / v{state.version}。以下结果仅来自当前 Supabase 登录身份的组织 RLS 查询。</p>
+        <p className="mt-2 text-xs">
+          当前：{state.status} / v{state.version} · 版本绑定历史 {state.historyEventCount} 条。
+          以下结果仅来自当前 Supabase 登录身份的组织 RLS 查询。
+        </p>
         <p className="mt-2 text-xs font-semibold text-amber-900">
           只读预览：无提交、修改、接单、物料确认或生产开工权限。
         </p>

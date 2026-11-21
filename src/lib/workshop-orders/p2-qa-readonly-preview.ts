@@ -3,7 +3,11 @@
  * P7 submission, P2 operator/office mutations and production readiness.
  */
 import { isApprovedWosSandboxUrl, WOS_READ_ROLES } from './api-contract';
-import { WOS_P2_QA_PROVEN_HANDOFF_VERSION } from './p2-handoff-timeline';
+
+export const WOS_P2_QA_V11_ORDER_VERSION = 11;
+export const WOS_P2_QA_V11_ORDER_STATUS = 'READINESS_CHECK';
+export const WOS_P2_QA_V11_VERSION_LABEL = 'QA-R6';
+export const WOS_P2_QA_V11_HISTORY_EVENT_COUNT = 10;
 
 export interface P2QaReadonlyPreviewEnv {
   readonly vercelEnv?: string;
@@ -54,10 +58,10 @@ export function isScopedP2QaOrder(
   const row = order as Record<string, unknown>;
   return row.id === orderId
     && row.organization_id === organizationId
-    && row.workflow_status === 'WAITING_MATERIAL'
-    // The existing six event history was witnessed for v7 only; it does NOT
-    // attest any future v8+ order revision, even if its status is unchanged.
-    && Number.isSafeInteger(row.version) && row.version === WOS_P2_QA_PROVEN_HANDOFF_VERSION
-    && typeof row.version_label === 'string' && row.version_label.trim().length > 0
+    && row.workflow_status === WOS_P2_QA_V11_ORDER_STATUS
+    // Only the exact QA v11 lifecycle is witnessed by the ten-event chain.
+    // Intermediate versions and later versions must never inherit this proof.
+    && Number.isSafeInteger(row.version) && row.version === WOS_P2_QA_V11_ORDER_VERSION
+    && row.version_label === WOS_P2_QA_V11_VERSION_LABEL
     && Number.isSafeInteger(row.current_batch_quantity) && Number(row.current_batch_quantity) > 0;
 }
