@@ -1,0 +1,7 @@
+oidc-pr-diagnostic	Verify REAL GitHub-signed PR OIDC JWT with diagnostic-only Audience	﻿2026-11-21T00:26:11.8596114Z ##[group]Run set -euo pipefail
+oidc-pr-diagnostic	Verify REAL GitHub-signed PR OIDC JWT with diagnostic-only Audience	2026-11-21T00:26:11.8596787Z ^[[36;1mset -euo pipefail^[[0m
+oidc-pr-diagnostic	Verify REAL GitHub-signed PR OIDC JWT with diagnostic-only Audience	2026-11-21T00:26:11.8597280Z ^[[36;1mnode scripts/diagnose-pr-oidc.mjs^[[0m
+oidc-pr-diagnostic	Verify REAL GitHub-signed PR OIDC JWT with diagnostic-only Audience	2026-11-21T00:26:11.8625868Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+oidc-pr-diagnostic	Verify REAL GitHub-signed PR OIDC JWT with diagnostic-only Audience	2026-11-21T00:26:11.8626273Z ##[endgroup]
+oidc-pr-diagnostic	Verify REAL GitHub-signed PR OIDC JWT with diagnostic-only Audience	2026-11-21T00:26:15.5337518Z PR_OIDC_DIAGNOSTIC_DENIED_RUNTIME_GITHUB_RUN_ATTEMPT
+oidc-pr-diagnostic	Verify REAL GitHub-signed PR OIDC JWT with diagnostic-only Audience	2026-11-21T00:26:15.5455806Z ##[error]Process completed with exit code 1.
