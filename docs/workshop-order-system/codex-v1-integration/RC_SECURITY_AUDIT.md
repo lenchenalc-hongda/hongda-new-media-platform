@@ -1,5 +1,9 @@
 # WOS V1 RC Security Audit
 
+HISTORICAL_ARCHIVE: YES
+PR269_STATUS: CLOSED_UNMERGED
+NOT_CURRENT_INSTALL_AUTHORITY: See `RC_QA_INSTALL_PLAN.md` and PR #270.
+
 AUDIT_SHA: `b6b9b098ac818d79f182e43507edf1370b92fa34`
 AUDIT_SCOPE: local integration diff, M2 candidate SQL, Edge proof function,
 WOS API routes and read-only QA metadata

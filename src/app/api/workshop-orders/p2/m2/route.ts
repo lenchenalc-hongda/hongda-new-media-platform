@@ -64,11 +64,15 @@ export async function POST(req: NextRequest) {
   }
 
   const order = await client.from('wos_production_orders')
-    .select('id,organization_id,order_number,workflow_status,version')
+    .select('id,organization_id,order_number,workflow_status,version,created_by_profile_id,sales_owner_profile_id')
     .eq('id', request.orderId).eq('organization_id', actor.org_id).maybeSingle();
   if (order.error) return answer(503, 'QA_ORDER_READ_UNAVAILABLE');
   if (!order.data || order.data.organization_id !== actor.org_id
-    || !order.data.order_number.startsWith('QA-')) {
+    || !order.data.order_number.startsWith('QA-NONPROD-')
+    || (actor.role === 'sales'
+      && (request.action === 'BASELINE_SELECT' || request.action === 'BASELINE_OFFICE_CONFIRM')
+      && actor.id !== order.data.created_by_profile_id
+      && actor.id !== order.data.sales_owner_profile_id)) {
     return answer(403, 'FORBIDDEN');
   }
 

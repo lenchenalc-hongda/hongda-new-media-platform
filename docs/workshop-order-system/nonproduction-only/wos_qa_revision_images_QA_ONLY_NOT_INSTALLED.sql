@@ -12,6 +12,50 @@ CREATE TABLE IF NOT EXISTS wos_qa_safety.wos_proof_guard_backup (
 );
 REVOKE ALL ON TABLE wos_qa_safety.wos_proof_guard_backup
  FROM PUBLIC,anon,authenticated,service_role;
+CREATE TABLE IF NOT EXISTS wos_qa_safety.wos_revision_install_marker (
+ install_key text PRIMARY KEY CHECK (install_key='revision-images-v1'),
+ captured_at timestamptz NOT NULL DEFAULT clock_timestamp()
+);
+CREATE TABLE IF NOT EXISTS wos_qa_safety.wos_revision_rollback_marker (
+ install_key text PRIMARY KEY CHECK (install_key='revision-images-v1'),
+ completed_at timestamptz NOT NULL DEFAULT clock_timestamp()
+);
+CREATE TABLE IF NOT EXISTS wos_qa_safety.wos_trigger_backup (
+ trigger_name text PRIMARY KEY,
+ trigger_definition text NOT NULL,
+ captured_at timestamptz NOT NULL DEFAULT clock_timestamp()
+);
+CREATE TABLE IF NOT EXISTS wos_qa_safety.wos_function_backup (
+ function_identity text PRIMARY KEY,
+ function_definition text NOT NULL,
+ captured_at timestamptz NOT NULL DEFAULT clock_timestamp()
+);
+CREATE TABLE IF NOT EXISTS wos_qa_safety.wos_acl_backup (
+ object_kind text NOT NULL CHECK (object_kind IN ('TABLE','FUNCTION')),
+ object_identity text NOT NULL,
+ grantee text NOT NULL,
+ privilege_type text NOT NULL,
+ is_grantable boolean NOT NULL,
+ captured_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+ PRIMARY KEY (object_kind,object_identity,grantee,privilege_type)
+);
+CREATE TABLE IF NOT EXISTS wos_qa_safety.wos_policy_backup (
+ policy_name text PRIMARY KEY,
+ permissive boolean NOT NULL,
+ role_names text[] NOT NULL,
+ command text NOT NULL,
+ using_expression text,
+ check_expression text,
+ captured_at timestamptz NOT NULL DEFAULT clock_timestamp()
+);
+REVOKE ALL ON TABLE
+ wos_qa_safety.wos_revision_install_marker,
+ wos_qa_safety.wos_revision_rollback_marker,
+ wos_qa_safety.wos_trigger_backup,
+ wos_qa_safety.wos_function_backup,
+ wos_qa_safety.wos_acl_backup,
+ wos_qa_safety.wos_policy_backup
+ FROM PUBLIC,anon,authenticated,service_role;
 DO $backup$
 DECLARE v_oid oid;
 BEGIN
@@ -28,6 +72,116 @@ BEGIN
   ON CONFLICT(function_oid) DO NOTHING;
  END IF;
 END $backup$;
+
+DO $capture_original$
+DECLARE
+ v_trigger record;
+ v_function record;
+ v_policy record;
+BEGIN
+ DELETE FROM wos_qa_safety.wos_revision_rollback_marker
+ WHERE install_key='revision-images-v1';
+ IF EXISTS (
+   SELECT 1 FROM wos_qa_safety.wos_revision_install_marker
+   WHERE install_key='revision-images-v1'
+ ) THEN RETURN; END IF;
+
+ FOR v_trigger IN
+   SELECT t.tgname,pg_catalog.pg_get_triggerdef(t.oid,true) AS definition
+   FROM pg_catalog.pg_trigger t
+   WHERE t.tgrelid='public.wos_qa_verified_image_proofs'::regclass
+     AND NOT t.tgisinternal
+ LOOP
+   INSERT INTO wos_qa_safety.wos_trigger_backup(trigger_name,trigger_definition)
+   VALUES(v_trigger.tgname,v_trigger.definition)
+   ON CONFLICT(trigger_name) DO NOTHING;
+ END LOOP;
+
+ FOR v_function IN
+   SELECT p.oid,p.oid::regprocedure::text AS identity,
+     pg_catalog.pg_get_functiondef(p.oid) AS definition
+   FROM pg_catalog.pg_proc p
+   JOIN pg_catalog.pg_namespace n ON n.oid=p.pronamespace
+   WHERE n.nspname='public'
+     AND p.oid IN (
+       pg_catalog.to_regprocedure('public.wos_qa_revision_gate_allows(uuid,uuid,uuid)'),
+       pg_catalog.to_regprocedure('public.wos_register_qa_revision_image(uuid,uuid,text,text)'),
+       pg_catalog.to_regprocedure(
+         'public.wos_qa_p2_m2_record_trusted_proof(uuid,uuid,uuid,text,uuid,integer,text,uuid,text,timestamptz,text)')
+     )
+ LOOP
+   INSERT INTO wos_qa_safety.wos_function_backup(function_identity,function_definition)
+   VALUES(v_function.identity,v_function.definition)
+   ON CONFLICT(function_identity) DO NOTHING;
+ END LOOP;
+
+ INSERT INTO wos_qa_safety.wos_acl_backup(
+   object_kind,object_identity,grantee,privilege_type,is_grantable)
+ SELECT 'TABLE',v.identity,
+   CASE WHEN a.grantee=0 THEN 'PUBLIC' ELSE pg_catalog.pg_get_userbyid(a.grantee) END,
+   a.privilege_type,a.is_grantable
+ FROM (
+   SELECT c.oid,c.oid::regclass::text AS identity,c.relowner,c.relacl
+   FROM pg_catalog.pg_class c
+   WHERE c.oid IN (
+     'public.wos_qa_verified_image_proofs'::regclass,
+     'public.wos_reference_images'::regclass
+   )
+ ) v
+ CROSS JOIN LATERAL pg_catalog.aclexplode(
+   COALESCE(v.relacl,pg_catalog.acldefault('r',v.relowner))) a
+ ON CONFLICT(object_kind,object_identity,grantee,privilege_type) DO NOTHING;
+
+ INSERT INTO wos_qa_safety.wos_acl_backup(
+   object_kind,object_identity,grantee,privilege_type,is_grantable)
+ SELECT 'FUNCTION',v.identity,
+   CASE WHEN a.grantee=0 THEN 'PUBLIC' ELSE pg_catalog.pg_get_userbyid(a.grantee) END,
+   a.privilege_type,a.is_grantable
+ FROM (
+   SELECT p.oid,p.oid::regprocedure::text AS identity,p.proowner,p.proacl
+   FROM pg_catalog.pg_proc p
+   WHERE p.oid IN (
+     pg_catalog.to_regprocedure('public.wos_qa_proof_write_guard()'),
+     pg_catalog.to_regprocedure('public.wos_qa_revision_gate_allows(uuid,uuid,uuid)'),
+     pg_catalog.to_regprocedure('public.wos_register_qa_revision_image(uuid,uuid,text,text)'),
+     pg_catalog.to_regprocedure(
+       'public.wos_qa_p2_m2_record_trusted_proof(uuid,uuid,uuid,text,uuid,integer,text,uuid,text,timestamptz,text)')
+   )
+ ) v
+ CROSS JOIN LATERAL pg_catalog.aclexplode(
+   COALESCE(v.proacl,pg_catalog.acldefault('f',v.proowner))) a
+ ON CONFLICT(object_kind,object_identity,grantee,privilege_type) DO NOTHING;
+
+ FOR v_policy IN
+   SELECT p.polname,
+     p.polpermissive,
+     ARRAY(
+       SELECT CASE WHEN role_oid=0 THEN 'PUBLIC'
+         ELSE pg_catalog.pg_get_userbyid(role_oid) END
+       FROM pg_catalog.unnest(p.polroles) AS roles(role_oid)
+     ) AS role_names,
+     p.polcmd,
+     pg_catalog.pg_get_expr(p.polqual,p.polrelid) AS using_expression,
+     pg_catalog.pg_get_expr(p.polwithcheck,p.polrelid) AS check_expression
+   FROM pg_catalog.pg_policy p
+   WHERE p.polrelid='storage.objects'::regclass
+     AND p.polname='wos_qa_revision_object_insert'
+ LOOP
+   INSERT INTO wos_qa_safety.wos_policy_backup(
+     policy_name,permissive,role_names,command,using_expression,check_expression)
+   VALUES(
+     v_policy.polname,v_policy.polpermissive,v_policy.role_names,
+     CASE v_policy.polcmd
+       WHEN 'r' THEN 'SELECT' WHEN 'a' THEN 'INSERT' WHEN 'w' THEN 'UPDATE'
+       WHEN 'd' THEN 'DELETE' ELSE 'ALL' END,
+     v_policy.using_expression,v_policy.check_expression)
+   ON CONFLICT(policy_name) DO NOTHING;
+ END LOOP;
+
+ INSERT INTO wos_qa_safety.wos_revision_install_marker(install_key)
+ VALUES('revision-images-v1')
+ ON CONFLICT(install_key) DO NOTHING;
+END $capture_original$;
 
 CREATE TABLE IF NOT EXISTS public.wos_qa_trusted_proof_receipts (
  request_id uuid PRIMARY KEY,

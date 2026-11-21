@@ -224,9 +224,46 @@ assert.equal(buildWosQaImageObjectPath({
 const route = readFileSync('src/app/api/workshop-orders/p2/m2/route.ts', 'utf8');
 assert(route.includes('resolveVerifiedSupabaseIdentity'));
 assert(route.includes("client.rpc('wos_qa_p2_m2_action'"));
+assert(route.includes("startsWith('QA-NONPROD-')"));
+assert(route.includes('created_by_profile_id'));
+assert(route.includes('sales_owner_profile_id'));
+assert(route.includes("request.action === 'BASELINE_SELECT'"));
+assert(route.includes("request.action === 'BASELINE_OFFICE_CONFIRM'"));
 assert(!route.includes('service_role'));
 assert(!route.includes('.insert('));
 assert(!route.includes('.update('));
+const m2Sql = readFileSync(
+  'docs/workshop-order-system/nonproduction-only/WOS_P2_M2_NONPROD_SQL_NOT_INSTALLED.sql',
+  'utf8');
+assert(m2Sql.includes(
+  "AND v_actor.id IS DISTINCT FROM v_order.created_by_profile_id"));
+assert(m2Sql.includes(
+  "AND v_actor.id IS DISTINCT FROM v_order.sales_owner_profile_id"));
+assert(!m2Sql.includes("order_number LIKE 'QA-%'"));
+assert(m2Sql.includes("order_number LIKE 'QA-NONPROD-%'"));
+const m2Rollback = readFileSync(
+  'docs/workshop-order-system/codex-v1-integration/rc-sql/qa_m2_install_rollback.sql',
+  'utf8',
+);
+assert(m2Rollback.includes('M2_ROLLBACK_REVISION_IMAGE_DEPENDENCY_ACTIVE'));
+assert(m2Rollback.includes(
+  'DROP TRIGGER IF EXISTS wos_qa_p2_m2_reference_image_guard'));
+assert(m2Rollback.includes(
+  'DROP FUNCTION IF EXISTS public.wos_qa_p2_m2_invalidate_signoff'));
+assert(m2Rollback.includes(
+  'DROP FUNCTION IF EXISTS public.wos_qa_p2_m2_image_change_guard'));
+assert(!/DROP\s+(TABLE|FUNCTION|TRIGGER)[^;]*CASCADE/i.test(m2Rollback));
+const revisionRollback = readFileSync(
+  'docs/workshop-order-system/nonproduction-only/wos_qa_revision_images_QA_ONLY_ROLLBACK_NOT_INSTALLED.sql',
+  'utf8',
+);
+assert(revisionRollback.includes('wos_revision_install_marker'));
+assert(revisionRollback.includes('wos_qa_revision_object_insert'));
+assert(revisionRollback.includes('wos_register_qa_revision_image'));
+assert(revisionRollback.includes('wos_qa_revision_gate_allows'));
+assert(revisionRollback.includes('wos_qa_trusted_proof_receipts'));
+assert(revisionRollback.includes('wos_acl_backup'));
+assert(!/DROP\s+(TABLE|POLICY|FUNCTION|TRIGGER)[^;]*CASCADE/i.test(revisionRollback));
 const imageRoute = readFileSync(
   'src/app/api/workshop-orders/qa-image-verify/route.ts', 'utf8');
 const edge = readFileSync('supabase/functions/wos-p7-verify-image/index.ts', 'utf8');

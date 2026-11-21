@@ -23,6 +23,7 @@ import './workshop-order-p2-actions-contract.test';
 import './workshop-order-p2-office-returns.test';
 import './workshop-order-p2-office-revision-contract.test';
 import './workshop-order-p2-m2-http-contract.test';
+import './workshop-order-pr270-install-fingerprints.test';
 import './workshop-order-p2-scoped-gates.test';
 import './workshop-order-qa-revision-environment.test';
 import './wos-qa-image-validation.test';

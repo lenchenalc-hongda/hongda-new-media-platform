@@ -221,7 +221,7 @@ BEGIN
    pg_catalog.hashtextextended('wos-qa-m2:'||p_order_id::text,0));
  SELECT * INTO v_order FROM public.wos_production_orders
   WHERE id=p_order_id AND organization_id=p_org_id
-    AND order_number LIKE 'QA-%' FOR UPDATE;
+    AND order_number LIKE 'QA-NONPROD-%' FOR UPDATE;
  IF NOT FOUND THEN RETURN false; END IF;
  IF NOT EXISTS (
    SELECT 1 FROM public.wos_visual_baselines b
@@ -409,9 +409,14 @@ BEGIN
   pg_catalog.hashtextextended('wos-qa-m2:'||p_order_id::text,0));
  SELECT * INTO v_order FROM public.wos_production_orders
  WHERE id=p_order_id AND organization_id=v_actor.org_id
-   AND order_number LIKE 'QA-%' FOR UPDATE;
+   AND order_number LIKE 'QA-NONPROD-%' FOR UPDATE;
  IF NOT FOUND OR v_order.workflow_status NOT IN ('WAITING_MATERIAL','READINESS_CHECK')
  THEN RAISE EXCEPTION 'NOT_AUTHORIZED' USING ERRCODE='42501'; END IF;
+ IF p_action IN ('BASELINE_SELECT','BASELINE_OFFICE_CONFIRM')
+    AND v_actor.role='sales'
+    AND v_actor.id IS DISTINCT FROM v_order.created_by_profile_id
+    AND v_actor.id IS DISTINCT FROM v_order.sales_owner_profile_id
+ THEN RAISE EXCEPTION 'OFFICE_ORDER_OWNER_REQUIRED' USING ERRCODE='42501'; END IF;
  SELECT * INTO v_prior FROM public.wos_qa_p2_m2_receipts WHERE request_id=p_request_id;
  IF FOUND THEN
   IF v_prior.organization_id<>v_actor.org_id OR v_prior.order_id<>p_order_id
