@@ -8,6 +8,7 @@ import {
   canSubmitWosOfficeRequest,
   isWosNonproductionApiEnabled,
   isApprovedWosSandboxUrl,
+  isWosLoopbackSupabaseUrl,
   resolveWosApiActor,
   validateWosPostEnvelope,
 } from '../../src/lib/workshop-orders/api-contract';
@@ -47,6 +48,25 @@ assert.equal(isApprovedWosSandboxUrl('https://xulmpqaknlwqqculbsek.supabase.co.e
 assert.equal(isApprovedWosSandboxUrl('http://xulmpqaknlwqqculbsek.supabase.co'), false);
 assert.equal(isApprovedWosSandboxUrl('https://xulmpqaknlwqqculbsek.supabase.co/?query=1'), false);
 assert.equal(isApprovedWosSandboxUrl(undefined), false);
+const localSupabase = 'http://127.0.0.1:55421';
+assert.equal(isWosLoopbackSupabaseUrl(localSupabase), true);
+assert.equal(isWosLoopbackSupabaseUrl('http://localhost:55421'), true);
+assert.equal(isWosLoopbackSupabaseUrl('https://localhost:55421'), false);
+assert.equal(isWosLoopbackSupabaseUrl('http://localhost:55421/rest/v1'), false);
+assert.equal(isWosLoopbackSupabaseUrl('http://user:pass@localhost:55421'), false);
+assert.equal(isApprovedWosSandboxUrl(localSupabase), false);
+assert.equal(isApprovedWosSandboxUrl(localSupabase, {
+  nodeEnv: 'development', allowLocal: 'true',
+}), true);
+assert.equal(isApprovedWosSandboxUrl(localSupabase, {
+  nodeEnv: 'development', publicAllowLocal: 'true',
+}), true);
+assert.equal(isApprovedWosSandboxUrl(localSupabase, {
+  nodeEnv: 'production', allowLocal: 'true', publicAllowLocal: 'true',
+}), false);
+assert.equal(isApprovedWosSandboxUrl('http://localhost:55421/?query=1', {
+  nodeEnv: 'development', allowLocal: 'true',
+}), false);
 assert.equal(isWosNonproductionApiEnabled({ vercelEnv: 'production', enabled: 'true' }), false);
 assert.equal(isWosNonproductionApiEnabled({ vercelEnv: 'preview', enabled: 'true' }), true);
 assert.equal(isWosNonproductionApiEnabled({ vercelEnv: 'preview' }), false);

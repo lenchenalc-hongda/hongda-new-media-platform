@@ -5,7 +5,7 @@ import { PRODUCTION_TRANSITIONS, SAMPLING_TRANSITIONS, type WosEntityType } from
 // are permitted until a reviewed atomic submission RPC and audit gate exist.
 export const WOS_INBOX_LIMIT_PER_TYPE = 200;
 export const WOS_API_INPUT_LIMIT_CHARS = 32768;
-export const WOS_READ_ROLES = ['admin', 'manager', 'sales', 'workshop', 'technician'] as const;
+export const WOS_READ_ROLES = ['admin', 'manager', 'sales', 'operator', 'workshop', 'technician'] as const;
 export const WOS_SUBMIT_ROLES = ['admin', 'manager', 'sales'] as const;
 export const WOS_ACTIVE_PRODUCTION_STATUSES = Object.keys(PRODUCTION_TRANSITIONS)
   .filter(value => !['DRAFT', 'CANCELLED', 'CLOSED'].includes(value));
@@ -74,15 +74,102 @@ export function isWosNonproductionApiEnabled(input: {
 // Pin the nonproduction Preview to the vetted hongda-review-dev database.
 // Preview can otherwise inherit Production Supabase URL variables.
 export const WOS_P5C_SANDBOX_REF = 'xulmpqaknlwqqculbsek' as const;
-export function isApprovedWosSandboxUrl(value: unknown): boolean {
+export interface WosSandboxUrlEnvironment {
+  readonly nodeEnv?: string;
+  readonly allowLocal?: string;
+  readonly publicAllowLocal?: string;
+}
+
+function isLoopbackHostname(hostname: string): boolean {
+  return hostname === '127.0.0.1' || hostname === 'localhost';
+}
+
+/**
+ * Structural check only. Callers must still require an explicit opt-in and a
+ * non-production runtime before treating a loopback URL as approved.
+ */
+export function isWosLoopbackSupabaseUrl(value: unknown): boolean {
   if (typeof value !== 'string') return false;
   try {
     const url = new URL(value);
-    return url.protocol === 'https:'
+    return url.protocol === 'http:'
+      && isLoopbackHostname(url.hostname)
+      && /^[1-9][0-9]{1,4}$/.test(url.port)
+      && !url.username && !url.password
+      && (url.pathname === '/' || url.pathname === '')
+      && !url.search && !url.hash;
+  } catch {
+    return false;
+  }
+}
+
+export function isApprovedWosSandboxUrl(
+  value: unknown,
+  environment: WosSandboxUrlEnvironment = {},
+): boolean {
+  if (typeof value !== 'string') return false;
+  try {
+    const url = new URL(value);
+    const approvedCloudSandbox = url.protocol === 'https:'
       && url.hostname === WOS_P5C_SANDBOX_REF + '.supabase.co'
       && !url.username && !url.password
       && (url.pathname === '/' || url.pathname === '')
       && !url.search && !url.hash;
+    if (approvedCloudSandbox) return true;
+
+    const nodeEnv = environment.nodeEnv ?? process.env.NODE_ENV;
+    const allowLocal = environment.allowLocal
+      ?? process.env.WOS_ALLOW_LOCAL_SUPABASE;
+    const publicAllowLocal = environment.publicAllowLocal
+      ?? process.env.NEXT_PUBLIC_WOS_ALLOW_LOCAL_SUPABASE;
+    return nodeEnv !== 'production'
+      && (allowLocal === 'true' || publicAllowLocal === 'true')
+      && isWosLoopbackSupabaseUrl(value);
+  } catch {
+    return false;
+  }
+}
+
+export function isWosQaRevisionImageUploadEnabled(input: {
+  readonly enabled?: string;
+  readonly vercelEnv?: string;
+  readonly nodeEnv?: string;
+  readonly supabaseUrl?: string;
+  readonly allowLocal?: string;
+  readonly publicAllowLocal?: string;
+}): boolean {
+  const approvedRuntime = input.vercelEnv === 'preview'
+    || (input.vercelEnv === undefined && input.nodeEnv === 'development');
+  return approvedRuntime
+    && input.enabled === 'true'
+    && isApprovedWosSandboxUrl(input.supabaseUrl, {
+      nodeEnv: input.nodeEnv,
+      allowLocal: input.allowLocal,
+      publicAllowLocal: input.publicAllowLocal,
+    });
+}
+
+export function isSameOriginWosMutation(
+  requestUrl: string,
+  origin: string | null,
+  referer: string | null,
+  host: string | null = null,
+  forwardedProto: string | null = null,
+): boolean {
+  let expected: string;
+  try {
+    const target = new URL(requestUrl);
+    const hostValue = host?.split(',')[0]?.trim();
+    const protocol = forwardedProto === 'https' || forwardedProto === 'http'
+      ? forwardedProto : target.protocol.replace(':', '');
+    expected = new URL(`${protocol}://${hostValue || target.host}`).origin;
+  } catch {
+    return false;
+  }
+  if (origin !== null) return origin === expected;
+  if (referer === null) return false;
+  try {
+    return new URL(referer).origin === expected;
   } catch {
     return false;
   }
@@ -141,6 +228,35 @@ export function validateWosPostEnvelope(value: unknown): boolean {
   const parsed = postSchema.safeParse(value);
   if (!parsed.success || Object.keys(parsed.data.payload).length === 0) return false;
   return !Object.keys(parsed.data.payload).some(key => clientControlled.has(key));
+}
+
+
+export interface WosProductionSubmitEnvelope {
+  readonly idempotencyKey: string;
+  readonly expectedVersion: number;
+  readonly orderId: string;
+  readonly versionLabel: string;
+}
+
+// The P7 API submits a *previously created* DRAFT. It cannot accept direct
+// client-written org, actor, owner, status, receipt, image or audit fields.
+const productionSubmitPayloadSchema = z.object({
+  orderId: z.string().uuid(),
+  versionLabel: z.string().regex(/^V[1-9][0-9]{0,20}$/),
+}).strict();
+
+export function parseWosProductionSubmitEnvelope(value: unknown): WosProductionSubmitEnvelope | null {
+  if (!validateWosPostEnvelope(value)) return null;
+  const envelope = postSchema.safeParse(value);
+  if (!envelope.success) return null;
+  const payload = productionSubmitPayloadSchema.safeParse(envelope.data.payload);
+  if (!payload.success) return null;
+  return {
+    idempotencyKey: envelope.data.idempotencyKey,
+    expectedVersion: envelope.data.expectedVersion,
+    orderId: payload.data.orderId,
+    versionLabel: payload.data.versionLabel,
+  };
 }
 
 function mapInboxRow(type: WosEntityType, raw: unknown, actor: WosApiActor): WosInboxItem | null {
