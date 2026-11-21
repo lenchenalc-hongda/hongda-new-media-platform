@@ -25,6 +25,7 @@ export interface PortalVisibilityOptions {
   canAccessCustomerProjectCenter: boolean;
   canAccessCustomerProjectTeam?: boolean;
   canAccessCustomerProjectSettings?: boolean;
+  workshopOrdersEnabled?: boolean;
   currentRole?: Role | null;
 }
 
@@ -183,6 +184,21 @@ export const PORTAL_GROUPS: PortalGroup[] = [
     ],
   },
   {
+    id: 'workshop',
+    label: '车间订单',
+    description: '生产下单、车间接单、物料与签样',
+    icon: '🏭',
+    color: 'orange',
+    items: [
+      { label: '车间总览', path: '/workshop-orders', icon: '🏭', matchExact: true },
+      { label: '生产下单', path: '/workshop-orders/production/new', icon: '📝' },
+      { label: '车间收件箱', path: '/workshop-orders/inbox', icon: '📥' },
+      { label: '开工前检查', path: '/workshop-orders/readiness', icon: '✅' },
+      { label: '打样申请', path: '/workshop-orders/sampling/new', icon: '🧪' },
+      { label: '排期预览', path: '/workshop-orders/schedule', icon: '📅' },
+    ],
+  },
+  {
     id: 'admin',
     label: '管理',
     description: '系统配置与用户管理',
@@ -208,10 +224,12 @@ export function getVisiblePortalGroups({
   canAccessCustomerProjectCenter,
   canAccessCustomerProjectTeam = false,
   canAccessCustomerProjectSettings = false,
+  workshopOrdersEnabled = process.env.NEXT_PUBLIC_FEATURE_WORKSHOP_ORDERS === 'true',
   currentRole = null,
 }: PortalVisibilityOptions): PortalGroup[] {
   const groups = PORTAL_GROUPS.filter(group => {
     if (group.id === 'review') return projectReviewCenterEnabled;
+    if (group.id === 'workshop') return workshopOrdersEnabled;
     if (group.id === 'glh') return ['admin','manager','sales'].includes(currentRole || '');
     if (group.id === 'sales') {
       return customerProjectCenterEnabled && canAccessCustomerProjectCenter;
@@ -297,6 +315,7 @@ export function getPortalForPath(path: string): string {
   if (path.startsWith('/oa')) return 'official';
   if (path.startsWith('/knowledge')) return 'knowledge';
   if (path.startsWith('/commercial-documents')) return 'commercial';
+  if (path === '/workshop-orders' || path.startsWith('/workshop-orders/')) return 'workshop';
   if (path === '/global-lead-hub' || path.startsWith('/global-lead-hub/')) return 'glh';
   if (path.startsWith('/customer-projects')) return 'sales';
   if (path.startsWith('/settings')) return 'admin';
