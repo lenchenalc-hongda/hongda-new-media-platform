@@ -1,7 +1,7 @@
 // WOS P7 isolated-QA only. NO Production, no real client images.
 // The browser cannot mint this proof; only this audited Edge Function can.
 import { createClient } from 'npm:@supabase/supabase-js@2.58.0';
-import { pngValid } from './png.ts';
+import { evaluateWosQaRevisionImageAccess, pngValid } from './png.ts';
 
 const QA_URL='https://xulmpqaknlwqqculbsek.supabase.co';
 const MAX_FILE=20*1024*1024;
@@ -38,6 +38,9 @@ function approvedRuntimeUrl():boolean{
       &&!url.search&&!url.hash;
   }catch{return false;}
 }
+function localRuntimeUrl():boolean{
+  return approvedRuntimeUrl() && Deno.env.get('SUPABASE_URL')!==QA_URL;
+}
 function output(code:string,status:number,extra:Record<string,unknown>={}) {
   return new Response(JSON.stringify({ok:status===200,code,...extra}),{status,headers:NO_CACHE});
 }
@@ -57,7 +60,8 @@ function publicKey():string{
 }
 Deno.serve(async(req:Request)=>{
   if(req.method!=='POST')return output('METHOD_NOT_ALLOWED',405);
-  if(!approvedRuntimeUrl())return output('QA_PROJECT_PIN_FAILED',503);
+  const runtimeAuthorized=approvedRuntimeUrl();
+  if(!runtimeAuthorized)return output('QA_PROJECT_PIN_FAILED',503);
   const runtimeUrl=Deno.env.get('SUPABASE_URL')!;
   const h=req.headers.get('authorization')||'';
   if(!/^Bearer [^\s]+$/.test(h))return output('UNAUTHENTICATED',401);
@@ -92,17 +96,16 @@ Deno.serve(async(req:Request)=>{
     const {data:order,error:oe}=await userDb.from('wos_production_orders')
       .select('id,organization_id,created_by_profile_id,sales_owner_profile_id,order_number,version,version_label,workflow_status')
       .eq('id',body.orderId).eq('organization_id',profile.org_id).maybeSingle();
-    const localRevision=Deno.env.get('WOS_ALLOW_LOCAL_SUPABASE')==='true'
-      && order?.workflow_status==='WAITING_MATERIAL'
-      && /^QA-R[1-9][0-9]*$/.test(order.version_label);
-    const qaRevision=Deno.env.get('WOS_QA_REVISION_IMAGES_ENABLED')==='true'
-      && order?.workflow_status==='WAITING_MATERIAL'
-      && /^QA-R[1-9][0-9]*$/.test(order.version_label);
-    if(oe||!order||(order.workflow_status!=='DRAFT'&&!localRevision&&!qaRevision)
-      ||!/^QA-NONPROD-[a-f0-9-]{36}$/i.test(order.order_number)
-      ||(!localRevision&&!/^V[1-9][0-9]{0,20}$/.test(order.version_label))
-      ||(profile.role==='sales'&&profile.id!==order.created_by_profile_id
-         &&profile.id!==order.sales_owner_profile_id))return output('FORBIDDEN',403);
+    const localRevisionAuthorized=localRuntimeUrl();
+    const qaRevisionAuthorized=Deno.env.get('WOS_QA_REVISION_IMAGES_ENABLED')==='true';
+    const access=evaluateWosQaRevisionImageAccess({
+      runtimeAuthorized,
+      localRevisionAuthorized,
+      qaRevisionAuthorized,
+      profile,
+      order,
+    });
+    if(oe||!order||!access.allowed)return output('FORBIDDEN',403);
     const path=['organizations',profile.org_id,'wos','production-order',order.id,
       'images',categorySlugs[body.category],'versions',order.version_label,
       body.imageId,'qa-preview-proof.png'].join('/');

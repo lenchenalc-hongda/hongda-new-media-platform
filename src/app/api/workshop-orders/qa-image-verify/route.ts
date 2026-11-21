@@ -8,7 +8,10 @@ import {
   isWosLoopbackSupabaseUrl,
   isWosNonproductionApiEnabled,
 } from '@/lib/workshop-orders/api-contract';
-import { verifyWosSyntheticPngBinary } from '@/lib/workshop-orders/qa-image-validation';
+import {
+  evaluateWosQaRevisionImageAccess,
+  verifyWosSyntheticPngBinary,
+} from '@/lib/workshop-orders/qa-image-validation';
 import {
   buildWosQaImageObjectPath,
   isWosQaImageCategory,
@@ -30,7 +33,8 @@ const fail=(code:string,status:number)=>NextResponse.json({ok:false,code},
   {status,headers:noCache});
 
 export async function POST(req:NextRequest) {
-  if(disabled()) return fail('NONPRODUCTION_ONLY_DISABLED',503);
+  const runtimeAuthorized=!disabled();
+  if(!runtimeAuthorized) return fail('NONPRODUCTION_ONLY_DISABLED',503);
   if(!req.headers.get('content-type')?.startsWith('application/json')) return fail('INVALID_INPUT',400);
   const len=Number(req.headers.get('content-length')||'0');
   if(!Number.isFinite(len)||len>4096) return fail('INVALID_INPUT',400);
@@ -57,26 +61,25 @@ export async function POST(req:NextRequest) {
     const order=await client.from('wos_production_orders')
       .select('id,organization_id,created_by_profile_id,sales_owner_profile_id,order_number,version_label,workflow_status')
       .eq('id',x.orderId).eq('organization_id',profile.data.org_id).maybeSingle();
-    const localRevisionUpload=process.env.NODE_ENV!=='production'
+    const localRevisionAuthorized=process.env.NODE_ENV!=='production'
       && process.env.WOS_ALLOW_LOCAL_SUPABASE==='true'
-      && isWosLoopbackSupabaseUrl(process.env.NEXT_PUBLIC_SUPABASE_URL)
-      && order.data?.workflow_status==='WAITING_MATERIAL'
-      && /^QA-R[1-9][0-9]*$/.test(order.data.version_label);
-    const qaRevisionUpload=isWosQaRevisionImageUploadEnabled({
+      && isWosLoopbackSupabaseUrl(process.env.NEXT_PUBLIC_SUPABASE_URL);
+    const qaRevisionAuthorized=isWosQaRevisionImageUploadEnabled({
       enabled:process.env.WOS_QA_REVISION_IMAGES_ENABLED,
       vercelEnv:process.env.VERCEL_ENV,
       nodeEnv:process.env.NODE_ENV,
       supabaseUrl:process.env.NEXT_PUBLIC_SUPABASE_URL,
       allowLocal:process.env.WOS_ALLOW_LOCAL_SUPABASE,
       publicAllowLocal:process.env.NEXT_PUBLIC_WOS_ALLOW_LOCAL_SUPABASE,
-    }) && order.data?.workflow_status==='WAITING_MATERIAL'
-      && /^QA-R[1-9][0-9]*$/.test(order.data.version_label);
-    if(order.error||!order.data
-      ||(order.data.workflow_status!=='DRAFT'&&!localRevisionUpload&&!qaRevisionUpload)
-      || !/^QA-NONPROD-[0-9a-f-]{36}$/i.test(order.data.order_number)
-      || (!localRevisionUpload && !/^V[1-9][0-9]{0,20}$/.test(order.data.version_label))
-      || (profile.data.role==='sales' && profile.data.id!==order.data.created_by_profile_id
-        && profile.data.id!==order.data.sales_owner_profile_id))return fail('FORBIDDEN',403);
+    });
+    const access=evaluateWosQaRevisionImageAccess({
+      runtimeAuthorized,
+      localRevisionAuthorized,
+      qaRevisionAuthorized,
+      profile:profile.data,
+      order:order.data,
+    });
+    if(order.error||!order.data||!access.allowed)return fail('FORBIDDEN',403);
     const expected=buildWosQaImageObjectPath({
       organizationId:profile.data.org_id,
       orderId:order.data.id,
