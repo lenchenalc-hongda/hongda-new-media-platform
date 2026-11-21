@@ -29,6 +29,7 @@ import './workshop-order-qa-revision-environment.test';
 import './wos-qa-image-validation.test';
 import './wos-p7-edge-png.test';
 import './workshop-order-local-integration.test';
+import './workshop-order-route-access.test';
 
 // WOS project-owned test aggregator. Each new WOS test is imported here,
 // so the existing shared CI invokes it without modifying shared workflows.
