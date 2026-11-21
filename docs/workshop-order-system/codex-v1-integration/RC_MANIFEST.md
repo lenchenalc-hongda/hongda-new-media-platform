@@ -1,17 +1,24 @@
 # WOS V1 Release Candidate Manifest
 
-STATUS: LOCAL_FIX_CANDIDATE_PENDING_NEW_HEAD_REVIEW
-RC_CODE_SHA: `b6b9b098ac818d79f182e43507edf1370b92fa34`
-SOURCE_REVIEW_HEAD: `b168044ea95019d620b8aefade1a3afa6665f894`
+STATUS: CURRENT_DRAFT_INTEGRATION_CANDIDATE_PENDING_FINAL_SECURITY_REVIEW
+HISTORICAL_RC_CODE_SHA: `b6b9b098ac818d79f182e43507edf1370b92fa34`
+SOURCE_REVIEW_HEAD_6003371530: `b168044ea95019d620b8aefade1a3afa6665f894`
+TECHNICAL_REVIEW_6003584584_HEAD: `a08523f525e6649f7489018ace4546e217917e7e`
 BASE_MASTER_SHA: `5ac678a50af6391efbdfb0258f037cbdeb2e18d6`
 LOCAL_BRANCH: `codex/wos-v1-rc-integration-baa98b3`
 ACTIVE_DRAFT_PR: #270
-REMOTE_PUSH: `b168044e` ONLY; FIX_HEAD_NOT_PUSHED
+CURRENT_INTEGRATION_HEAD: resolve with `git rev-parse HEAD`; the current GitHub
+Draft PR head is authoritative. Do not use a historical review SHA as the
+current integration head.
+HEAD_SELF_REFERENCE: NOT_STORED_IN_TRACKED_DOCUMENT
+REMOTE_PUSH: CURRENT_HEAD_IS_GITHUB_DRAFT_PR_270_HEAD
 PR_CREATED: YES_DRAFT
 MERGE: NOT_PERFORMED
 
 The documentation commit that contains this manifest is later than
-`RC_CODE_SHA`; it does not change application or SQL behavior.
+`HISTORICAL_RC_CODE_SHA`; it does not change application or SQL behavior.
+PR #270 is the current effective Draft integration candidate. PR #269 is
+historical and closed unmerged.
 
 ## Commit History
 

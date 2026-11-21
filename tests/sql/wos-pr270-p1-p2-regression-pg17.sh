@@ -2,21 +2,100 @@
 set -euo pipefail
 
 # Ephemeral PostgreSQL 17 regression for PR #270 P1/P2 review findings.
+# Required: WOS_PG_DOCKER_CONTAINER names a local postgres:17-alpine container
+# created with --network none and labels:
+#   com.hongda.wos.disposable-pg17=true
+#   com.hongda.wos.test-purpose=pr270-p1-p2-regression
+# WOS_PG17_GUARD_CHECK_ONLY=1 verifies the isolation contract without DB writes.
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 CONTAINER="${WOS_PG_DOCKER_CONTAINER:-}"
+CONTAINER_ID=''
+RUN_NAMESPACE="wos_pr270_${$}_"
+DB_OWNER="WOS_PR270_REGRESSION:${RUN_NAMESPACE}"
+CREATED_DBS=()
+
+guard_fail() {
+  printf 'WOS_PG17_GUARD_FAILED=%s\n' "$1" >&2
+  exit 78
+}
+
+[[ -n "$CONTAINER" ]] || guard_fail 'WOS_PG_DOCKER_CONTAINER_REQUIRED'
+[[ "$CONTAINER" =~ ^codex-wos-pr270-pg17-[A-Za-z0-9_.-]+$ ]] \
+  || guard_fail 'CONTAINER_NAME_NOT_OWNED'
+[[ -S /var/run/docker.sock ]] || guard_fail 'LOCAL_DOCKER_SOCKET_REQUIRED'
+export DOCKER_HOST='unix:///var/run/docker.sock'
+unset DOCKER_CONTEXT PGHOST PGPORT PGUSER PGPASSWORD PGDATABASE PGOPTIONS
+unset DATABASE_URL DIRECT_URL SUPABASE_URL SUPABASE_DB_URL
+
+command -v docker >/dev/null 2>&1 || guard_fail 'DOCKER_CLI_REQUIRED'
+CONTAINER_ID="$(docker inspect --format '{{.Id}}' "$CONTAINER" 2>/dev/null)" \
+  || guard_fail 'CONTAINER_NOT_FOUND'
+[[ "$(docker inspect --format '{{.State.Running}}' "$CONTAINER_ID")" = 'true' ]] \
+  || guard_fail 'CONTAINER_NOT_RUNNING'
+[[ "$(docker inspect --format '{{.Config.Image}}' "$CONTAINER_ID")" = 'postgres:17-alpine' ]] \
+  || guard_fail 'CONTAINER_IMAGE_NOT_POSTGRES17_ALPINE'
+[[ "$(docker inspect --format '{{.HostConfig.NetworkMode}}' "$CONTAINER_ID")" = 'none' ]] \
+  || guard_fail 'CONTAINER_NETWORK_NOT_DISABLED'
+[[ "$(docker inspect --format '{{index .Config.Labels "com.hongda.wos.disposable-pg17"}}' "$CONTAINER_ID")" = 'true' ]] \
+  || guard_fail 'DISPOSABLE_CONTAINER_LABEL_REQUIRED'
+[[ "$(docker inspect --format '{{index .Config.Labels "com.hongda.wos.test-purpose"}}' "$CONTAINER_ID")" = 'pr270-p1-p2-regression' ]] \
+  || guard_fail 'TEST_PURPOSE_LABEL_REQUIRED'
 
 psql_run() {
-  if [[ -n "$CONTAINER" ]]; then
-    docker exec -i "$CONTAINER" psql -X -v ON_ERROR_STOP=1 -U postgres "$@"
-  else
-    psql -X -v ON_ERROR_STOP=1 "$@"
-  fi
+  docker exec -i "$CONTAINER_ID" env -u PGHOST -u PGPORT -u PGUSER \
+    -u PGPASSWORD -u PGDATABASE -u PGOPTIONS -u DATABASE_URL \
+    -u DIRECT_URL -u SUPABASE_URL -u SUPABASE_DB_URL \
+    psql -X -v ON_ERROR_STOP=1 -U postgres "$@"
 }
+
+POSTGRES_SCOPE="$(psql_run -qAt -d postgres -c "
+  SELECT (current_database()='postgres')
+     AND (current_user='postgres')
+     AND pg_catalog.inet_server_addr() IS NULL
+     AND current_setting('server_version_num')::integer BETWEEN 170000 AND 179999
+")"
+[[ "$POSTGRES_SCOPE" = 't' ]] || guard_fail 'POSTGRES_CONNECTION_SCOPE_INVALID'
+
+if [[ "${WOS_PG17_GUARD_CHECK_ONLY:-}" = '1' ]]; then
+  echo 'WOS_PG17_GUARD_PASS'
+  exit 0
+fi
+
+cleanup_databases() {
+  local rc=$?
+  local db owner
+  trap - EXIT INT TERM
+  for db in "${CREATED_DBS[@]}"; do
+    if [[ "$db" != "${RUN_NAMESPACE}"* ]] \
+      || [[ ! "$db" =~ ^[a-z0-9_]+$ ]]; then
+      echo "WOS_PG17_CLEANUP_REFUSED_INVALID_NAME=$db" >&2
+      continue
+    fi
+    owner="$(psql_run -qAt -d postgres -c \
+      "SELECT shobj_description(oid,'pg_database') FROM pg_database WHERE datname='$db'" \
+      2>/dev/null || true)"
+    if [[ -n "$owner" && "$owner" != "$DB_OWNER" ]]; then
+      echo "WOS_PG17_CLEANUP_REFUSED_NOT_OWNED=$db" >&2
+      continue
+    fi
+    psql_run -q -d postgres -c "DROP DATABASE IF EXISTS \"$db\" WITH (FORCE)" \
+      >/dev/null 2>&1 || true
+  done
+  exit "$rc"
+}
+trap cleanup_databases EXIT INT TERM
 
 create_db() {
   local db="$1"
-  psql_run -q -d postgres -c "DROP DATABASE IF EXISTS \"$db\" WITH (FORCE)" >/dev/null
+  [[ "$db" = "${RUN_NAMESPACE}"* ]] || guard_fail 'DATABASE_NAME_OUTSIDE_RUN_NAMESPACE'
+  [[ "$db" =~ ^[a-z0-9_]+$ ]] || guard_fail 'DATABASE_NAME_INVALID'
+  if [[ "$(psql_run -qAt -d postgres -c \
+    "SELECT count(*) FROM pg_database WHERE datname='$db'")" != '0' ]]; then
+    guard_fail 'DATABASE_NAMESPACE_ALREADY_EXISTS'
+  fi
   psql_run -q -d postgres -c "CREATE DATABASE \"$db\"" >/dev/null
+  CREATED_DBS+=("$db")
+  psql_run -q -d postgres -c "COMMENT ON DATABASE \"$db\" IS '$DB_OWNER'" >/dev/null
   psql_run -q -d "$db" < "$ROOT/tests/sql/wos-p2-m2-pg17-fixture.sql"
   psql_run -q -d "$db" < \
     "$ROOT/docs/workshop-order-system/nonproduction-only/WOS_P2_M2_NONPROD_SQL_NOT_INSTALLED.sql"
@@ -39,7 +118,7 @@ SQL
 }
 
 # 1. Same-org Sales B is denied for baseline selection and office confirmation.
-sales_db='wos_pr270_sales_scope'
+sales_db="${RUN_NAMESPACE}sales_scope"
 create_db "$sales_db"
 psql_run -q -d "$sales_db" <<'SQL'
 INSERT INTO public.profiles(id,user_id,org_id,role,is_active) VALUES
@@ -258,7 +337,7 @@ echo 'PR270_SALES_B_DIRECT_RPC_DENIED=PASS'
 echo 'PR270_SALES_OWNER_MANAGER_ADMIN_SUCCESS=PASS'
 
 # 2. Exact QA-NONPROD prefix is enforced with no side effects.
-prefix_db='wos_pr270_prefix_scope'
+prefix_db="${RUN_NAMESPACE}prefix_scope"
 create_db "$prefix_db"
 psql_run -q -d "$prefix_db" <<'SQL'
 INSERT INTO public.wos_production_orders(
@@ -305,7 +384,7 @@ SQL
 echo 'PR270_QA_ORDER_PREFIX_DENIED=PASS'
 
 # 3. Empty-receipt M2 rollback removes triggers/functions and image ops still work.
-rollback_db='wos_pr270_m2_rollback'
+rollback_db="${RUN_NAMESPACE}m2_rollback"
 create_db "$rollback_db"
 psql_run -q -d "$rollback_db" < \
   "$ROOT/docs/workshop-order-system/codex-v1-integration/rc-sql/qa_m2_install_rollback.sql"
@@ -338,7 +417,7 @@ SQL
 echo 'PR270_M2_ROLLBACK_IMAGE_INSERT_UPDATE=PASS'
 
 # 4. Existing M2 receipts refuse destructive rollback and preserve objects.
-receipt_db='wos_pr270_receipt_rollback'
+receipt_db="${RUN_NAMESPACE}receipt_rollback"
 create_db "$receipt_db"
 psql_run -q -d "$receipt_db" <<'SQL'
 INSERT INTO public.wos_qa_p2_m2_receipts(
@@ -374,7 +453,7 @@ SELECT CASE WHEN to_regclass('public.wos_qa_p2_m2_receipts') IS NOT NULL
 SQL
 
 # 5. Revision-image rollback restores the pre-install catalog and ACL state.
-revision_db='wos_pr270_revision_rollback'
+revision_db="${RUN_NAMESPACE}revision_rollback"
 create_db "$revision_db"
 psql_run -q -d "$revision_db" \
   < "$ROOT/tests/sql/wos-qa-existing-proof-guard-fixture.sql"
@@ -499,7 +578,7 @@ echo 'PR270_REVISION_CATALOG_AND_ACL_EQUAL=PASS'
 echo 'PR270_CORRECT_REVERSE_ROLLBACK_ORDER=PASS'
 
 # 6. A same-name pre-existing Storage policy is restored exactly.
-policy_db='wos_pr270_revision_policy_restore'
+policy_db="${RUN_NAMESPACE}revision_policy_restore"
 create_db "$policy_db"
 psql_run -q -d "$policy_db" \
   < "$ROOT/tests/sql/wos-qa-existing-proof-guard-fixture.sql"
@@ -536,7 +615,7 @@ psql_run -q -d "$policy_db" < \
 echo 'PR270_STORAGE_POLICY_RESTORED=PASS'
 
 # 7. Receipts with audit data are retained closed instead of deleted.
-audit_db='wos_pr270_revision_audit_preserve'
+audit_db="${RUN_NAMESPACE}revision_audit_preserve"
 create_db "$audit_db"
 psql_run -q -d "$audit_db" \
   < "$ROOT/tests/sql/wos-qa-existing-proof-guard-fixture.sql"
@@ -572,7 +651,7 @@ SELECT CASE WHEN to_regclass('public.wos_qa_trusted_proof_receipts') IS NOT NULL
 SQL
 
 # 8. M2-first rollback is rejected while revision-image dependencies exist.
-wrong_db='wos_pr270_wrong_rollback_order'
+wrong_db="${RUN_NAMESPACE}wrong_rollback_order"
 create_db "$wrong_db"
 psql_run -q -d "$wrong_db" \
   < "$ROOT/tests/sql/wos-qa-existing-proof-guard-fixture.sql"

@@ -4,9 +4,16 @@ QA_PROJECT: `xulmpqaknlwqqculbsek`
 INSTALL_AUTHORIZED: NO
 SQL_EXECUTED_AGAINST_QA: NO
 CURRENT_PR: #270
-SOURCE_REVIEW_HEAD: `b168044ea95019d620b8aefade1a3afa6665f894`
+HISTORICAL_SOURCE_REVIEW_HEAD_6003371530: `b168044ea95019d620b8aefade1a3afa6665f894`
+TECHNICAL_REVIEW_6003584584_HEAD: `a08523f525e6649f7489018ace4546e217917e7e`
+CURRENT_INSTALL_HEAD: resolve with `git rev-parse HEAD`; the current GitHub
+Draft PR #270 head is authoritative and must not be substituted with a
+historical SHA.
 PR269_STATUS: `CLOSED_UNMERGED_HISTORICAL`
 INSTALL_STATUS: `NOT_AUTHORIZED`
+
+PR #270 is the current effective Draft integration candidate. This plan is not
+installation authorization.
 
 ## Current SQL Fingerprints
 
@@ -36,6 +43,9 @@ All must be true before any QA write:
    - CURRENT visual baselines = 0.
    - Legacy Office and Operator Gates OFF.
 5. A fresh isolated PostgreSQL 17 installation of the same SQL passes.
+   `tests/sql/wos-pr270-p1-p2-regression-pg17.sh` requires an explicit local
+   `postgres:17-alpine` container with the two disposable-test labels and
+   `network=none`; it fails closed instead of using ambient `psql` variables.
 6. Rollback script has been verified in another fresh database.
 7. No current QA job or synthetic E2E is running.
 
