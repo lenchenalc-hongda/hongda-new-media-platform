@@ -43,6 +43,15 @@ psql_run() {
     psql -X -v ON_ERROR_STOP=1 -U postgres "$@"
 }
 
+psql_run_as() {
+  local role="$1"
+  shift
+  docker exec -i "$CONTAINER_ID" env -u PGHOST -u PGPORT -u PGUSER \
+    -u PGPASSWORD -u PGDATABASE -u PGOPTIONS -u DATABASE_URL \
+    -u DIRECT_URL -u SUPABASE_URL -u SUPABASE_DB_URL -u SERVICE_ROLE_KEY \
+    psql -X -v ON_ERROR_STOP=1 -U "$role" "$@"
+}
+
 cleanup() {
   local rc=$?
   trap - EXIT INT TERM
@@ -60,6 +69,15 @@ cleanup() {
       ) THEN
         DROP ROLE wos_m4_proof_verifier_owner;
       END IF;
+      IF pg_catalog.to_regrole('hosted_wos_installer') IS NOT NULL THEN
+        DROP ROLE hosted_wos_installer;
+      END IF;
+      IF pg_catalog.to_regrole('supabase_storage_admin') IS NOT NULL THEN
+        DROP ROLE supabase_storage_admin;
+      END IF;
+      IF pg_catalog.to_regrole('supabase_auth_admin') IS NOT NULL THEN
+        DROP ROLE supabase_auth_admin;
+      END IF;
     END;
     \$cleanup\$;
   " >/dev/null 2>&1 || true
@@ -74,11 +92,16 @@ SCOPE="$(psql_run -qAt -d postgres -c "
 [[ "$SCOPE" = 't' ]] || guard_fail 'POSTGRES_SCOPE_INVALID'
 
 ROLE_STATE="$(psql_run -qAt -d postgres -c "
-  SELECT pg_catalog.shobj_description(role.oid, 'pg_authid')
+  SELECT pg_catalog.count(*)::text
   FROM pg_catalog.pg_roles role
-  WHERE role.rolname = 'wos_m4_proof_verifier_owner'
+  WHERE role.rolname IN (
+    'wos_m4_proof_verifier_owner',
+    'hosted_wos_installer',
+    'supabase_storage_admin',
+    'supabase_auth_admin'
+  )
 ")"
-[[ -z "$ROLE_STATE" ]] || guard_fail 'M4_OWNER_ROLE_ALREADY_EXISTS'
+[[ "$ROLE_STATE" = '0' ]] || guard_fail 'M4_HOSTED_ROLE_ALREADY_EXISTS'
 
 psql_run -q -d postgres -c "CREATE DATABASE \"$DB\"" >/dev/null
 psql_run -q -d postgres -c "COMMENT ON DATABASE \"$DB\" IS '$DB_OWNER'" >/dev/null
@@ -87,13 +110,35 @@ psql_run -q -d "$DB" < "$ROOT/tests/sql/wos-p2-m2-pg17-fixture.sql"
 psql_run -q -d "$DB" < \
   "$ROOT/docs/workshop-order-system/nonproduction-only/WOS_P2_M2_NONPROD_SQL_NOT_INSTALLED.sql"
 psql_run -q -d "$DB" < "$ROOT/tests/sql/wos-m4-02-pg17-seed.sql"
+psql_run -q -d "$DB" < "$ROOT/tests/sql/wos-m4-02-pg17-hosted-roles-fixture.sql"
 psql_run -q -d "$DB" < "$ROOT/tests/sql/wos-m4-02-pg17-preinstall-baseline.sql"
-psql_run -q -d "$DB" < \
+psql_run_as hosted_wos_installer -q -d "$DB" < \
+  "$ROOT/tests/sql/wos-m4-02-pg17-old-forward-failure-probe.sql"
+psql_run_as hosted_wos_installer -q -d "$DB" < \
   "$ROOT/docs/workshop-order-system/nonproduction-only/WOS_M4_02_READONLY_PROOF_VERIFIER_QA_ONLY_NOT_INSTALLED.sql"
+psql_run_as hosted_wos_installer -q -d "$DB" < \
+  "$ROOT/tests/sql/wos-m4-02-pg17-phase1-check.sql"
+psql_run_as supabase_storage_admin -q -d "$DB" < \
+  "$ROOT/docs/workshop-order-system/nonproduction-only/WOS_M4_02_READONLY_PROOF_VERIFIER_STORAGE_OWNER_PHASE_NOT_INSTALLED.sql"
+psql_run_as supabase_storage_admin -q -d "$DB" < \
+  "$ROOT/tests/sql/wos-m4-02-pg17-phase2-check.sql"
+psql_run_as hosted_wos_installer -q -d "$DB" < \
+  "$ROOT/docs/workshop-order-system/nonproduction-only/WOS_M4_02_READONLY_PROOF_VERIFIER_ACTIVATION_NOT_INSTALLED.sql"
 psql_run -d "$DB" < "$ROOT/tests/sql/wos-m4-02-pg17-assertions.sql"
-psql_run -q -d "$DB" < \
+psql_run_as hosted_wos_installer -q -d "$DB" < \
+  "$ROOT/docs/workshop-order-system/nonproduction-only/WOS_M4_02_READONLY_PROOF_VERIFIER_DEACTIVATE_NOT_INSTALLED.sql"
+psql_run_as hosted_wos_installer -q -d "$DB" < \
+  "$ROOT/tests/sql/wos-m4-02-pg17-deactivated-check.sql"
+psql_run_as supabase_storage_admin -q -d "$DB" < \
+  "$ROOT/docs/workshop-order-system/nonproduction-only/WOS_M4_02_READONLY_PROOF_VERIFIER_STORAGE_OWNER_ROLLBACK_NOT_INSTALLED.sql"
+psql_run_as supabase_storage_admin -q -d "$DB" < \
+  "$ROOT/tests/sql/wos-m4-02-pg17-storage-rollback-check.sql"
+psql_run_as hosted_wos_installer -q -d "$DB" < \
   "$ROOT/docs/workshop-order-system/nonproduction-only/WOS_M4_02_READONLY_PROOF_VERIFIER_QA_ONLY_ROLLBACK_NOT_INSTALLED.sql"
 psql_run -d "$DB" < "$ROOT/tests/sql/wos-m4-02-pg17-post-rollback.sql"
 
 echo 'WOS_M4_02_PG17_SUITE=PASS'
 echo 'WOS_M4_02_PG17_NO_CLOUD_CONNECTION=PASS'
+echo 'WOS_M4_02_SYNTHETIC_SPLIT_OWNER_TEST=PASS'
+echo 'WOS_M4_02_STORAGE_OWNER_SPLIT_PHASE=PASS'
+echo 'WOS_M4_02_HOSTED_STORAGE_OWNER_EXECUTOR=BLOCKED'

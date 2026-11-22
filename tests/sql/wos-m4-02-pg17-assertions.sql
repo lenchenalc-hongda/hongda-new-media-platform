@@ -148,6 +148,34 @@ BEGIN
     RAISE EXCEPTION 'M4_OWNER_HAS_ROLE_MEMBERSHIPS';
   END IF;
 
+  IF (
+    SELECT pg_catalog.count(*)
+    FROM pg_catalog.pg_auth_members membership
+    WHERE membership.member = 'hosted_wos_installer'::regrole
+      AND membership.roleid = 'wos_m4_proof_verifier_owner'::regrole
+      AND membership.admin_option IS TRUE
+      AND membership.inherit_option IS FALSE
+      AND membership.set_option IS FALSE
+  ) <> 1
+    OR pg_catalog.pg_has_role(
+      'hosted_wos_installer',
+      'wos_m4_proof_verifier_owner',
+      'SET'
+    )
+    OR pg_catalog.has_schema_privilege(
+      'wos_m4_proof_verifier_owner',
+      'public',
+      'CREATE'
+    )
+    OR pg_catalog.has_schema_privilege(
+      'wos_m4_proof_verifier_owner',
+      'auth',
+      'USAGE'
+    )
+  THEN
+    RAISE EXCEPTION 'M4_OWNER_ROLE_HANDOFF_INVALID';
+  END IF;
+
   IF EXISTS (
     SELECT 1
     FROM pg_catalog.pg_proc p
@@ -188,6 +216,31 @@ BEGIN
     OR v_anon_execute IS NOT FALSE
   THEN
     RAISE EXCEPTION 'M4_DOWNLOAD_GUARD_SECURITY_METADATA_INVALID';
+  END IF;
+
+  SELECT pg_catalog.pg_get_userbyid(p.proowner),
+         p.prosecdef,
+         p.proconfig,
+         pg_catalog.has_function_privilege('authenticated',p.oid,'EXECUTE'),
+         pg_catalog.has_function_privilege('anon',p.oid,'EXECUTE')
+    INTO v_owner, v_security_definer, v_config,
+         v_authenticated_execute, v_anon_execute
+  FROM pg_catalog.pg_proc p
+  WHERE p.oid = pg_catalog.to_regprocedure(
+    'public.wos_qa_m4_current_user_id()'
+  );
+  IF v_owner <> 'hosted_wos_installer'
+    OR v_security_definer IS NOT TRUE
+    OR v_config IS DISTINCT FROM ARRAY['search_path=""']::text[]
+    OR v_authenticated_execute IS NOT FALSE
+    OR v_anon_execute IS NOT FALSE
+    OR pg_catalog.has_function_privilege(
+      'service_role',
+      'public.wos_qa_m4_current_user_id()',
+      'EXECUTE'
+    )
+  THEN
+    RAISE EXCEPTION 'M4_CALLER_UID_BRIDGE_SECURITY_METADATA_INVALID';
   END IF;
 
   IF (
@@ -333,6 +386,23 @@ BEGIN
   END IF;
 END;
 $viewer_storage_denied$;
+RESET ROLE;
+
+SELECT set_config(
+  'request.jwt.claim.sub',
+  '60606060-6060-4060-8060-606060606060',
+  false
+);
+SET ROLE authenticated;
+SELECT tests.wos_m4_expect_download_denied(
+  'organizations/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/wos/production-order/33333333-3333-4333-8333-333333333333/images/product/versions/QA-R6/41111111-1111-4111-8111-111111111111/qa-preview-proof.png'
+);
+SELECT tests.wos_m4_expect_error(
+  $$SELECT public.wos_qa_m4_readonly_proof_snapshot(
+      '33333333-3333-4333-8333-333333333333',11,'QA-R6')$$,
+  '42501',
+  'ORDER_NOT_AVAILABLE'
+);
 RESET ROLE;
 
 SELECT set_config(
@@ -641,6 +711,31 @@ SELECT tests.wos_m4_expect_error(
       '33333333-3333-4333-8333-333333333333',11,'QA-R6')$$,
   'PT409',
   'BASELINE_CARDINALITY_INVALID'
+);
+RESET ROLE;
+ROLLBACK;
+
+BEGIN;
+CREATE OR REPLACE FUNCTION public.wos_qa_m4_current_user_id()
+RETURNS uuid
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $slow_caller_uid$
+BEGIN
+  PERFORM pg_catalog.pg_sleep(1);
+  RETURN auth.uid();
+END;
+$slow_caller_uid$;
+UPDATE public.wos_qa_verified_image_proofs
+SET expires_at = clock_timestamp() + interval '200 milliseconds'
+WHERE order_id = '33333333-3333-4333-8333-333333333333';
+SET ROLE authenticated;
+SELECT tests.wos_m4_expect_error(
+  $$SELECT public.wos_qa_m4_readonly_proof_snapshot(
+      '33333333-3333-4333-8333-333333333333',11,'QA-R6')$$,
+  'PT409',
+  'PROOF_EXPIRED'
 );
 RESET ROLE;
 ROLLBACK;
@@ -1089,7 +1184,7 @@ inventory AS (
           FROM pg_catalog.pg_auth_members membership
           JOIN pg_catalog.pg_roles parent
             ON parent.oid = membership.roleid
-          WHERE parent.oid = role.oid
+          WHERE membership.member = role.oid
         ), '[]'::jsonb)
       )
       FROM pg_catalog.pg_roles role
@@ -1118,6 +1213,19 @@ SELECT
   'WOS_M4_02_GUARD_FUNCTION_SHA256='
     || guard.definition_sha256 AS guard_fingerprint
 FROM guard_function guard;
+
+SELECT
+  'WOS_M4_02_CALLER_BRIDGE_SHA256=' || pg_catalog.encode(
+    pg_catalog.sha256(pg_catalog.convert_to(
+      pg_catalog.pg_get_functiondef(p.oid),
+      'UTF8'
+    )),
+    'hex'
+  ) AS caller_bridge_fingerprint
+FROM pg_catalog.pg_proc p
+WHERE p.oid = pg_catalog.to_regprocedure(
+  'public.wos_qa_m4_current_user_id()'
+);
 
 WITH
 snapshot_function AS (

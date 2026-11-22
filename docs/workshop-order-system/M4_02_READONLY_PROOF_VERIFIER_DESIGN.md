@@ -1,6 +1,7 @@
 # M4-02 Minimal Read-Only Proof Verifier
 
-Status: SOURCE IMPLEMENTED / QA SQL NOT INSTALLED
+Status:
+SOURCE IMPLEMENTED / QA SQL NOT INSTALLED / HOSTED STORAGE-OWNER EXECUTOR BLOCKED
 
 This document does not authorize SQL installation, role changes, live Storage
 changes, Gate activation, QA writes or Production deployment. The source and
@@ -33,6 +34,14 @@ A read-only audit of QA project `xulmpqaknlwqqculbsek` on 2026-11-22 confirmed:
   historical evidence, not current verification evidence.
 - The existing private Storage SELECT policy permits Operator only while an
   order is `SUBMITTED`; M4 verification occurs at `READINESS_CHECK`.
+- QA `postgres` is not a superuser and does not own `storage.objects`.
+  `supabase_storage_admin` owns that table, and the installer has no MEMBER,
+  SET or USAGE relation to that owner role.
+- `auth.uid()` is owned by `supabase_auth_admin`, has PUBLIC EXECUTE, and the
+  installer has no grant option on that function.
+- No project-specific Supabase-supported executor for the exact
+  `storage.objects` policy transaction has yet been demonstrated. The split
+  phase SQL is reviewable, but hosted installation remains a hard blocker.
 
 ## Design Goal
 
@@ -49,8 +58,8 @@ The verifier never grants start authority. `canStart=false` is invariant.
 
 ## QA-Only Object Allowlist
 
-None of these objects is installed by this source task. The uninstalled forward
-SQL creates and the rollback SQL removes:
+None of these objects is installed by this source task. The uninstalled split
+installation creates and the staged rollback removes:
 
 ### Read-only database function
 
@@ -68,8 +77,10 @@ Recommended properties:
 - no writes
 - only explicitly qualified objects
 
-The function must derive the actor from `auth.uid()`. It must load exactly one
-active `profiles` row for that user and reject missing, inactive or ambiguous
+The function derives the actor from the real request UID through a private
+SECURITY DEFINER bridge owned by the QA installer. The bridge calls
+`auth.uid()` and is executable only by the dedicated owner. The RPC loads
+exactly one active `profiles` row and rejects missing, inactive or ambiguous
 profiles. Caller-supplied actor, organization, role or profile IDs are not
 accepted.
 
@@ -85,7 +96,8 @@ Allowed read roles for this verifier:
 
 - `admin`
 - `manager`
-- `sales` when same organization and normal WOS order visibility applies
+- `sales` only when the Profile is the same-organization order creator or sales
+  owner
 - `operator`
 - `workshop` / `technician` only if the server role policy explicitly includes
   them
@@ -109,14 +121,14 @@ the Storage policy from becoming a weaker alternate verifier. It does not
 return a path, object ID, proof row, signed URL or token.
 
 No new table, column, trigger, direct private-table grant or dynamic SQL is
-required. The only RLS/Storage-policy proposal is the object-scoped read
-allowance above, and it remains uninstalled.
+required. The object-scoped Storage policy remains uninstalled and is a
+separate storage-owner phase.
 
 ## Function Checks
 
 The snapshot function must:
 
-1. Require non-null `auth.uid()` and one active authoritative Profile.
+1. Require the private caller-UID bridge and one active authoritative Profile.
 2. Lock/read one production order by exact `p_order_id`, Profile organization,
    `p_expected_version`, `version_label=p_version_label`, active workflow and
    `QA-NONPROD-` order-number scope.
@@ -183,7 +195,8 @@ Requirements:
 
 - same verified Supabase identity and active Profile requirements as the Inbox
   read route
-- exact QA project binding, preview environment and dedicated read switch
+- exact QA project binding, preview environment and dedicated default-OFF
+  `WOS_QA_M4_PROOF_READONLY_ENABLED` switch; the Inbox flag is not reused
 - one UUID query parameter only
 - no POST/PATCH/DELETE
 - no service role
@@ -231,7 +244,8 @@ Before any future installation:
 
 - Prove the function owner has only the minimum private-table and
   `storage.objects` read access needed.
-- Prove function-owned bypass of RLS is compensated by explicit `auth.uid()`,
+- Prove function-owned bypass of RLS is compensated by the private caller-UID
+  bridge,
   active Profile, organization, order, role and version predicates.
 - Confirm `SET search_path=''` and fully qualified function/table names.
 - Confirm no dynamic SQL, temporary object, arbitrary path or caller-provided
@@ -247,11 +261,15 @@ Before any future installation:
 
 ## PostgreSQL 17 Offline Evidence
 
-The forward and rollback drafts were executed only in disposable
-`postgres:17-alpine` containers with network mode `none`. No Supabase connection
-is used by the suite. A pre-install baseline stores deterministic row-content,
-table-ACL and schema-ACL hashes for comparison after rollback. The executed
-suite covers:
+The staged forward and rollback drafts were executed only in disposable
+`postgres:17-alpine` containers with network mode `none`. Installation runs as
+a non-superuser `CREATEROLE` installer with a synthetic Storage owner and a
+separate Auth owner. This proves PostgreSQL permission mechanics, not a hosted
+Supabase Storage-policy executor. No Supabase connection is used by the suite.
+The suite first proves the old
+single-executor path fails, then executes the three forward phases and the
+three rollback phases. A pre-install baseline stores deterministic row-content,
+table-ACL and schema-ACL hashes for comparison after rollback.
 
 ### Positive
 
@@ -271,6 +289,7 @@ suite covers:
 - missing/extra baseline item
 - wrong organization/order/version label
 - viewer/anonymous/cross-org caller
+- same-organization Sales caller who is neither creator nor sales owner
 - inactive or ambiguous Profile
 - proof expired or expires during verification
 - archived/delete-marked/changed Storage object
@@ -296,20 +315,22 @@ Before any future installation:
    `pg_get_functiondef()`, `proowner`, `proacl`, `proconfig`, owner role
    memberships, direct dependencies, relevant table ACLs and relevant policies.
    `pg_get_functiondef()` alone does not identify the Security Definer owner.
-4. Install only in one transaction, with all QA gates OFF.
-5. Roll back by revoking/dropping only the new read functions and any private
-   helper, without dropping tables or deleting immutable proof/receipt history.
-6. Re-verify authenticated execute denial after rollback.
+4. Install as three fail-closed owner phases, with all QA gates OFF:
+   database objects, Storage-owner policies, then authenticated EXECUTE
+   activation.
+5. Roll back in reverse owner order: deactivate EXECUTE, drop Storage policies,
+   then drop database objects.
+6. Re-verify authenticated execute denial after deactivation and rollback.
 7. Add a PG17 owner-escalation test proving the owner cannot be swapped to a
    higher-privilege role without changing the approved fingerprint and tests.
 
-The forward draft also refuses installation unless all P2/Office/M2 Gates are
+The database phase also refuses installation unless all P2/Office/M2 Gates are
 fully closed with no whitelist/TTL, `authenticated` still lacks direct private
 proof/receipt SELECT and M2 EXECUTE, the three reviewed M2 function
 fingerprints match, and the two Issue #274 QA orders retain their approved
 state/version. Project identity, Production auto-build suppression and domain
 state cannot be proved from inside SQL and remain mandatory external installer
-checks.
+checks. The unavailable hosted Storage-owner executor remains a hard stop.
 
 ## Current Deliverables
 
@@ -317,9 +338,10 @@ checks.
 - safe snapshot DTO parser and stable double-snapshot comparator
 - real-byte SHA-256 verification using the caller's Supabase Storage session
 - exact four-image and four-category validation
-- Forward/Rollback SQL drafts marked `INSTALL_NOT_AUTHORIZED`
+- split Phase 1/2/3 activation and reverse rollback SQL drafts marked
+  `INSTALL_NOT_AUTHORIZED`
 - disposable PostgreSQL 17 positive, negative, role/owner, Storage-policy and
-  rollback suite
+  hosted-like non-superuser installer rollback suite
 
 ## Explicit Non-Authorizations
 

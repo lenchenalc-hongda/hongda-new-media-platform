@@ -4,7 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { resolveVerifiedSupabaseIdentity } from '@/lib/auth/supabase-identity';
 import { createClient } from '@/lib/supabase/server';
 import {
-  isWosQaInboxReadonlyEnabled,
+  isWosQaM4ProofReadonlyEnabled,
   resolveWosApiActor,
 } from './api-contract';
 import {
@@ -30,10 +30,10 @@ function response(code: string, status: number, data: unknown = null) {
 
 function verifierEnabled(): boolean {
   return process.env.NEXT_PUBLIC_FEATURE_WORKSHOP_ORDERS === 'true'
-    && isWosQaInboxReadonlyEnabled({
+    && isWosQaM4ProofReadonlyEnabled({
       vercelEnv: process.env.VERCEL_ENV,
       authMode: process.env.AUTH_MODE,
-      enabled: process.env.WOS_QA_INBOX_READONLY_ENABLED,
+      enabled: process.env.WOS_QA_M4_PROOF_READONLY_ENABLED,
       supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL,
     });
 }

@@ -1,11 +1,14 @@
 -- WOS M4-02 READ-ONLY PRIVATE PROOF VERIFIER / QA ONLY / NOT INSTALLED
 -- INSTALL_NOT_AUTHORIZED
 --
--- This file creates one order-scoped read-only RPC and its dedicated NOLOGIN
--- function-owner role plus one object-scoped authenticated Storage SELECT
--- policy. It does not create or mutate business data, open a Gate, change any
--- other Storage policy, or grant direct proof/receipt table SELECT to
--- authenticated users.
+-- PHASE 1 OF 3: database objects only.
+--
+-- This phase creates the order-scoped read-only RPCs and their dedicated
+-- NOLOGIN function-owner role. It deliberately does NOT create policies on
+-- storage.objects, grant EXECUTE to authenticated, grant auth.uid(), or mutate
+-- business data. Storage policy installation requires the storage.objects
+-- owner and is a separate reviewed phase. Direct authenticated RPC access is
+-- enabled only by the later activation phase.
 
 BEGIN;
 
@@ -19,7 +22,21 @@ DECLARE
   v_scope_count integer;
   v_active_gate_count integer;
   v_is_disposable boolean;
+  v_expected_m2_owner text;
 BEGIN
+  v_is_disposable := pg_catalog.current_database() ~ '^wos_m4_02_pg17_'
+    AND pg_catalog.to_regclass('tests.wos_m4_pg17_context') IS NOT NULL;
+  IF pg_catalog.to_regclass('tests.wos_m4_pg17_context') IS NOT NULL
+    AND v_is_disposable IS NOT TRUE
+  THEN
+    RAISE EXCEPTION 'M4_TEST_CONTEXT_OUTSIDE_DISPOSABLE_DATABASE'
+      USING ERRCODE = '55000';
+  END IF;
+  v_expected_m2_owner := CASE
+    WHEN v_is_disposable IS TRUE THEN current_user
+    ELSE 'postgres'
+  END;
+
   IF pg_catalog.current_setting('server_version_num')::integer
       NOT BETWEEN 170000 AND 179999
     OR pg_catalog.to_regclass('public.wos_qa_p2_execution_gate') IS NULL
@@ -27,6 +44,82 @@ BEGIN
     OR pg_catalog.to_regclass('public.wos_qa_p2_m2_gate') IS NULL
   THEN
     RAISE EXCEPTION 'M4_QA_PREREQUISITE_MISSING' USING ERRCODE = '55000';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_roles role
+    WHERE role.rolname = current_user
+      AND (
+        role.rolsuper
+        OR role.rolcreaterole IS NOT TRUE
+        OR role.rolbypassrls IS NOT TRUE
+      )
+  )
+    OR pg_catalog.has_schema_privilege(
+      current_user,
+      'public',
+      'CREATE WITH GRANT OPTION'
+    ) IS NOT TRUE
+    OR pg_catalog.has_schema_privilege(
+      current_user,
+      'storage',
+      'USAGE WITH GRANT OPTION'
+    ) IS NOT TRUE
+    OR pg_catalog.has_schema_privilege(
+      current_user,
+      'auth',
+      'USAGE'
+    ) IS NOT TRUE
+    OR (
+      v_is_disposable IS NOT TRUE
+      AND current_user <> 'postgres'
+    )
+  THEN
+    RAISE EXCEPTION 'M4_DB_PHASE_INSTALLER_ROLE_INVALID'
+      USING ERRCODE = '55000';
+  END IF;
+
+  IF pg_catalog.has_function_privilege(
+      CURRENT_USER,
+      'auth.uid()',
+      'EXECUTE'
+    ) IS NOT TRUE
+    OR NOT EXISTS (
+      SELECT 1
+      FROM pg_catalog.pg_proc procedure
+      CROSS JOIN LATERAL pg_catalog.aclexplode(
+        COALESCE(
+          procedure.proacl,
+          pg_catalog.acldefault('f', procedure.proowner)
+        )
+      ) acl
+      WHERE procedure.oid = 'auth.uid()'::regprocedure
+        AND acl.grantee = 0
+        AND acl.privilege_type = 'EXECUTE'
+    )
+  THEN
+    RAISE EXCEPTION 'M4_AUTH_UID_PUBLIC_EXECUTE_BASELINE_INVALID'
+      USING ERRCODE = '55000';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_class relation
+    WHERE relation.oid IN (
+      'public.profiles'::regclass,
+      'public.wos_production_orders'::regclass,
+      'public.wos_visual_baselines'::regclass,
+      'public.wos_visual_baseline_items'::regclass,
+      'public.wos_reference_images'::regclass,
+      'public.wos_qa_verified_image_proofs'::regclass,
+      'public.wos_qa_p2_m2_receipts'::regclass
+    )
+      AND pg_catalog.pg_get_userbyid(relation.relowner)
+        IS DISTINCT FROM current_user
+  ) THEN
+    RAISE EXCEPTION 'M4_DB_PHASE_INSTALLER_MUST_OWN_BUSINESS_TABLES'
+      USING ERRCODE = '55000';
   END IF;
 
   IF EXISTS (SELECT 1 FROM pg_catalog.pg_roles
@@ -42,6 +135,11 @@ BEGIN
     'public.wos_qa_m4_can_download_proof(text,text)'
   ) IS NOT NULL THEN
     RAISE EXCEPTION 'M4_STORAGE_GUARD_FUNCTION_ALREADY_EXISTS' USING ERRCODE = '42723';
+  END IF;
+  IF pg_catalog.to_regprocedure(
+    'public.wos_qa_m4_current_user_id()'
+  ) IS NOT NULL THEN
+    RAISE EXCEPTION 'M4_CALLER_UID_HELPER_ALREADY_EXISTS' USING ERRCODE = '42723';
   END IF;
   IF EXISTS (
     SELECT 1
@@ -70,7 +168,7 @@ BEGIN
       'public.wos_qa_p2_m2_action(uuid,integer,uuid,text,jsonb)'
     )
     AND p.proname = 'wos_qa_p2_m2_action'
-    AND pg_catalog.pg_get_userbyid(p.proowner) = 'postgres'
+    AND pg_catalog.pg_get_userbyid(p.proowner) = v_expected_m2_owner
     AND p.prosecdef IS TRUE
     AND p.proconfig IS NOT DISTINCT FROM ARRAY['search_path=""']::text[]
     AND pg_catalog.encode(
@@ -87,7 +185,7 @@ BEGIN
       'public.wos_qa_p2_m2_checked_proof_set(uuid,uuid,uuid,text)'
     )
     AND p.proname = 'wos_qa_p2_m2_checked_proof_set'
-    AND pg_catalog.pg_get_userbyid(p.proowner) = 'postgres'
+    AND pg_catalog.pg_get_userbyid(p.proowner) = v_expected_m2_owner
     AND p.prosecdef IS FALSE
     AND p.proconfig IS NOT DISTINCT FROM ARRAY['search_path=""']::text[]
     AND pg_catalog.encode(
@@ -104,7 +202,7 @@ BEGIN
       'public.wos_qa_p2_m2_spec_digest(uuid)'
     )
     AND p.proname = 'wos_qa_p2_m2_spec_digest'
-    AND pg_catalog.pg_get_userbyid(p.proowner) = 'postgres'
+    AND pg_catalog.pg_get_userbyid(p.proowner) = v_expected_m2_owner
     AND p.prosecdef IS FALSE
     AND p.proconfig IS NOT DISTINCT FROM ARRAY['search_path=""']::text[]
     AND pg_catalog.encode(
@@ -238,15 +336,6 @@ BEGIN
       USING ERRCODE = '55000';
   END IF;
 
-  v_is_disposable := pg_catalog.current_database() ~ '^wos_m4_02_pg17_'
-    AND pg_catalog.to_regclass('tests.wos_m4_pg17_context') IS NOT NULL;
-  IF pg_catalog.to_regclass('tests.wos_m4_pg17_context') IS NOT NULL
-    AND v_is_disposable IS NOT TRUE
-  THEN
-    RAISE EXCEPTION 'M4_TEST_CONTEXT_OUTSIDE_DISPOSABLE_DATABASE'
-      USING ERRCODE = '55000';
-  END IF;
-
   IF v_is_disposable IS TRUE THEN
     SELECT expected_order_id, expected_org_id,
            expected_version, expected_version_label
@@ -298,9 +387,7 @@ CREATE ROLE wos_m4_proof_verifier_owner
 COMMENT ON ROLE wos_m4_proof_verifier_owner IS
   'WOS_M4_02_READONLY_PROOF_VERIFIER_OWNER_V1';
 
-GRANT USAGE ON SCHEMA public, auth, storage
-  TO wos_m4_proof_verifier_owner;
-GRANT EXECUTE ON FUNCTION auth.uid()
+GRANT USAGE ON SCHEMA public, storage
   TO wos_m4_proof_verifier_owner;
 
 GRANT SELECT ON TABLE
@@ -317,10 +404,29 @@ TO wos_m4_proof_verifier_owner;
 GRANT EXECUTE ON FUNCTION public.wos_qa_p2_m2_spec_digest(uuid)
 TO wos_m4_proof_verifier_owner;
 
+CREATE FUNCTION public.wos_qa_m4_current_user_id()
+RETURNS uuid
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = ''
+STABLE
+AS $caller_uid$
+  SELECT auth.uid()
+$caller_uid$;
+COMMENT ON FUNCTION public.wos_qa_m4_current_user_id() IS
+  'WOS_M4_02_PRIVATE_CALLER_UID_BRIDGE_V1';
+REVOKE ALL ON FUNCTION public.wos_qa_m4_current_user_id()
+FROM PUBLIC, anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.wos_qa_m4_current_user_id()
+TO wos_m4_proof_verifier_owner;
+
+GRANT wos_m4_proof_verifier_owner TO CURRENT_USER WITH SET TRUE;
+GRANT CREATE ON SCHEMA public TO wos_m4_proof_verifier_owner;
+
 -- These are owner-only permissive RLS policies. The owner is NOLOGIN and has
 -- no application-role membership. Every row visible through them is still
--- constrained by explicit auth.uid(), Profile, organization, order, version,
--- baseline, proof, and receipt predicates inside the SECURITY DEFINER RPC.
+-- constrained by the private caller bridge, active Profile, organization,
+-- order, version, baseline, proof, and receipt predicates inside RPCs.
 CREATE POLICY wos_m4_proof_owner_profiles_read
   ON public.profiles FOR SELECT TO wos_m4_proof_verifier_owner USING (true);
 CREATE POLICY wos_m4_proof_owner_orders_read
@@ -335,9 +441,6 @@ CREATE POLICY wos_m4_proof_owner_proofs_read
   ON public.wos_qa_verified_image_proofs FOR SELECT TO wos_m4_proof_verifier_owner USING (true);
 CREATE POLICY wos_m4_proof_owner_receipts_read
   ON public.wos_qa_p2_m2_receipts FOR SELECT TO wos_m4_proof_verifier_owner USING (true);
-CREATE POLICY wos_m4_proof_owner_storage_read
-  ON storage.objects FOR SELECT TO wos_m4_proof_verifier_owner
-  USING (bucket_id = 'wos-private');
 
 -- The existing application Storage policy grants Operator access only while
 -- an order is SUBMITTED. M4 verification occurs at READINESS_CHECK, so the
@@ -365,7 +468,7 @@ DECLARE
 BEGIN
   IF p_bucket_id IS DISTINCT FROM 'wos-private'
     OR p_object_name IS NULL
-    OR auth.uid() IS NULL
+    OR public.wos_qa_m4_current_user_id() IS NULL
   THEN
     RETURN false;
   END IF;
@@ -374,7 +477,7 @@ BEGIN
     SELECT p.id, p.org_id, p.role
       INTO STRICT v_profile_id, v_org_id, v_role
     FROM public.profiles p
-    WHERE p.user_id = auth.uid()
+    WHERE p.user_id = public.wos_qa_m4_current_user_id()
       AND p.is_active = true
       AND p.role IN ('admin','manager','sales','operator');
   EXCEPTION
@@ -424,6 +527,8 @@ BEGIN
     AND v_snapshot->>'orderVersion' = v_order_version::text
     AND v_snapshot->>'versionLabel' = v_version_label
     AND v_snapshot->>'canStart' = 'false'
+    AND (v_snapshot->>'proofExpiresAt')::timestamptz
+      > pg_catalog.clock_timestamp()
     AND EXISTS (
       SELECT 1
       FROM pg_catalog.jsonb_array_elements(v_snapshot->'images') AS image
@@ -438,12 +543,6 @@ COMMENT ON FUNCTION public.wos_qa_m4_can_download_proof(text,text) IS
   'WOS_M4_02_READONLY_PROOF_DOWNLOAD_GUARD_V1';
 REVOKE ALL ON FUNCTION public.wos_qa_m4_can_download_proof(text,text)
 FROM PUBLIC, anon, authenticated, service_role;
-GRANT EXECUTE ON FUNCTION public.wos_qa_m4_can_download_proof(text,text)
-TO authenticated;
-
-CREATE POLICY wos_m4_proof_verifier_storage_read
-  ON storage.objects FOR SELECT TO authenticated
-  USING (public.wos_qa_m4_can_download_proof(bucket_id, name));
 
 CREATE FUNCTION public.wos_qa_m4_readonly_proof_snapshot(
   p_order_id uuid,
@@ -502,14 +601,14 @@ BEGIN
     RAISE EXCEPTION 'VERSION_CONFLICT' USING ERRCODE = 'PT409';
   END IF;
 
-  IF auth.uid() IS NULL THEN
+  IF public.wos_qa_m4_current_user_id() IS NULL THEN
     RAISE EXCEPTION 'NOT_AUTHORIZED' USING ERRCODE = '42501';
   END IF;
 
   SELECT p.id, p.org_id, p.role
     INTO STRICT v_actor_profile_id, v_actor_org_id, v_actor_role
   FROM public.profiles p
-  WHERE p.user_id = auth.uid()
+  WHERE p.user_id = public.wos_qa_m4_current_user_id()
     AND p.is_active = true
     AND p.role IN ('admin','manager','sales','operator');
 
@@ -525,6 +624,13 @@ BEGIN
     WHERE o.id = p_order_id
       AND o.organization_id = v_actor_org_id
       AND o.order_number ~ '^QA-NONPROD-[0-9a-f-]{36}$'
+      AND (
+        v_actor_role <> 'sales'
+        OR v_actor_profile_id IN (
+          o.created_by_profile_id,
+          o.sales_owner_profile_id
+        )
+      )
     ;
   EXCEPTION
     WHEN NO_DATA_FOUND THEN
@@ -785,6 +891,13 @@ BEGIN
     RAISE EXCEPTION 'PROOF_OBJECT_CHANGED' USING ERRCODE = 'PT409';
   END IF;
 
+  v_checked_at := pg_catalog.clock_timestamp();
+  IF v_proof_expires_at IS NULL
+    OR v_proof_expires_at <= v_checked_at
+  THEN
+    RAISE EXCEPTION 'PROOF_EXPIRED' USING ERRCODE = 'PT409';
+  END IF;
+
   SELECT pg_catalog.jsonb_agg(
     pg_catalog.jsonb_build_object(
       'imageId', im.id,
@@ -990,6 +1103,13 @@ BEGIN
     RAISE EXCEPTION 'RECEIPT_CHAIN_INVALID' USING ERRCODE = 'PT409';
   END IF;
 
+  v_checked_at := pg_catalog.clock_timestamp();
+  IF v_proof_expires_at IS NULL
+    OR v_proof_expires_at <= v_checked_at
+  THEN
+    RAISE EXCEPTION 'PROOF_EXPIRED' USING ERRCODE = 'PT409';
+  END IF;
+
   v_snapshot_fingerprint := pg_catalog.encode(
     pg_catalog.sha256(
       pg_catalog.convert_to(
@@ -1046,9 +1166,97 @@ COMMENT ON FUNCTION public.wos_qa_m4_readonly_proof_snapshot(uuid,integer,text) 
 REVOKE ALL ON FUNCTION
   public.wos_qa_m4_readonly_proof_snapshot(uuid,integer,text)
 FROM PUBLIC, anon, authenticated, service_role;
-GRANT EXECUTE ON FUNCTION
-  public.wos_qa_m4_readonly_proof_snapshot(uuid,integer,text)
-TO authenticated;
+
+REVOKE CREATE ON SCHEMA public FROM wos_m4_proof_verifier_owner;
+REVOKE wos_m4_proof_verifier_owner
+FROM CURRENT_USER GRANTED BY CURRENT_USER;
+
+DO $phase1_check$
+DECLARE
+  v_membership_count integer;
+BEGIN
+  IF pg_catalog.has_schema_privilege(
+      'wos_m4_proof_verifier_owner',
+      'public',
+      'CREATE'
+    )
+    OR pg_catalog.has_schema_privilege(
+      'wos_m4_proof_verifier_owner',
+      'auth',
+      'USAGE'
+    )
+    OR pg_catalog.has_function_privilege(
+      'authenticated',
+      'public.wos_qa_m4_readonly_proof_snapshot(uuid,integer,text)',
+      'EXECUTE'
+    )
+    OR pg_catalog.has_function_privilege(
+      'authenticated',
+      'public.wos_qa_m4_can_download_proof(text,text)',
+      'EXECUTE'
+    )
+    OR pg_catalog.has_function_privilege(
+      'authenticated',
+      'public.wos_qa_m4_current_user_id()',
+      'EXECUTE'
+    )
+    OR pg_catalog.pg_has_role(
+      CURRENT_USER,
+      'wos_m4_proof_verifier_owner',
+      'SET'
+    )
+  THEN
+    RAISE EXCEPTION 'M4_DB_PHASE_PRIVILEGE_STATE_INVALID'
+      USING ERRCODE = '55000';
+  END IF;
+
+  SELECT pg_catalog.count(*)::integer
+    INTO v_membership_count
+  FROM pg_catalog.pg_auth_members membership
+  WHERE membership.member = CURRENT_USER::regrole
+    AND membership.roleid = 'wos_m4_proof_verifier_owner'::regrole
+    AND membership.admin_option IS TRUE
+    AND membership.inherit_option IS FALSE
+    AND membership.set_option IS FALSE;
+  IF v_membership_count <> 1
+    OR EXISTS (
+      SELECT 1
+      FROM pg_catalog.pg_auth_members membership
+      WHERE membership.member =
+        'wos_m4_proof_verifier_owner'::regrole
+    )
+  THEN
+    RAISE EXCEPTION 'M4_DB_PHASE_ROLE_HANDOFF_INVALID'
+      USING ERRCODE = '55000';
+  END IF;
+
+  IF pg_catalog.pg_get_userbyid((
+      SELECT p.proowner
+      FROM pg_catalog.pg_proc p
+      WHERE p.oid = pg_catalog.to_regprocedure(
+        'public.wos_qa_m4_readonly_proof_snapshot(uuid,integer,text)'
+      )
+    )) <> 'wos_m4_proof_verifier_owner'
+    OR pg_catalog.pg_get_userbyid((
+      SELECT p.proowner
+      FROM pg_catalog.pg_proc p
+      WHERE p.oid = pg_catalog.to_regprocedure(
+        'public.wos_qa_m4_can_download_proof(text,text)'
+      )
+    )) <> 'wos_m4_proof_verifier_owner'
+    OR pg_catalog.pg_get_userbyid((
+      SELECT p.proowner
+      FROM pg_catalog.pg_proc p
+      WHERE p.oid = pg_catalog.to_regprocedure(
+        'public.wos_qa_m4_current_user_id()'
+      )
+    )) <> CURRENT_USER
+  THEN
+    RAISE EXCEPTION 'M4_DB_PHASE_FUNCTION_OWNER_INVALID'
+      USING ERRCODE = '55000';
+  END IF;
+END;
+$phase1_check$;
 
 COMMIT;
 

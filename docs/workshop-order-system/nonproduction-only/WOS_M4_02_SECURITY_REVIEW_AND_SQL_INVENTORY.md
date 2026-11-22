@@ -1,6 +1,7 @@
 # WOS M4-02 Security Review And SQL Inventory
 
-Status: `SOURCE_PASS_WITH_RESIDUAL_RISKS` / `QA_SQL_NOT_INSTALLED`
+Status:
+`SOURCE_PASS / BLOCKED_HOSTED_STORAGE_OWNER_EXECUTOR / QA_SQL_NOT_INSTALLED`
 
 Issue: `#274`
 
@@ -22,6 +23,14 @@ not install SQL, update rows, change policies, or call a business action.
 - `storage.objects.version` is nullable.
 - `authenticated` has no direct SELECT on either private table.
 - `authenticated` has no EXECUTE on any of the three M2 functions.
+- QA `postgres` is `NOSUPERUSER`, `CREATEROLE` and owns the named public
+  business tables.
+- `storage.objects` is owned by `supabase_storage_admin`.
+- `postgres` has SELECT WITH GRANT OPTION and broad table privileges on
+  `storage.objects`, but no MEMBER/SET/USAGE relation to the owner role and no
+  policy DDL authority.
+- `auth.uid()` is owned by `supabase_auth_admin`; PUBLIC EXECUTE already exists
+  and the installer has no EXECUTE WITH GRANT OPTION.
 - Installed M2 function fingerprints exactly match the reviewed local
   definitions:
 
@@ -50,13 +59,16 @@ Candidate order `2071a963-1b35-4c96-81cd-709d8180ad49` was
 The existing `wos_p7_private_object_select` policy permits Operator download
 only while an order is `SUBMITTED`. M4 verification occurs at
 `READINESS_CHECK`, so caller-JWT download alone cannot support the product
-path. The draft includes one object-scoped Storage SELECT policy for that gap.
+path. The draft therefore separates an object-scoped Storage SELECT policy into
+a Storage-owner phase.
 
 ## Two-Stage Proof Design
 
 1. The server calls the order-scoped snapshot RPC with the real user client.
-2. The RPC derives actor identity from `auth.uid()`, resolves one active
-   Profile, and checks same organization, role, order, numeric version,
+2. The dedicated owner calls a private installer-owned bridge that returns
+   `auth.uid()`. This avoids requesting or fabricating USAGE/GRANT authority on
+   the Auth-owned schema. The RPC resolves one active Profile and checks same
+   organization, role, order, numeric version,
    version label, exactly one CURRENT baseline, exactly four distinct images,
    one image per required category, canonical private paths, unexpired proofs,
    Storage object identity/version, independent signers, recomputed proof-set
@@ -82,30 +94,37 @@ path. The draft includes one object-scoped Storage SELECT policy for that gap.
    behavior is not claimed until a separately authorized QA Preview browser
    test.
 
-The database RPC is directly callable by an authenticated same-organization
-QA user even when the Next.js read switch is off. That access is intentional
-and bounded: the RPC is installed only in the isolated QA database, requires a
-`QA-NONPROD-` order, performs all identity/version checks, and returns only a
-safe, non-executable DTO. The environment read switch gates the business
-route, not the database authorization boundary.
+The database RPC becomes directly callable by an authenticated same-organization
+QA user immediately after Phase 3 activation, even when the Next.js read switch
+is off. That access is intentional and bounded: the RPC exists only in the
+isolated QA database, requires a `QA-NONPROD-` order, performs all
+identity/version checks, and returns only a safe, non-executable DTO. Phase 3
+must be separately approved. The route uses the dedicated default-OFF
+`WOS_QA_M4_PROOF_READONLY_ENABLED` switch.
 
 ## Object And Permission Inventory
 
-Forward draft creates:
+Phase 1 database draft creates:
 
 - NOLOGIN owner role `wos_m4_proof_verifier_owner`
 - `public.wos_qa_m4_readonly_proof_snapshot(uuid,integer,text)`
 - `public.wos_qa_m4_can_download_proof(text,text)`
-- Eight owner-only SELECT policies on the seven read tables plus
-  `storage.objects`
-- One authenticated SELECT policy on `storage.objects`, named
-  `wos_m4_proof_verifier_storage_read`
+- `public.wos_qa_m4_current_user_id()`, a private installer-owned bridge
+- Seven owner-only SELECT policies on the seven public read tables
 - Owner SELECT grants on `profiles`, production orders, baselines, baseline
   items, reference images, verified image proofs, M2 receipts and
   `storage.objects`
-- Owner EXECUTE on `auth.uid()` and
+- Owner EXECUTE on the private caller bridge and
   `public.wos_qa_p2_m2_spec_digest(uuid)`
-- Authenticated EXECUTE on the two new functions only
+
+Phase 2 storage-owner draft creates:
+
+- `wos_m4_proof_owner_storage_read`
+- `wos_m4_proof_verifier_storage_read`
+
+Phase 3 activation grants authenticated EXECUTE on the two public RPCs only.
+It does not grant the private caller bridge or direct Proof/Receipt table
+access.
 
 No table is created or altered. No column is added. No business row is written.
 No existing RLS policy is disabled or replaced. No direct proof/receipt table
@@ -114,9 +133,11 @@ The preflight verifies all private-table DML/TRUNCATE/REFERENCES/TRIGGER
 privileges, PUBLIC/anon grants, PUBLIC M2 EXECUTE and RLS status for all eight
 read targets before creating any object.
 
-Rollback removes only the two new functions, the dedicated role, its owner
-policies/grants and the one new Storage SELECT policy. It does not delete order,
-baseline, image, proof, receipt or Storage object data.
+Rollback is reverse-owner and access-first. Deactivation removes the two
+authenticated EXECUTE grants while policies remain inert. The storage owner then
+drops both policies. Final database rollback drops RPCs/helper, owner policies,
+grants and the dedicated role. It does not delete order, baseline, image, proof,
+receipt or Storage object data.
 
 ## Published Draft Fingerprints
 
@@ -124,16 +145,21 @@ These values must be recalculated before any Owner installation authorization.
 
 | Artifact | Raw SHA-256 | Git Blob SHA |
 | --- | --- | --- |
-| Forward SQL | `878185f9563c1b25986e07de853d4e9f19bfde8f16021537acd1c26d353f88ca` | `f057aa23775c5901fdfb430e64fc7d657ed72baf` |
-| Rollback SQL | `f757cde5b3514f7a9663cee54bb30307ca426d5c0c8bdf5fa366ae76828870b5` | `58ce9ec64214b5aa6bfd378fa149e2411675238b` |
+| DB Phase 1 | `56b83dbec56fbd299aecdde28602481897cce8013b2c8e979a0a8ef82f3e341a` | `0e12977d8765ad02884803e9d9ff828c2299f3cf` |
+| Storage Owner Phase 2 | `b0c29f91594c3328a3fc61e9ef841e0fa64df610e06e25625e7cdfa541fb9d8f` | `b9ef4ecc7766d50b9bc1bf572d8900ffb806d3c3` |
+| Activation Phase 3 | `c7672c4f83b435dfca3d6eae367080346db46369993e1bc9e9592192e680aeb2` | `f2daaa0ba945d59ec5a3d42be4e5740a529d13db` |
+| Deactivate Rollback 1 | `f5ee9e622909138b017761e7a97d0d9722e58162d42e403f9f8ac774afc26715` | `b8bba5ffef0f6e28e8c5176b4ccb6357eabd2132` |
+| Storage Owner Rollback 2 | `0e8f06398380ef655e4106c1b97b5cc9d72d09d16d6a33ff01e46593953a0899` | `536ff6f4f63665ea1504ab3fac733d28eae481aa` |
+| DB Rollback 3 | `40b0bdc40d20d823cbea4fbab6e1540c2fcca77ac8714efc3c9d31fb2fc03d47` | `bf061122b16ed3915623b05f51bfbf0826d016d7` |
 
 PG17 installed-state fingerprints:
 
 | Item | SHA-256 |
 | --- | --- |
-| Snapshot function definition | `b46d63de8bd6e88f214f88d49a7546d5ef79f9654d86a967797262f8783cc84a` |
-| Storage guard function definition | `7406b8245374568af84bb3afb2ec9c55a62058ed873730e395f06fdbc27fd765` |
-| Combined function ACL/config/owner-role/policy inventory | `5d2675cc7ac0d8e5dcda4d72d2228abc6e5431e0678f594753fab460b63cbfd5` |
+| Snapshot function definition | `6bed433d79370f50b48be3e12c108c202343f31868c0d4eb0aa36e9eab1443f0` |
+| Storage guard function definition | `c547983e9c34f03d73bad40c6c53d96b528feaf0f10e8bff324da332c30d7589` |
+| Private caller bridge definition | `c4bffcc159132f8018d22dcdfbf48b45421f92483b998db8e8a93ca2a689c887` |
+| Combined function ACL/config/owner-role/policy inventory | `5357075c96c1c3880ceb3bf203e499087bf4444de278e77071474863336f0cee` |
 
 ## PostgreSQL 17 Offline Evidence
 
@@ -143,8 +169,19 @@ database and owner role before exit.
 
 Covered and passing:
 
+- old single-executor path fails to create a policy on `storage.objects`, fails
+  to transfer function ownership without temporary SET membership, and leaves
+  `auth.uid()` ACL unchanged despite a no-op GRANT attempt
+- synthetic non-superuser `CREATEROLE` installer with separate Storage and Auth
+  owners, proving PostgreSQL mechanics but not a hosted executor
+- temporary SET membership cleanup to
+  `ADMIN TRUE`, `INHERIT FALSE`, `SET FALSE`
+- Phase 2 Storage-owner policy creation leaves authenticated EXECUTE closed
+- Phase 3 activation is the first point that opens authenticated RPC access
+- deactivation closes access before Storage policy rollback
 - Office and Operator positive snapshots and Storage-path reads
 - Viewer, anonymous and cross-organization denial
+- same-organization Sales non-owner denial for both RPC and Storage guard
 - missing, inactive and ambiguous Profile denial
 - fifth image, duplicate image ID, missing category and duplicate CURRENT
   baseline denial
@@ -173,19 +210,29 @@ Captured output (trailing display spaces normalized for Git):
   independently verified QA order.
 - The SQL cannot prove Vercel Production auto-build suppression or domain
   state. Those remain mandatory external installer checks.
-- Any SQL installation requires a new Owner authorization bound to the final
-  raw SHA-256, Git blob SHA, PG17 logs, function fingerprints and exact QA
-  project.
+- No project-specific, auditable Supabase-supported executor for the exact
+  Storage owner phase has been demonstrated. The normal QA `postgres` login
+  cannot run it, and a synthetic PG17 login is not hosted evidence. This is a
+  hard blocker, not a PASS.
+- Any SQL installation requires a new Owner authorization bound to all phase
+  files, their raw SHA-256/Git blobs, PG17 logs, function fingerprints and
+  exact QA project.
 
-Next gate: `EXACT_SQL_QA_INSTALL_AUTHORIZATION`.
+Next gate:
+`DEMONSTRATE_SUPABASE_STORAGE_OWNER_EXECUTOR_BEFORE_SQL_INSTALL_AUTHORIZATION`.
 
 ## Independent Review
 
-Final independent read-only source and security review:
+Final independent review:
 
-`SOURCE_PASS_WITH_RESIDUAL_RISKS`
+`SOURCE_REVIEW=SOURCE_PASS`
 
-The reviewer confirmed the current SQL raw/Git blob hashes, regenerated PG17
-evidence, full-snapshot Storage guard, disposable-database context restriction,
-direct-grant/RLS preflight, timeout/abort behavior and rollback content/ACL
-comparison. No remaining source-level security blocker was identified.
+The reviewer confirmed the current evidence/results and all six phase hashes,
+activation definition pinning, auth-schema preflight, intra-call expiry
+decision, catalog restoration checks, dedicated read flag, Sales scope and
+expired-Proof behavior. No remaining non-P0 source or security finding was
+reported.
+
+The hosted Storage-owner executor remains `BLOCKED_P0`. PR #275 is
+source-ready with verified synthetic PostgreSQL 17 mechanics, but it is not
+installation-ready.

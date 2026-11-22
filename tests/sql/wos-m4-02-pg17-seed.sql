@@ -38,6 +38,16 @@ INSERT INTO public.wos_qa_p2_office_execution_gate(
   'OFFICE_WRITES', false, NULL, 'NOT_AUTHORIZED', NULL, NULL
 ) ON CONFLICT(gate_name) DO NOTHING;
 
+INSERT INTO public.profiles(id,user_id,org_id,role,is_active)
+VALUES(
+  '66666666-6666-4666-8666-666666666666',
+  '60606060-6060-4060-8060-606060606060',
+  'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+  'sales',
+  true
+)
+ON CONFLICT(id) DO NOTHING;
+
 UPDATE public.wos_production_orders
 SET version_label = 'QA-R6',
     order_number = 'QA-NONPROD-' || id::text

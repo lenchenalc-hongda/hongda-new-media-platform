@@ -16,6 +16,9 @@ import {
   buildWosQaImageObjectPath,
   type WosQaImageCategory,
 } from '../../src/lib/workshop-orders/qa-image-categories';
+import {
+  isWosQaM4ProofReadonlyEnabled,
+} from '../../src/lib/workshop-orders/api-contract';
 
 const userId = '10101010-1010-4010-8010-101010101010';
 const officeProfileId = '11111111-1111-4111-8111-111111111111';
@@ -113,6 +116,32 @@ assert.deepEqual(parseWosM4ProofVerifierRequest(
 assert.deepEqual(parseWosM4ProofVerifierRequest(
   'https://qa.example/api/workshop-orders/m4/proof-verifier',
 ), { ok: false, code: 'INVALID_READ_QUERY' });
+
+const m4ReadFlagInput = {
+  authMode: 'supabase',
+  supabaseUrl: 'https://xulmpqaknlwqqculbsek.supabase.co',
+} as const;
+assert.equal(isWosQaM4ProofReadonlyEnabled({
+  ...m4ReadFlagInput,
+  vercelEnv: 'preview',
+  enabled: 'true',
+}), true);
+assert.equal(isWosQaM4ProofReadonlyEnabled({
+  ...m4ReadFlagInput,
+  vercelEnv: 'preview',
+  enabled: 'false',
+}), false);
+assert.equal(isWosQaM4ProofReadonlyEnabled({
+  ...m4ReadFlagInput,
+  vercelEnv: 'production',
+  enabled: 'true',
+}), false);
+assert.equal(isWosQaM4ProofReadonlyEnabled({
+  ...m4ReadFlagInput,
+  supabaseUrl: 'https://amqpvxrurenevniilhtl.supabase.co',
+  vercelEnv: 'preview',
+  enabled: 'true',
+}), false);
 assert.deepEqual(parseWosM4ProofVerifierRequest(
   'https://qa.example/api/workshop-orders/m4/proof-verifier?orderId=' + orderId
     + '&orgId=' + foreignOrgId,
@@ -316,6 +345,8 @@ assert(!route.includes('export async function POST'));
 assert(server.includes("client.rpc('wos_qa_m4_readonly_proof_snapshot'"));
 assert(server.includes("client.storage.from(bucket).download(path)"));
 assert(server.includes('resolveVerifiedSupabaseIdentity'));
+assert(server.includes('WOS_QA_M4_PROOF_READONLY_ENABLED'));
+assert(!server.includes('WOS_QA_INBOX_READONLY_ENABLED'));
 assert(server.includes("from('profiles')"));
 assert(server.includes("from('wos_production_orders')"));
 assert(server.includes("from('wos_reference_images')"));

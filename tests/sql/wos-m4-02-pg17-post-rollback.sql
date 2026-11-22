@@ -12,6 +12,9 @@ BEGIN
     OR pg_catalog.to_regprocedure(
       'public.wos_qa_m4_can_download_proof(text,text)'
     ) IS NOT NULL
+    OR pg_catalog.to_regprocedure(
+      'public.wos_qa_m4_current_user_id()'
+    ) IS NOT NULL
     OR EXISTS (
       SELECT 1 FROM pg_catalog.pg_roles
       WHERE rolname = 'wos_m4_proof_verifier_owner'
@@ -156,6 +159,8 @@ BEGIN
       'public.wos_qa_p2_m2_action(uuid,integer,uuid,text,jsonb)',
       'EXECUTE'
     ) IS DISTINCT FROM v_before.authenticated_m2_execute
+    OR tests.wos_m4_catalog_fingerprint()
+      IS DISTINCT FROM v_before.catalog_hash
   THEN
     RAISE EXCEPTION 'M4_ROLLBACK_ACL_CHANGED';
   END IF;
