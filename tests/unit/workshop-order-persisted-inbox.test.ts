@@ -21,10 +21,12 @@ const user = '11111111-1111-4111-8111-111111111111';
 const org = '0ff53d93-2b9e-48b9-8113-a4768c39cdd2';
 const foreignOrg = 'fbdb0989-ae25-4ba4-92f9-3266cc845977';
 const profile = '22222222-2222-4222-8222-222222222222';
+const operatorProfile = '88888888-8888-4888-8888-888888888888';
 const orderId = '953d2204-3e65-4b75-b10e-c6e97f1bbb56';
 const owner = '33333333-3333-4333-8333-333333333333';
 const inboxId = '44444444-4444-4444-8444-444444444444';
 const receiptId = '55555555-5555-4555-8555-555555555555';
+const baselineId = '99999999-9999-4999-8999-999999999999';
 const qaUrl = 'https://xulmpqaknlwqqculbsek.supabase.co';
 
 assert.equal(isWosQaInboxReadonlyEnabled({
@@ -154,6 +156,7 @@ const history = historyBase.map((row, index) => ({
   entity_id: orderId,
   previous_status: row[0],
   next_status: row[1],
+  actor_profile_id: row[2] === 'admin' ? profile : operatorProfile,
   actor_role: row[2],
   reason_code: row[3],
   created_at: row[4],
@@ -163,6 +166,11 @@ const history = historyBase.map((row, index) => ({
   } : {
     expectedVersion: index + 1,
     newVersion: index + 2,
+    ...(row[3].startsWith('QA_M2_') ? {
+      action: row[3].replace(/^QA_M2_/, ''),
+      baselineId,
+      proofDigest: row[3] === 'QA_M2_BASELINE_SELECT' ? null : 'a'.repeat(64),
+    } : {}),
     requestId: [
       '37f83a39-384c-4872-b1e3-4e1ea7809051',
       'b8b9eb1f-310b-4ff5-9765-a26e39f04c10',
@@ -182,6 +190,9 @@ const resources = [
   ['INCOMING_MATERIAL', 'QUANTITY_VERIFIED'],
   ['SIGNED_SAMPLE', 'VERIFIED'],
 ].map(([resource_type, status]) => ({
+  organization_id: org,
+  entity_type: 'PRODUCTION_ORDER' as const,
+  entity_id: orderId,
   resource_type,
   status,
   version_label: 'QA-R6',
@@ -194,10 +205,22 @@ const resources = [
   note: '四类物料与当前 proof-set 已完成最终实物核对',
 }));
 const baselines = [{
+  id: baselineId,
+  organization_id: org,
+  entity_type: 'PRODUCTION_ORDER',
+  entity_id: orderId,
   version_label: 'QA-R6',
   status: 'CURRENT',
+  confirmed_by_office_profile_id: profile,
+  confirmed_by_workshop_profile_id: operatorProfile,
   office_confirmed_at: '2026-11-21T10:06:00+00:00',
   workshop_confirmed_at: '2026-11-21T10:09:00+00:00',
+  created_at: '2026-11-21T10:04:00+00:00',
+  superseded_at: null,
+  office_proof_set_digest: 'a'.repeat(64),
+  office_post_order_version: 9,
+  workshop_proof_set_digest: 'a'.repeat(64),
+  workshop_post_order_version: 10,
 }];
 const images = [
   {
@@ -211,6 +234,8 @@ const images = [
     file_name: 'current.png',
     uploaded_at: '2026-11-21T10:01:00+00:00',
     superseded_at: null,
+    storage_bucket: 'wos-private',
+    storage_path: 'private/current-film.png',
   },
   {
     id: '77777777-7777-4777-8777-777777777777',
@@ -223,6 +248,72 @@ const images = [
     file_name: 'old.png',
     uploaded_at: '2026-11-18T12:00:00+00:00',
     superseded_at: '2026-11-21T10:00:00+00:00',
+    storage_bucket: 'wos-private',
+    storage_path: 'private/old-product.png',
+  },
+  {
+    id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+    organization_id: org,
+    entity_type: 'PRODUCTION_ORDER' as const,
+    entity_id: orderId,
+    category: 'PRODUCT',
+    version_label: 'QA-R6',
+    image_status: 'READY',
+    file_name: 'current-product.png',
+    uploaded_at: '2026-11-21T10:01:01+00:00',
+    superseded_at: null,
+    storage_bucket: 'wos-private',
+    storage_path: 'private/current-product.png',
+  },
+  {
+    id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+    organization_id: org,
+    entity_type: 'PRODUCTION_ORDER' as const,
+    entity_id: orderId,
+    category: 'CUSTOMER_APPROVED_SAMPLE',
+    version_label: 'QA-R6',
+    image_status: 'READY',
+    file_name: 'current-customer-sample.png',
+    uploaded_at: '2026-11-21T10:01:02+00:00',
+    superseded_at: null,
+    storage_bucket: 'wos-private',
+    storage_path: 'private/current-customer-sample.png',
+  },
+  {
+    id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+    organization_id: org,
+    entity_type: 'PRODUCTION_ORDER' as const,
+    entity_id: orderId,
+    category: 'SIGNED_SAMPLE',
+    version_label: 'QA-R6',
+    image_status: 'READY',
+    file_name: 'current-signed-sample.png',
+    uploaded_at: '2026-11-21T10:01:03+00:00',
+    superseded_at: null,
+    storage_bucket: 'wos-private',
+    storage_path: 'private/current-signed-sample.png',
+  },
+];
+const baselineItems = [images[0], ...images.slice(2)].map((image, index) => ({
+  baseline_id: baselineId,
+  reference_image_id: image.id,
+  display_order: index,
+  is_required: true,
+}));
+const profiles = [
+  {
+    id: profile,
+    org_id: org,
+    full_name: 'Preview Smoke Admin',
+    role: 'admin',
+    is_active: true,
+  },
+  {
+    id: operatorProfile,
+    org_id: org,
+    full_name: 'WOS QA Operator',
+    role: 'operator',
+    is_active: true,
   },
 ];
 const detail = buildWosInboxDetail({
@@ -253,8 +344,10 @@ const detail = buildWosInboxDetail({
   resources,
   blockers: [],
   baselines,
+  baselineItems,
   history,
   images,
+  profiles,
   confirmations: [
     {
       confirmation_type: 'WORKSHOP_FINAL_READINESS',
@@ -279,9 +372,22 @@ assert.equal(detail.detail.item.workflowStatus, 'READINESS_CHECK');
 assert.equal(detail.detail.transaction.originalWorkflowStatus, 'SUBMITTED');
 assert.equal(detail.detail.readiness.materialsVerified, true);
 assert.equal(detail.detail.handoff.historySequenceVerified, true);
+assert.equal(detail.detail.materialSignoff.materials.length, 4);
+assert.equal(detail.detail.materialSignoff.currentBaseline.requiredCategoriesComplete, true);
+assert.equal(detail.detail.materialSignoff.currentBaseline.proofSetDigestMatch, true);
+assert.equal(detail.detail.materialSignoff.currentBaseline.independentSigners, true);
+assert.equal(detail.detail.materialSignoff.currentBaseline.historicalM2EvidenceComplete, true);
+assert.equal(detail.detail.materialSignoff.currentBaseline.currentPrivateProofState,
+  'UNVERIFIED_AUTHENTICATED_RLS_PROOF_READ_UNAVAILABLE');
+assert.equal(detail.detail.materialSignoff.reviewReady, false);
+assert.equal(detail.detail.materialSignoff.canStart, false);
 assert.equal(detail.detail.canStart, false);
+assert.equal(JSON.stringify(detail.detail).includes('private/current'), false);
 const imageSet = classifyWosInboxImages(detail.detail.images, detail.detail.item);
-assert.deepEqual(imageSet.current.map(image => image.file_name), ['current.png']);
+assert.deepEqual(imageSet.current.map(image => image.file_name), [
+  'current.png', 'current-product.png', 'current-customer-sample.png',
+  'current-signed-sample.png',
+]);
 assert.deepEqual(imageSet.historical.map(image => image.file_name), ['old.png']);
 
 const v11Key = wosInboxVersionKey(wosInboxVersionIdentity(item));
@@ -395,9 +501,14 @@ assert(!inboxComponent.includes('LiveQaWorkshopReadiness'));
 assert(!inboxComponent.includes('LiveQaWorkshopActions'));
 assert(!inboxComponent.includes('LiveQaM2WorkshopConfirm'));
 assert(!inboxComponent.includes('LiveQaFinalReadiness'));
+assert(inboxComponent.includes('<MaterialSignoffWorkbench'));
+assert(inboxComponent.includes('detail.materialSignoff'));
 assert(inboxComponent.includes('canStart=false'));
 assert(inboxComponent.includes('INBOX_READ_UNAVAILABLE_OR_UNVERIFIED'));
 assert(apiServer.includes('WOS_QA_INBOX_READONLY_ENABLED'));
 assert(apiServer.includes('INBOX_DETAIL_READ_UNAVAILABLE_OR_TRUNCATED'));
+assert(apiServer.includes("from('wos_visual_baseline_items')"));
+assert(!apiServer.includes("from('wos_qa_verified_image_proofs')"));
+assert(!apiServer.includes("from('wos_qa_p2_m2_receipts')"));
 
 console.log('workshop-order-persisted-inbox.test.ts: PASS');

@@ -60,3 +60,19 @@ Office 的普通生产下单页通过 `WOS_QA_INBOX_READONLY_ENABLED` 独立读�
 - `RESUBMIT_CORRECTION`：进入 `WORKSHOP_REVIEW`；空 patch 仅允许用于数据库已存在当前版本保存修订的情况。
 
 原始 P1 Inbox 和 Submission Receipt 不变。所有写入仍分别受 `WOS_P2_QA_MUTATIONS_ENABLED`、`WOS_P2_QA_OFFICE_REVISION_ENABLED`、服务器返回的写能力、可信身份、组织 RLS 与数据库原子事务约束。409 版本/幂等冲突会作废旧请求标识并重新读取最新版本；断线后未确认结果才保留同一请求 ID 重试。Office 退回列表使用请求代数与 AbortController，旧响应不得覆盖新结果。本轮代码开发不开启任何 Gate，也不执行 QA/Production SQL。
+
+## M4-01 普通 Inbox 物料、现版图片与双签工作台
+
+普通 Inbox 详情在既有 P1/P2 证据之后增加服务器派生的 M4 只读工作台。该工作台继续使用当前登录用户的 Supabase SSR client、同组织 RLS、精确订单范围和最小字段投影，不引入 service role，也不增加表权限。
+
+工作台统一展示：
+
+- 四类物料 `FILM`、`FIXTURE`、`INCOMING_MATERIAL`、`SIGNED_SAMPLE` 的当前状态、版本标签、到位时间、应到/实到数量、缺口、确认人员与待补证据。
+- 当前版本图片、`PRODUCT`、`FILM_PATTERN`、`CUSTOMER_APPROVED_SAMPLE`、`SIGNED_SAMPLE` 四类基准项、历史/替代图片和 CURRENT 基准唯一性。
+- Office 与 Workshop 的 profile、确认时间、post-order version、proof-set 摘要存在性及双方摘要一致性。
+- `QA_M2_BASELINE_SELECT`、`QA_M2_BASELINE_OFFICE_CONFIRM`、`QA_M2_BASELINE_WORKSHOP_CONFIRM`、`QA_M2_FINAL_READINESS_CONFIRM` 的连续事务历史。
+- 缺口优先级、下一步只读责任动作、人工 proof 复核需求和固定 `canStart=false`。
+
+数据读取现状必须明确区分：authenticated RLS 可以读取物料、baseline、baseline item、reference image、状态历史和同组织可见 Profile；当前不能读取 `wos_qa_verified_image_proofs` 或 `wos_qa_p2_m2_receipts`，且 M2 proof 检查函数没有 authenticated EXECUTE。因此普通 Inbox 可以识别历史 M2 proof-set 双签与连续状态事务，但不能在当前会话中重新认证私有 proof 或 Storage object 的未过期状态。
+
+该限制按 fail closed 处理：`historicalM2EvidenceComplete` 与 `currentPrivateProofState` 分开显示；历史双签完整不产生 `reviewReady=true`，不恢复旧确认，不把文件存在当成证明有效，也不允许开工。后续若要在普通 Inbox 直接重验 live private proof，必须另行设计最小只读 verifier、独立 SQL/RLS/Storage 审核及 Owner 授权，不得复用本轮代码开发授权。

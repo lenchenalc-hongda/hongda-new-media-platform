@@ -23,14 +23,16 @@ import {
   type WosInboxConfirmationRecord,
   type WosInboxHistoryRecord,
   type WosInboxProductionRecord,
-  type WosInboxReferenceImageRecord,
   type WosInboxTransactionEvidence,
 } from './api-contract';
 import type {
-  WosP2BaselineRow,
-  WosP2BlockerRow,
-  WosP2ResourceRow,
-} from './p2-qa-readiness';
+  WosM4BaselineItemRecord,
+  WosM4BaselineRecord,
+  WosM4BlockerRecord,
+  WosM4ProfileRecord,
+  WosM4ReferenceImageRecord,
+  WosM4ResourceRecord,
+} from './m4-material-signoff';
 import {
   canActOnWosP2,
   isWosP2QaMutationEnabled,
@@ -268,17 +270,17 @@ async function readInboxDetail(
       .eq('organization_id', actor.orgId).eq('entity_id', orderId)
       .eq('entity_type', 'PRODUCTION_ORDER').limit(WOS_INBOX_DETAIL_LIMIT + 1),
     client.from('wos_visual_baselines')
-      .select('organization_id,entity_id,entity_type,version_label,status,office_confirmed_at,workshop_confirmed_at,superseded_at')
+      .select('id,organization_id,entity_id,entity_type,version_label,status,confirmed_by_office_profile_id,confirmed_by_workshop_profile_id,office_confirmed_at,workshop_confirmed_at,created_at,superseded_at,office_proof_set_digest,office_post_order_version,workshop_proof_set_digest,workshop_post_order_version')
       .eq('organization_id', actor.orgId).eq('entity_id', orderId)
       .eq('entity_type', 'PRODUCTION_ORDER').limit(WOS_INBOX_DETAIL_LIMIT + 1),
     client.from('wos_status_history')
-      .select('organization_id,entity_id,entity_type,previous_status,next_status,actor_role,reason_code,created_at,metadata')
+      .select('organization_id,entity_id,entity_type,previous_status,next_status,actor_profile_id,actor_role,reason_code,created_at,metadata')
       .eq('organization_id', actor.orgId).eq('entity_id', orderId)
       .eq('entity_type', 'PRODUCTION_ORDER')
       .order('created_at', { ascending: true })
       .limit(WOS_INBOX_DETAIL_LIMIT + 1),
     client.from('wos_reference_images')
-      .select('id,organization_id,entity_type,entity_id,category,version_label,image_status,file_name,uploaded_at,superseded_at')
+      .select('id,organization_id,entity_type,entity_id,category,version_label,image_status,file_name,uploaded_at,superseded_at,storage_bucket,storage_path')
       .eq('organization_id', actor.orgId).eq('entity_id', orderId)
       .eq('entity_type', 'PRODUCTION_ORDER').limit(WOS_INBOX_DETAIL_LIMIT + 1),
     client.from('wos_confirmations')
@@ -300,6 +302,48 @@ async function readInboxDetail(
       }
     }
   }
+  const baselineIds = (baselines.data ?? []).flatMap(row =>
+    typeof row.id === 'string' ? [row.id] : []);
+  const baselineItems = baselineIds.length > 0
+    ? await client.from('wos_visual_baseline_items')
+      .select('baseline_id,reference_image_id,display_order,is_required')
+      .in('baseline_id', baselineIds)
+      .limit(WOS_INBOX_DETAIL_LIMIT + 1)
+    : { data: [], error: null };
+  if (baselineItems.error || !Array.isArray(baselineItems.data)
+    || baselineItems.data.length >= WOS_INBOX_DETAIL_LIMIT) {
+    return response('INBOX_DETAIL_READ_UNAVAILABLE_OR_TRUNCATED', 409);
+  }
+  const baselineIdSet = new Set(baselineIds);
+  if (baselineItems.data.some(row =>
+    typeof row.baseline_id !== 'string' || !baselineIdSet.has(row.baseline_id)
+    || typeof row.reference_image_id !== 'string'
+    || !Number.isSafeInteger(row.display_order)
+    || typeof row.is_required !== 'boolean')) {
+    return response('UNTRUSTED_DB_ROW', 409);
+  }
+  const profileIds = Array.from(new Set([
+    ...(resources.data ?? []).flatMap(row =>
+      typeof row.confirmed_by_profile_id === 'string' ? [row.confirmed_by_profile_id] : []),
+    ...(baselines.data ?? []).flatMap(row => [
+      ...(typeof row.confirmed_by_office_profile_id === 'string'
+        ? [row.confirmed_by_office_profile_id] : []),
+      ...(typeof row.confirmed_by_workshop_profile_id === 'string'
+        ? [row.confirmed_by_workshop_profile_id] : []),
+    ]),
+  ]));
+  const profiles = profileIds.length > 0
+    ? await client.from('profiles')
+      .select('id,org_id,full_name,role,is_active')
+      .eq('org_id', actor.orgId)
+      .in('id', profileIds)
+      .limit(WOS_INBOX_DETAIL_LIMIT + 1)
+    : { data: [], error: null };
+  if (profiles.error || !Array.isArray(profiles.data)
+    || profiles.data.length >= WOS_INBOX_DETAIL_LIMIT
+    || profiles.data.some(row => row.org_id !== actor.orgId)) {
+    return response('INBOX_DETAIL_PROFILE_READ_UNAVAILABLE', 409);
+  }
 
   const projection = buildWosLiveInbox({
     actor,
@@ -314,11 +358,13 @@ async function readInboxDetail(
     item: projection.items[0],
     transaction,
     production: order.data as WosInboxProductionRecord,
-    resources: (resources.data ?? []) as WosP2ResourceRow[],
-    blockers: (blockers.data ?? []) as WosP2BlockerRow[],
-    baselines: (baselines.data ?? []) as WosP2BaselineRow[],
+    resources: (resources.data ?? []) as WosM4ResourceRecord[],
+    blockers: (blockers.data ?? []) as WosM4BlockerRecord[],
+    baselines: (baselines.data ?? []) as WosM4BaselineRecord[],
+    baselineItems: baselineItems.data as WosM4BaselineItemRecord[],
     history: (history.data ?? []) as WosInboxHistoryRecord[],
-    images: (images.data ?? []) as WosInboxReferenceImageRecord[],
+    images: (images.data ?? []) as WosM4ReferenceImageRecord[],
+    profiles: profiles.data as WosM4ProfileRecord[],
     confirmations: (confirmations.data ?? []) as WosInboxConfirmationRecord[],
   });
   if (!detail.ok) return response(detail.code, 409);
