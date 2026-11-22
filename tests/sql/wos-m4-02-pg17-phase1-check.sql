@@ -7,9 +7,6 @@ BEGIN
       'public.wos_qa_m4_readonly_proof_snapshot(uuid,integer,text)'
     ) IS NULL
     OR pg_catalog.to_regprocedure(
-      'public.wos_qa_m4_can_download_proof(text,text)'
-    ) IS NULL
-    OR pg_catalog.to_regprocedure(
       'public.wos_qa_m4_current_user_id()'
     ) IS NULL
     OR pg_catalog.has_schema_privilege(
@@ -20,11 +17,6 @@ BEGIN
     OR pg_catalog.has_function_privilege(
       'authenticated',
       'public.wos_qa_m4_readonly_proof_snapshot(uuid,integer,text)',
-      'EXECUTE'
-    )
-    OR pg_catalog.has_function_privilege(
-      'authenticated',
-      'public.wos_qa_m4_can_download_proof(text,text)',
       'EXECUTE'
     )
     OR pg_catalog.has_function_privilege(

@@ -1,9 +1,6 @@
 -- WOS M4-02 ROLLBACK STEP 1: CLOSE AUTHENTICATED EXECUTE
+-- ARCHITECTURE_STATUS=OFFICE_ONLY_INFEASIBLE_FAIL_CLOSED
 -- INSTALL_NOT_AUTHORIZED
---
--- This phase runs before any storage policy removal. It immediately removes
--- the two authenticated EXECUTE grants while leaving the policy definitions
--- intact for a separately owned rollback phase.
 
 BEGIN;
 
@@ -19,9 +16,6 @@ BEGIN
   END IF;
   IF pg_catalog.to_regprocedure(
       'public.wos_qa_m4_readonly_proof_snapshot(uuid,integer,text)'
-    ) IS NULL
-    OR pg_catalog.to_regprocedure(
-      'public.wos_qa_m4_can_download_proof(text,text)'
     ) IS NULL
     OR pg_catalog.pg_has_role(
       CURRENT_USER,
@@ -52,9 +46,6 @@ SET LOCAL ROLE wos_m4_proof_verifier_owner;
 REVOKE EXECUTE ON FUNCTION
   public.wos_qa_m4_readonly_proof_snapshot(uuid,integer,text)
 FROM authenticated;
-REVOKE EXECUTE ON FUNCTION
-  public.wos_qa_m4_can_download_proof(text,text)
-FROM authenticated;
 RESET ROLE;
 REVOKE wos_m4_proof_verifier_owner
 FROM CURRENT_USER GRANTED BY CURRENT_USER;
@@ -64,11 +55,6 @@ BEGIN
   IF pg_catalog.has_function_privilege(
       'authenticated',
       'public.wos_qa_m4_readonly_proof_snapshot(uuid,integer,text)',
-      'EXECUTE'
-    )
-    OR pg_catalog.has_function_privilege(
-      'authenticated',
-      'public.wos_qa_m4_can_download_proof(text,text)',
       'EXECUTE'
     )
     OR pg_catalog.pg_has_role(

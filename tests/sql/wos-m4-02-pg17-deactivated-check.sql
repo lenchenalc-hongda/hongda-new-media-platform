@@ -8,19 +8,14 @@ BEGIN
       'public.wos_qa_m4_readonly_proof_snapshot(uuid,integer,text)',
       'EXECUTE'
     )
-    OR pg_catalog.has_function_privilege(
-      'authenticated',
-      'public.wos_qa_m4_can_download_proof(text,text)',
-      'EXECUTE'
-    )
     OR (
       SELECT pg_catalog.count(*)
       FROM pg_catalog.pg_policies policy
       WHERE policy.schemaname = 'storage'
         AND policy.tablename = 'objects'
         AND policy.policyname IN (
-          'wos_m4_proof_owner_storage_read',
-          'wos_m4_proof_verifier_storage_read'
+          'wos_p7_private_object_select',
+          'wos_p7_storage_reader_roles'
         )
     ) <> 2
   THEN

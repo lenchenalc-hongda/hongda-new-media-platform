@@ -1,238 +1,262 @@
-# WOS M4-02 Security Review And SQL Inventory
+# WOS M4-02 Office-Only Fallback Security Inventory
 
 Status:
-`SOURCE_PASS / BLOCKED_HOSTED_STORAGE_OWNER_EXECUTOR / QA_SQL_NOT_INSTALLED`
+
+`OFFICE_ONLY_INFEASIBLE_FAIL_CLOSED / SOURCE_REVIEW_FIX_REQUIRED_P1 / QA_SQL_NOT_INSTALLED`
 
 Issue: `#274`
 
-Repository: `lenchenalc-hongda/hongda-new-media-platform`
+PR: `#275`
 
 Base master: `c3b63eaddafec8aaae8460b26e804cbb4bdd70ba`
 
-Target QA project if separately authorized:
+Target if separately authorized:
 `xulmpqaknlwqqculbsek` (`hongda-review-dev`)
 
-## Read-Only QA Schema Audit
+## Superseded P0
 
-The audit on 2026-11-22 used SELECT-only catalog and aggregate queries. It did
-not install SQL, update rows, change policies, or call a business action.
+The earlier design attempted to create M4 policies on `storage.objects`. QA
+`postgres` does not own that table and cannot SET ROLE to
+`supabase_storage_admin`, so no supported hosted executor was demonstrated.
+That path is not part of this fallback.
 
-- PostgreSQL server version: `17.6`
-- Required proof and receipt columns are present.
-- `wos_qa_verified_image_proofs.storage_object_version` is nullable.
-- `storage.objects.version` is nullable.
-- `authenticated` has no direct SELECT on either private table.
-- `authenticated` has no EXECUTE on any of the three M2 functions.
-- QA `postgres` is `NOSUPERUSER`, `CREATEROLE` and owns the named public
-  business tables.
-- `storage.objects` is owned by `supabase_storage_admin`.
-- `postgres` has SELECT WITH GRANT OPTION and broad table privileges on
-  `storage.objects`, but no MEMBER/SET/USAGE relation to the owner role and no
-  policy DDL authority.
-- `auth.uid()` is owned by `supabase_auth_admin`; PUBLIC EXECUTE already exists
-  and the installer has no EXECUTE WITH GRANT OPTION.
-- Installed M2 function fingerprints exactly match the reviewed local
-  definitions:
+Historical Storage-owner SQL files remain in Git for audit continuity but are
+marked `HISTORICAL_SUPERSEDED`, contain no executable installation, and are not
+run by the active PostgreSQL 17 suite.
 
-| Function | Owner | SECURITY DEFINER | Definition SHA-256 |
-| --- | --- | --- | --- |
-| `wos_qa_p2_m2_action(uuid,integer,uuid,text,jsonb)` | `postgres` | YES | `be003e28743691c216784030dcd163612185d10eae3481ab67087e566e326830` |
-| `wos_qa_p2_m2_checked_proof_set(uuid,uuid,uuid,text)` | `postgres` | NO | `a5c13f9acab42b378e971475a4d0dd0928618942979cbed9bd70a162c82d68d1` |
-| `wos_qa_p2_m2_spec_digest(uuid)` | `postgres` | NO | `3a684301e7cb890cd4a3f325b65d392c18902fca65054a4dada9157bddc5e173` |
+## Decisive P1: Hosted Timestamp Precision
 
-All four Gate rows were OFF, with `enabled_until=NULL`,
-`approval_reference=NOT_AUTHORIZED`, and no order/organization whitelist:
+The new fallback was independently reviewed against pinned Storage server
+source commit `c0d596a798f8b21a9a5808875e6bfcdc02ca54a7`:
 
-- `OPERATOR_WRITES`
-- `OFFICE_WRITES`
-- `M2_OPERATOR_WRITES`
-- `M2_OFFICE_WRITES`
+- `InfoRenderer` returns `last_modified: obj.updated_at`.
+- Storage pins `pg@8.23.1` and `pg-types@2.2.0`.
+- Storage overrides INT8 only. `timestamptz` therefore uses the default
+  JavaScript `Date` parser.
+- JSON serialization truncates the timestamp to milliseconds.
 
-Historical order `953d2204-3e65-4b75-b10e-c6e97f1bbb56` was
-`READINESS_CHECK / v11 / QA-R6`, with one current baseline, four current
-images and four M2 receipts. All five stored proofs for that order were
-expired, so they cannot be represented as current verification evidence.
+Examples:
 
-Candidate order `2071a963-1b35-4c96-81cd-709d8180ad49` was
-`WAITING_MATERIAL / v7 / QA-R6` with no current baseline and no M2 receipts.
+```text
+database: 2026-11-22T09:59:00.123456Z
+info():   2026-11-22T09:59:00.123Z
+```
 
-The existing `wos_p7_private_object_select` policy permits Operator download
-only while an order is `SUBMITTED`. M4 verification occurs at
-`READINESS_CHECK`, so caller-JWT download alone cannot support the product
-path. The draft therefore separates an object-scoped Storage SELECT policy into
-a Storage-owner phase.
+The required commitment is exact to six fractional digits. It therefore fails
+for any object whose database timestamp has non-zero sub-millisecond digits.
+This is deterministic fail-closed behavior, not an availability bug that can be
+fixed by ignoring metadata drift. Rounding both sides to milliseconds would
+change the approved proof standard and is not authorized.
 
-## Two-Stage Proof Design
+Final decision:
 
-1. The server calls the order-scoped snapshot RPC with the real user client.
-2. The dedicated owner calls a private installer-owned bridge that returns
-   `auth.uid()`. This avoids requesting or fabricating USAGE/GRANT authority on
-   the Auth-owned schema. The RPC resolves one active Profile and checks same
-   organization, role, order, numeric version,
-   version label, exactly one CURRENT baseline, exactly four distinct images,
-   one image per required category, canonical private paths, unexpired proofs,
-   Storage object identity/version, independent signers, recomputed proof-set
-   digest and the four-field canonical receipt chain.
-3. The RPC returns only order/version/baseline identifiers, expiry/fingerprint
-   fields, four image IDs/categories/expected SHA-256 values and invariant
-   booleans. It does not return paths, object IDs, raw proof rows, receipt rows
-   or tokens.
-4. The server reads reference-image paths through the caller's existing
-   authenticated RLS, then downloads using the caller's Storage session.
-5. The Storage policy invokes a boolean guard. That guard resolves the exact
-   path to one same-organization current image and calls the same full snapshot
-   verifier. It allows the object only when the snapshot succeeds and contains
-   that image ID. There is no weaker alternate proof path.
-6. The Node server recomputes SHA-256 over downloaded bytes with
-   `node:crypto`, then calls the snapshot RPC a second time. It fails closed if
-   the stable DTO projection, snapshot fingerprint, object identity, expiry or
-   version changes.
-7. The route has a 15-second deadline, aborts supported DB requests with
-   `AbortController`, checks the signal around Storage I/O and returns
-   `PROOF_VERIFIER_TIMEOUT` without partial success.
-8. The response remains `canStart=false`. Real Storage download service
-   behavior is not claimed until a separately authorized QA Preview browser
-   test.
+`OFFICE_ONLY_INFEASIBLE_FAIL_CLOSED`
 
-The database RPC becomes directly callable by an authenticated same-organization
-QA user immediately after Phase 3 activation, even when the Next.js read switch
-is off. That access is intentional and bounded: the RPC exists only in the
-isolated QA database, requires a `QA-NONPROD-` order, performs all
-identity/version checks, and returns only a safe, non-executable DTO. Phase 3
-must be separately approved. The route uses the dedicated default-OFF
-`WOS_QA_M4_PROOF_READONLY_ENABLED` switch.
+No installation or Preview request follows from this source.
 
-## Object And Permission Inventory
+## Review Corrections Retained
 
-Phase 1 database draft creates:
+- Activation preflight pins the approved snapshot function SHA-256
+  `22d0f4b09891414be8dfb7353b97bac95f259a450ed697ee8528631b595a9361`.
+- Activation pins the private bridge SHA-256
+  `c4bffcc159132f8018d22dcdfbf48b45421f92483b998db8e8a93ca2a689c887`.
+- Activation requires the two existing P7 Storage RLS policies to remain
+  present.
+- Storage metadata parsing requires `archivedAt === null` and
+  `isDeleteMarker === false`; missing fields fail closed.
 
-- NOLOGIN owner role `wos_m4_proof_verifier_owner`
-- `public.wos_qa_m4_readonly_proof_snapshot(uuid,integer,text)`
-- `public.wos_qa_m4_can_download_proof(text,text)`
-- `public.wos_qa_m4_current_user_id()`, a private installer-owned bridge
-- Seven owner-only SELECT policies on the seven public read tables
-- Owner SELECT grants on `profiles`, production orders, baselines, baseline
-  items, reference images, verified image proofs, M2 receipts and
-  `storage.objects`
-- Owner EXECUTE on the private caller bridge and
-  `public.wos_qa_p2_m2_spec_digest(uuid)`
+## Existing Storage RLS
 
-Phase 2 storage-owner draft creates:
+The fallback reuses:
 
-- `wos_m4_proof_owner_storage_read`
-- `wos_m4_proof_verifier_storage_read`
+- `wos_p7_private_object_select`
+- `wos_p7_storage_reader_roles`
 
-Phase 3 activation grants authenticated EXECUTE on the two public RPCs only.
-It does not grant the private caller bridge or direct Proof/Receipt table
-access.
+For matching same-organization WOS paths:
 
-No table is created or altered. No column is added. No business row is written.
-No existing RLS policy is disabled or replaced. No direct proof/receipt table
-SELECT is granted. No M2, Legacy or application write permission is added.
-The preflight verifies all private-table DML/TRUNCATE/REFERENCES/TRIGGER
-privileges, PUBLIC/anon grants, PUBLIC M2 EXECUTE and RLS status for all eight
-read targets before creating any object.
+- Admin and Manager may SELECT regardless of order status.
+- Operator may SELECT only while the order is `SUBMITTED`.
+- Sales SELECT remains limited to the order creator/sales owner by the existing
+  permissive policy.
+- Viewer, cross-organization identities and anonymous callers are denied.
 
-Rollback is reverse-owner and access-first. Deactivation removes the two
-authenticated EXECUTE grants while policies remain inert. The storage owner then
-drops both policies. Final database rollback drops RPCs/helper, owner policies,
-grants and the dedicated role. It does not delete order, baseline, image, proof,
-receipt or Storage object data.
+The verifier route itself is stricter than Storage: only same-organization
+Admin/Manager are admitted, and only for `READINESS_CHECK`. No policy or RLS
+statement is included in the active forward or rollback files.
 
-## Published Draft Fingerprints
+## Active SQL Files
 
-These values must be recalculated before any Owner installation authorization.
+1. `WOS_M4_02_READONLY_PROOF_VERIFIER_QA_ONLY_NOT_INSTALLED.sql`
+   - Forward phase 1.
+2. `WOS_M4_02_READONLY_PROOF_VERIFIER_ACTIVATION_NOT_INSTALLED.sql`
+   - Forward phase 2; first point that grants authenticated EXECUTE.
+3. `WOS_M4_02_READONLY_PROOF_VERIFIER_DEACTIVATE_NOT_INSTALLED.sql`
+   - Rollback phase 1; closes authenticated EXECUTE.
+4. `WOS_M4_02_READONLY_PROOF_VERIFIER_QA_ONLY_ROLLBACK_NOT_INSTALLED.sql`
+   - Rollback phase 2; drops only fallback DB objects.
+
+Every file begins with `INSTALL_NOT_AUTHORIZED`.
+
+## Current Artifact Fingerprints
+
+These values are the current source draft only. They must be recalculated and
+re-authorized after any later edit.
 
 | Artifact | Raw SHA-256 | Git Blob SHA |
 | --- | --- | --- |
-| DB Phase 1 | `56b83dbec56fbd299aecdde28602481897cce8013b2c8e979a0a8ef82f3e341a` | `0e12977d8765ad02884803e9d9ff828c2299f3cf` |
-| Storage Owner Phase 2 | `b0c29f91594c3328a3fc61e9ef841e0fa64df610e06e25625e7cdfa541fb9d8f` | `b9ef4ecc7766d50b9bc1bf572d8900ffb806d3c3` |
-| Activation Phase 3 | `c7672c4f83b435dfca3d6eae367080346db46369993e1bc9e9592192e680aeb2` | `f2daaa0ba945d59ec5a3d42be4e5740a529d13db` |
-| Deactivate Rollback 1 | `f5ee9e622909138b017761e7a97d0d9722e58162d42e403f9f8ac774afc26715` | `b8bba5ffef0f6e28e8c5176b4ccb6357eabd2132` |
-| Storage Owner Rollback 2 | `0e8f06398380ef655e4106c1b97b5cc9d72d09d16d6a33ff01e46593953a0899` | `536ff6f4f63665ea1504ab3fac733d28eae481aa` |
-| DB Rollback 3 | `40b0bdc40d20d823cbea4fbab6e1540c2fcca77ac8714efc3c9d31fb2fc03d47` | `bf061122b16ed3915623b05f51bfbf0826d016d7` |
+| Forward phase 1 | `e45c4ec637fb1121c9cdc13d29531a2abe75048983cb69cad00842659fda163d` | `ad0fd52eaddd3bc5f739ea0a7ad2facb5851c19e` |
+| Forward phase 2 | `2d04faa8e802ca33a4311d4b73d01a0618c8cf90e0b9ca5a61c2067abb9c6997` | `b79a5234f4c5ee4527ff0eae0b83b8a239129f05` |
+| Deactivate rollback | `a2f0d78d515e3033835d74b5563f66a30d7439004e060deccbd782c22e9c6d6a` | `fc4013abe2614894c741cd07e5cd68f0a7b21151` |
+| Database rollback | `1a73fc8262feb871863db7bbd0ec36d90f97809dfdea6c1258a757aad5c10154` | `26869f46c7715355038d2d0130e71631d6605f1e` |
 
-PG17 installed-state fingerprints:
+PG17 function/security inventory from the current draft:
 
 | Item | SHA-256 |
 | --- | --- |
-| Snapshot function definition | `6bed433d79370f50b48be3e12c108c202343f31868c0d4eb0aa36e9eab1443f0` |
-| Storage guard function definition | `c547983e9c34f03d73bad40c6c53d96b528feaf0f10e8bff324da332c30d7589` |
-| Private caller bridge definition | `c4bffcc159132f8018d22dcdfbf48b45421f92483b998db8e8a93ca2a689c887` |
-| Combined function ACL/config/owner-role/policy inventory | `5357075c96c1c3880ceb3bf203e499087bf4444de278e77071474863336f0cee` |
+| Snapshot function definition | `22d0f4b09891414be8dfb7353b97bac95f259a450ed697ee8528631b595a9361` |
+| Private caller bridge | `c4bffcc159132f8018d22dcdfbf48b45421f92483b998db8e8a93ca2a689c887` |
+| Combined function/role/policy inventory | `33028d0072e0d15fb7287a50daa5398a5b8b2da1951b3feacca481abef942815` |
+
+## Created Objects
+
+Forward phase 1 creates:
+
+- NOLOGIN role `wos_m4_proof_verifier_owner`.
+- `public.wos_qa_m4_current_user_id()` private caller-UID bridge, owned by the
+  installer and executable only by the dedicated owner.
+- `public.wos_qa_m4_readonly_proof_snapshot(uuid,integer,text)`, owned by the
+  dedicated owner.
+- Seven owner-only SELECT policies on:
+  `profiles`, `wos_production_orders`, `wos_visual_baselines`,
+  `wos_visual_baseline_items`, `wos_reference_images`,
+  `wos_qa_verified_image_proofs`, `wos_qa_p2_m2_receipts`.
+- SELECT grants for the owner on those seven tables.
+- EXECUTE for the owner on `wos_qa_p2_m2_spec_digest(uuid)` and the caller-UID
+  bridge.
+
+It creates no table, column, trigger or Storage policy.
+
+Forward phase 2, after exact-SQL approval, grants EXECUTE on only:
+
+- `public.wos_qa_m4_readonly_proof_snapshot(uuid,integer,text)` to
+  `authenticated`.
+
+It does not expose the caller bridge, direct Proof/Receipt table access,
+`service_role`, M2 writers or any Storage policy.
+
+## Permission Contract
+
+- Installer: `CREATEROLE`, `BYPASSRLS`, owns the seven public business tables,
+  has `CREATE` on `public`, has `USAGE` on `auth`, and has no SELECT on
+  `storage.objects`.
+- Dedicated owner: NOLOGIN, NOINHERIT, NOSUPERUSER, NOCREATEDB, NOCREATEROLE,
+  NOREPLICATION, NOBYPASSRLS, no role memberships, no `CREATE` on `public`, no
+  `USAGE` on `auth`, no `USAGE` on `storage`, no Storage privileges.
+- `authenticated`: no direct SELECT on the Proof or Receipt tables and no M2
+  EXECUTE.
+- `anon`: no RPC EXECUTE.
+- PUBLIC: no snapshot or bridge EXECUTE.
+
+The temporary owner-membership used for function ownership/activation is
+checked for `ADMIN TRUE, INHERIT FALSE, SET FALSE`, then `SET` is removed and
+the final state is verified.
+
+## Function Security
+
+The snapshot returns only a safe JSON DTO. It derives actor identity from the
+private bridge over the real `auth.uid()`, not from request parameters. It
+accepts no organization or role ID, uses fully qualified objects, disables
+dynamic SQL, serializes with the reviewed M2 order lock and uses fixed
+`search_path=''`.
+
+The DTO intentionally includes a per-image irreversible commitment:
+
+```text
+sha256(
+  "wos-m4-storage-object-v1\n" ||
+  "bucket=wos-private\n" ||
+  "path=<path>\n" ||
+  "id=<lowercase uuid>\n" ||
+  "version=<version>\n" ||
+  "lastModified=<UTC YYYY-MM-DDTHH:MM:SS.ffffffZ>\n"
+)
+```
+
+It does not expose the inputs `path`, object ID or object timestamp.
+
+## Storage API Evidence
+
+The repository uses `@supabase/supabase-js 2.110.0`, which pins
+`@supabase/storage-js 2.110.0`.
+
+The unit test executes the actual SDK with a custom fetch boundary and proves:
+
+- `storage.from(bucket).info(path)` calls
+  `GET /storage/v1/object/info/<bucket>/<path>`.
+- The SDK maps `id`, `version`, `last_modified` and `bucket_id` to `id`,
+  `version`, `lastModified` and `bucketId`.
+- `download(path)` with no transform calls
+  `GET /storage/v1/object/<bucket>/<path>`.
+- The downloaded Blob bytes are the raw response bytes.
+- The synthetic caller Authorization header is preserved on both requests.
+- No `render/image/authenticated` request is made.
+
+This proves the pinned browser SDK contract and request behavior. It also shows
+that the SDK itself does not repair server-side timestamp precision. Independent
+Storage server source review above proves `timestamptz` is serialized through a
+millisecond JavaScript Date, which is the decisive P1.
 
 ## PostgreSQL 17 Offline Evidence
 
-The suite runs only in a disposable `postgres:17-alpine` container with
-network mode `none` and explicit disposable labels. It removes every temporary
-database and owner role before exit.
+The disposable PG17 suite covers:
 
-Covered and passing:
+- Manager and Admin order-scoped snapshot success.
+- Existing P7 Storage RLS: Manager/Admin can read at `READINESS_CHECK`;
+  Operator cannot.
+- Viewer, Sales, anonymous, unknown Profile and cross-organization denial.
+- Missing, inactive and ambiguous Profile denial.
+- Fourth/fifth image, duplicate category, missing category, duplicate image ID
+  and duplicate CURRENT baseline denial.
+- Missing/duplicate/out-of-order receipt denial.
+- Same Office/Workshop signer and inactive signer denial.
+- Proof expiry during call, null object version, Proof SHA/digest mismatch and
+  order-version drift denial.
+- Exact SQL object-commitment formula comparison.
+- Direct authenticated RPC invocation with no dependency on the Next.js switch.
+- Function owner, `SECURITY DEFINER`, `search_path`, schema/table/function ACLs
+  and absence of Storage object/schema privileges.
+- Deactivation before object cleanup.
+- Full rollback with row counts, content hashes, ACL hashes, policy inventory,
+  role/function catalog and Storage-policy inventory restored.
 
-- old single-executor path fails to create a policy on `storage.objects`, fails
-  to transfer function ownership without temporary SET membership, and leaves
-  `auth.uid()` ACL unchanged despite a no-op GRANT attempt
-- synthetic non-superuser `CREATEROLE` installer with separate Storage and Auth
-  owners, proving PostgreSQL mechanics but not a hosted executor
-- temporary SET membership cleanup to
-  `ADMIN TRUE`, `INHERIT FALSE`, `SET FALSE`
-- Phase 2 Storage-owner policy creation leaves authenticated EXECUTE closed
-- Phase 3 activation is the first point that opens authenticated RPC access
-- deactivation closes access before Storage policy rollback
-- Office and Operator positive snapshots and Storage-path reads
-- Viewer, anonymous and cross-organization denial
-- same-organization Sales non-owner denial for both RPC and Storage guard
-- missing, inactive and ambiguous Profile denial
-- fifth image, duplicate image ID, missing category and duplicate CURRENT
-  baseline denial
-- inactive signer and same signer denial
-- malformed/expired proof, NULL/blank object version, changed/archived/deleted
-  object denial
-- missing, duplicate, out-of-order, digest-tampered and result-tampered M2
-  receipt denial
-- order version drift and two-snapshot expiry/state-change denial
-- direct Storage guard denial when the same snapshot invariants fail
-- function owner, role attributes, fixed `search_path`, function/table/schema
-  ACLs and PUBLIC/anon denial
-- rollback comparison of row counts, deterministic content hashes, table ACL
-  hashes, schema ACL hashes and relevant privilege booleans
+Server unit tests additionally cover:
 
-Captured output (trailing display spaces normalized for Git):
-`docs/workshop-order-system/nonproduction-only/WOS_M4_02_PG17_EVIDENCE_20261122.log`
+- `info()` object ID mismatch.
+- `info()` version mismatch.
+- one-microsecond timestamp mismatch and non-ISO timestamp failure.
+- object size mismatch.
+- object replacement between pre-download and post-download `info()`.
+- raw byte SHA mismatch.
+- database snapshot drift and proof expiry during downloads.
+- malformed object commitment.
 
-## Residual Risks And Next Gate
+## Residual Risks
 
-- PG17 tests the RLS predicates through a synthetic Storage metadata table;
-  only a real QA Preview can prove the Supabase Storage service honors the new
-  policy end to end.
-- Existing QA proofs are expired. A live verifier test cannot show a successful
-  current proof without a separately authorized proof refresh or a newer
-  independently verified QA order.
-- The SQL cannot prove Vercel Production auto-build suppression or domain
-  state. Those remain mandatory external installer checks.
-- No project-specific, auditable Supabase-supported executor for the exact
-  Storage owner phase has been demonstrated. The normal QA `postgres` login
-  cannot run it, and a synthetic PG17 login is not hosted evidence. This is a
-  hard blocker, not a PASS.
-- Any SQL installation requires a new Owner authorization bound to all phase
-  files, their raw SHA-256/Git blobs, PG17 logs, function fingerprints and
-  exact QA project.
+- Hosted `info()` cannot preserve the required six-digit microsecond timestamp
+  through its current `Date`/JSON serialization path.
+- Current historical QA Proofs are expired; a verification success cannot be
+  claimed without fresh evidence or a separately authorized new QA order.
+- Rounding both database and Storage values to milliseconds would change the
+  approved standard and is not authorized.
+- The route's 15-second deadline checks aborts around Storage calls; the SDK
+  `info()` method does not accept an AbortSignal. A timed-out call returns
+  fail-closed and writes no verification state.
+- No path in this source task installs SQL, changes RLS/Storage/Secrets, opens a
+  Gate, writes business data, deploys Production or merges the PR.
 
-Next gate:
-`DEMONSTRATE_SUPABASE_STORAGE_OWNER_EXECUTOR_BEFORE_SQL_INSTALL_AUTHORIZATION`.
+## Next Gate
 
-## Independent Review
+`STOP_OR_REDESIGN_EXACT_OBJECT_METADATA_READ`
 
-Final independent review:
-
-`SOURCE_REVIEW=SOURCE_PASS`
-
-The reviewer confirmed the current evidence/results and all six phase hashes,
-activation definition pinning, auth-schema preflight, intra-call expiry
-decision, catalog restoration checks, dedicated read flag, Sales scope and
-expired-Proof behavior. No remaining non-P0 source or security finding was
-reported.
-
-The hosted Storage-owner executor remains `BLOCKED_P0`. PR #275 is
-source-ready with verified synthetic PostgreSQL 17 mechanics, but it is not
-installation-ready.
+This fallback must not be installed or deployed. The next WOS decision is a new
+business task or a separately authorized exact-metadata read architecture.

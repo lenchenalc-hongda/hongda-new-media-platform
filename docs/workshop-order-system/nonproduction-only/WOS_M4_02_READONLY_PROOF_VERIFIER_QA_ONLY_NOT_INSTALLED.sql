@@ -1,14 +1,14 @@
 -- WOS M4-02 READ-ONLY PRIVATE PROOF VERIFIER / QA ONLY / NOT INSTALLED
+-- ARCHITECTURE_STATUS=OFFICE_ONLY_INFEASIBLE_FAIL_CLOSED
 -- INSTALL_NOT_AUTHORIZED
 --
--- PHASE 1 OF 3: database objects only.
+-- PHASE 1 OF 2: database objects only.
 --
--- This phase creates the order-scoped read-only RPCs and their dedicated
--- NOLOGIN function-owner role. It deliberately does NOT create policies on
--- storage.objects, grant EXECUTE to authenticated, grant auth.uid(), or mutate
--- business data. Storage policy installation requires the storage.objects
--- owner and is a separate reviewed phase. Direct authenticated RPC access is
--- enabled only by the later activation phase.
+-- This Office-only fallback creates one order-scoped snapshot RPC and its
+-- dedicated NOLOGIN function-owner role. It never reads or writes
+-- storage.objects, creates no Storage policy, and grants no authenticated
+-- EXECUTE. Storage metadata and bytes are checked by the Next.js server using
+-- the caller's existing same-organization Admin/Manager Storage RLS.
 
 BEGIN;
 
@@ -60,11 +60,6 @@ BEGIN
       current_user,
       'public',
       'CREATE WITH GRANT OPTION'
-    ) IS NOT TRUE
-    OR pg_catalog.has_schema_privilege(
-      current_user,
-      'storage',
-      'USAGE WITH GRANT OPTION'
     ) IS NOT TRUE
     OR pg_catalog.has_schema_privilege(
       current_user,
@@ -132,11 +127,6 @@ BEGIN
     RAISE EXCEPTION 'M4_VERIFIER_FUNCTION_ALREADY_EXISTS' USING ERRCODE = '42723';
   END IF;
   IF pg_catalog.to_regprocedure(
-    'public.wos_qa_m4_can_download_proof(text,text)'
-  ) IS NOT NULL THEN
-    RAISE EXCEPTION 'M4_STORAGE_GUARD_FUNCTION_ALREADY_EXISTS' USING ERRCODE = '42723';
-  END IF;
-  IF pg_catalog.to_regprocedure(
     'public.wos_qa_m4_current_user_id()'
   ) IS NOT NULL THEN
     RAISE EXCEPTION 'M4_CALLER_UID_HELPER_ALREADY_EXISTS' USING ERRCODE = '42723';
@@ -144,7 +134,7 @@ BEGIN
   IF EXISTS (
     SELECT 1
     FROM pg_catalog.pg_policies
-    WHERE schemaname IN ('public','storage')
+    WHERE schemaname = 'public'
       AND policyname IN (
         'wos_m4_proof_owner_profiles_read',
         'wos_m4_proof_owner_orders_read',
@@ -152,9 +142,7 @@ BEGIN
         'wos_m4_proof_owner_baseline_items_read',
         'wos_m4_proof_owner_images_read',
         'wos_m4_proof_owner_proofs_read',
-        'wos_m4_proof_owner_receipts_read',
-        'wos_m4_proof_owner_storage_read',
-        'wos_m4_proof_verifier_storage_read'
+        'wos_m4_proof_owner_receipts_read'
       )
   ) THEN
     RAISE EXCEPTION 'M4_OWNER_POLICY_ALREADY_EXISTS' USING ERRCODE = '42710';
@@ -327,8 +315,7 @@ BEGIN
       'public.wos_visual_baseline_items'::regclass,
       'public.wos_reference_images'::regclass,
       'public.wos_qa_verified_image_proofs'::regclass,
-      'public.wos_qa_p2_m2_receipts'::regclass,
-      'storage.objects'::regclass
+      'public.wos_qa_p2_m2_receipts'::regclass
     )
       AND relation.relrowsecurity IS NOT TRUE
   ) THEN
@@ -387,7 +374,7 @@ CREATE ROLE wos_m4_proof_verifier_owner
 COMMENT ON ROLE wos_m4_proof_verifier_owner IS
   'WOS_M4_02_READONLY_PROOF_VERIFIER_OWNER_V1';
 
-GRANT USAGE ON SCHEMA public, storage
+GRANT USAGE ON SCHEMA public
   TO wos_m4_proof_verifier_owner;
 
 GRANT SELECT ON TABLE
@@ -397,8 +384,7 @@ GRANT SELECT ON TABLE
   public.wos_visual_baseline_items,
   public.wos_reference_images,
   public.wos_qa_verified_image_proofs,
-  public.wos_qa_p2_m2_receipts,
-  storage.objects
+  public.wos_qa_p2_m2_receipts
 TO wos_m4_proof_verifier_owner;
 
 GRANT EXECUTE ON FUNCTION public.wos_qa_p2_m2_spec_digest(uuid)
@@ -442,108 +428,6 @@ CREATE POLICY wos_m4_proof_owner_proofs_read
 CREATE POLICY wos_m4_proof_owner_receipts_read
   ON public.wos_qa_p2_m2_receipts FOR SELECT TO wos_m4_proof_verifier_owner USING (true);
 
--- The existing application Storage policy grants Operator access only while
--- an order is SUBMITTED. M4 verification occurs at READINESS_CHECK, so the
--- caller needs one narrowly scoped SELECT policy for the exact current proof
--- objects. This function returns only a boolean and never returns a path,
--- object ID or proof row.
-CREATE FUNCTION public.wos_qa_m4_can_download_proof(
-  p_bucket_id text,
-  p_object_name text
-) RETURNS boolean
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = ''
-VOLATILE
-AS $download_guard$
-DECLARE
-  v_profile_id uuid;
-  v_org_id uuid;
-  v_role text;
-  v_image_id uuid;
-  v_order_id uuid;
-  v_order_version integer;
-  v_version_label text;
-  v_snapshot jsonb;
-BEGIN
-  IF p_bucket_id IS DISTINCT FROM 'wos-private'
-    OR p_object_name IS NULL
-    OR public.wos_qa_m4_current_user_id() IS NULL
-  THEN
-    RETURN false;
-  END IF;
-
-  BEGIN
-    SELECT p.id, p.org_id, p.role
-      INTO STRICT v_profile_id, v_org_id, v_role
-    FROM public.profiles p
-    WHERE p.user_id = public.wos_qa_m4_current_user_id()
-      AND p.is_active = true
-      AND p.role IN ('admin','manager','sales','operator');
-  EXCEPTION
-    WHEN NO_DATA_FOUND OR TOO_MANY_ROWS THEN
-      RETURN false;
-  END;
-
-  SELECT im.id, o.id, o.version, o.version_label
-    INTO v_image_id, v_order_id, v_order_version, v_version_label
-  FROM public.wos_reference_images im
-  JOIN public.wos_production_orders o
-    ON o.id = im.entity_id
-    AND o.organization_id = im.organization_id
-  WHERE im.organization_id = v_org_id
-    AND im.entity_type = 'PRODUCTION_ORDER'
-    AND im.image_status = 'READY'
-    AND im.superseded_at IS NULL
-    AND im.storage_bucket = p_bucket_id
-    AND im.storage_path = p_object_name
-    AND im.version_label = o.version_label
-    AND o.workflow_status = 'READINESS_CHECK'
-    AND o.order_number ~ '^QA-NONPROD-[0-9a-f-]{36}$'
-    AND (
-      v_role IN ('admin','manager','operator')
-      OR (
-        v_role = 'sales'
-        AND v_profile_id IN (o.created_by_profile_id, o.sales_owner_profile_id)
-      )
-    );
-  IF NOT FOUND THEN
-    RETURN false;
-  END IF;
-
-  BEGIN
-    v_snapshot := public.wos_qa_m4_readonly_proof_snapshot(
-      v_order_id,
-      v_order_version,
-      v_version_label
-    );
-  EXCEPTION
-    WHEN OTHERS THEN
-      RETURN false;
-  END;
-
-  RETURN v_snapshot IS NOT NULL
-    AND v_snapshot->>'orderId' = v_order_id::text
-    AND v_snapshot->>'orderVersion' = v_order_version::text
-    AND v_snapshot->>'versionLabel' = v_version_label
-    AND v_snapshot->>'canStart' = 'false'
-    AND (v_snapshot->>'proofExpiresAt')::timestamptz
-      > pg_catalog.clock_timestamp()
-    AND EXISTS (
-      SELECT 1
-      FROM pg_catalog.jsonb_array_elements(v_snapshot->'images') AS image
-      WHERE image->>'imageId' = v_image_id::text
-    );
-END;
-$download_guard$;
-
-ALTER FUNCTION public.wos_qa_m4_can_download_proof(text,text)
-  OWNER TO wos_m4_proof_verifier_owner;
-COMMENT ON FUNCTION public.wos_qa_m4_can_download_proof(text,text) IS
-  'WOS_M4_02_READONLY_PROOF_DOWNLOAD_GUARD_V1';
-REVOKE ALL ON FUNCTION public.wos_qa_m4_can_download_proof(text,text)
-FROM PUBLIC, anon, authenticated, service_role;
-
 CREATE FUNCTION public.wos_qa_m4_readonly_proof_snapshot(
   p_order_id uuid,
   p_expected_version integer,
@@ -573,7 +457,6 @@ DECLARE
   v_proof_missing integer;
   v_proof_invalid integer;
   v_proof_expired integer;
-  v_object_count integer;
   v_proof_expires_at timestamptz;
   v_proof_last_verified_at timestamptz;
   v_internal_images jsonb;
@@ -610,7 +493,7 @@ BEGIN
   FROM public.profiles p
   WHERE p.user_id = public.wos_qa_m4_current_user_id()
     AND p.is_active = true
-    AND p.role IN ('admin','manager','sales','operator');
+    AND p.role IN ('admin','manager');
 
   -- Serialize with all reviewed M2 writers. Shared mode permits concurrent
   -- verifiers while excluding any M2 write that takes the exclusive order lock.
@@ -624,13 +507,6 @@ BEGIN
     WHERE o.id = p_order_id
       AND o.organization_id = v_actor_org_id
       AND o.order_number ~ '^QA-NONPROD-[0-9a-f-]{36}$'
-      AND (
-        v_actor_role <> 'sales'
-        OR v_actor_profile_id IN (
-          o.created_by_profile_id,
-          o.sales_owner_profile_id
-        )
-      )
     ;
   EXCEPTION
     WHEN NO_DATA_FOUND THEN
@@ -803,7 +679,22 @@ BEGIN
       pf.storage_object_updated_at,
       pf.verified_sha256,
       pf.verified_at,
-      pf.expires_at
+      pf.expires_at,
+      pg_catalog.encode(
+        pg_catalog.sha256(pg_catalog.convert_to(
+          'wos-m4-storage-object-v1' || E'\n'
+          || 'bucket=' || pf.storage_bucket || E'\n'
+          || 'path=' || pf.storage_path || E'\n'
+          || 'id=' || pg_catalog.lower(pf.storage_object_id::text) || E'\n'
+          || 'version=' || pf.storage_object_version || E'\n'
+          || 'lastModified=' || pg_catalog.to_char(
+            pf.storage_object_updated_at AT TIME ZONE 'UTC',
+            'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'
+          ) || E'\n',
+          'UTF8'
+        )),
+        'hex'
+      ) AS object_commitment
     FROM pg_catalog.unnest(v_image_ids) AS selected(image_id)
     JOIN public.wos_reference_images im
       ON im.id = selected.image_id
@@ -824,7 +715,7 @@ BEGIN
         OR proof_path IS DISTINCT FROM storage_path
         OR storage_object_id IS NULL
         OR storage_object_version IS NULL
-        OR pg_catalog.btrim(storage_object_version) = ''
+        OR storage_object_version !~ '^[A-Za-z0-9._:-]{1,200}$'
         OR storage_object_updated_at IS NULL
         OR verified_sha256 !~ '^[a-f0-9]{64}$'
         OR verified_at IS NULL
@@ -839,6 +730,7 @@ BEGIN
       pg_catalog.jsonb_build_object(
         'imageId', image_id,
         'category', category,
+        'objectCommitment', object_commitment,
         'expectedSha256', verified_sha256,
         'expiresAt', expires_at
       )
@@ -861,34 +753,6 @@ BEGIN
     OR v_proof_last_verified_at > v_baseline.office_confirmed_at
   THEN
     RAISE EXCEPTION 'PROOF_EXPIRED' USING ERRCODE = 'PT409';
-  END IF;
-
-  SELECT pg_catalog.count(*)::integer
-    INTO v_object_count
-  FROM pg_catalog.unnest(v_image_ids) AS selected(image_id)
-  JOIN public.wos_reference_images im
-    ON im.id = selected.image_id
-  JOIN public.wos_qa_verified_image_proofs pf
-    ON pf.image_id = im.id
-  JOIN storage.objects ob
-    ON ob.id = pf.storage_object_id
-  WHERE im.organization_id = v_actor_org_id
-    AND im.entity_type = 'PRODUCTION_ORDER'
-    AND im.entity_id = p_order_id
-    AND im.version_label = p_version_label
-    AND pf.organization_id = v_actor_org_id
-    AND pf.order_id = p_order_id
-    AND pf.storage_bucket = im.storage_bucket
-    AND pf.storage_path = im.storage_path
-    AND ob.bucket_id = pf.storage_bucket
-    AND ob.name = pf.storage_path
-    AND ob.version IS NOT DISTINCT FROM pf.storage_object_version
-    AND ob.updated_at IS NOT DISTINCT FROM pf.storage_object_updated_at
-    AND ob.archived_at IS NULL
-    AND ob.is_delete_marker IS DISTINCT FROM true
-  ;
-  IF v_object_count <> 4 THEN
-    RAISE EXCEPTION 'PROOF_OBJECT_CHANGED' USING ERRCODE = 'PT409';
   END IF;
 
   v_checked_at := pg_catalog.clock_timestamp();
@@ -919,9 +783,7 @@ BEGIN
   JOIN public.wos_reference_images im
     ON im.id = selected.image_id
   JOIN public.wos_qa_verified_image_proofs pf
-    ON pf.image_id = im.id
-  JOIN storage.objects ob
-    ON ob.id = pf.storage_object_id;
+    ON pf.image_id = im.id;
 
   v_spec := pg_catalog.jsonb_build_object(
     'org', v_order.organization_id,
@@ -1192,11 +1054,6 @@ BEGIN
     )
     OR pg_catalog.has_function_privilege(
       'authenticated',
-      'public.wos_qa_m4_can_download_proof(text,text)',
-      'EXECUTE'
-    )
-    OR pg_catalog.has_function_privilege(
-      'authenticated',
       'public.wos_qa_m4_current_user_id()',
       'EXECUTE'
     )
@@ -1235,13 +1092,6 @@ BEGIN
       FROM pg_catalog.pg_proc p
       WHERE p.oid = pg_catalog.to_regprocedure(
         'public.wos_qa_m4_readonly_proof_snapshot(uuid,integer,text)'
-      )
-    )) <> 'wos_m4_proof_verifier_owner'
-    OR pg_catalog.pg_get_userbyid((
-      SELECT p.proowner
-      FROM pg_catalog.pg_proc p
-      WHERE p.oid = pg_catalog.to_regprocedure(
-        'public.wos_qa_m4_can_download_proof(text,text)'
       )
     )) <> 'wos_m4_proof_verifier_owner'
     OR pg_catalog.pg_get_userbyid((

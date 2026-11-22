@@ -10,9 +10,6 @@ BEGIN
       'public.wos_qa_m4_readonly_proof_snapshot(uuid,integer,text)'
     ) IS NOT NULL
     OR pg_catalog.to_regprocedure(
-      'public.wos_qa_m4_can_download_proof(text,text)'
-    ) IS NOT NULL
-    OR pg_catalog.to_regprocedure(
       'public.wos_qa_m4_current_user_id()'
     ) IS NOT NULL
     OR EXISTS (
@@ -23,10 +20,14 @@ BEGIN
       SELECT 1 FROM pg_catalog.pg_policies
       WHERE policyname LIKE 'wos_m4_proof_owner_%'
     )
-    OR EXISTS (
-      SELECT 1 FROM pg_catalog.pg_policies
-      WHERE policyname = 'wos_m4_proof_verifier_storage_read'
-    )
+    OR (
+      SELECT pg_catalog.count(*)
+      FROM pg_catalog.pg_policies
+      WHERE policyname IN (
+        'wos_p7_private_object_select',
+        'wos_p7_storage_reader_roles'
+      )
+    ) <> 2
   THEN
     RAISE EXCEPTION 'M4_ROLLBACK_OBJECTS_REMAIN';
   END IF;

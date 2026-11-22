@@ -29,21 +29,6 @@ $expect$;
 GRANT EXECUTE ON FUNCTION tests.wos_m4_expect_error(text,text,text)
   TO authenticated, anon;
 
-CREATE FUNCTION tests.wos_m4_expect_download_denied(p_path text)
-RETURNS void
-LANGUAGE plpgsql
-AS $download_denied$
-BEGIN
-  IF public.wos_qa_m4_can_download_proof('wos-private', p_path)
-      IS NOT FALSE
-  THEN
-    RAISE EXCEPTION 'M4_DOWNLOAD_GUARD_ACCEPTED_DENIED_SNAPSHOT';
-  END IF;
-END;
-$download_denied$;
-GRANT EXECUTE ON FUNCTION tests.wos_m4_expect_download_denied(text)
-  TO authenticated;
-
 DO $metadata$
 DECLARE
   v_owner text;
@@ -119,8 +104,7 @@ BEGIN
     'public.wos_visual_baseline_items'::regclass,
     'public.wos_reference_images'::regclass,
     'public.wos_qa_verified_image_proofs'::regclass,
-    'public.wos_qa_p2_m2_receipts'::regclass,
-    'storage.objects'::regclass
+    'public.wos_qa_p2_m2_receipts'::regclass
   ]
   LOOP
     IF pg_catalog.has_table_privilege(
@@ -194,28 +178,8 @@ BEGIN
     FROM pg_catalog.pg_policies
     WHERE policyname LIKE 'wos_m4_proof_owner_%'
       AND 'wos_m4_proof_verifier_owner' = ANY(roles)
-  ) <> 8 THEN
+  ) <> 7 THEN
     RAISE EXCEPTION 'M4_OWNER_POLICY_INVENTORY_INVALID';
-  END IF;
-
-  SELECT pg_catalog.pg_get_userbyid(p.proowner),
-         p.prosecdef,
-         p.proconfig,
-         pg_catalog.has_function_privilege('authenticated',p.oid,'EXECUTE'),
-         pg_catalog.has_function_privilege('anon',p.oid,'EXECUTE')
-    INTO v_owner, v_security_definer, v_config,
-         v_authenticated_execute, v_anon_execute
-  FROM pg_catalog.pg_proc p
-  WHERE p.oid = pg_catalog.to_regprocedure(
-    'public.wos_qa_m4_can_download_proof(text,text)'
-  );
-  IF v_owner <> 'wos_m4_proof_verifier_owner'
-    OR v_security_definer IS NOT TRUE
-    OR v_config IS DISTINCT FROM ARRAY['search_path=""']::text[]
-    OR v_authenticated_execute IS NOT TRUE
-    OR v_anon_execute IS NOT FALSE
-  THEN
-    RAISE EXCEPTION 'M4_DOWNLOAD_GUARD_SECURITY_METADATA_INVALID';
   END IF;
 
   SELECT pg_catalog.pg_get_userbyid(p.proowner),
@@ -243,17 +207,6 @@ BEGIN
     RAISE EXCEPTION 'M4_CALLER_UID_BRIDGE_SECURITY_METADATA_INVALID';
   END IF;
 
-  IF (
-    SELECT count(*)
-    FROM pg_catalog.pg_policies
-    WHERE schemaname = 'storage'
-      AND tablename = 'objects'
-      AND policyname = 'wos_m4_proof_verifier_storage_read'
-      AND cmd = 'SELECT'
-      AND 'authenticated' = ANY(roles)
-  ) <> 1 THEN
-    RAISE EXCEPTION 'M4_DOWNLOAD_POLICY_INVENTORY_INVALID';
-  END IF;
 END;
 $metadata$;
 
@@ -308,15 +261,44 @@ BEGIN
       AND name =
         'organizations/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/wos/production-order/33333333-3333-4333-8333-333333333333/images/product/versions/QA-R6/41111111-1111-4111-8111-111111111111/qa-preview-proof.png'
   ) <> 1
-    OR public.wos_qa_m4_can_download_proof(
-      'wos-private',
-      'organizations/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/wos/production-order/33333333-3333-4333-8333-333333333333/images/product/versions/QA-R6/41111111-1111-4111-8111-111111111111/qa-preview-proof.png'
-    ) IS NOT TRUE
   THEN
-    RAISE EXCEPTION 'M4_OFFICE_STORAGE_READ_FAILED';
+    RAISE EXCEPTION
+      'M4_OFFICE_EXISTING_STORAGE_RLS_FAILED uid=% role=% rows=%',
+      auth.uid(),
+      (SELECT role FROM public.profiles WHERE user_id = auth.uid()),
+      (
+        SELECT pg_catalog.count(*)
+        FROM storage.objects
+        WHERE bucket_id = 'wos-private'
+      );
   END IF;
 END;
 $office_storage_positive$;
+RESET ROLE;
+
+SELECT set_config(
+  'request.jwt.claim.sub',
+  '70707070-7070-4070-8070-707070707070',
+  false
+);
+SET ROLE authenticated;
+DO $admin_positive$
+BEGIN
+  IF public.wos_qa_m4_readonly_proof_snapshot(
+      '33333333-3333-4333-8333-333333333333',11,'QA-R6'
+    )->>'canStart' IS DISTINCT FROM 'false'
+    OR (
+      SELECT pg_catalog.count(*)
+      FROM storage.objects
+      WHERE bucket_id = 'wos-private'
+        AND name =
+          'organizations/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/wos/production-order/33333333-3333-4333-8333-333333333333/images/product/versions/QA-R6/41111111-1111-4111-8111-111111111111/qa-preview-proof.png'
+    ) <> 1
+  THEN
+    RAISE EXCEPTION 'M4_ADMIN_POSITIVE_FAILED';
+  END IF;
+END;
+$admin_positive$;
 RESET ROLE;
 
 SELECT set_config(
@@ -325,33 +307,25 @@ SELECT set_config(
   false
 );
 SET ROLE authenticated;
-DO $operator_positive$
-DECLARE
-  r jsonb;
+SELECT tests.wos_m4_expect_error(
+  $$SELECT public.wos_qa_m4_readonly_proof_snapshot(
+      '33333333-3333-4333-8333-333333333333',11,'QA-R6')$$,
+  '42501',
+  'NOT_AUTHORIZED'
+);
+DO $operator_storage_denied$
 BEGIN
-  r := public.wos_qa_m4_readonly_proof_snapshot(
-    '33333333-3333-4333-8333-333333333333',11,'QA-R6');
-  IF (r->>'officeWorkshopDistinct')::boolean IS NOT TRUE
-    OR (r->>'canStart')::boolean IS NOT FALSE
-  THEN
-    RAISE EXCEPTION 'M4_OPERATOR_READ_FAILED';
-  END IF;
-END;
-$operator_positive$;
-DO $operator_storage_positive$
-BEGIN
-  IF (
-    SELECT pg_catalog.count(*)
+  IF EXISTS (
+    SELECT 1
     FROM storage.objects
     WHERE bucket_id = 'wos-private'
       AND name =
-        'organizations/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/wos/production-order/33333333-3333-4333-8333-333333333333/images/signed-sample/versions/QA-R6/43333333-3333-4333-8333-333333333333/qa-preview-proof.png'
-  ) <> 1
-  THEN
-    RAISE EXCEPTION 'M4_OPERATOR_STORAGE_READ_FAILED';
+        'organizations/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/wos/production-order/33333333-3333-4333-8333-333333333333/images/product/versions/QA-R6/41111111-1111-4111-8111-111111111111/qa-preview-proof.png'
+  ) THEN
+    RAISE EXCEPTION 'M4_OPERATOR_STORAGE_ACCESS_LEAK';
   END IF;
 END;
-$operator_storage_positive$;
+$operator_storage_denied$;
 RESET ROLE;
 
 SELECT set_config(
@@ -360,9 +334,6 @@ SELECT set_config(
   false
 );
 SET ROLE authenticated;
-SELECT tests.wos_m4_expect_download_denied(
-  'organizations/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/wos/production-order/33333333-3333-4333-8333-333333333333/images/product/versions/QA-R6/45555555-5555-4555-8555-555555555555/qa-preview-proof.png'
-);
 SELECT tests.wos_m4_expect_error(
   $$SELECT public.wos_qa_m4_readonly_proof_snapshot(
       '33333333-3333-4333-8333-333333333333',11,'QA-R6')$$,
@@ -371,17 +342,13 @@ SELECT tests.wos_m4_expect_error(
 );
 DO $viewer_storage_denied$
 BEGIN
-  IF public.wos_qa_m4_can_download_proof(
-      'wos-private',
-      'organizations/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/wos/production-order/33333333-3333-4333-8333-333333333333/images/product/versions/QA-R6/41111111-1111-4111-8111-111111111111/qa-preview-proof.png'
-    ) IS NOT FALSE
-    OR EXISTS (
-      SELECT 1 FROM storage.objects
-      WHERE bucket_id = 'wos-private'
-        AND name =
-          'organizations/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/wos/production-order/33333333-3333-4333-8333-333333333333/images/product/versions/QA-R6/41111111-1111-4111-8111-111111111111/qa-preview-proof.png'
-    )
-  THEN
+  IF EXISTS (
+    SELECT 1
+    FROM storage.objects
+    WHERE bucket_id = 'wos-private'
+      AND name =
+        'organizations/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/wos/production-order/33333333-3333-4333-8333-333333333333/images/product/versions/QA-R6/41111111-1111-4111-8111-111111111111/qa-preview-proof.png'
+  ) THEN
     RAISE EXCEPTION 'M4_VIEWER_STORAGE_ACCESS_LEAK';
   END IF;
 END;
@@ -394,14 +361,11 @@ SELECT set_config(
   false
 );
 SET ROLE authenticated;
-SELECT tests.wos_m4_expect_download_denied(
-  'organizations/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/wos/production-order/33333333-3333-4333-8333-333333333333/images/product/versions/QA-R6/41111111-1111-4111-8111-111111111111/qa-preview-proof.png'
-);
 SELECT tests.wos_m4_expect_error(
   $$SELECT public.wos_qa_m4_readonly_proof_snapshot(
       '33333333-3333-4333-8333-333333333333',11,'QA-R6')$$,
   '42501',
-  'ORDER_NOT_AVAILABLE'
+  'NOT_AUTHORIZED'
 );
 RESET ROLE;
 
@@ -411,9 +375,20 @@ SELECT set_config(
   false
 );
 SET ROLE authenticated;
-SELECT tests.wos_m4_expect_download_denied(
-  'organizations/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/wos/production-order/33333333-3333-4333-8333-333333333333/images/product/versions/QA-R6/41111111-1111-4111-8111-111111111111/qa-preview-proof.png'
+SELECT tests.wos_m4_expect_error(
+  $$SELECT public.wos_qa_m4_readonly_proof_snapshot(
+      '33333333-3333-4333-8333-333333333333',11,'QA-R6')$$,
+  '42501',
+  'NOT_AUTHORIZED'
 );
+RESET ROLE;
+
+SELECT set_config(
+  'request.jwt.claim.sub',
+  '80808080-8080-4080-8080-808080808080',
+  false
+);
+SET ROLE authenticated;
 SELECT tests.wos_m4_expect_error(
   $$SELECT public.wos_qa_m4_readonly_proof_snapshot(
       '33333333-3333-4333-8333-333333333333',11,'QA-R6')$$,
@@ -422,11 +397,13 @@ SELECT tests.wos_m4_expect_error(
 );
 DO $cross_org_storage_denied$
 BEGIN
-  IF public.wos_qa_m4_can_download_proof(
-      'wos-private',
-      'organizations/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/wos/production-order/33333333-3333-4333-8333-333333333333/images/product/versions/QA-R6/41111111-1111-4111-8111-111111111111/qa-preview-proof.png'
-    ) IS NOT FALSE
-  THEN
+  IF EXISTS (
+    SELECT 1
+    FROM storage.objects
+    WHERE bucket_id = 'wos-private'
+      AND name =
+        'organizations/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/wos/production-order/33333333-3333-4333-8333-333333333333/images/product/versions/QA-R6/41111111-1111-4111-8111-111111111111/qa-preview-proof.png'
+  ) THEN
     RAISE EXCEPTION 'M4_CROSS_ORG_STORAGE_ACCESS_LEAK';
   END IF;
 END;
@@ -440,9 +417,7 @@ SELECT tests.wos_m4_expect_error(
   '42501'
 );
 SELECT tests.wos_m4_expect_error(
-  $$SELECT public.wos_qa_m4_can_download_proof(
-      'wos-private',
-      'organizations/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/wos/production-order/33333333-3333-4333-8333-333333333333/images/product/versions/QA-R6/41111111-1111-4111-8111-111111111111/qa-preview-proof.png')$$,
+  $$SELECT count(*) FROM storage.objects$$,
   '42501'
 );
 RESET ROLE;
@@ -453,9 +428,6 @@ SELECT set_config(
   false
 );
 SET ROLE authenticated;
-SELECT tests.wos_m4_expect_download_denied(
-  'organizations/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/wos/production-order/33333333-3333-4333-8333-333333333333/images/product/versions/QA-R6/41111111-1111-4111-8111-111111111111/qa-preview-proof.png'
-);
 SELECT tests.wos_m4_expect_error(
   $$SELECT public.wos_qa_m4_readonly_proof_snapshot(
       '33333333-3333-4333-8333-333333333333',11,'QA-R6')$$,
@@ -473,9 +445,6 @@ SELECT set_config(
   false
 );
 SET ROLE authenticated;
-SELECT tests.wos_m4_expect_download_denied(
-  'organizations/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/wos/production-order/33333333-3333-4333-8333-333333333333/images/product/versions/QA-R6/41111111-1111-4111-8111-111111111111/qa-preview-proof.png'
-);
 SELECT tests.wos_m4_expect_error(
   $$SELECT public.wos_qa_m4_readonly_proof_snapshot(
       '33333333-3333-4333-8333-333333333333',11,'QA-R6')$$,
@@ -492,7 +461,7 @@ VALUES(
   '91919191-9191-4191-8191-919191919191',
   '10101010-1010-4010-8010-101010101010',
   'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
-  'sales',true
+  'manager',true
 );
 SELECT set_config(
   'request.jwt.claim.sub',
@@ -573,9 +542,6 @@ FROM public.wos_visual_baselines
 WHERE entity_id = '33333333-3333-4333-8333-333333333333'
   AND status = 'CURRENT';
 SET ROLE authenticated;
-SELECT tests.wos_m4_expect_download_denied(
-  'organizations/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/wos/production-order/33333333-3333-4333-8333-333333333333/images/product/versions/QA-R6/45555555-5555-4555-8555-555555555555/qa-preview-proof.png'
-);
 SELECT tests.wos_m4_expect_error(
   $$SELECT public.wos_qa_m4_readonly_proof_snapshot(
       '33333333-3333-4333-8333-333333333333',11,'QA-R6')$$,
@@ -671,9 +637,6 @@ UPDATE public.profiles
 SET is_active = false
 WHERE id = '22222222-2222-4222-8222-222222222222';
 SET ROLE authenticated;
-SELECT tests.wos_m4_expect_download_denied(
-  'organizations/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/wos/production-order/33333333-3333-4333-8333-333333333333/images/product/versions/QA-R6/41111111-1111-4111-8111-111111111111/qa-preview-proof.png'
-);
 SELECT tests.wos_m4_expect_error(
   $$SELECT public.wos_qa_m4_readonly_proof_snapshot(
       '33333333-3333-4333-8333-333333333333',11,'QA-R6')$$,
@@ -703,9 +666,6 @@ FROM public.wos_visual_baselines
 WHERE entity_id = '33333333-3333-4333-8333-333333333333'
   AND status = 'CURRENT';
 SET ROLE authenticated;
-SELECT tests.wos_m4_expect_download_denied(
-  'organizations/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/wos/production-order/33333333-3333-4333-8333-333333333333/images/product/versions/QA-R6/41111111-1111-4111-8111-111111111111/qa-preview-proof.png'
-);
 SELECT tests.wos_m4_expect_error(
   $$SELECT public.wos_qa_m4_readonly_proof_snapshot(
       '33333333-3333-4333-8333-333333333333',11,'QA-R6')$$,
@@ -782,15 +742,62 @@ RESET ROLE;
 ROLLBACK;
 
 BEGIN;
-UPDATE storage.objects
-SET version = 'replaced-version', updated_at = clock_timestamp()
-WHERE id = '51111111-1111-4111-8111-111111111111';
+SELECT set_config(
+  'request.jwt.claim.sub',
+  '10101010-1010-4010-8010-101010101010',
+  true
+);
+DO $commitment_exact$
+DECLARE
+  v_snapshot jsonb;
+  v_actual text;
+  v_expected text;
+  v_proof public.wos_qa_verified_image_proofs%ROWTYPE;
+BEGIN
+  v_snapshot := public.wos_qa_m4_readonly_proof_snapshot(
+    '33333333-3333-4333-8333-333333333333',11,'QA-R6');
+  SELECT image->>'objectCommitment'
+    INTO v_actual
+  FROM pg_catalog.jsonb_array_elements(v_snapshot->'images') image
+  WHERE image->>'imageId' = '41111111-1111-4111-8111-111111111111';
+  SELECT proof.* INTO STRICT v_proof
+  FROM public.wos_qa_verified_image_proofs proof
+  WHERE proof.image_id = '41111111-1111-4111-8111-111111111111';
+  v_expected := pg_catalog.encode(
+    pg_catalog.sha256(pg_catalog.convert_to(
+      'wos-m4-storage-object-v1' || E'\n'
+      || 'bucket=' || v_proof.storage_bucket || E'\n'
+      || 'path=' || v_proof.storage_path || E'\n'
+      || 'id=' || pg_catalog.lower(v_proof.storage_object_id::text) || E'\n'
+      || 'version=' || v_proof.storage_object_version || E'\n'
+      || 'lastModified=' || pg_catalog.to_char(
+        v_proof.storage_object_updated_at AT TIME ZONE 'UTC',
+        'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'
+      ) || E'\n',
+      'UTF8'
+    )),
+    'hex'
+  );
+  IF v_expected IS DISTINCT FROM
+      '258aa05aafe531bba67ef6edfe6141fb6732b786d61b10c15cadc1192b92e752'
+    OR v_actual IS DISTINCT FROM v_expected
+  THEN
+    RAISE EXCEPTION 'M4_OBJECT_COMMITMENT_FORMULA_MISMATCH';
+  END IF;
+END;
+$commitment_exact$;
+ROLLBACK;
+
+BEGIN;
+UPDATE public.wos_qa_verified_image_proofs
+SET storage_object_version = 'v-prod-1-replaced'
+WHERE image_id = '41111111-1111-4111-8111-111111111111';
 SET ROLE authenticated;
 SELECT tests.wos_m4_expect_error(
   $$SELECT public.wos_qa_m4_readonly_proof_snapshot(
       '33333333-3333-4333-8333-333333333333',11,'QA-R6')$$,
   'PT409',
-  'PROOF_OBJECT_CHANGED'
+  'PROOF_SET_MISMATCH'
 );
 RESET ROLE;
 ROLLBACK;
@@ -799,78 +806,12 @@ BEGIN;
 UPDATE public.wos_qa_verified_image_proofs
 SET storage_object_version = NULL
 WHERE image_id = '41111111-1111-4111-8111-111111111111';
-UPDATE storage.objects
-SET version = NULL
-WHERE id = '51111111-1111-4111-8111-111111111111';
 SET ROLE authenticated;
-DO $null_object_version_guard$
-BEGIN
-  IF public.wos_qa_m4_can_download_proof(
-      'wos-private',
-      'organizations/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/wos/production-order/33333333-3333-4333-8333-333333333333/images/product/versions/QA-R6/41111111-1111-4111-8111-111111111111/qa-preview-proof.png'
-    ) IS NOT FALSE
-  THEN
-    RAISE EXCEPTION 'M4_NULL_OBJECT_VERSION_GUARD_ACCEPTED';
-  END IF;
-END;
-$null_object_version_guard$;
 SELECT tests.wos_m4_expect_error(
   $$SELECT public.wos_qa_m4_readonly_proof_snapshot(
       '33333333-3333-4333-8333-333333333333',11,'QA-R6')$$,
   'PT409',
   'PROOF_NOT_AVAILABLE'
-);
-RESET ROLE;
-ROLLBACK;
-
-BEGIN;
-UPDATE storage.objects
-SET archived_at = clock_timestamp()
-WHERE id = '51111111-1111-4111-8111-111111111111';
-SET ROLE authenticated;
-SELECT tests.wos_m4_expect_error(
-  $$SELECT public.wos_qa_m4_readonly_proof_snapshot(
-      '33333333-3333-4333-8333-333333333333',11,'QA-R6')$$,
-  'PT409',
-  'PROOF_OBJECT_CHANGED'
-);
-RESET ROLE;
-ROLLBACK;
-
-BEGIN;
-UPDATE storage.objects
-SET is_delete_marker = true
-WHERE id = '51111111-1111-4111-8111-111111111111';
-SET ROLE authenticated;
-SELECT tests.wos_m4_expect_error(
-  $$SELECT public.wos_qa_m4_readonly_proof_snapshot(
-      '33333333-3333-4333-8333-333333333333',11,'QA-R6')$$,
-  'PT409',
-  'PROOF_OBJECT_CHANGED'
-);
-RESET ROLE;
-ROLLBACK;
-
-BEGIN;
-DELETE FROM storage.objects
-WHERE id = '51111111-1111-4111-8111-111111111111';
-SET ROLE authenticated;
-DO $deleted_storage_guard$
-BEGIN
-  IF public.wos_qa_m4_can_download_proof(
-      'wos-private',
-      'organizations/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/wos/production-order/33333333-3333-4333-8333-333333333333/images/product/versions/QA-R6/41111111-1111-4111-8111-111111111111/qa-preview-proof.png'
-    ) IS NOT FALSE
-  THEN
-    RAISE EXCEPTION 'M4_DELETED_STORAGE_GUARD_ACCEPTED';
-  END IF;
-END;
-$deleted_storage_guard$;
-SELECT tests.wos_m4_expect_error(
-  $$SELECT public.wos_qa_m4_readonly_proof_snapshot(
-      '33333333-3333-4333-8333-333333333333',11,'QA-R6')$$,
-  'PT409',
-  'PROOF_OBJECT_CHANGED'
 );
 RESET ROLE;
 ROLLBACK;
@@ -894,9 +835,6 @@ DELETE FROM public.wos_qa_p2_m2_receipts
 WHERE action = 'FINAL_READINESS_CONFIRM'
   AND order_id = '33333333-3333-4333-8333-333333333333';
 SET ROLE authenticated;
-SELECT tests.wos_m4_expect_download_denied(
-  'organizations/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/wos/production-order/33333333-3333-4333-8333-333333333333/images/product/versions/QA-R6/41111111-1111-4111-8111-111111111111/qa-preview-proof.png'
-);
 SELECT tests.wos_m4_expect_error(
   $$SELECT public.wos_qa_m4_readonly_proof_snapshot(
       '33333333-3333-4333-8333-333333333333',11,'QA-R6')$$,
@@ -952,9 +890,6 @@ SET receipt_digest = repeat('a',64)
 WHERE action = 'FINAL_READINESS_CONFIRM'
   AND order_id = '33333333-3333-4333-8333-333333333333';
 SET ROLE authenticated;
-SELECT tests.wos_m4_expect_download_denied(
-  'organizations/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/wos/production-order/33333333-3333-4333-8333-333333333333/images/product/versions/QA-R6/41111111-1111-4111-8111-111111111111/qa-preview-proof.png'
-);
 SELECT tests.wos_m4_expect_error(
   $$SELECT public.wos_qa_m4_readonly_proof_snapshot(
       '33333333-3333-4333-8333-333333333333',11,'QA-R6')$$,
@@ -1031,24 +966,6 @@ snapshot_function AS (
     'public.wos_qa_m4_readonly_proof_snapshot(uuid,integer,text)'
   )
 ),
-guard_function AS (
-  SELECT
-    p.oid,
-    pg_catalog.pg_get_userbyid(p.proowner) AS owner,
-    p.proacl::text AS acl,
-    p.proconfig AS config,
-    pg_catalog.encode(
-      pg_catalog.sha256(pg_catalog.convert_to(
-        pg_catalog.pg_get_functiondef(p.oid),
-        'UTF8'
-      )),
-      'hex'
-    ) AS definition_sha256
-  FROM pg_catalog.pg_proc p
-  WHERE p.oid = pg_catalog.to_regprocedure(
-    'public.wos_qa_m4_can_download_proof(text,text)'
-  )
-),
 inventory AS (
   SELECT pg_catalog.jsonb_build_object(
     'snapshotFunction', (
@@ -1059,15 +976,6 @@ inventory AS (
         'definitionSha256', definition_sha256
       )
       FROM snapshot_function
-    ),
-    'guardFunction', (
-      SELECT pg_catalog.jsonb_build_object(
-        'owner', owner,
-        'acl', acl,
-        'config', config,
-        'definitionSha256', definition_sha256
-      )
-      FROM guard_function
     ),
     'ownerRole', (
       SELECT pg_catalog.jsonb_build_object(
@@ -1113,107 +1021,6 @@ SELECT
     || snapshot.definition_sha256 AS snapshot_fingerprint
 FROM snapshot_function snapshot;
 
-WITH
-snapshot_function AS (
-  SELECT
-    p.oid,
-    pg_catalog.pg_get_userbyid(p.proowner) AS owner,
-    p.proacl::text AS acl,
-    p.proconfig AS config,
-    pg_catalog.encode(
-      pg_catalog.sha256(pg_catalog.convert_to(
-        pg_catalog.pg_get_functiondef(p.oid),
-        'UTF8'
-      )),
-      'hex'
-    ) AS definition_sha256
-  FROM pg_catalog.pg_proc p
-  WHERE p.oid = pg_catalog.to_regprocedure(
-    'public.wos_qa_m4_readonly_proof_snapshot(uuid,integer,text)'
-  )
-),
-guard_function AS (
-  SELECT
-    p.oid,
-    pg_catalog.pg_get_userbyid(p.proowner) AS owner,
-    p.proacl::text AS acl,
-    p.proconfig AS config,
-    pg_catalog.encode(
-      pg_catalog.sha256(pg_catalog.convert_to(
-        pg_catalog.pg_get_functiondef(p.oid),
-        'UTF8'
-      )),
-      'hex'
-    ) AS definition_sha256
-  FROM pg_catalog.pg_proc p
-  WHERE p.oid = pg_catalog.to_regprocedure(
-    'public.wos_qa_m4_can_download_proof(text,text)'
-  )
-),
-inventory AS (
-  SELECT pg_catalog.jsonb_build_object(
-    'snapshotFunction', (
-      SELECT pg_catalog.jsonb_build_object(
-        'owner', owner,
-        'acl', acl,
-        'config', config,
-        'definitionSha256', definition_sha256
-      )
-      FROM snapshot_function
-    ),
-    'guardFunction', (
-      SELECT pg_catalog.jsonb_build_object(
-        'owner', owner,
-        'acl', acl,
-        'config', config,
-        'definitionSha256', definition_sha256
-      )
-      FROM guard_function
-    ),
-    'ownerRole', (
-      SELECT pg_catalog.jsonb_build_object(
-        'rolcanlogin', role.rolcanlogin,
-        'rolinherit', role.rolinherit,
-        'rolsuper', role.rolsuper,
-        'rolcreatedb', role.rolcreatedb,
-        'rolcreaterole', role.rolcreaterole,
-        'rolreplication', role.rolreplication,
-        'rolbypassrls', role.rolbypassrls,
-        'memberships', COALESCE((
-          SELECT pg_catalog.jsonb_agg(parent.rolname ORDER BY parent.rolname)
-          FROM pg_catalog.pg_auth_members membership
-          JOIN pg_catalog.pg_roles parent
-            ON parent.oid = membership.roleid
-          WHERE membership.member = role.oid
-        ), '[]'::jsonb)
-      )
-      FROM pg_catalog.pg_roles role
-      WHERE role.rolname = 'wos_m4_proof_verifier_owner'
-    ),
-    'policies', (
-      SELECT pg_catalog.jsonb_agg(
-        pg_catalog.jsonb_build_object(
-          'schema', policy.schemaname,
-          'table', policy.tablename,
-          'name', policy.policyname,
-          'permissive', policy.permissive,
-          'roles', pg_catalog.to_jsonb(policy.roles),
-          'cmd', policy.cmd,
-          'qual', policy.qual,
-          'withCheck', policy.with_check
-        )
-        ORDER BY policy.schemaname, policy.tablename, policy.policyname
-      )
-      FROM pg_catalog.pg_policies policy
-      WHERE policy.policyname LIKE 'wos_m4_%'
-    )
-  ) AS value
-)
-SELECT
-  'WOS_M4_02_GUARD_FUNCTION_SHA256='
-    || guard.definition_sha256 AS guard_fingerprint
-FROM guard_function guard;
-
 SELECT
   'WOS_M4_02_CALLER_BRIDGE_SHA256=' || pg_catalog.encode(
     pg_catalog.sha256(pg_catalog.convert_to(
@@ -1246,24 +1053,6 @@ snapshot_function AS (
     'public.wos_qa_m4_readonly_proof_snapshot(uuid,integer,text)'
   )
 ),
-guard_function AS (
-  SELECT
-    p.oid,
-    pg_catalog.pg_get_userbyid(p.proowner) AS owner,
-    p.proacl::text AS acl,
-    p.proconfig AS config,
-    pg_catalog.encode(
-      pg_catalog.sha256(pg_catalog.convert_to(
-        pg_catalog.pg_get_functiondef(p.oid),
-        'UTF8'
-      )),
-      'hex'
-    ) AS definition_sha256
-  FROM pg_catalog.pg_proc p
-  WHERE p.oid = pg_catalog.to_regprocedure(
-    'public.wos_qa_m4_can_download_proof(text,text)'
-  )
-),
 inventory AS (
   SELECT pg_catalog.jsonb_build_object(
     'snapshotFunction', (
@@ -1274,15 +1063,6 @@ inventory AS (
         'definitionSha256', definition_sha256
       )
       FROM snapshot_function
-    ),
-    'guardFunction', (
-      SELECT pg_catalog.jsonb_build_object(
-        'owner', owner,
-        'acl', acl,
-        'config', config,
-        'definitionSha256', definition_sha256
-      )
-      FROM guard_function
     ),
     'ownerRole', (
       SELECT pg_catalog.jsonb_build_object(

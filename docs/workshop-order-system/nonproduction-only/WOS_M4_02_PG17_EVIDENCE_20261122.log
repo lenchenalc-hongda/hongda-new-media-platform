@@ -1,3 +1,7 @@
+WOS M4-02 OFFICE-ONLY FALLBACK / POSTGRESQL 17 DISPOSABLE EVIDENCE
+Generated from the fail-closed fallback source; no cloud connection or queue variables.
+SUITE=WOS_M4_02_PG17_SUITE
+
 NOTICE:  trigger "wos_qa_p2_m2_reference_image_guard" for relation "public.wos_reference_images" does not exist, skipping
 NOTICE:  column "superseded_at" of relation "wos_visual_baselines" already exists, skipping
               set_config
@@ -7,12 +11,12 @@ NOTICE:  column "superseded_at" of relation "wos_visual_baselines" already exist
 
                                                                                                                                                                                                                                                                                       baseline_select
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- {"status": "APPLIED", "orderId": "33333333-3333-4333-8333-333333333333", "version": 8, "canStart": false, "requestId": "71000000-0000-4000-8000-000000000001", "baselineId": "b92c8a69-101d-4160-a164-1b5ab574a0e6", "proofStatus": "UNVERIFIED", "preSpecDigest": "73b4a8ba800866a4e95196171ba727bec8462d7da6b1d7b1c9bf126c09af71ac", "receiptDigest": "af2340d6d711cdab54909b88d1b4199ff87b2d4ff10420a2ffd2a1e98aa598d1", "postSpecDigest": "38a094681dfe2fa5a37b57bd26043fc61a1a9ee4fba7ce594f1e1bea117a165f", "workflowStatus": "WAITING_MATERIAL", "productionVersionLabel": "QA-R6"}
+ {"status": "APPLIED", "orderId": "33333333-3333-4333-8333-333333333333", "version": 8, "canStart": false, "requestId": "71000000-0000-4000-8000-000000000001", "baselineId": "db172c9b-27a1-459c-9346-b3911084f0b4", "proofStatus": "UNVERIFIED", "preSpecDigest": "73b4a8ba800866a4e95196171ba727bec8462d7da6b1d7b1c9bf126c09af71ac", "receiptDigest": "af2340d6d711cdab54909b88d1b4199ff87b2d4ff10420a2ffd2a1e98aa598d1", "postSpecDigest": "38a094681dfe2fa5a37b57bd26043fc61a1a9ee4fba7ce594f1e1bea117a165f", "workflowStatus": "WAITING_MATERIAL", "productionVersionLabel": "QA-R6"}
 (1 row)
 
                                                                                                                                                                                                                                                                                        office_confirm
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- {"status": "APPLIED", "orderId": "33333333-3333-4333-8333-333333333333", "version": 9, "canStart": false, "requestId": "71000000-0000-4000-8000-000000000002", "baselineId": "b92c8a69-101d-4160-a164-1b5ab574a0e6", "proofStatus": "UNVERIFIED", "preSpecDigest": "38a094681dfe2fa5a37b57bd26043fc61a1a9ee4fba7ce594f1e1bea117a165f", "receiptDigest": "edff4854111a55998dc8a61c3e17f0d763fe7529230542adef4b20b1c6dabfe0", "postSpecDigest": "92e9375b49b56faed92789e7bd71ca8519ef134c0929e3da2be1bc57e5c3fc41", "workflowStatus": "WAITING_MATERIAL", "productionVersionLabel": "QA-R6"}
+ {"status": "APPLIED", "orderId": "33333333-3333-4333-8333-333333333333", "version": 9, "canStart": false, "requestId": "71000000-0000-4000-8000-000000000002", "baselineId": "db172c9b-27a1-459c-9346-b3911084f0b4", "proofStatus": "UNVERIFIED", "preSpecDigest": "38a094681dfe2fa5a37b57bd26043fc61a1a9ee4fba7ce594f1e1bea117a165f", "receiptDigest": "58b9ecfa19085507140287d17c14b48a755e3f164ed938f00e96d0594cad1226", "postSpecDigest": "5fc627cfcb4b8942eae3c9cb937ec143e3f22bf7bbf6223959a71eaf1a88ba04", "workflowStatus": "WAITING_MATERIAL", "productionVersionLabel": "QA-R6"}
 (1 row)
 
               set_config
@@ -22,28 +26,12 @@ NOTICE:  column "superseded_at" of relation "wos_visual_baselines" already exist
 
                                                                                                                                                                                                                                                                                       workshop_confirm
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- {"status": "APPLIED", "orderId": "33333333-3333-4333-8333-333333333333", "version": 10, "canStart": false, "requestId": "71000000-0000-4000-8000-000000000003", "baselineId": "b92c8a69-101d-4160-a164-1b5ab574a0e6", "proofStatus": "UNVERIFIED", "preSpecDigest": "92e9375b49b56faed92789e7bd71ca8519ef134c0929e3da2be1bc57e5c3fc41", "receiptDigest": "4382733468d85e4362bec6ce954d682e894d0597ec1f12d61073e729f8891491", "postSpecDigest": "b047490f165d4c7a09835a0e047a2d9a19d5ffaa6fe64531a210df2fb2464a58", "workflowStatus": "WAITING_MATERIAL", "productionVersionLabel": "QA-R6"}
+ {"status": "APPLIED", "orderId": "33333333-3333-4333-8333-333333333333", "version": 10, "canStart": false, "requestId": "71000000-0000-4000-8000-000000000003", "baselineId": "db172c9b-27a1-459c-9346-b3911084f0b4", "proofStatus": "UNVERIFIED", "preSpecDigest": "5fc627cfcb4b8942eae3c9cb937ec143e3f22bf7bbf6223959a71eaf1a88ba04", "receiptDigest": "e0686acb56d4bf74a6ba4fc8b432f609f653aca8b8b14aae095d967379129f86", "postSpecDigest": "6598d4b794d8e06fc7c0feaf629c0f88b748aa69c725c0f992d14d6d84a971bc", "workflowStatus": "WAITING_MATERIAL", "productionVersionLabel": "QA-R6"}
 (1 row)
 
                                                                                                                                                                                                                                                                                       final_readiness
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- {"status": "APPLIED", "orderId": "33333333-3333-4333-8333-333333333333", "version": 11, "canStart": false, "requestId": "71000000-0000-4000-8000-000000000004", "baselineId": "b92c8a69-101d-4160-a164-1b5ab574a0e6", "proofStatus": "UNVERIFIED", "preSpecDigest": "b047490f165d4c7a09835a0e047a2d9a19d5ffaa6fe64531a210df2fb2464a58", "receiptDigest": "17471b1d3bd8518b55da627cb4c72a36794ebe39baa28ae4480e36e5a3351d2e", "postSpecDigest": "d981e86df2b74922e540341276990dc27ef56258760490f506f5ea4cc91574da", "workflowStatus": "READINESS_CHECK", "productionVersionLabel": "QA-R6"}
-(1 row)
-
- wos_m4_hosted_expect_error
-----------------------------
-
-(1 row)
-
- wos_m4_hosted_expect_error
-----------------------------
-
-(1 row)
-
-WARNING:  no privileges were granted for "uid"
-                 ?column?
--------------------------------------------
- WOS_M4_02_OLD_FORWARD_HOSTED_FAILURE=PASS
+ {"status": "APPLIED", "orderId": "33333333-3333-4333-8333-333333333333", "version": 11, "canStart": false, "requestId": "71000000-0000-4000-8000-000000000004", "baselineId": "db172c9b-27a1-459c-9346-b3911084f0b4", "proofStatus": "UNVERIFIED", "preSpecDigest": "6598d4b794d8e06fc7c0feaf629c0f88b748aa69c725c0f992d14d6d84a971bc", "receiptDigest": "60e2d8ec22091bb5c21e8f7ac3dfcaa11b7c73df94853d7cea7cb834476809ec", "postSpecDigest": "e55585e13ed3a00733336fce9d81a51737ebe6bcd9f581165dca607768f90f46", "workflowStatus": "READINESS_CHECK", "productionVersionLabel": "QA-R6"}
 (1 row)
 
             ?column?
@@ -51,19 +39,6 @@ WARNING:  no privileges were granted for "uid"
  WOS_M4_02_SYNTHETIC_PHASE1=PASS
 (1 row)
 
-            ?column?
----------------------------------
- WOS_M4_02_SYNTHETIC_PHASE2=PASS
-(1 row)
-
-             policyname             |   roles   |                     qual
-------------------------------------+-----------+-----------------------------------------------
- wos_m4_proof_owner_storage_read    | ["20685"] | (bucket_id = 'wos-private'::text)
- wos_m4_proof_verifier_storage_read | ["16386"] | wos_qa_m4_can_download_proof(bucket_id, name)
-(2 rows)
-
-GRANT
-CREATE FUNCTION
 GRANT
 CREATE FUNCTION
 GRANT
@@ -79,11 +54,23 @@ DO
 RESET
               set_config
 --------------------------------------
- 20202020-2020-4020-8020-202020202020
+ 70707070-7070-4070-8070-707070707070
 (1 row)
 
 SET
 DO
+RESET
+              set_config
+--------------------------------------
+ 20202020-2020-4020-8020-202020202020
+(1 row)
+
+SET
+ wos_m4_expect_error
+---------------------
+
+(1 row)
+
 DO
 RESET
               set_config
@@ -92,11 +79,6 @@ RESET
 (1 row)
 
 SET
- wos_m4_expect_download_denied
--------------------------------
-
-(1 row)
-
  wos_m4_expect_error
 ---------------------
 
@@ -110,11 +92,6 @@ RESET
 (1 row)
 
 SET
- wos_m4_expect_download_denied
--------------------------------
-
-(1 row)
-
  wos_m4_expect_error
 ---------------------
 
@@ -127,11 +104,18 @@ RESET
 (1 row)
 
 SET
- wos_m4_expect_download_denied
--------------------------------
+ wos_m4_expect_error
+---------------------
 
 (1 row)
 
+RESET
+              set_config
+--------------------------------------
+ 80808080-8080-4080-8080-808080808080
+(1 row)
+
+SET
  wos_m4_expect_error
 ---------------------
 
@@ -157,11 +141,6 @@ RESET
 (1 row)
 
 SET
- wos_m4_expect_download_denied
--------------------------------
-
-(1 row)
-
  wos_m4_expect_error
 ---------------------
 
@@ -176,11 +155,6 @@ UPDATE 1
 (1 row)
 
 SET
- wos_m4_expect_download_denied
--------------------------------
-
-(1 row)
-
  wos_m4_expect_error
 ---------------------
 
@@ -229,11 +203,6 @@ INSERT 0 1
 ALTER TABLE
 INSERT 0 1
 SET
- wos_m4_expect_download_denied
--------------------------------
-
-(1 row)
-
  wos_m4_expect_error
 ---------------------
 
@@ -294,11 +263,6 @@ ROLLBACK
 BEGIN
 UPDATE 1
 SET
- wos_m4_expect_download_denied
--------------------------------
-
-(1 row)
-
  wos_m4_expect_error
 ---------------------
 
@@ -310,11 +274,6 @@ BEGIN
 DROP INDEX
 INSERT 0 1
 SET
- wos_m4_expect_download_denied
--------------------------------
-
-(1 row)
-
  wos_m4_expect_error
 ---------------------
 
@@ -357,20 +316,16 @@ SET
 RESET
 ROLLBACK
 BEGIN
-UPDATE 1
-SET
- wos_m4_expect_error
----------------------
-
+              set_config
+--------------------------------------
+ 10101010-1010-4010-8010-101010101010
 (1 row)
 
-RESET
+DO
 ROLLBACK
 BEGIN
 UPDATE 1
-UPDATE 1
 SET
-DO
  wos_m4_expect_error
 ---------------------
 
@@ -401,32 +356,6 @@ ROLLBACK
 BEGIN
 DELETE 1
 SET
-DO
- wos_m4_expect_error
----------------------
-
-(1 row)
-
-RESET
-ROLLBACK
-BEGIN
-UPDATE 1
-SET
- wos_m4_expect_error
----------------------
-
-(1 row)
-
-RESET
-ROLLBACK
-BEGIN
-DELETE 1
-SET
- wos_m4_expect_download_denied
--------------------------------
-
-(1 row)
-
  wos_m4_expect_error
 ---------------------
 
@@ -457,11 +386,6 @@ ROLLBACK
 BEGIN
 UPDATE 1
 SET
- wos_m4_expect_download_denied
--------------------------------
-
-(1 row)
-
  wos_m4_expect_error
 ---------------------
 
@@ -501,12 +425,7 @@ RESET
 ROLLBACK
                                         snapshot_fingerprint
 -----------------------------------------------------------------------------------------------------
- WOS_M4_02_SNAPSHOT_FUNCTION_SHA256=6bed433d79370f50b48be3e12c108c202343f31868c0d4eb0aa36e9eab1443f0
-(1 row)
-
-                                        guard_fingerprint
---------------------------------------------------------------------------------------------------
- WOS_M4_02_GUARD_FUNCTION_SHA256=c547983e9c34f03d73bad40c6c53d96b528feaf0f10e8bff324da332c30d7589
+ WOS_M4_02_SNAPSHOT_FUNCTION_SHA256=22d0f4b09891414be8dfb7353b97bac95f259a450ed697ee8528631b595a9361
 (1 row)
 
                                     caller_bridge_fingerprint
@@ -516,7 +435,7 @@ ROLLBACK
 
                                          security_fingerprint
 ------------------------------------------------------------------------------------------------------
- WOS_M4_02_SECURITY_INVENTORY_SHA256=5357075c96c1c3880ceb3bf203e499087bf4444de278e77071474863336f0cee
+ WOS_M4_02_SECURITY_INVENTORY_SHA256=33028d0072e0d15fb7287a50daa5398a5b8b2da1951b3feacca481abef942815
 (1 row)
 
            ?column?
@@ -549,11 +468,6 @@ ROLLBACK
  WOS_M4_02_SYNTHETIC_DEACTIVATED=PASS
 (1 row)
 
-                 ?column?
--------------------------------------------
- WOS_M4_02_SYNTHETIC_STORAGE_ROLLBACK=PASS
-(1 row)
-
 DO
            ?column?
 ------------------------------
@@ -562,6 +476,6 @@ DO
 
 WOS_M4_02_PG17_SUITE=PASS
 WOS_M4_02_PG17_NO_CLOUD_CONNECTION=PASS
-WOS_M4_02_SYNTHETIC_SPLIT_OWNER_TEST=PASS
-WOS_M4_02_STORAGE_OWNER_SPLIT_PHASE=PASS
-WOS_M4_02_HOSTED_STORAGE_OWNER_EXECUTOR=BLOCKED
+WOS_M4_02_EXISTING_P7_STORAGE_RLS=PASS
+WOS_M4_02_NO_NEW_STORAGE_POLICY=PASS
+WOS_M4_02_OFFICE_ONLY_SNAPSHOT=PASS

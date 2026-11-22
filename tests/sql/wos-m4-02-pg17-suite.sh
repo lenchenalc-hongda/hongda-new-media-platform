@@ -111,17 +111,15 @@ psql_run -q -d "$DB" < \
   "$ROOT/docs/workshop-order-system/nonproduction-only/WOS_P2_M2_NONPROD_SQL_NOT_INSTALLED.sql"
 psql_run -q -d "$DB" < "$ROOT/tests/sql/wos-m4-02-pg17-seed.sql"
 psql_run -q -d "$DB" < "$ROOT/tests/sql/wos-m4-02-pg17-hosted-roles-fixture.sql"
-psql_run -q -d "$DB" < "$ROOT/tests/sql/wos-m4-02-pg17-preinstall-baseline.sql"
 psql_run_as hosted_wos_installer -q -d "$DB" < \
-  "$ROOT/tests/sql/wos-m4-02-pg17-old-forward-failure-probe.sql"
+  "$ROOT/tests/sql/wos-m4-02-pg17-supporting-read-policies.sql"
+psql_run_as supabase_storage_admin -q -d "$DB" < \
+  "$ROOT/tests/sql/wos-m4-02-pg17-existing-storage-policies.sql"
+psql_run -q -d "$DB" < "$ROOT/tests/sql/wos-m4-02-pg17-preinstall-baseline.sql"
 psql_run_as hosted_wos_installer -q -d "$DB" < \
   "$ROOT/docs/workshop-order-system/nonproduction-only/WOS_M4_02_READONLY_PROOF_VERIFIER_QA_ONLY_NOT_INSTALLED.sql"
 psql_run_as hosted_wos_installer -q -d "$DB" < \
   "$ROOT/tests/sql/wos-m4-02-pg17-phase1-check.sql"
-psql_run_as supabase_storage_admin -q -d "$DB" < \
-  "$ROOT/docs/workshop-order-system/nonproduction-only/WOS_M4_02_READONLY_PROOF_VERIFIER_STORAGE_OWNER_PHASE_NOT_INSTALLED.sql"
-psql_run_as supabase_storage_admin -q -d "$DB" < \
-  "$ROOT/tests/sql/wos-m4-02-pg17-phase2-check.sql"
 psql_run_as hosted_wos_installer -q -d "$DB" < \
   "$ROOT/docs/workshop-order-system/nonproduction-only/WOS_M4_02_READONLY_PROOF_VERIFIER_ACTIVATION_NOT_INSTALLED.sql"
 psql_run -d "$DB" < "$ROOT/tests/sql/wos-m4-02-pg17-assertions.sql"
@@ -129,16 +127,12 @@ psql_run_as hosted_wos_installer -q -d "$DB" < \
   "$ROOT/docs/workshop-order-system/nonproduction-only/WOS_M4_02_READONLY_PROOF_VERIFIER_DEACTIVATE_NOT_INSTALLED.sql"
 psql_run_as hosted_wos_installer -q -d "$DB" < \
   "$ROOT/tests/sql/wos-m4-02-pg17-deactivated-check.sql"
-psql_run_as supabase_storage_admin -q -d "$DB" < \
-  "$ROOT/docs/workshop-order-system/nonproduction-only/WOS_M4_02_READONLY_PROOF_VERIFIER_STORAGE_OWNER_ROLLBACK_NOT_INSTALLED.sql"
-psql_run_as supabase_storage_admin -q -d "$DB" < \
-  "$ROOT/tests/sql/wos-m4-02-pg17-storage-rollback-check.sql"
 psql_run_as hosted_wos_installer -q -d "$DB" < \
   "$ROOT/docs/workshop-order-system/nonproduction-only/WOS_M4_02_READONLY_PROOF_VERIFIER_QA_ONLY_ROLLBACK_NOT_INSTALLED.sql"
 psql_run -d "$DB" < "$ROOT/tests/sql/wos-m4-02-pg17-post-rollback.sql"
 
 echo 'WOS_M4_02_PG17_SUITE=PASS'
 echo 'WOS_M4_02_PG17_NO_CLOUD_CONNECTION=PASS'
-echo 'WOS_M4_02_SYNTHETIC_SPLIT_OWNER_TEST=PASS'
-echo 'WOS_M4_02_STORAGE_OWNER_SPLIT_PHASE=PASS'
-echo 'WOS_M4_02_HOSTED_STORAGE_OWNER_EXECUTOR=BLOCKED'
+echo 'WOS_M4_02_EXISTING_P7_STORAGE_RLS=PASS'
+echo 'WOS_M4_02_NO_NEW_STORAGE_POLICY=PASS'
+echo 'WOS_M4_02_OFFICE_ONLY_SNAPSHOT=PASS'

@@ -1,178 +1,148 @@
-# WOS M4-02 Hosted Staged Install Runbook
+# WOS M4-02 Office-Only QA Install Runbook
 
 Status:
-`BLOCKED_STORAGE_OWNER_EXECUTOR_NOT_DEMONSTRATED / REVIEW_ONLY_NOT_AUTHORIZED`
 
-Target QA project: `xulmpqaknlwqqculbsek`
+`OFFICE_ONLY_INFEASIBLE_FAIL_CLOSED / HISTORICAL_AUDIT_ONLY / INSTALL_NOT_AUTHORIZED`
 
-## Hard Owner Boundary
+Target only:
 
-The M4-02 installation cannot be one transaction executed by the normal QA
-`postgres` login.
+- Supabase QA `xulmpqaknlwqqculbsek`
+- Repository `lenchenalc-hongda/hongda-new-media-platform`
+- PR #275 exact source HEAD
 
-- `postgres` is not a superuser and is not a member of
-  `supabase_storage_admin`.
-- `storage.objects` is owned by `supabase_storage_admin`.
-- PostgreSQL 17 permits `CREATE POLICY` only for the table owner.
-- A SELECT grant option does not grant policy DDL authority.
+This runbook does not authorize installation.
 
-The candidate split is therefore:
+Do not execute these phases. Independent review established that the current
+hosted Storage `info()` path serializes `updated_at` through a JavaScript Date,
+so it cannot reproduce the required six-digit microsecond commitment. The
+runbook is retained only to document the safe staged design, rollback order and
+the exact point at which the architecture fails.
 
-1. Database objects installed by QA `postgres`.
-2. Storage policies installed through the Supabase Dashboard Storage Policy
-   owner path or another platform-supported `storage.objects` owner executor.
-3. Authenticated EXECUTE opened by QA `postgres` only after Phase 1 and Phase 2
-   catalog checks pass.
+## Security Invariant
 
-No role membership on `supabase_storage_admin` and no change to
-`storage.objects.relowner` are permitted.
+The installer must not:
 
-**Hard blocker:** this task has not demonstrated a project-specific, auditable
-executor that can run the exact Phase 2 transaction as
-`supabase_storage_admin`. The local PG17 suite uses a synthetic login role
-solely to exercise policy SQL and rollback mechanics. That is not evidence that
-the hosted Dashboard or Management API exposes the same executor. Phase 2 must
-remain blocked until Supabase-supported executor evidence is supplied and
-independently reviewed.
+- create or alter any Storage policy;
+- grant `postgres` membership in `supabase_storage_admin`;
+- grant SELECT on `storage.objects` to the M4 owner;
+- use `service_role` as the business caller;
+- change existing P7 Storage RLS;
+- grant direct Proof/Receipt SELECT to authenticated;
+- open P2, M2 or Legacy Gates;
+- execute business writes or deploy Production.
 
-## Phase 0: Read-Only Prerequisites
+Existing P7 Storage RLS remains the only Storage authorization layer.
 
-Before any DDL:
+## Preinstall Readback
 
-- Pin the exact PR head and SQL SHA-256/Git blob values.
-- Confirm QA project identity.
-- Confirm all P2, Office, M2 and Legacy Gates are OFF with no whitelist/TTL.
-- Confirm authenticated lacks direct Proof/Receipt SELECT and M2 EXECUTE.
-- Confirm `postgres` is `NOSUPERUSER`, `CREATEROLE`, `BYPASSRLS`.
-- Confirm `postgres` owns all named public tables.
-- Confirm `supabase_storage_admin` owns `storage.objects`.
-- Confirm `auth.uid()` is owned by `supabase_auth_admin` and PUBLIC EXECUTE
-  already exists.
-- Confirm Production auto-build suppression and domain state separately.
+Before installation, require:
 
-Any change requires a new review. The SQL itself cannot prove project identity
-or Production hosting state.
+1. PR #275 is still Draft and the exact source HEAD matches the Owner
+   authorization.
+2. Raw Forward/Rollback SHA-256 values match the authorization.
+3. QA project identity is exactly `xulmpqaknlwqqculbsek`.
+4. PostgreSQL 17.6.
+5. No `wos_m4_proof_verifier_owner`.
+6. Neither public M4 function exists.
+7. No `wos_m4_%` Storage policy exists.
+8. P2 Operator/Office and M2 Gate rows are OFF, with no whitelist or TTL.
+9. Authenticated has no SELECT on Proof or Receipt tables.
+10. Authenticated has no EXECUTE on the M2 action.
+11. Existing P7 policies are present:
+    - `wos_p7_private_object_select`
+    - `wos_p7_storage_reader_roles`
+12. The target synthetic QA order is still
+    `READINESS_CHECK / v11 / QA-R6`.
+13. No conflicting database operation or QA Writer is active.
+
+Stop on any mismatch.
 
 ## Phase 1: Database Objects
 
-File:
+Artifact:
 
 `WOS_M4_02_READONLY_PROOF_VERIFIER_QA_ONLY_NOT_INSTALLED.sql`
 
-Executor: QA `postgres`.
+Execution must be one controlled transaction as the reviewed QA installer.
 
-The phase is one transaction. It:
+Required result:
 
-- creates `wos_m4_proof_verifier_owner`;
-- creates two RPCs and one private caller-UID bridge;
-- uses temporary `SET TRUE` membership only for function ownership transfer;
-- removes the temporary SET membership and temporary schema CREATE before
-  commit;
-- grants only the minimum table/schema/function dependencies;
-- creates no Storage policy;
-- grants no authenticated EXECUTE;
-- grants no `auth.uid()` ACL change.
+- dedicated NOLOGIN owner exists with no excess attributes or memberships;
+- snapshot RPC and private caller bridge exist;
+- snapshot RPC is owned by the dedicated role, is SECURITY DEFINER and has
+  `search_path=''`;
+- seven owner-only public read policies exist;
+- owner has SELECT on the seven public read tables and no Storage privilege;
+- authenticated EXECUTE remains closed;
+- no M4 Storage function or policy exists;
+- Gate and business data counts are unchanged.
 
-Final installer membership is expected to remain
-`ADMIN TRUE, INHERIT FALSE, SET FALSE`.
+Do not proceed if Phase 1 is partial or cannot prove the closed ACL state.
 
-After success, authenticated users cannot call either RPC and no Storage policy
-is present.
+## Phase 2: Activation
 
-## Phase 2: Storage Owner Policy Phase
-
-File:
-
-`WOS_M4_02_READONLY_PROOF_VERIFIER_STORAGE_OWNER_PHASE_NOT_INSTALLED.sql`
-
-Executor: `BLOCKED_NOT_DEMONSTRATED`. The normal `postgres` executor must not be
-used. A future authorization must first prove the exact Supabase-supported
-owner executor for project `xulmpqaknlwqqculbsek`.
-
-The phase is one storage-owner transaction. It creates exactly:
-
-- `wos_m4_proof_owner_storage_read`
-- `wos_m4_proof_verifier_storage_read`
-
-After success, the policies exist but authenticated EXECUTE is still revoked.
-All downloads continue to fail closed.
-
-## Phase 3: Activation
-
-File:
+Artifact:
 
 `WOS_M4_02_READONLY_PROOF_VERIFIER_ACTIVATION_NOT_INSTALLED.sql`
 
-Executor: QA `postgres`.
+Execution must be one controlled transaction only after Phase 1 readback and a
+separate Owner approval for the exact function definition and activation file.
 
-This phase is one database transaction. It verifies both earlier phases, then
-grants authenticated EXECUTE on the snapshot and Storage guard only.
+Required result:
 
-This is the exact point where direct authenticated PostgREST RPC access becomes
-available. The Vercel route flag is not a database authorization boundary.
-Owner approval must explicitly accept this direct read capability.
+- authenticated has EXECUTE on the snapshot only;
+- anon/PUBLIC and authenticated bridge EXECUTE remain closed;
+- direct Proof/Receipt table SELECT remains closed;
+- M2 action EXECUTE remains closed;
+- no Storage policy was added or changed;
+- temporary owner SET membership is absent after commit;
+- `canStart=false` is present in the DTO contract.
 
-The Next.js route additionally requires the default-OFF server-side flag:
+Activation makes the RPC directly callable through PostgREST regardless of the
+Next.js read flag. That is why Phase 2 requires a separate approval.
 
-`WOS_QA_M4_PROOF_READONLY_ENABLED=true`
+## Hosted Read-Only Smoke
 
-It no longer reuses `WOS_QA_INBOX_READONLY_ENABLED`.
+After activation, first perform direct authenticated RPC readback with a real
+same-organization Admin/Manager JWT:
 
-## Failure Isolation
+- valid order/version returns the safe DTO;
+- Operator, Sales, Viewer, cross-organization and anonymous are denied;
+- response includes no path, Storage object ID, signed URL, raw Proof or Receipt.
 
-- Phase 1 failure: transaction rolls back all roles, functions, grants and
-  policies from that phase.
-- Phase 2 failure: transaction rolls back both Storage policies; authenticated
-  EXECUTE remains closed.
-- Phase 3 failure: transaction rolls back both EXECUTE grants; installed
-  policies remain inert.
-- There is no cross-owner atomic transaction. Safe staging is provided by
-  keeping authenticated EXECUTE revoked until the final database transaction.
+Then, only under a separate Preview authorization, test the Next.js route and
+hosted Storage service using the same caller JWT:
 
-## Rollback
+- `info()` returns the expected ID/version/microsecond timestamp;
+- raw `download()` bytes reproduce the signed SHA-256;
+- second `info()` is unchanged;
+- second database snapshot is unchanged;
+- any missing/expired/changed evidence fails closed.
 
-1. `WOS_M4_02_READONLY_PROOF_VERIFIER_DEACTIVATE_NOT_INSTALLED.sql`
-   as QA `postgres`: revoke both authenticated EXECUTE grants.
-2. `WOS_M4_02_READONLY_PROOF_VERIFIER_STORAGE_OWNER_ROLLBACK_NOT_INSTALLED.sql`
-   as the `storage.objects` owner: drop exactly both M4 Storage policies.
-3. `WOS_M4_02_READONLY_PROOF_VERIFIER_QA_ONLY_ROLLBACK_NOT_INSTALLED.sql`
-   as QA `postgres`: drop RPCs/helper, owner policies, grants, bridge and the
-   dedicated role.
+Historical expired Proofs may not be presented as a successful live
+verification.
 
-If storage-owner rollback fails, authenticated access is already closed and
-the RPCs cannot be reached. Do not drop database functions while Storage
-policies still depend on them.
+## Rollback Order
 
-## Sales Scope
+1. Run `WOS_M4_02_READONLY_PROOF_VERIFIER_DEACTIVATE_NOT_INSTALLED.sql`.
+2. Confirm authenticated snapshot EXECUTE is false.
+3. Confirm the RPC and bridge remain, but all access is closed.
+4. Run
+   `WOS_M4_02_READONLY_PROOF_VERIFIER_QA_ONLY_ROLLBACK_NOT_INSTALLED.sql`.
+5. Confirm M4 functions, owner policies, grants and role are absent.
+6. Confirm existing P7 Storage policies and Storage objects are unchanged.
+7. Confirm business row counts/content hashes, table/schema ACLs, Gate states
+   and M2 execute state equal the preinstall baseline.
 
-Same-organization Sales can invoke the snapshot RPC only when the Sales Profile
-is the order creator or sales owner. The Storage guard uses the same search
-condition before calling the full snapshot validator. Non-owner Sales fail
-closed for both direct RPC and Storage download.
+Never drop business tables or delete Proof, Receipt, image, baseline, order or
+Storage data during rollback.
 
-## Expired Historical Proofs
+## Failure Handling
 
-Order `953d2204-3e65-4b75-b10e-c6e97f1bbb56` has five historical Proof records
-that are expired. They must remain rejected. This task does not change
-`expires_at`, create a new Proof, or carry old Office/Workshop signatures onto
-a future refreshed Proof. A new Proof refresh/sign-off requires a separately
-authorized M2 business flow.
-
-## Next Owner Gate
-
-`DEMONSTRATE_SUPABASE_STORAGE_OWNER_EXECUTOR_BEFORE_SQL_INSTALL_AUTHORIZATION`
-
-The authorization must name all phase files, raw hashes, Git blobs, executor
-roles, expected catalog state after each phase, rollback files and the direct
-authenticated read capability created by activation.
-
-## References
-
-- PostgreSQL 17 `CREATE POLICY`: table ownership is required.
-  https://www.postgresql.org/docs/17/sql-createpolicy.html
-- Supabase RLS guide: policies may be applied through the Dashboard SQL Editor
-  or migration path.
-  https://supabase.com/docs/guides/database/postgres/row-level-security
-- Supabase Storage access control: Storage policies are policies on
-  `storage.objects`.
-  https://supabase.com/docs/guides/storage/security/access-control
+- Phase 1 failure: transaction rollback; do not retry blindly.
+- Phase 2 failure: transaction rollback; confirm authenticated RPC access stays
+  closed.
+- Storage live read failure: leave the route flag OFF and database Gate state
+  unchanged; record the exact SDK/API error.
+- Proof expiry or object drift: return `UNVERIFIED`, never a cached success.
+- Any ACL widening or Storage-policy change: rollback the M4 objects and stop.

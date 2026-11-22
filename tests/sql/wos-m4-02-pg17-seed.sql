@@ -48,6 +48,30 @@ VALUES(
 )
 ON CONFLICT(id) DO NOTHING;
 
+INSERT INTO public.profiles(id,user_id,org_id,role,is_active)
+VALUES(
+  '88888888-8888-4888-8888-888888888888',
+  '80808080-8080-4080-8080-808080808080',
+  'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+  'manager',
+  true
+)
+ON CONFLICT(id) DO NOTHING;
+
+UPDATE public.profiles
+SET role = 'manager'
+WHERE id = '11111111-1111-4111-8111-111111111111';
+
+INSERT INTO public.profiles(id,user_id,org_id,role,is_active)
+VALUES(
+  '77777777-7777-4777-8777-777777777777',
+  '70707070-7070-4070-8070-707070707070',
+  'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+  'admin',
+  true
+)
+ON CONFLICT(id) DO NOTHING;
+
 UPDATE public.wos_production_orders
 SET version_label = 'QA-R6',
     order_number = 'QA-NONPROD-' || id::text
@@ -97,7 +121,8 @@ WHERE pf.image_id = im.id
   AND pf.order_id = '33333333-3333-4333-8333-333333333333';
 
 UPDATE storage.objects ob
-SET name = im.storage_path
+SET name = im.storage_path,
+    updated_at = '2026-11-22T09:59:00.123456Z'::timestamptz
 FROM public.wos_reference_images im
 WHERE ob.id IN (
   SELECT pf.storage_object_id

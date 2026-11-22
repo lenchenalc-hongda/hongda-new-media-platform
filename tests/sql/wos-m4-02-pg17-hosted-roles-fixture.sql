@@ -1,8 +1,8 @@
 \set ON_ERROR_STOP on
 
--- Bootstrap-only synthetic split-owner fixture. The login-role executor proves
--- PostgreSQL permission mechanics only; it is NOT evidence that hosted
--- Supabase exposes this exact Storage-owner executor.
+-- Bootstrap-only synthetic installer fixture. The fallback installer needs no
+-- Storage schema or object privilege; the existing P7 policies are installed
+-- separately by the synthetic Storage owner for RLS behavior tests.
 
 CREATE ROLE hosted_wos_installer
   LOGIN NOSUPERUSER CREATEROLE INHERIT BYPASSRLS
@@ -17,10 +17,11 @@ CREATE ROLE supabase_auth_admin
 GRANT USAGE, CREATE ON SCHEMA public
   TO hosted_wos_installer WITH GRANT OPTION;
 GRANT USAGE ON SCHEMA auth TO hosted_wos_installer;
-GRANT USAGE ON SCHEMA storage
-  TO hosted_wos_installer WITH GRANT OPTION;
 GRANT USAGE ON SCHEMA public, storage TO supabase_storage_admin;
+GRANT USAGE ON SCHEMA auth TO supabase_storage_admin;
 GRANT USAGE ON SCHEMA auth TO supabase_auth_admin;
+GRANT SELECT ON public.profiles, public.wos_production_orders
+  TO supabase_storage_admin;
 
 ALTER TABLE public.profiles OWNER TO hosted_wos_installer;
 ALTER TABLE public.wos_production_orders OWNER TO hosted_wos_installer;
@@ -42,8 +43,6 @@ ALTER FUNCTION public.wos_qa_p2_m2_spec_digest(uuid)
 
 ALTER TABLE storage.objects OWNER TO supabase_storage_admin;
 REVOKE ALL ON storage.objects FROM hosted_wos_installer;
-GRANT SELECT ON storage.objects
-  TO hosted_wos_installer WITH GRANT OPTION;
 
 ALTER FUNCTION auth.uid() OWNER TO supabase_auth_admin;
 GRANT EXECUTE ON FUNCTION auth.uid() TO PUBLIC;
@@ -54,6 +53,16 @@ BEGIN
       'hosted_wos_installer',
       'storage.objects',
       'TRIGGER'
+    )
+    OR pg_catalog.has_table_privilege(
+      'hosted_wos_installer',
+      'storage.objects',
+      'SELECT'
+    )
+    OR pg_catalog.has_schema_privilege(
+      'hosted_wos_installer',
+      'storage',
+      'USAGE'
     )
     OR pg_catalog.pg_has_role(
       'hosted_wos_installer',
@@ -69,12 +78,7 @@ BEGIN
     RAISE EXCEPTION 'M4_HOSTED_ROLE_FIXTURE_OVERPRIVILEGED';
   END IF;
 
-  IF NOT pg_catalog.has_table_privilege(
-      'hosted_wos_installer',
-      'storage.objects',
-      'SELECT WITH GRANT OPTION'
-    )
-    OR pg_catalog.pg_get_userbyid((
+  IF pg_catalog.pg_get_userbyid((
       SELECT relation.relowner
       FROM pg_catalog.pg_class relation
       WHERE relation.oid = 'storage.objects'::regclass

@@ -7,7 +7,7 @@ import {
 } from './qa-image-categories';
 
 export const WOS_M4_PROOF_READ_ROLES = [
-  'admin', 'manager', 'sales', 'operator',
+  'admin', 'manager',
 ] as const;
 export const WOS_M4_PROOF_MAX_IMAGE_BYTES = 20 * 1024 * 1024;
 
@@ -37,6 +37,7 @@ export interface WosM4ProofVerifierOrder {
 export interface WosM4ProofSnapshotImage {
   readonly imageId: string;
   readonly category: WosQaImageCategory;
+  readonly objectCommitment: string;
   readonly expectedSha256: string;
   readonly expiresAt: string;
 }
@@ -70,6 +71,14 @@ export interface WosM4ProofReferenceImage {
   readonly storagePath: string;
 }
 
+export interface WosM4StorageObjectInfo {
+  readonly bucketId: 'wos-private';
+  readonly objectId: string;
+  readonly version: string;
+  readonly lastModified: string;
+  readonly size: number | null;
+}
+
 export interface WosM4ProofVerifierDependencies {
   readonly readSnapshot: (
     orderId: string,
@@ -79,6 +88,10 @@ export interface WosM4ProofVerifierDependencies {
   readonly readReferenceImages: (
     orderId: string,
     imageIds: readonly string[],
+  ) => Promise<unknown>;
+  readonly readObjectInfo: (
+    bucket: string,
+    path: string,
   ) => Promise<unknown>;
   readonly downloadObject: (
     bucket: string,
@@ -95,6 +108,7 @@ export interface WosM4ProofVerifierResult {
   readonly imageCategories: readonly WosQaImageCategory[];
   readonly metadataSnapshotStable: true;
   readonly contentSha256Verified: true;
+  readonly objectIdentityStable: true;
   readonly officeWorkshopDistinct: true;
   readonly proofSetDigestMatch: true;
   readonly m2ReceiptChainComplete: true;
@@ -200,16 +214,19 @@ export function parseWosM4ProofSnapshot(value: unknown): WosM4ProofSnapshot | nu
   const images: WosM4ProofSnapshotImage[] = [];
   for (const candidate of value.images) {
     if (!record(candidate) || !hasExactKeys(candidate, [
-      'imageId', 'category', 'expectedSha256', 'expiresAt',
+      'imageId', 'category', 'objectCommitment', 'expectedSha256', 'expiresAt',
     ])
       || !uuid(candidate.imageId)
       || !isWosQaImageCategory(candidate.category)
+      || typeof candidate.objectCommitment !== 'string'
+      || !sha256Pattern.test(candidate.objectCommitment)
       || typeof candidate.expectedSha256 !== 'string'
       || !sha256Pattern.test(candidate.expectedSha256)
       || !validDate(candidate.expiresAt)) return null;
     images.push({
       imageId: candidate.imageId,
       category: candidate.category,
+      objectCommitment: candidate.objectCommitment,
       expectedSha256: candidate.expectedSha256,
       expiresAt: candidate.expiresAt,
     });
@@ -258,6 +275,90 @@ export function wosM4SnapshotStableProjection(snapshot: WosM4ProofSnapshot): str
 
 export function wosM4ProofSha256(bytes: Uint8Array): string {
   return createHash('sha256').update(Buffer.from(bytes)).digest('hex');
+}
+
+export function canonicalizeWosM4StorageTimestamp(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,6}))?(Z|([+-])(\d{2}):(\d{2}))$/.exec(value);
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const hour = Number(match[4]);
+  const minute = Number(match[5]);
+  const second = Number(match[6]);
+  const fraction = (match[7] ?? '').padEnd(6, '0');
+  const offsetSign = match[9] === '-' ? -1 : 1;
+  const offsetHour = Number(match[10] ?? 0);
+  const offsetMinute = Number(match[11] ?? 0);
+  if (month < 1 || month > 12
+    || day < 1 || day > 31
+    || hour > 23 || minute > 59 || second > 59
+    || offsetHour > 23 || offsetMinute > 59) return null;
+  const baseMs = Date.UTC(year, month - 1, day, hour, minute, second, 0);
+  const date = new Date(baseMs);
+  if (date.getUTCFullYear() !== year
+    || date.getUTCMonth() !== month - 1
+    || date.getUTCDate() !== day
+    || date.getUTCHours() !== hour
+    || date.getUTCMinutes() !== minute
+    || date.getUTCSeconds() !== second) return null;
+  const utcMs = baseMs
+    - offsetSign * (offsetHour * 60 + offsetMinute) * 60_000;
+  return new Date(utcMs).toISOString()
+    .replace(/\.\d{3}Z$/, `.${fraction}Z`);
+}
+
+export function wosM4StorageObjectCommitment(input: {
+  readonly bucket: string;
+  readonly path: string;
+  readonly objectId: string;
+  readonly version: string;
+  readonly lastModified: string;
+}): string {
+  const canonicalTimestamp = canonicalizeWosM4StorageTimestamp(input.lastModified);
+  if (input.bucket !== 'wos-private'
+    || !uuid(input.objectId)
+    || !/^[A-Za-z0-9._:-]{1,200}$/.test(input.version)
+    || canonicalTimestamp === null
+    || input.path.length < 1
+    || input.path.length > 600
+    || /[\r\n]/.test(input.path)) {
+    throw new WosM4ProofVerifierFailure('PROOF_OBJECT_CHANGED', 409);
+  }
+  return createHash('sha256').update([
+    'wos-m4-storage-object-v1',
+    `bucket=${input.bucket}`,
+    `path=${input.path}`,
+    `id=${input.objectId.toLowerCase()}`,
+    `version=${input.version}`,
+    `lastModified=${canonicalTimestamp}`,
+    '',
+  ].join('\n'), 'utf8').digest('hex');
+}
+
+function parseWosM4StorageObjectInfo(
+  value: unknown,
+): WosM4StorageObjectInfo | null {
+  if (!record(value)
+    || value.bucketId !== 'wos-private'
+    || !uuid(value.id)
+    || typeof value.version !== 'string'
+    || !/^[A-Za-z0-9._:-]{1,200}$/.test(value.version)
+    || canonicalizeWosM4StorageTimestamp(value.lastModified) === null
+    || value.archivedAt !== null
+    || value.isDeleteMarker !== false
+    || (value.size != null
+      && (!Number.isSafeInteger(value.size) || Number(value.size) < 1))) {
+    return null;
+  }
+  return {
+    bucketId: 'wos-private',
+    objectId: value.id,
+    version: value.version,
+    lastModified: value.lastModified as string,
+    size: value.size == null ? null : Number(value.size),
+  };
 }
 
 function verifyHashesEqual(actual: string, expected: string): boolean {
@@ -378,6 +479,41 @@ function mapReferenceImages(input: {
   return rows;
 }
 
+async function readWosM4ObjectInfos(input: {
+  readonly snapshot: WosM4ProofSnapshot;
+  readonly referenceById: ReadonlyMap<string, WosM4ProofReferenceImage>;
+  readonly readObjectInfo: WosM4ProofVerifierDependencies['readObjectInfo'];
+  readonly signal?: AbortSignal;
+}): Promise<ReadonlyMap<string, WosM4StorageObjectInfo>> {
+  const values = await Promise.all(input.snapshot.images.map(async image => {
+    const reference = input.referenceById.get(image.imageId);
+    if (!reference) {
+      throw new WosM4ProofVerifierFailure('PROOF_NOT_AVAILABLE', 409);
+    }
+    const raw = await input.readObjectInfo(
+      reference.storageBucket,
+      reference.storagePath,
+    );
+    throwIfAborted(input.signal);
+    const parsed = parseWosM4StorageObjectInfo(raw);
+    if (!parsed) {
+      throw new WosM4ProofVerifierFailure('PROOF_OBJECT_UNAVAILABLE', 409);
+    }
+    const commitment = wosM4StorageObjectCommitment({
+      bucket: reference.storageBucket,
+      path: reference.storagePath,
+      objectId: parsed.objectId,
+      version: parsed.version,
+      lastModified: parsed.lastModified,
+    });
+    if (!verifyHashesEqual(commitment, image.objectCommitment)) {
+      throw new WosM4ProofVerifierFailure('PROOF_OBJECT_CHANGED', 409);
+    }
+    return [image.imageId, parsed] as const;
+  }));
+  return new Map(values);
+}
+
 export async function executeWosM4ProofVerifier(input: {
   readonly actor: WosM4ProofVerifierActor;
   readonly orderId: string;
@@ -416,6 +552,19 @@ export async function executeWosM4ProofVerifier(input: {
   const referenceById = new Map(referenceImages.map(image => [image.id, image]));
   throwIfAborted(input.signal);
 
+  let firstObjectInfos: ReadonlyMap<string, WosM4StorageObjectInfo>;
+  try {
+    firstObjectInfos = await readWosM4ObjectInfos({
+      snapshot: first,
+      referenceById,
+      readObjectInfo: input.dependencies.readObjectInfo,
+      signal: input.signal,
+    });
+  } catch (error) {
+    if (error instanceof WosM4ProofVerifierFailure) throw error;
+    throw new WosM4ProofVerifierFailure('PROOF_OBJECT_UNAVAILABLE', 409);
+  }
+
   let downloaded: readonly Uint8Array[];
   try {
     downloaded = await Promise.all(first.images.map(image => {
@@ -441,10 +590,26 @@ export async function executeWosM4ProofVerifier(input: {
       || bytes.byteLength > WOS_M4_PROOF_MAX_IMAGE_BYTES) {
       throw new WosM4ProofVerifierFailure('PROOF_OBJECT_UNAVAILABLE', 409);
     }
+    const info = firstObjectInfos.get(first.images[index].imageId);
+    if (!info || (info.size !== null && info.size !== bytes.byteLength)) {
+      throw new WosM4ProofVerifierFailure('PROOF_OBJECT_UNAVAILABLE', 409);
+    }
     const actual = wosM4ProofSha256(bytes);
     if (!verifyHashesEqual(actual, first.images[index].expectedSha256)) {
       throw new WosM4ProofVerifierFailure('PROOF_SHA_MISMATCH', 409);
     }
+  }
+
+  try {
+    await readWosM4ObjectInfos({
+      snapshot: first,
+      referenceById,
+      readObjectInfo: input.dependencies.readObjectInfo,
+      signal: input.signal,
+    });
+  } catch (error) {
+    if (error instanceof WosM4ProofVerifierFailure) throw error;
+    throw new WosM4ProofVerifierFailure('PROOF_OBJECT_UNAVAILABLE', 409);
   }
 
   const secondRaw = await input.dependencies.readSnapshot(
@@ -479,6 +644,7 @@ export async function executeWosM4ProofVerifier(input: {
     imageCategories: second.images.map(image => image.category),
     metadataSnapshotStable: true,
     contentSha256Verified: true,
+    objectIdentityStable: true,
     officeWorkshopDistinct: true,
     proofSetDigestMatch: true,
     m2ReceiptChainComplete: true,

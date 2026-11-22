@@ -163,6 +163,18 @@ export async function readWosM4ProofVerifier(request: NextRequest) {
               storagePath: row.storage_path,
             }));
           },
+          async readObjectInfo(bucket, path) {
+            throwIfAborted(controller);
+            const information = await client.storage.from(bucket).info(path);
+            throwIfAborted(controller);
+            if (information.error || !information.data) {
+              throw new WosM4ProofVerifierFailure(
+                'PROOF_OBJECT_UNAVAILABLE',
+                409,
+              );
+            }
+            return information.data;
+          },
           async downloadObject(bucket, path) {
             throwIfAborted(controller);
             const downloaded = await client.storage.from(bucket).download(path);
