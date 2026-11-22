@@ -1,11 +1,19 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { classifyWosInboxImages } from '@/lib/workshop-orders/api-contract';
 import type {
   WosInboxItem,
   WosInboxReadDetail,
 } from '@/lib/workshop-orders/api-contract';
+import {
+  canApplyWosInboxDetailResponse,
+  emptyWosInboxEvidenceState,
+  shouldApplyWosInboxListResponse,
+  wosInboxDetailMatchesItem,
+  wosInboxVersionIdentity,
+  wosInboxVersionKey,
+} from '@/lib/workshop-orders/persisted-inbox-state';
 
 interface ListResponse {
   readonly ok: boolean;
@@ -46,78 +54,177 @@ export default function PersistedWorkshopInbox() {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [detailLoading, setDetailLoading] = useState<Record<string, boolean>>({});
   const [detailErrors, setDetailErrors] = useState<Record<string, string>>({});
+  const itemsRef = useRef<readonly WosInboxItem[]>([]);
+  const listGenerationRef = useRef(0);
+  const listAbortRef = useRef<AbortController | null>(null);
+  const detailGenerationRef = useRef(new Map<string, number>());
+  const detailAbortRef = useRef(new Map<string, AbortController>());
+
+  const invalidateDetails = useCallback(() => {
+    for (const controller of detailAbortRef.current.values()) controller.abort();
+    detailAbortRef.current.clear();
+    detailGenerationRef.current.clear();
+    const empty = emptyWosInboxEvidenceState();
+    setDetails(empty.details);
+    setExpanded(empty.expanded);
+    setDetailLoading(empty.loading);
+    setDetailErrors(empty.errors);
+  }, []);
 
   const refresh = useCallback(async () => {
+    const generation = ++listGenerationRef.current;
+    listAbortRef.current?.abort();
+    const controller = new AbortController();
+    listAbortRef.current = controller;
+    invalidateDetails();
+    itemsRef.current = [];
+    setItems([]);
     setLoading(true);
     setMessage('');
+    setLastFetchedAt('');
     try {
       const response = await fetch('/api/workshop-orders/inbox', {
         method: 'GET',
         credentials: 'same-origin',
         cache: 'no-store',
         headers: { Accept: 'application/json' },
+        signal: controller.signal,
       });
       const result = await response.json() as ListResponse;
+      if (!shouldApplyWosInboxListResponse({
+        responseGeneration: generation,
+        currentGeneration: listGenerationRef.current,
+      })) return;
       if (!response.ok || !result.ok || result.code !== 'OK'
         || result.data?.mode !== 'LIVE_READ_ONLY'
         || result.data.source !== 'SUPABASE_RLS'
         || !Array.isArray(result.data.items)
         || result.data.count !== result.data.items.length) {
+        itemsRef.current = [];
         setItems([]);
         setMessage('INBOX_READ_UNAVAILABLE_OR_UNVERIFIED');
         return;
       }
+      itemsRef.current = result.data.items;
       setItems(result.data.items);
       setLastFetchedAt(new Date().toLocaleString('zh-CN'));
-    } catch {
+    } catch (error) {
+      if (!shouldApplyWosInboxListResponse({
+        responseGeneration: generation,
+        currentGeneration: listGenerationRef.current,
+      }) || controller.signal.aborted
+        || (error instanceof DOMException && error.name === 'AbortError')) return;
+      itemsRef.current = [];
       setItems([]);
       setMessage('INBOX_READ_NETWORK_UNAVAILABLE');
     } finally {
-      setLoading(false);
+      if (shouldApplyWosInboxListResponse({
+        responseGeneration: generation,
+        currentGeneration: listGenerationRef.current,
+      })) {
+        setLoading(false);
+        if (listAbortRef.current === controller) listAbortRef.current = null;
+      }
     }
-  }, []);
+  }, [invalidateDetails]);
 
   useEffect(() => {
     void refresh();
+    return () => {
+      listAbortRef.current?.abort();
+      for (const controller of detailAbortRef.current.values()) controller.abort();
+      detailAbortRef.current.clear();
+    };
   }, [refresh]);
 
   async function toggleDetails(item: WosInboxItem) {
     if (item.entityType !== 'PRODUCTION_ORDER') return;
-    if (expanded[item.id]) {
-      setExpanded(current => ({ ...current, [item.id]: false }));
+    const key = wosInboxVersionKey(wosInboxVersionIdentity(item));
+    if (expanded[key]) {
+      setExpanded(current => ({ ...current, [key]: false }));
       return;
     }
-    if (details[item.id]) {
-      setExpanded(current => ({ ...current, [item.id]: true }));
+    const cached = details[key];
+    if (cached && wosInboxDetailMatchesItem(cached, item)) {
+      setExpanded(current => ({ ...current, [key]: true }));
       return;
     }
-    setDetailLoading(current => ({ ...current, [item.id]: true }));
-    setDetailErrors(current => ({ ...current, [item.id]: '' }));
+    if (cached) {
+      setDetails(current => Object.fromEntries(
+        Object.entries(current).filter(([candidate]) => candidate !== key),
+      ) as Record<string, WosInboxReadDetail>);
+    }
+    const requestListGeneration = listGenerationRef.current;
+    const requestDetailGeneration = (detailGenerationRef.current.get(key) ?? 0) + 1;
+    detailGenerationRef.current.set(key, requestDetailGeneration);
+    detailAbortRef.current.get(key)?.abort();
+    const controller = new AbortController();
+    detailAbortRef.current.set(key, controller);
+    setDetailLoading(current => ({ ...current, [key]: true }));
+    setDetailErrors(current => ({ ...current, [key]: '' }));
     try {
       const response = await fetch('/api/workshop-orders/inbox?orderId=' + encodeURIComponent(item.id), {
         method: 'GET',
         credentials: 'same-origin',
         cache: 'no-store',
         headers: { Accept: 'application/json' },
+        signal: controller.signal,
       });
       const result = await response.json() as DetailResponse;
+      if (!shouldApplyWosInboxListResponse({
+        responseGeneration: requestListGeneration,
+        currentGeneration: listGenerationRef.current,
+      }) || controller.signal.aborted) return;
       const detail = result.data?.detail;
+      const currentItem = itemsRef.current.find(candidate =>
+        candidate.entityType === item.entityType && candidate.id === item.id);
+      const applicable = canApplyWosInboxDetailResponse({
+        requestListGeneration,
+        currentListGeneration: listGenerationRef.current,
+        requestDetailGeneration,
+        currentDetailGeneration: detailGenerationRef.current.get(key),
+        expectedItem: item,
+        currentItem,
+        detail,
+      });
       if (!response.ok || !result.ok || result.code !== 'OK'
         || result.data?.mode !== 'LIVE_READ_ONLY_DETAIL'
         || result.data.source !== 'SUPABASE_RLS'
         || !detail
-        || detail.item.id !== item.id
-        || detail.item.version !== item.version
-        || detail.item.workflowStatus !== item.workflowStatus
-        || detail.canStart !== false) {
-        throw new Error('INBOX_DETAIL_UNVERIFIED');
+        || !applicable) {
+        if (requestListGeneration === listGenerationRef.current
+          && requestDetailGeneration === detailGenerationRef.current.get(key)) {
+          setDetails(current => Object.fromEntries(
+            Object.entries(current).filter(([candidate]) => candidate !== key),
+          ) as Record<string, WosInboxReadDetail>);
+          setExpanded(current => ({ ...current, [key]: false }));
+          setDetailErrors(current => ({
+            ...current,
+            [key]: 'INBOX_DETAIL_STALE_OR_VERSION_MISMATCH',
+          }));
+        }
+        return;
       }
-      setDetails(current => ({ ...current, [item.id]: detail }));
-      setExpanded(current => ({ ...current, [item.id]: true }));
-    } catch {
-      setDetailErrors(current => ({ ...current, [item.id]: 'INBOX_DETAIL_UNAVAILABLE_OR_UNVERIFIED' }));
+      setDetails(current => ({ ...current, [key]: detail }));
+      setExpanded(current => ({ ...current, [key]: true }));
+    } catch (error) {
+      if (!shouldApplyWosInboxListResponse({
+        responseGeneration: requestListGeneration,
+        currentGeneration: listGenerationRef.current,
+      }) || controller.signal.aborted
+        || (error instanceof DOMException && error.name === 'AbortError')) return;
+      setDetailErrors(current => ({
+        ...current,
+        [key]: 'INBOX_DETAIL_UNAVAILABLE_OR_UNVERIFIED',
+      }));
     } finally {
-      setDetailLoading(current => ({ ...current, [item.id]: false }));
+      if (shouldApplyWosInboxListResponse({
+        responseGeneration: requestListGeneration,
+        currentGeneration: listGenerationRef.current,
+      }) && requestDetailGeneration === detailGenerationRef.current.get(key)) {
+        setDetailLoading(current => ({ ...current, [key]: false }));
+      }
+      if (detailAbortRef.current.get(key) === controller) detailAbortRef.current.delete(key);
     }
   }
 
@@ -165,7 +272,8 @@ export default function PersistedWorkshopInbox() {
 
       <div className="space-y-4">
         {items.map(item => {
-          const detail = details[item.id];
+          const itemKey = wosInboxVersionKey(wosInboxVersionIdentity(item));
+          const detail = details[itemKey];
           const imageSet = detail
             ? classifyWosInboxImages(detail.images, item)
             : { current: [], historical: [] };
@@ -221,21 +329,21 @@ export default function PersistedWorkshopInbox() {
 
               {item.entityType === 'PRODUCTION_ORDER' && (
                 <button type="button" onClick={() => { void toggleDetails(item); }}
-                  disabled={detailLoading[item.id]}
+                  disabled={detailLoading[itemKey]}
                   className="mt-3 min-h-11 rounded-md border border-gray-300 bg-gray-50 px-3 py-2 text-xs font-medium text-gray-800 disabled:opacity-50">
-                  {detailLoading[item.id]
+                  {detailLoading[itemKey]
                     ? '读取当前资料中...'
-                    : expanded[item.id] ? '收起当前资料与齐套' : '展开当前资料与齐套'}
+                    : expanded[itemKey] ? '收起当前资料与齐套' : '展开当前资料与齐套'}
                 </button>
               )}
 
-              {detailErrors[item.id] && (
+              {detailErrors[itemKey] && (
                 <p role="alert" className="mt-3 rounded bg-red-50 p-3 text-xs text-red-800">
-                  {detailErrors[item.id]}。不显示缓存或模拟详情。
+                  {detailErrors[itemKey]}。不显示缓存或模拟详情。
                 </p>
               )}
 
-              {expanded[item.id] && detail && (
+              {expanded[itemKey] && detail && wosInboxDetailMatchesItem(detail, item) && (
                 <section className="mt-4 space-y-4 border-t pt-4" aria-label="订单只读资料与齐套详情">
                   <section className="rounded border border-blue-200 bg-blue-50 p-3">
                     <h4 className="text-xs font-semibold text-blue-950">当前版本与 P1 回执</h4>

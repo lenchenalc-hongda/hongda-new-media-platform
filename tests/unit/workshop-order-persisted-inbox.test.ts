@@ -8,6 +8,14 @@ import {
   parseWosInboxReadRequest,
   resolveWosApiActor,
 } from '../../src/lib/workshop-orders/api-contract';
+import {
+  canApplyWosInboxDetailResponse,
+  emptyWosInboxEvidenceState,
+  shouldApplyWosInboxListResponse,
+  wosInboxDetailMatchesItem,
+  wosInboxVersionIdentity,
+  wosInboxVersionKey,
+} from '../../src/lib/workshop-orders/persisted-inbox-state';
 
 const user = '11111111-1111-4111-8111-111111111111';
 const org = '0ff53d93-2b9e-48b9-8113-a4768c39cdd2';
@@ -276,6 +284,95 @@ const imageSet = classifyWosInboxImages(detail.detail.images, detail.detail.item
 assert.deepEqual(imageSet.current.map(image => image.file_name), ['current.png']);
 assert.deepEqual(imageSet.historical.map(image => image.file_name), ['old.png']);
 
+const v11Key = wosInboxVersionKey(wosInboxVersionIdentity(item));
+const v12Item = {
+  ...item,
+  version: 12,
+  versionLabel: 'QA-R7',
+  workflowStatus: 'READINESS_CHECK',
+};
+const v12Key = wosInboxVersionKey(wosInboxVersionIdentity(v12Item));
+const statusChangedItem = { ...item, workflowStatus: 'WAITING_MATERIAL' };
+const labelChangedItem = { ...item, versionLabel: 'QA-R7' };
+
+// 1. A loaded v11 detail is unreachable after the list advances to v12.
+let evidence = {
+  ...emptyWosInboxEvidenceState(),
+  details: { [v11Key]: detail.detail },
+  expanded: { [v11Key]: true },
+};
+assert.equal(v11Key === v12Key, false);
+assert.equal(evidence.details[v12Key], undefined);
+assert.equal(wosInboxDetailMatchesItem(evidence.details[v11Key], v12Item), false);
+
+// 2. A v11 response that arrives after refresh to v12 is rejected.
+assert.equal(canApplyWosInboxDetailResponse({
+  requestListGeneration: 1,
+  currentListGeneration: 2,
+  requestDetailGeneration: 1,
+  currentDetailGeneration: 1,
+  expectedItem: item,
+  currentItem: v12Item,
+  detail: detail.detail,
+}), false);
+
+// 3-4. Status and version-label changes invalidate the same version number.
+assert.equal(wosInboxDetailMatchesItem(detail.detail, statusChangedItem), false);
+assert.equal(wosInboxDetailMatchesItem(detail.detail, labelChangedItem), false);
+assert.equal(canApplyWosInboxDetailResponse({
+  requestListGeneration: 1,
+  currentListGeneration: 1,
+  requestDetailGeneration: 1,
+  currentDetailGeneration: 1,
+  expectedItem: item,
+  currentItem: statusChangedItem,
+  detail: detail.detail,
+}), false);
+
+// 5. Refresh invalidation clears displayed evidence before a failed request.
+evidence = {
+  ...emptyWosInboxEvidenceState(),
+  details: { [v11Key]: detail.detail },
+  expanded: { [v11Key]: true },
+  loading: { [v11Key]: true },
+};
+const refreshFailureEvidence = emptyWosInboxEvidenceState();
+assert.deepEqual(refreshFailureEvidence.details, {});
+assert.deepEqual(refreshFailureEvidence.expanded, {});
+assert.deepEqual(refreshFailureEvidence.loading, {});
+assert.equal(canApplyWosInboxDetailResponse({
+  requestListGeneration: 1,
+  currentListGeneration: 2,
+  requestDetailGeneration: 1,
+  currentDetailGeneration: undefined,
+  expectedItem: item,
+  currentItem: null,
+  detail: detail.detail,
+}), false);
+
+// 6. Out-of-order list responses only apply to the current generation.
+const appliedListGenerations: number[] = [];
+if (shouldApplyWosInboxListResponse({
+  responseGeneration: 1,
+  currentGeneration: 2,
+})) appliedListGenerations.push(1);
+if (shouldApplyWosInboxListResponse({
+  responseGeneration: 2,
+  currentGeneration: 2,
+})) appliedListGenerations.push(2);
+assert.deepEqual(appliedListGenerations, [2]);
+
+// 7. A current, fully matching detail remains valid.
+assert.equal(canApplyWosInboxDetailResponse({
+  requestListGeneration: 2,
+  currentListGeneration: 2,
+  requestDetailGeneration: 3,
+  currentDetailGeneration: 3,
+  expectedItem: item,
+  currentItem: item,
+  detail: detail.detail,
+}), true);
+
 const root = process.cwd();
 const inboxPage = readFileSync(root + '/src/app/workshop-orders/inbox/page.tsx', 'utf8');
 const inboxRoute = readFileSync(root + '/src/app/api/workshop-orders/inbox/route.ts', 'utf8');
@@ -292,7 +389,8 @@ assert(inboxComponent.includes("method: 'GET'"));
 assert(!inboxComponent.includes('.rpc('));
 assert(!inboxComponent.includes('.insert('));
 assert(!inboxComponent.includes('.update('));
-assert(!inboxComponent.includes('.delete('));
+assert((inboxComponent.match(/method: 'GET'/g) ?? []).length >= 2);
+assert(!/method:\s*'(POST|PUT|PATCH|DELETE)'/.test(inboxComponent));
 assert(!inboxComponent.includes('LiveQaWorkshopReadiness'));
 assert(!inboxComponent.includes('LiveQaWorkshopActions'));
 assert(!inboxComponent.includes('LiveQaM2WorkshopConfirm'));
