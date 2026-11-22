@@ -5,6 +5,11 @@ import {
   parseWosP2OfficeRevision,
   type WosP2OfficeRevision,
 } from '@/lib/workshop-orders/p2-office-revision-contract';
+import {
+  classifyWosWriteFailure,
+  shouldApplyWosOfficeReturnedRead,
+  wosResponsibleDisplay,
+} from '@/lib/workshop-orders/order-lifecycle-state';
 
 type ReturnReason = { reason: string; code: string; openedAt: string; operatorProfileId: string };
 type Returned = {
@@ -12,9 +17,19 @@ type Returned = {
   productName: string; productMaterial: string;
   requestedQuantity: number; currentBatchQuantity: number;
   customerAcceptanceStandard: string | null; positionReference: string | null;
-  version: number; versionLabel: string; updatedAt: string; reasons: ReturnReason[];
+  version: number; versionLabel: string; workflowStatus: string;
+  updatedAt: string;
+  responsibleProfileId: string; responsibleName: string | null;
+  responsibleRole: string | null; responsibleActive: boolean | null;
+  reasons: ReturnReason[];
 };
-type Result = { ok: boolean; code: string; data?: { items: Returned[]; count: number } };
+type Result = {
+  ok: boolean; code: string;
+  data?: {
+    items: Returned[]; count: number;
+    capabilities?: { revisionWriteEnabled?: boolean };
+  };
+};
 type Patch = WosP2OfficeRevision['patch'];
 type Field = keyof Patch;
 const fields: ReadonlyArray<{key:Field; label:string; numeric?:boolean}> = [
@@ -37,8 +52,9 @@ function currentFields(item:Returned):Record<Field,string> {
   };
 }
 
-function Correction({item,onSaved}:{item:Returned;onSaved:()=>void}) {
-  const flag=process.env.NEXT_PUBLIC_WOS_P2_QA_OFFICE_REVISION_ENABLED==='true';
+function Correction({item,writeEnabled,onSaved}:{
+  item:Returned;writeEnabled:boolean;onSaved:()=>void;
+}) {
   const [values,setValues]=useState<Record<Field,string>>(()=>currentFields(item));
   const [reason,setReason]=useState('');
   const [pending,setPending]=useState(false);
@@ -46,7 +62,7 @@ function Correction({item,onSaved}:{item:Returned;onSaved:()=>void}) {
   const replay=useRef<{fingerprint:string;requestId:string}|null>(null);
 
   async function submit(action:'SAVE_CORRECTION'|'RESUBMIT_CORRECTION') {
-    if (!flag || pending) return;
+    if (!writeEnabled || pending) return;
     const original=currentFields(item);
     const patch:Record<string,string|number>={};
     for (const f of fields) {
@@ -78,11 +94,20 @@ function Correction({item,onSaved}:{item:Returned;onSaved:()=>void}) {
       });
       const result:{ok?:boolean;code?:string;data?:{orderId?:string;version?:number;requestId?:string;workflowStatus?:string}}=
         await response.json();
+      const disposition=classifyWosWriteFailure(response.status,result.code);
+      if(disposition==='REFRESH_REQUIRED'){
+        replay.current=null;
+        setMessage('订单版本已被其他修订更新。本次请求未确认成功，正在重新读取最新版本。');
+        onSaved();
+        return;
+      }
       if (!response.ok || !result.ok
           || !['QA_OFFICE_CORRECTION_SAVED','QA_OFFICE_RESUBMITTED','QA_OFFICE_REVISION_REPLAYED'].includes(result.code??'')
           || result.data?.orderId!==item.orderId || result.data?.version!==item.version+1
           || result.data?.requestId!==requestId) {
-        setMessage('保存未验证：'+(result.code??'UNKNOWN')+'；保持表单不变重试会复用同一个请求 ID。');
+        setMessage(disposition==='RETRY_SAME_REQUEST'
+          ? '保存暂不可用：'+(result.code??'UNKNOWN')+'；保持表单不变重试会复用同一个请求 ID。'
+          : '保存未通过：'+(result.code??'UNKNOWN')+'；请核对权限和订单状态。');
         return;
       }
       replay.current=null;
@@ -96,29 +121,29 @@ function Correction({item,onSaved}:{item:Returned;onSaved:()=>void}) {
   }
 
   return <div className="mt-3 space-y-3 border-t border-amber-200 pt-3">
-    {!flag && <p role="status" className="rounded border border-amber-300 bg-amber-50 p-2 text-amber-950">
-      QA 写入未授权，六项字段可供查看；保存与重提按钮保持关闭。
+    {!writeEnabled && <p role="status" className="rounded border border-amber-300 bg-amber-50 p-2 text-amber-950">
+      受控写入 Gate 当前关闭，六项字段可供查看；保存与重提按钮保持关闭。
     </p>}
     <div className="grid gap-3 sm:grid-cols-2">
       {fields.map(f=><label key={f.key} className="block font-medium text-gray-800">
         {f.label}
         <input type={f.numeric?'number':'text'} min={f.numeric?1:undefined} step={f.numeric?1:undefined}
-          value={values[f.key]} disabled={!flag||pending} maxLength={f.numeric?undefined:(f.key==='productName'||f.key==='productMaterial'?200:2000)}
+          value={values[f.key]} disabled={!writeEnabled||pending} maxLength={f.numeric?undefined:(f.key==='productName'||f.key==='productMaterial'?200:2000)}
           onChange={e=>{setValues(v=>({...v,[f.key]:e.target.value}));setMessage('');}}
           className="mt-1 w-full rounded border border-gray-300 px-2 py-2 text-sm disabled:bg-gray-100"/>
       </label>)}
     </div>
     <label className="block font-medium text-gray-800">
       补资料说明（10 至 500 字，写入不可变历史）
-      <textarea value={reason} disabled={!flag||pending} maxLength={500}
+      <textarea value={reason} disabled={!writeEnabled||pending} maxLength={500}
         onChange={e=>{setReason(e.target.value);setMessage('');}}
         className="mt-1 block w-full rounded border border-gray-300 p-2 text-sm disabled:bg-gray-100"
         rows={3} placeholder="例如：已按车间反馈核实客户验收标准和印刷定位要求。"/>
     </label>
     <div className="flex flex-wrap gap-2">
-      <button type="button" disabled={!flag||pending} onClick={()=>void submit('SAVE_CORRECTION')}
+      <button type="button" disabled={!writeEnabled||pending} onClick={()=>void submit('SAVE_CORRECTION')}
         className="rounded bg-blue-800 px-3 py-2 font-medium text-white disabled:opacity-40">保存修订（生成新版本）</button>
-      <button type="button" disabled={!flag||pending} onClick={()=>void submit('RESUBMIT_CORRECTION')}
+      <button type="button" disabled={!writeEnabled||pending} onClick={()=>void submit('RESUBMIT_CORRECTION')}
         className="rounded bg-emerald-800 px-3 py-2 font-medium text-white disabled:opacity-40">重新提交车间复核</button>
     </div>
     {message&&<p role="status" className="text-amber-950">{message}</p>}
@@ -130,29 +155,60 @@ export default function LiveQaReturnedOrders() {
   const [items,setItems]=useState<Returned[]>([]);
   const [loading,setLoading]=useState(true);
   const [error,setError]=useState('');
+  const [writeEnabled,setWriteEnabled]=useState(false);
+  const readGenerationRef=useRef(0);
+  const readAbortRef=useRef<AbortController|null>(null);
   const load=useCallback(async()=>{
-    setLoading(true);setError('');setItems([]);
+    const generation=++readGenerationRef.current;
+    readAbortRef.current?.abort();
+    const controller=new AbortController();
+    readAbortRef.current=controller;
+    setLoading(true);setError('');setItems([]);setWriteEnabled(false);
     try {
       const response=await fetch('/api/workshop-orders/p2/returns',{
         credentials:'same-origin',cache:'no-store',headers:{Accept:'application/json'},
+        signal:controller.signal,
       });
       const value:Result=await response.json();
+      if(!shouldApplyWosOfficeReturnedRead({
+        requestGeneration:generation,
+        currentGeneration:readGenerationRef.current,
+        aborted:controller.signal.aborted,
+      })) return;
       if(!response.ok||!value.ok||value.code!=='QA_RETURNED_ORDERS_READ_ONLY'
-        ||!Array.isArray(value.data?.items)||value.data?.count!==value.data.items.length){
+        ||!Array.isArray(value.data?.items)||value.data?.count!==value.data.items.length
+        ||typeof value.data?.capabilities?.revisionWriteEnabled!=='boolean'){
         throw new Error('QA_RETURNED_ORDERS_UNVERIFIED');
       }
       setItems(value.data.items);
+      setWriteEnabled(value.data.capabilities.revisionWriteEnabled);
     } catch {
+      if(!shouldApplyWosOfficeReturnedRead({
+        requestGeneration:generation,
+        currentGeneration:readGenerationRef.current,
+        aborted:controller.signal.aborted,
+      })) return;
+      setItems([]);setWriteEnabled(false);
       setError('退回订单读取失败或无权限，不能显示旧数据。');
-    } finally {setLoading(false);}
+    } finally {
+      if(shouldApplyWosOfficeReturnedRead({
+        requestGeneration:generation,
+        currentGeneration:readGenerationRef.current,
+        aborted:controller.signal.aborted,
+      })) setLoading(false);
+      if(readAbortRef.current===controller)readAbortRef.current=null;
+    }
   },[]);
-  useEffect(()=>{void load();},[load]);
+  useEffect(()=>{
+    void load();
+    return()=>readAbortRef.current?.abort();
+  },[load]);
   return <section className="mb-6 rounded-lg border border-amber-300 bg-amber-50 p-4"
     aria-label="办公室退回补资料任务">
     <header className="flex flex-wrap items-center justify-between gap-3">
       <div>
-        <h2 className="text-sm font-semibold text-amber-950">车间退回资料（QA 当前版本）</h2>
-        <p className="mt-1 text-xs text-amber-900">按退回原因修改六项允许字段。所有写入使用受控 RPC，保留历史快照；不覆盖原始提交。</p>
+        <h2 className="text-sm font-semibold text-amber-950">车间退回待办</h2>
+        <p className="mt-1 text-xs text-amber-900">读取当前组织的真实退回订单。只能修改六项允许字段；保存修订与重新提交相互独立，原始提交回执不变。</p>
       </div>
       <button type="button" onClick={()=>void load()} disabled={loading}
         className="rounded border border-amber-400 bg-white px-3 py-2 text-xs disabled:opacity-50">
@@ -163,15 +219,40 @@ export default function LiveQaReturnedOrders() {
     {!loading&&!error&&!items.length&&<p role="status" className="mt-3 text-xs text-amber-950">当前账号没有待补资料订单。</p>}
     {!loading&&!error&&items.length>0&&<div className="mt-3 space-y-3">
       <p className="text-xs text-amber-950">待补齐订单：{items.length}</p>
-      {items.map(o=><article key={o.orderId+':'+o.version}
-        className="rounded border border-amber-200 bg-white p-3 text-xs">
-        <p className="font-semibold">{o.orderNumber} · {o.productName}</p>
-        <p className="mt-1 text-gray-700">{o.customerName} · {o.projectName||'无关联项目'} · {o.versionLabel} · 数据版本 {o.version}</p>
+      {items.map(o=>{
+        const responsible=wosResponsibleDisplay(o);
+        return <article key={o.orderId+':'+o.version}
+          className="rounded border border-amber-200 bg-white p-3 text-xs">
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div>
+            <p className="font-semibold">{o.orderNumber} · {o.productName}</p>
+            <p className="mt-1 text-gray-700">{o.customerName} · {o.projectName||'无关联项目'} · {o.versionLabel} · 数据版本 {o.version}</p>
+          </div>
+          <span className="rounded-full border border-amber-300 bg-amber-50 px-2 py-1 font-medium text-amber-900">
+            {o.workflowStatus}
+          </span>
+        </div>
+        <dl className="mt-2 grid gap-2 sm:grid-cols-3">
+          <div>
+            <dt className="text-gray-500">当前责任人</dt>
+            <dd className="mt-1 font-medium text-gray-900">{responsible.name}</dd>
+          </div>
+          <div>
+            <dt className="text-gray-500">责任人角色</dt>
+            <dd className="mt-1 font-medium text-gray-900">{responsible.role}</dd>
+          </div>
+          <div>
+            <dt className="text-gray-500">退回更新时间</dt>
+            <dd className="mt-1 font-medium text-gray-900">{new Date(o.updatedAt).toLocaleString('zh-CN')}</dd>
+          </div>
+        </dl>
+        {responsible.warning&&<p className="mt-2 text-amber-900">{responsible.warning}</p>}
         <ul className="mt-2 list-disc space-y-1 pl-4 text-red-800">
           {o.reasons.map((r,i)=><li key={i}>{r.reason} · {r.openedAt} · 操作人 {r.operatorProfileId}</li>)}
         </ul>
-        <Correction item={o} onSaved={()=>void load()}/>
-      </article>)}
+        <Correction item={o} writeEnabled={writeEnabled} onSaved={()=>void load()}/>
+      </article>;
+      })}
     </div>}
   </section>;
 }

@@ -31,7 +31,7 @@
 
 P1 Inbox 的原始 `SUBMITTED` 状态不会覆盖当前订单状态。当前 `READINESS_CHECK/v11/QA-R6` 只在原始 Inbox、提交回执、源修订或已登记的 QA-R 修订历史、当前订单版本和十条版本绑定状态链全部一致时返回。图片仅按当前订单版本、`READY` 和未 superseded 标记为当前；旧版本或 superseded 图片明确显示为历史。
 
-页面不导入接单、退回、物料确认、签样确认、最终 readiness、排产或开工组件。所有结果固定 `canStart=false`；四类物料或双签记录通过仍不等于人工生产放行。
+只读详情本身仍只调用 GET；接单、退回和修订复核由独立的 `OperatorWorkflowActions` 写入组件承载。该组件只在受控客户端 Gate、服务器 Gate、可信身份、组织 RLS、合法状态和当前版本同时通过时提交，且在 Gate 关闭时只显示禁用说明。页面不导入物料确认、签样确认、最终 readiness、排产或开工组件。所有结果固定 `canStart=false`；四类物料或双签记录通过仍不等于人工生产放行。
 
 这并不证明数据库表已部署，也不证明 RLS 实际正确：该阶段不执行 Supabase SQL，Production Migration 与私有 Storage 没有授权。
 
@@ -42,3 +42,21 @@ P1 Inbox 的原始 `SUBMITTED` 状态不会覆盖当前订单状态。当前 `RE
 现有已接入 CI 的 `tests/unit/workshop-order-suite.test.ts` 导入 `workshop-order-api.test.ts` 和 `workshop-order-persisted-inbox.test.ts`；新增覆盖读取 Flag 关闭、Production/错误认证模式/错误项目拒绝、Viewer 拒绝、Office/Operator 可读、跨组织拒绝、v11 当前状态与十条历史、旧版图片隔离、读取异常不退化为模拟订单，以及 Inbox 页面无写操作调用。以上为合约测试；真实 Supabase RLS/Auth 仍须在专用 QA Preview 中单独验收。
 
 下一阶段仅可在独立隔离 Supabase 测试库验证表、RLS、幂等 RPC、事务和审计；需要新范围锁定的 SQL 变更 PR。待实测证明正确才能允许真实 POST，Production SQL/RLS/数据及 Storage 一律仍需单独 Human Gate。此 PR 不能授权上游自动发起写入。
+
+## Operator 接单与 Office 修订闭环
+
+普通 Inbox 的 `SUBMITTED` 订单提供两个独立动作：
+
+- `ACCEPT`：调用既有 `wos_qa_p2_operator_action`，数据库确认后订单进入 `WORKSHOP_REVIEW`。
+- `RETURN_FOR_INFORMATION`：必须提供至少 10 字原因，数据库确认后进入 `NEEDS_INFORMATION`，并保留退回原因和审计历史。
+
+`WORKSHOP_REVIEW` 只有在状态历史中存在与当前 `version`、`versionLabel` 和合法请求 ID 匹配的 `QA_P2_OFFICE_RESUBMIT_CORRECTION` 时，才显示 `REVIEW_CORRECTION`。复核调用既有 `wos_qa_p2_review_correction`，成功目标为 `WAITING_MATERIAL`，不得跳到 readiness 或开工。
+
+操作结果只有在响应中的订单 ID、请求 ID、版本 `expectedVersion + 1` 和目标状态均与数据库合同一致时才被接受。成功后读取组件作废旧详情缓存并重新请求当前列表；断线重试保持相同 request ID，以数据库幂等回执为准。并发使用旧版本请求时由 RPC 返回版本/幂等冲突。
+
+Office 的普通生产下单页通过 `WOS_QA_INBOX_READONLY_ENABLED` 独立读取 `GET /api/workshop-orders/p2/returns`，不依赖 P5C 或 P7 写开关。退回任务显示原因、时间、责任人、当前版本和六项可补充字段；责任人档案若因 RLS 不可见则回退显示 Profile ID，若已停用则明确提示重新指派，不阻断整张待办。保存修订与重新提交由既有 `wos_qa_p2_office_revision` 分别处理：
+
+- `SAVE_CORRECTION`：停留在 `NEEDS_INFORMATION`，生成新的修订版本和历史快照。
+- `RESUBMIT_CORRECTION`：进入 `WORKSHOP_REVIEW`；空 patch 仅允许用于数据库已存在当前版本保存修订的情况。
+
+原始 P1 Inbox 和 Submission Receipt 不变。所有写入仍分别受 `WOS_P2_QA_MUTATIONS_ENABLED`、`WOS_P2_QA_OFFICE_REVISION_ENABLED`、服务器返回的写能力、可信身份、组织 RLS 与数据库原子事务约束。409 版本/幂等冲突会作废旧请求标识并重新读取最新版本；断线后未确认结果才保留同一请求 ID 重试。Office 退回列表使用请求代数与 AbortController，旧响应不得覆盖新结果。本轮代码开发不开启任何 Gate，也不执行 QA/Production SQL。

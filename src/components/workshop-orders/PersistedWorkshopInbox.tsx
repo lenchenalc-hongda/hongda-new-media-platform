@@ -14,6 +14,7 @@ import {
   wosInboxVersionIdentity,
   wosInboxVersionKey,
 } from '@/lib/workshop-orders/persisted-inbox-state';
+import OperatorWorkflowActions from './OperatorWorkflowActions';
 
 interface ListResponse {
   readonly ok: boolean;
@@ -23,6 +24,10 @@ interface ListResponse {
     readonly source?: string;
     readonly items?: readonly WosInboxItem[];
     readonly count?: number;
+    readonly capabilities?: {
+      readonly canOperateWorkflow?: boolean;
+      readonly workflowWriteEnabled?: boolean;
+    };
   } | null;
 }
 
@@ -54,6 +59,8 @@ export default function PersistedWorkshopInbox() {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [detailLoading, setDetailLoading] = useState<Record<string, boolean>>({});
   const [detailErrors, setDetailErrors] = useState<Record<string, string>>({});
+  const [canOperateWorkflow, setCanOperateWorkflow] = useState(false);
+  const [workflowWriteEnabled, setWorkflowWriteEnabled] = useState(false);
   const itemsRef = useRef<readonly WosInboxItem[]>([]);
   const listGenerationRef = useRef(0);
   const listAbortRef = useRef<AbortController | null>(null);
@@ -79,6 +86,8 @@ export default function PersistedWorkshopInbox() {
     invalidateDetails();
     itemsRef.current = [];
     setItems([]);
+    setCanOperateWorkflow(false);
+    setWorkflowWriteEnabled(false);
     setLoading(true);
     setMessage('');
     setLastFetchedAt('');
@@ -99,7 +108,9 @@ export default function PersistedWorkshopInbox() {
         || result.data?.mode !== 'LIVE_READ_ONLY'
         || result.data.source !== 'SUPABASE_RLS'
         || !Array.isArray(result.data.items)
-        || result.data.count !== result.data.items.length) {
+        || result.data.count !== result.data.items.length
+        || typeof result.data.capabilities?.canOperateWorkflow !== 'boolean'
+        || typeof result.data.capabilities?.workflowWriteEnabled !== 'boolean') {
         itemsRef.current = [];
         setItems([]);
         setMessage('INBOX_READ_UNAVAILABLE_OR_UNVERIFIED');
@@ -107,6 +118,8 @@ export default function PersistedWorkshopInbox() {
       }
       itemsRef.current = result.data.items;
       setItems(result.data.items);
+      setCanOperateWorkflow(result.data.capabilities.canOperateWorkflow);
+      setWorkflowWriteEnabled(result.data.capabilities.workflowWriteEnabled);
       setLastFetchedAt(new Date().toLocaleString('zh-CN'));
     } catch (error) {
       if (!shouldApplyWosInboxListResponse({
@@ -116,6 +129,8 @@ export default function PersistedWorkshopInbox() {
         || (error instanceof DOMException && error.name === 'AbortError')) return;
       itemsRef.current = [];
       setItems([]);
+      setCanOperateWorkflow(false);
+      setWorkflowWriteEnabled(false);
       setMessage('INBOX_READ_NETWORK_UNAVAILABLE');
     } finally {
       if (shouldApplyWosInboxListResponse({
@@ -236,7 +251,7 @@ export default function PersistedWorkshopInbox() {
             <h2 className="text-sm font-semibold text-blue-950">真实持久化订单</h2>
             <p className="mt-1 text-xs leading-5 text-blue-900">
               当前列表通过登录身份、组织 RLS、服务器组织约束和 P1 提交回执校验读取。
-              本页面不提供接单、退回、物料确认、签样确认、排产或开工操作。
+              接单、退回与修订复核只在独立写入 Gate、角色和当前版本同时通过时开放。
             </p>
           </div>
           <button type="button" onClick={() => { void refresh(); }} disabled={loading}
@@ -385,6 +400,20 @@ export default function PersistedWorkshopInbox() {
                     </dl>
                   </section>
 
+                  {detail.blockers.length > 0 && (
+                    <section className="rounded border border-red-200 bg-red-50 p-3">
+                      <h4 className="text-xs font-semibold text-red-950">退回原因与解除状态</h4>
+                      <ul className="mt-2 space-y-1 text-xs text-red-900">
+                        {detail.blockers.map((blocker, index) => (
+                          <li key={blocker.blocker_code + ':' + index}>
+                            {blocker.status === 'OPEN' ? '待处理' : '已解除'} ·
+                            {' '}{blocker.description}
+                          </li>
+                        ))}
+                      </ul>
+                    </section>
+                  )}
+
                   <section>
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <h4 className="text-xs font-semibold text-gray-900">四类物料只读核验</h4>
@@ -471,6 +500,14 @@ export default function PersistedWorkshopInbox() {
                   <p role="status" className="rounded border border-red-200 bg-red-50 p-3 text-xs font-semibold text-red-900">
                     canStart=false。即使物料、图片基准和双签记录均通过，仍必须经过独立人工生产放行。
                   </p>
+
+                  <OperatorWorkflowActions
+                    item={item}
+                    detail={detail}
+                    canOperate={canOperateWorkflow}
+                    writeEnabled={workflowWriteEnabled}
+                    onSuccess={() => { void refresh(); }}
+                  />
                 </section>
               )}
             </article>

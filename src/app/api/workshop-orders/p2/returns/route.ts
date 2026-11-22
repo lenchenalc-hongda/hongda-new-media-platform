@@ -1,10 +1,8 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { resolveVerifiedSupabaseIdentity } from '@/lib/auth/supabase-identity';
-import {
-  isApprovedWosSandboxUrl,
-  isWosNonproductionApiEnabled,
-} from '@/lib/workshop-orders/api-contract';
+import { isWosQaInboxReadonlyEnabled } from '@/lib/workshop-orders/api-contract';
+import { isWosP2QaOfficeRevisionEnabled } from '@/lib/workshop-orders/p2-office-revision-contract';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -15,13 +13,13 @@ function answer(status:number, code:string, data:unknown=null) {
 
 /** Office returned-order lookup; read-only even while P2 QA writes are off. */
 export async function GET() {
-  if (!isWosNonproductionApiEnabled({
+  if (!isWosQaInboxReadonlyEnabled({
     vercelEnv:process.env.VERCEL_ENV,
-    nodeEnv:process.env.NODE_ENV,
-    enabled:process.env.WOS_P5C_NONPROD_API_ENABLED,
-  }) || !isApprovedWosSandboxUrl(process.env.NEXT_PUBLIC_SUPABASE_URL)
-      || process.env.VERCEL_ENV!=='preview') {
-    return answer(503,'NONPRODUCTION_ONLY_DISABLED');
+    authMode:process.env.AUTH_MODE,
+    enabled:process.env.WOS_QA_INBOX_READONLY_ENABLED,
+    supabaseUrl:process.env.NEXT_PUBLIC_SUPABASE_URL,
+  })) {
+    return answer(503,'NONPRODUCTION_READ_ONLY_DISABLED');
   }
   const db=await createClient();
   if (!db) return answer(503,'QA_DATABASE_UNAVAILABLE');
@@ -34,9 +32,19 @@ export async function GET() {
     return answer(403,'FORBIDDEN');
   }
   const actor=p.data;
+  const capabilities={
+    revisionWriteEnabled:isWosP2QaOfficeRevisionEnabled({
+      vercelEnv:process.env.VERCEL_ENV,
+      nodeEnv:process.env.NODE_ENV,
+      flag:process.env.WOS_P2_QA_OFFICE_REVISION_ENABLED,
+      supabaseUrl:process.env.NEXT_PUBLIC_SUPABASE_URL,
+      allowLocal:process.env.WOS_ALLOW_LOCAL_SUPABASE,
+      publicAllowLocal:process.env.NEXT_PUBLIC_WOS_ALLOW_LOCAL_SUPABASE,
+    }),
+  };
   try {
     let query=db.from('wos_production_orders')
-      .select('id,organization_id,created_by_profile_id,order_number,customer_name_snapshot,project_name_snapshot,product_name,product_material,requested_quantity,current_batch_quantity,customer_acceptance_standard,position_reference,version,version_label,workflow_status,updated_at')
+      .select('id,organization_id,created_by_profile_id,project_owner_profile_id,order_number,customer_name_snapshot,project_name_snapshot,product_name,product_material,requested_quantity,current_batch_quantity,customer_acceptance_standard,position_reference,version,version_label,workflow_status,updated_at')
       .eq('organization_id',actor.org_id).eq('workflow_status','NEEDS_INFORMATION')
       .order('updated_at',{ascending:false}).limit(101);
     if (actor.role==='sales') query=query.eq('created_by_profile_id',actor.id);
@@ -50,8 +58,28 @@ export async function GET() {
          ||(actor.role==='sales'&&row.created_by_profile_id!==actor.id))) {
       return answer(409,'RETURNED_ORDER_SCOPE_MISMATCH');
     }
-    if (!list.length) return answer(200,'QA_RETURNED_ORDERS_READ_ONLY',{ items:[],count:0 });
+    if (!list.length) return answer(200,'QA_RETURNED_ORDERS_READ_ONLY',{
+      items:[],count:0,capabilities,
+    });
     const ids=list.map(row=>row.id);
+    const responsibleIds=Array.from(new Set(list.flatMap(row=>{
+      const id=row.project_owner_profile_id??row.created_by_profile_id;
+      return id?[id]:[];
+    })));
+    if (list.some(row=>!row.project_owner_profile_id&&!row.created_by_profile_id))
+      return answer(409,'RETURN_RESPONSIBLE_PROFILE_MISSING');
+    const responsibleProfiles=await db.from('profiles')
+      .select('id,org_id,user_id,full_name,role,is_active')
+      .eq('org_id',actor.org_id).in('id',responsibleIds).limit(201);
+    const visibleResponsibleProfiles=!responsibleProfiles.error
+      &&Array.isArray(responsibleProfiles.data)
+      &&responsibleProfiles.data.length<201
+      ? responsibleProfiles.data.filter(profile=>
+        profile.org_id===actor.org_id&&responsibleIds.includes(profile.id))
+      : [];
+    const responsibleById=new Map(
+      visibleResponsibleProfiles.map(profile=>[profile.id,profile]),
+    );
     const blockers=await db.from('wos_blockers')
       .select('id,organization_id,entity_type,entity_id,description,blocker_code,status,opened_at,opened_by_profile_id')
       .eq('organization_id',actor.org_id).eq('entity_type','PRODUCTION_ORDER')
@@ -72,7 +100,18 @@ export async function GET() {
       customerAcceptanceStandard:row.customer_acceptance_standard,
       positionReference:row.position_reference,
       version:row.version,versionLabel:row.version_label,
+      workflowStatus:row.workflow_status,
       updatedAt:row.updated_at,
+      responsibleProfileId:row.project_owner_profile_id??row.created_by_profile_id,
+      responsibleName:responsibleById.get(
+        row.project_owner_profile_id??row.created_by_profile_id,
+      )?.full_name??null,
+      responsibleRole:responsibleById.get(
+        row.project_owner_profile_id??row.created_by_profile_id,
+      )?.role??null,
+      responsibleActive:responsibleById.get(
+        row.project_owner_profile_id??row.created_by_profile_id,
+      )?.is_active??null,
       reasons:blockers.data.filter(b=>b.entity_id===row.id).map(b=>({
         reason:b.description,code:b.blocker_code,openedAt:b.opened_at,
         operatorProfileId:b.opened_by_profile_id,
@@ -83,7 +122,9 @@ export async function GET() {
       // present as a valid workflow state.
       return answer(409,'RETURN_REASON_MISSING');
     }
-    return answer(200,'QA_RETURNED_ORDERS_READ_ONLY',{items,count:items.length});
+    return answer(200,'QA_RETURNED_ORDERS_READ_ONLY',{
+      items,count:items.length,capabilities,
+    });
   } catch {
     return answer(503,'QA_RETURNED_ORDERS_UNAVAILABLE');
   }

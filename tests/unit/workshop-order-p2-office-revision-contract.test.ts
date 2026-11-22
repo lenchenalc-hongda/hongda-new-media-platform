@@ -86,9 +86,10 @@ for(const marker of [
   "db.from('wos_production_orders')",
   "db.rpc('wos_qa_p2_office_revision'",
 ]) assert(route.includes(marker),'Office API gate missing '+marker);
-assert(app.includes('NEXT_PUBLIC_WOS_P2_QA_OFFICE_REVISION_ENABLED'));
+assert(app.includes('writeEnabled'));
+assert(!app.includes('NEXT_PUBLIC_WOS_P2_QA_OFFICE_REVISION_ENABLED'));
 assert(app.includes('replay.current?.fingerprint===fingerprint'));
-assert(app.includes('disabled={!flag||pending}'));
+assert(app.includes('disabled={!writeEnabled||pending}'));
 assert(app.includes('重新提交车间复核'));
 assert(operator.includes("client.rpc('wos_qa_p2_review_correction'"));
 assert(api.includes('WORKSHOP_REVISION_UNVERIFIED'));
