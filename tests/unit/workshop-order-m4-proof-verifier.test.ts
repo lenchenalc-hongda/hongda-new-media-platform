@@ -602,6 +602,17 @@ const sdkRequests: Array<{
 }> = [];
 let sdkDownloadRequests = 0;
 const syntheticUserJwt = 'synthetic-office-user-jwt';
+const originalWebSocketDescriptor = Object.getOwnPropertyDescriptor(
+  globalThis,
+  'WebSocket',
+);
+if (!originalWebSocketDescriptor) {
+  Object.defineProperty(globalThis, 'WebSocket', {
+    configurable: true,
+    value: class SyntheticWebSocket {},
+    writable: true,
+  });
+}
 const sdkClient = createSupabaseClient(
   'https://xulmpqaknlwqqculbsek.supabase.co',
   'synthetic-anon-key',
@@ -677,6 +688,11 @@ assert(!sdkRequests.some(request =>
   request.url.includes('render/image/authenticated')));
 assert(sdkRequests.every(request =>
   request.authorization === 'Bearer ' + syntheticUserJwt));
+if (originalWebSocketDescriptor) {
+  Object.defineProperty(globalThis, 'WebSocket', originalWebSocketDescriptor);
+} else {
+  Reflect.deleteProperty(globalThis, 'WebSocket');
+}
 
 console.log('workshop-order-m4-proof-verifier.test.ts: PASS');
 console.log('WOS_M4_PROOF_ROLE_MATRIX=PASS');
