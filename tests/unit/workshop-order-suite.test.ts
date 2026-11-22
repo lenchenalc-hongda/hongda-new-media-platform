@@ -6,6 +6,7 @@ import './workshop-order-scheduling.test';
 import './workshop-order-sampling-execution.test';
 import './workshop-order-nonproduction-persistence.test';
 import './workshop-order-api.test';
+import './workshop-order-persisted-inbox.test';
 import './workshop-order-p6-atomic-submission.test';
 import './workshop-order-p6-private-image-contract.test';
 import './workshop-order-p7-storage-sql-syntax.test';
