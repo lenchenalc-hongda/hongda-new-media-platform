@@ -1,0 +1,301 @@
+- generic [ref=f13e1]:
+  - generic [ref=f13e2]:
+    - complementary [ref=f13e3]:
+      - link [ref=f13e5] [cursor=pointer]:
+        - /url: /workspace-home
+        - img "宏达印业 Logo" [ref=f13e6]
+        - generic [ref=f13e7]:
+          - paragraph [ref=f13e8]: Hongda OS
+          - paragraph [ref=f13e9]: 宏达印业数字化业务系统
+      - navigation [ref=f13e10]:
+        - link "🏠 首页" [ref=f13e11] [cursor=pointer]:
+          - /url: /workspace-home
+          - generic [ref=f13e12]: 🏠
+          - generic [ref=f13e13]: 首页
+        - button "🎬 新媒体" [ref=f13e16] [cursor=pointer]:
+          - generic [ref=f13e17]: 🎬
+          - generic [ref=f13e18]: 新媒体
+        - button "📢 公众号工厂" [ref=f13e22] [cursor=pointer]:
+          - generic [ref=f13e23]: 📢
+          - generic [ref=f13e24]: 公众号工厂
+        - button "📚 知识库" [ref=f13e28] [cursor=pointer]:
+          - generic [ref=f13e29]: 📚
+          - generic [ref=f13e30]: 知识库
+        - button "📑 商务单据" [ref=f13e34] [cursor=pointer]:
+          - generic [ref=f13e35]: 📑
+          - generic [ref=f13e36]: 商务单据
+        - generic [ref=f13e39]:
+          - button "🏭 车间订单" [ref=f13e40] [cursor=pointer]:
+            - generic [ref=f13e41]: 🏭
+            - generic [ref=f13e42]: 车间订单
+          - generic [ref=f13e45]:
+            - link "🏭 车间总览" [ref=f13e46] [cursor=pointer]:
+              - /url: /workshop-orders
+              - generic [ref=f13e47]: 🏭
+              - generic [ref=f13e48]: 车间总览
+            - link "📝 生产下单" [ref=f13e49] [cursor=pointer]:
+              - /url: /workshop-orders/production/new
+              - generic [ref=f13e50]: 📝
+              - generic [ref=f13e51]: 生产下单
+            - link "📥 车间收件箱" [ref=f13e52] [cursor=pointer]:
+              - /url: /workshop-orders/inbox
+              - generic [ref=f13e53]: 📥
+              - generic [ref=f13e54]: 车间收件箱
+            - link "✅ 开工前检查" [ref=f13e55] [cursor=pointer]:
+              - /url: /workshop-orders/readiness
+              - generic [ref=f13e56]: ✅
+              - generic [ref=f13e57]: 开工前检查
+            - link "🧪 打样申请" [ref=f13e58] [cursor=pointer]:
+              - /url: /workshop-orders/sampling/new
+              - generic [ref=f13e59]: 🧪
+              - generic [ref=f13e60]: 打样申请
+            - link "📅 排期预览" [ref=f13e61] [cursor=pointer]:
+              - /url: /workshop-orders/schedule
+              - generic [ref=f13e62]: 📅
+              - generic [ref=f13e63]: 排期预览
+        - button "⚙️ 管理" [ref=f13e65] [cursor=pointer]:
+          - generic [ref=f13e66]: ⚙️
+          - generic [ref=f13e67]: 管理
+      - generic [ref=f13e70]:
+        - generic [ref=f13e71]: 宏达印业
+        - generic [ref=f13e72]:
+          - link "首页" [ref=f13e73] [cursor=pointer]:
+            - /url: /workspace-home
+          - button "退出" [ref=f13e74] [cursor=pointer]
+    - main [ref=f13e75]:
+      - generic [ref=f13e76]: V5.7.0
+      - generic [ref=f13e77]:
+        - generic [ref=f13e78]:
+          - generic [ref=f13e79]:
+            - heading "车间收件箱与齐套检查" [level=1] [ref=f13e80]
+            - paragraph [ref=f13e81]: 按生产单和打样申请分别查看状态、优先级及有序齐套阻断。
+          - link "返回工作台" [ref=f13e83] [cursor=pointer]:
+            - /url: /dashboard
+        - generic [ref=f13e84]:
+          - generic [ref=f13e85]:
+            - heading "QA Preview · 车间真实 Inbox" [level=2] [ref=f13e86]
+            - paragraph [ref=f13e87]: 本页通过当前账号的 Supabase JWT 和 HTTP GET 读取真实、组织及角色受限的车间任务。 点击“刷新真实车间任务”可在切换到 Operator 登录后核对刚刚提交的订单。 不提供生产开工或排期按钮。
+            - generic [ref=f13e88]:
+              - button "刷新真实车间任务" [ref=f13e92] [cursor=pointer]
+              - status [ref=f13e90]: 上次查询：2026/11/21 00:06:45
+              - link "返回 QA 生产下单" [ref=f13e91] [cursor=pointer]:
+                - /url: /workshop-orders/production/new
+          - paragraph [ref=f13e941]:
+            - text: 真实受限任务数量：
+            - strong [ref=f13e942]: "1"
+          - article [ref=f13e95]:
+            - generic [ref=f13e96]:
+              - generic [ref=f13e97]:
+                - paragraph [ref=f13e98]: 生产订单 · QA-NONPROD-4b7d6a39-b225-469c-bc95-a0818466fa77
+                - heading "QA printed plastic cup" [level=3] [ref=f13e99]
+                - paragraph [ref=f13e100]: QA NONPRODUCTION ONLY · QA-R6 · MEDIUM
+              - generic [ref=f13e101]: READINESS_CHECK
+            - paragraph [ref=f13e102]: 订单 ID：eb1a7c6f-eef8-4d06-966c-3bbd82ad8c1d · 已提交于 2026/11/20 23:50:53
+            - generic [ref=f13e103]:
+              - button "收起生产要求" [active] [ref=f13e944] [cursor=pointer]
+              - button "用当前车间身份读取私有图片" [ref=f13e105] [cursor=pointer]
+            - region "订单生产详情" [ref=f13e945]:
+              - generic [ref=f13e946]:
+                - generic [ref=f13e947]:
+                  - term [ref=f13e948]: 客户
+                  - definition [ref=f13e949]: QA NONPRODUCTION ONLY
+                - generic [ref=f13e950]:
+                  - term [ref=f13e951]: 关联项目
+                  - definition [ref=f13e952]: WOS Preview Browser Acceptance
+                - generic [ref=f13e953]:
+                  - term [ref=f13e954]: 产品
+                  - definition [ref=f13e955]: QA printed plastic cup
+                - generic [ref=f13e956]:
+                  - term [ref=f13e957]: 材质
+                  - definition [ref=f13e958]: PP plastic
+                - generic [ref=f13e959]:
+                  - term [ref=f13e960]: 订单数量
+                  - definition [ref=f13e961]: "100"
+                - generic [ref=f13e962]:
+                  - term [ref=f13e963]: 本批数量
+                  - definition [ref=f13e964]: "100"
+                - generic [ref=f13e965]:
+                  - term [ref=f13e966]: 交货日期
+                  - definition [ref=f13e967]: 2026-11-27
+                - generic [ref=f13e968]:
+                  - term [ref=f13e969]: 工艺与表面处理
+                  - definition [ref=f13e970]: None (QA only)
+                - generic [ref=f13e971]:
+                  - term [ref=f13e972]: 图案范围
+                  - definition [ref=f13e973]: FULL
+                - generic [ref=f13e974]:
+                  - term [ref=f13e975]: 接缝要求
+                  - definition [ref=f13e976]: 1 mm QA tolerance
+                - generic [ref=f13e977]:
+                  - term [ref=f13e978]: 印刷位置
+                  - definition [ref=f13e979]: 12 mm below rim, QA only
+                - generic [ref=f13e980]:
+                  - term [ref=f13e981]: 客户验收标准
+                  - definition [ref=f13e982]: 按当前 V1 合成样核对颜色、套准与外观，补充办公室验收说明
+                - generic [ref=f13e983]:
+                  - term [ref=f13e984]: 包装方式
+                  - definition [ref=f13e985]: QA sample carton
+                - generic [ref=f13e986]:
+                  - term [ref=f13e987]: 每箱数量
+                  - definition [ref=f13e988]: "50"
+                - generic [ref=f13e989]:
+                  - term [ref=f13e990]: 标签要求
+                  - definition [ref=f13e991]: QA NONPRODUCTION ONLY - DO NOT SHIP
+                - generic [ref=f13e992]:
+                  - term [ref=f13e993]: 生产资料版本
+                  - definition [ref=f13e994]: QA-R6
+              - heading "参考图片与历史版本（仅展示元数据，图片下载仍受 Storage RLS 控制）" [level=4] [ref=f13e995]
+              - list [ref=f13e996]:
+                - listitem [ref=f13e997]: SIGNED_SAMPLE · QA-R6 · READY · qa-preview-proof.png · 当前订单版本（不代表已完成签样确认）
+                - listitem [ref=f13e998]: CUSTOMER_APPROVED_SAMPLE · QA-R6 · READY · qa-preview-proof.png · 当前订单版本（不代表已完成签样确认）
+                - listitem [ref=f13e999]: FILM_PATTERN · QA-R6 · READY · qa-preview-proof.png · 当前订单版本（不代表已完成签样确认）
+                - listitem [ref=f13e1000]: PRODUCT · QA-R6 · READY · qa-preview-proof.png · 当前订单版本（不代表已完成签样确认）
+                - listitem [ref=f13e1001]: SIGNED_SAMPLE · V1 · READY · qa-preview-proof.png · 历史或非就绪记录
+                - listitem [ref=f13e1002]: CUSTOMER_APPROVED_SAMPLE · V1 · READY · qa-preview-proof.png · 历史或非就绪记录
+                - listitem [ref=f13e1003]: FILM_PATTERN · V1 · READY · qa-preview-proof.png · 历史或非就绪记录
+                - listitem [ref=f13e1004]: PRODUCT · V1 · READY · qa-preview-proof.png · 历史或非就绪记录
+              - region "真实 QA 物料齐套与接单核对" [ref=f13e1005]:
+                - generic [ref=f13e1006]:
+                  - generic [ref=f13e1007]:
+                    - heading "车间接单与物料齐套核对（真实 QA 只读）" [level=4] [ref=f13e1008]
+                    - paragraph [ref=f13e1009]: 仅使用当前账号经 RLS 授权的物料、签样基准和阻断记录。 未登记、版本不一致或查询失败一律视为未齐套。
+                  - button "刷新真实物料状态" [ref=f13e1010] [cursor=pointer]
+                - paragraph [ref=f13e1011]: 最后核对：2026/11/21 00:07:03 · 来源：QA_RLS_READ_ONLY
+                - region "办公室与车间交接进度" [ref=f13e1012]:
+                  - heading "办公室 → 车间交接进度（真实 QA 状态历史）" [level=5] [ref=f13e1013]
+                  - paragraph [ref=f13e1014]: 当前版本 v14 · 当前状态：READINESS_CHECK · 来源：QA_RLS_STATUS_HISTORY_ONLY。 本进度只核对状态历史，不等同于独立回执验收或开工授权。
+                  - list [ref=f13e1015]:
+                    - listitem [ref=f13e1016]:
+                      - generic [ref=f13e1017]: 历史待核验 · 办公室提交
+                    - listitem [ref=f13e1018]:
+                      - generic [ref=f13e1019]: 历史待核验 · 车间接单
+                    - listitem [ref=f13e1020]:
+                      - generic [ref=f13e1021]: 历史待核验 · 车间退回补资料
+                    - listitem [ref=f13e1022]:
+                      - generic [ref=f13e1023]: 历史待核验 · 办公室保存六字段修订
+                    - listitem [ref=f13e1024]:
+                      - generic [ref=f13e1025]: 历史待核验 · 办公室重新提交
+                    - listitem [ref=f13e1026]:
+                      - generic [ref=f13e1027]: 历史待核验 · 车间复核修订
+                  - status [ref=f13e1028]: 交接历史证据不完整或与订单版本不匹配；本页不作完成判定。
+                  - paragraph [ref=f13e1029]: 缺少当前版本可信交接证明；旧 QA v7 六步不能由 v8+ 或多余历史复用。
+                - generic [ref=f13e1030]:
+                  - generic [ref=f13e1031]:
+                    - paragraph [ref=f13e1032]: 花膜 · 已核实
+                    - paragraph [ref=f13e1033]: VERSION_VERIFIED · 当前订单版本的到位记录与确认人已核实
+                    - generic [ref=f13e1034]:
+                      - term [ref=f13e1035]: 物料版本
+                      - definition [ref=f13e1036]: QA-R6
+                      - term [ref=f13e1037]: 预计到位
+                      - definition [ref=f13e1038]: 未登记
+                      - term [ref=f13e1039]: 实际到位
+                      - definition [ref=f13e1040]: 未登记
+                      - term [ref=f13e1041]: 核对人员
+                      - definition [ref=f13e1042]: 已有人员记录
+                      - term [ref=f13e1043]: 核对时间
+                      - definition [ref=f13e1044]: 2026-11-20T16:03:42.231403+00:00
+                      - term [ref=f13e1045]: 异常说明
+                      - definition [ref=f13e1046]: 已核对当前 QA-R6 花膜图案版本并完成实物版本核验
+                  - generic [ref=f13e1047]:
+                    - paragraph [ref=f13e1048]: 夹具 · 已核实
+                    - paragraph [ref=f13e1049]: FIT_VERIFIED · 当前订单版本的到位记录与确认人已核实
+                    - generic [ref=f13e1050]:
+                      - term [ref=f13e1051]: 物料版本
+                      - definition [ref=f13e1052]: QA-R6
+                      - term [ref=f13e1053]: 预计到位
+                      - definition [ref=f13e1054]: 未登记
+                      - term [ref=f13e1055]: 实际到位
+                      - definition [ref=f13e1056]: 未登记
+                      - term [ref=f13e1057]: 核对人员
+                      - definition [ref=f13e1058]: 已有人员记录
+                      - term [ref=f13e1059]: 核对时间
+                      - definition [ref=f13e1060]: 2026-11-20T16:04:49.001094+00:00
+                      - term [ref=f13e1061]: 异常说明
+                      - definition [ref=f13e1062]: 已完成当前 QA-R6 夹具试装，定位和产品适配合格
+                  - generic [ref=f13e1063]:
+                    - paragraph [ref=f13e1064]: 来料及产品 · 已核实
+                    - paragraph [ref=f13e1065]: QUANTITY_VERIFIED · 当前订单版本的到位记录与确认人已核实
+                    - generic [ref=f13e1066]:
+                      - term [ref=f13e1067]: 物料版本
+                      - definition [ref=f13e1068]: QA-R6
+                      - term [ref=f13e1069]: 预计到位
+                      - definition [ref=f13e1070]: 未登记
+                      - term [ref=f13e1071]: 实际到位
+                      - definition [ref=f13e1072]: 未登记
+                      - term [ref=f13e1073]: 应到 / 实到
+                      - definition [ref=f13e1074]: 100 / 100
+                      - term [ref=f13e1075]: 本批数量缺口
+                      - definition [ref=f13e1076]: "0"
+                      - term [ref=f13e1077]: 核对人员
+                      - definition [ref=f13e1078]: 已有人员记录
+                      - term [ref=f13e1079]: 核对时间
+                      - definition [ref=f13e1080]: 2026-11-20T16:05:52.075463+00:00
+                      - term [ref=f13e1081]: 异常说明
+                      - definition [ref=f13e1082]: 当前批次应到和实到均为 100，数量核对完成
+                  - generic [ref=f13e1083]:
+                    - paragraph [ref=f13e1084]: 客户确认样 / 大货签样 · 已核实
+                    - paragraph [ref=f13e1085]: VERIFIED · 当前订单版本的到位记录与确认人已核实
+                    - generic [ref=f13e1086]:
+                      - term [ref=f13e1087]: 物料版本
+                      - definition [ref=f13e1088]: QA-R6
+                      - term [ref=f13e1089]: 预计到位
+                      - definition [ref=f13e1090]: 未登记
+                      - term [ref=f13e1091]: 实际到位
+                      - definition [ref=f13e1092]: 未登记
+                      - term [ref=f13e1093]: 核对人员
+                      - definition [ref=f13e1094]: 已有人员记录
+                      - term [ref=f13e1095]: 核对时间
+                      - definition [ref=f13e1096]: 2026-11-20T16:06:45.349529+00:00
+                      - term [ref=f13e1097]: 异常说明
+                      - definition [ref=f13e1098]: 已核对当前版本的客户确认样和实物签样，签样状态与 proof-set 一致
+                - region "当前生产图片基准与办公室车间双重核对" [ref=f13e1099]:
+                  - heading "当前图片 / 签样基准（只读证据）" [level=5] [ref=f13e1100]
+                  - generic [ref=f13e1101]:
+                    - paragraph [ref=f13e1102]: CURRENT 基准记录：1
+                    - paragraph [ref=f13e1103]: 基准版本：QA-R6
+                    - paragraph [ref=f13e1104]: 当前生产版本匹配：记录匹配
+                    - paragraph [ref=f13e1105]: 办公室签认：时间已登记
+                    - paragraph [ref=f13e1106]: 车间签认：时间已登记
+                  - paragraph [ref=f13e1107]: 时间戳与版本标签不等于独立人员签名、私有图片 SHA-256 完整性证明或实物签样核验； 后续必须通过受审核的独立证据链及人工放行。
+                - status [ref=f13e1108]: 物料、签样或当前事务版本交接证明未全部核实，禁止排期放行或开工。
+                - generic [ref=f13e1109]:
+                  - heading "真实订单状态历史（操作人与时间）" [level=5] [ref=f13e1110]
+                  - list [ref=f13e1111]:
+                    - listitem [ref=f13e1112]: WAITING_MATERIAL → READINESS_CHECK · QA_P2_CONFIRM_MATERIAL ·operator / 22222222-2222-4222-8222-222222222222 · 2026-11-20T16:06:45.349529+00:00 · 已核对当前版本的客户确认样和实物签样，签样状态与 proof-set 一致
+                    - listitem [ref=f13e1113]: WAITING_MATERIAL → WAITING_MATERIAL · QA_P2_CONFIRM_MATERIAL ·operator / 22222222-2222-4222-8222-222222222222 · 2026-11-20T16:05:52.075463+00:00 · 当前批次应到和实到均为 100，数量核对完成
+                    - listitem [ref=f13e1114]: WAITING_MATERIAL → WAITING_MATERIAL · QA_P2_CONFIRM_MATERIAL ·operator / 22222222-2222-4222-8222-222222222222 · 2026-11-20T16:04:49.001094+00:00 · 已完成当前 QA-R6 夹具试装，定位和产品适配合格
+                    - listitem [ref=f13e1115]: WAITING_MATERIAL → WAITING_MATERIAL · QA_P2_CONFIRM_MATERIAL ·operator / 22222222-2222-4222-8222-222222222222 · 2026-11-20T16:03:42.231403+00:00 · 已核对当前 QA-R6 花膜图案版本并完成实物版本核验
+                    - listitem [ref=f13e1116]: WORKSHOP_REVIEW → WAITING_MATERIAL · QA_P2_REVIEW_CORRECTION ·operator / 22222222-2222-4222-8222-222222222222 · 2026-11-20T15:56:19.532638+00:00 · 已核对 QA-R6 最新验收标准和历史快照，解除对应资料阻塞后进入物料核对
+                    - listitem [ref=f13e1117]: NEEDS_INFORMATION → WORKSHOP_REVIEW · QA_P2_OFFICE_RESUBMIT_CORRECTION ·sales / 11111111-1111-4111-8111-111111111111 · 2026-11-20T15:55:07.964763+00:00 · 补齐资料后重新提交车间复核，请按当前修订版本重新核对
+                    - listitem [ref=f13e1118]: NEEDS_INFORMATION → NEEDS_INFORMATION · QA_P2_OFFICE_SAVE_CORRECTION ·sales / 11111111-1111-4111-8111-111111111111 · 2026-11-20T15:54:49.131917+00:00 · 已根据车间退回意见补齐客户验收标准，保留原提交版本并生成新版本
+                    - listitem [ref=f13e1119]: WORKSHOP_REVIEW → NEEDS_INFORMATION · QA_P2_RETURN_FOR_INFORMATION ·operator / 22222222-2222-4222-8222-222222222222 · 2026-11-20T15:53:37.204688+00:00 · 客户批准样说明需补齐，请办公室补充验收标准后再提交复核
+                    - listitem [ref=f13e1120]: SUBMITTED → WORKSHOP_REVIEW · QA_P2_ACCEPT ·operator / 22222222-2222-4222-8222-222222222222 · 2026-11-20T15:52:52.525894+00:00 · 本地车间确认收到订单并核对当前版本，接单后仍需资料复核
+                    - listitem [ref=f13e1121]: DRAFT → SUBMITTED · OFFICE_SUBMISSION_COMMITTED ·sales / 11111111-1111-4111-8111-111111111111 · 2026-11-20T15:50:53.01752+00:00 · 无备注
+                - region "车间四类图片独立签认" [ref=f13e1122]:
+                  - heading "四类图片 proof-set 车间独立签认" [level=5] [ref=f13e1123]
+                  - paragraph [ref=f13e1124]: 基准：ac3ced5e-9587-4e56-9f89-772dd09356c6 · Office：已签认 · Workshop：已签认
+                  - generic [ref=f13e1125]:
+                    - text: 签认依据（10–500 字）
+                    - textbox "签认依据（10–500 字）" [ref=f13e1126]: 车间使用独立账号核对同一四类图片证明集合
+                  - generic [ref=f13e1127]:
+                    - button "车间签认同一 proof-set" [disabled] [ref=f13e1128]
+                    - button "刷新签认状态" [ref=f13e1129] [cursor=pointer]
+                  - paragraph [ref=f13e1130]: 等待办公室签认，或当前订单版本已变化，不能签认旧图片集合。
+                - region "车间受控操作" [ref=f13e1131]:
+                  - heading "车间接单、资料退回、修订复核与物料核对" [level=4] [ref=f13e1132]
+                  - generic [ref=f13e1133]:
+                    - text: 操作类型
+                    - combobox "操作类型" [ref=f13e1134]:
+                      - option "确认接单（仅进入车间审阅，不代表开工）" [selected]
+                      - option "资料不完整，退回办公室"
+                      - option "登记花膜 / 夹具 / 来料 / 签样的实际状态"
+                      - option "复核办公室的最新修订并解除对应资料阻塞（不准许开工）"
+                  - generic [ref=f13e1135]:
+                    - text: 操作依据 / 不齐套原因（10–500 字）
+                    - textbox "操作依据 / 不齐套原因（10–500 字）" [ref=f13e1136]:
+                      - /placeholder: 请写明实际核对结果；退回时写清需补齐的资料
+                  - alert [ref=f13e1137]: 当前订单状态为 READINESS_CHECK，此操作不符合允许的状态流转。
+                  - button "提交到 QA 原子事务" [disabled] [ref=f13e1138]
+                  - paragraph [ref=f13e1139]: "**禁止开工：** 本功能不包含开工权限；即使物料登记齐套也必须另行签样核查与放行。"
+                - paragraph [ref=f13e1140]: 在 QA SQL 与权限单独审核安装前，操作按钮保持关闭。 确认开工不属于本阶段授权，本页面不会伪造已保存操作。
+  - alert [ref=f13e106]

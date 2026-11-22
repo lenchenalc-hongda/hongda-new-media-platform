@@ -1,0 +1,7 @@
+verify-real-github-oidc	Run verified read-only issuer evidence	2026-11-21T00:25:27.0359824Z WOS_P1_REAL_GITHUB_OIDC_SIGNATURE=PASS
+verify-real-github-oidc	Run verified read-only issuer evidence	2026-11-21T00:25:27.0361232Z WOS_P1_OIDC_ISSUER_REPO_ID=1464840651
+verify-real-github-oidc	Run verified read-only issuer evidence	2026-11-21T00:25:27.0361925Z WOS_P1_OIDC_TARGET_BUSINESS_REPO_ID=1286793274
+verify-real-github-oidc	Run verified read-only issuer evidence	2026-11-21T00:25:27.0362603Z WOS_P1_OIDC_WORKFLOW_SHA=48672e5e6ff728be1cde15b8c2b63f137ec82984
+verify-real-github-oidc	Run verified read-only issuer evidence	2026-11-21T00:25:27.0363401Z WOS_P1_OIDC_TOKEN_FINGERPRINT_SHA256=7ef19fa31d20e1f73751008a12e2cd32f10794191ad05576dda5adfddd5b5003
+verify-real-github-oidc	Run verified read-only issuer evidence	2026-11-21T00:25:27.0364322Z WOS_P1_OIDC_INDEPENDENT_REVIEWER=NOT_YET_VERIFIED
+verify-real-github-oidc	Run verified read-only issuer evidence	2026-11-21T00:25:27.0364948Z WOS_P1_OIDC_CAS_GATE=CLOSED
