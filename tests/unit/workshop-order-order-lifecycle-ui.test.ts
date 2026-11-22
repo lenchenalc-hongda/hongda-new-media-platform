@@ -247,7 +247,9 @@ for (const marker of [
   'responsibleActive',
   'revisionWriteEnabled',
   "db.from('wos_blockers')",
-  "'RETURN_REASON_MISSING'",
+  ".eq('blocker_code','P2_DOCUMENTS_INCOMPLETE')",
+  ".eq('blocker_category','DOCUMENT')",
+  'buildWosP2ReturnReasons',
 ]) assert(returnsRoute.includes(marker), 'returned read route missing ' + marker);
 assert(!returnsRoute.includes('WOS_P5C_NONPROD_API_ENABLED'));
 assert(!returnsRoute.includes('WOS_P7_NONPROD_SUBMIT_ENABLED'));

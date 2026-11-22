@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server';
 import { resolveVerifiedSupabaseIdentity } from '@/lib/auth/supabase-identity';
 import { isWosQaInboxReadonlyEnabled } from '@/lib/workshop-orders/api-contract';
 import { isWosP2QaOfficeRevisionEnabled } from '@/lib/workshop-orders/p2-office-revision-contract';
+import { buildWosP2ReturnReasons } from '@/lib/workshop-orders/p2-return-reasons';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -81,17 +82,19 @@ export async function GET() {
       visibleResponsibleProfiles.map(profile=>[profile.id,profile]),
     );
     const blockers=await db.from('wos_blockers')
-      .select('id,organization_id,entity_type,entity_id,description,blocker_code,status,opened_at,opened_by_profile_id')
+      .select('id,organization_id,entity_type,entity_id,description,blocker_code,blocker_category,status,opened_at,opened_by_profile_id')
       .eq('organization_id',actor.org_id).eq('entity_type','PRODUCTION_ORDER')
       .in('entity_id',ids).eq('status','OPEN')
+      .eq('blocker_code','P2_DOCUMENTS_INCOMPLETE')
+      .eq('blocker_category','DOCUMENT')
       .order('opened_at',{ascending:false}).limit(201);
     if (blockers.error) return answer(503,'RETURN_BLOCKERS_READ_FAILED');
     if (!Array.isArray(blockers.data) || blockers.data.length>200)
       return answer(409,'RETURN_BLOCKER_LIMIT_EXCEEDED');
-    if (blockers.data.some(b=>b.organization_id!==actor.org_id
-      ||b.entity_type!=='PRODUCTION_ORDER'||!ids.includes(b.entity_id))) {
-      return answer(409,'RETURN_BLOCKER_SCOPE_MISMATCH');
-    }
+    const returnReasons=buildWosP2ReturnReasons({
+      organizationId:actor.org_id,orderIds:ids,blockers:blockers.data,
+    });
+    if (!returnReasons.ok) return answer(409,returnReasons.code);
     const items=list.map(row=>({
       orderId:row.id, orderNumber:row.order_number,
       customerName:row.customer_name_snapshot,projectName:row.project_name_snapshot,
@@ -112,16 +115,8 @@ export async function GET() {
       responsibleActive:responsibleById.get(
         row.project_owner_profile_id??row.created_by_profile_id,
       )?.is_active??null,
-      reasons:blockers.data.filter(b=>b.entity_id===row.id).map(b=>({
-        reason:b.description,code:b.blocker_code,openedAt:b.opened_at,
-        operatorProfileId:b.opened_by_profile_id,
-      })),
+      reasons:returnReasons.reasonsByOrder.get(row.id)??[],
     }));
-    if (items.some(row=>row.reasons.length===0)) {
-      // A returned order without a durable blocker reason is not safe to
-      // present as a valid workflow state.
-      return answer(409,'RETURN_REASON_MISSING');
-    }
     return answer(200,'QA_RETURNED_ORDERS_READ_ONLY',{
       items,count:items.length,capabilities,
     });
