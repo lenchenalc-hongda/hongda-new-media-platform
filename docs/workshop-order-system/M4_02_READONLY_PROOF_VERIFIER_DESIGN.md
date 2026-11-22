@@ -1,9 +1,10 @@
 # M4-02 Minimal Read-Only Proof Verifier
 
-Status: DESIGN ONLY
+Status: SOURCE IMPLEMENTED / QA SQL NOT INSTALLED
 
-This document does not authorize SQL creation, installation, role changes,
-Storage changes, Gate activation, QA writes or Production deployment.
+This document does not authorize SQL installation, role changes, live Storage
+changes, Gate activation, QA writes or Production deployment. The source and
+disposable PostgreSQL 17 evidence are review artifacts only.
 
 ## Current Evidence Gap
 
@@ -20,6 +21,19 @@ historical signed baseline/status evidence but intentionally keeps
 `currentPrivateProofState=UNVERIFIED...`, `reviewReady=false` and
 `canStart=false`.
 
+A read-only audit of QA project `xulmpqaknlwqqculbsek` on 2026-11-22 confirmed:
+
+- PostgreSQL 17.6 and the expected proof/receipt columns are present.
+- `authenticated` has no SELECT on the two private proof/receipt tables.
+- The three installed M2 functions match the reviewed local definitions by
+  function SHA-256, owner, `SECURITY DEFINER` flag and `search_path`.
+- All Operator, Office and M2 Gates are OFF with TTL NULL and
+  `approval_reference=NOT_AUTHORIZED`.
+- Existing QA proofs for the historical v11 order are expired. They remain
+  historical evidence, not current verification evidence.
+- The existing private Storage SELECT policy permits Operator only while an
+  order is `SUBMITTED`; M4 verification occurs at `READINESS_CHECK`.
+
 ## Design Goal
 
 Provide one GET-only, order-scoped verifier for a bounded QA order. It must
@@ -33,9 +47,10 @@ distinguish:
 
 The verifier never grants start authority. `canStart=false` is invariant.
 
-## Future Object Allowlist
+## QA-Only Object Allowlist
 
-No object in this list exists under this authorization.
+None of these objects is installed by this source task. The uninstalled forward
+SQL creates and the rollback SQL removes:
 
 ### Read-only database function
 
@@ -58,10 +73,13 @@ active `profiles` row for that user and reject missing, inactive or ambiguous
 profiles. Caller-supplied actor, organization, role or profile IDs are not
 accepted.
 
-The RPC return type is itself the safe DTO. It must never contain a Storage
+The RPC return type is itself the safe DTO. It never contains a Storage
 path, object ID, signed URL, access token or raw proof row. Because
 `authenticated` can invoke the RPC directly through PostgREST, the route-level
-read switch is defense in depth, not the authorization boundary.
+read switch is defense in depth, not the database authorization boundary.
+Direct access is intentionally limited to the isolated QA database and a
+`QA-NONPROD-` order, requires the real same-organization Profile, and returns
+only a safe non-executable DTO. The read switch gates the business route.
 
 Allowed read roles for this verifier:
 
@@ -74,19 +92,25 @@ Allowed read roles for this verifier:
 
 Viewer and anonymous callers fail closed.
 
-### Optional server-side helper functions
+### Scoped Storage download guard
 
-Only if independently reviewed:
+The existing Storage policy above is incompatible with Operator verification
+at `READINESS_CHECK`. A narrow QA-only policy is therefore included in the
+uninstalled SQL:
 
-- `public.wos_qa_m4_assert_exact_four_image_baseline(...)`
-- `public.wos_qa_m4_assert_proof_receipt_chain(...)`
+- `public.wos_qa_m4_can_download_proof(p_bucket_id text, p_object_name text)`
+- `wos_m4_proof_verifier_storage_read` on `storage.objects`
 
-Both must remain private (`REVOKE ALL FROM PUBLIC, anon, authenticated`) and be
-callable only by the snapshot function. They must not return Storage paths to
-the browser.
+The guard returns a boolean only. It resolves an exact READY, non-superseded
+same-organization image, then calls the full snapshot verifier using that
+order's numeric version and label. Storage access is allowed only when the
+snapshot succeeds and its four-image DTO contains that image ID. This prevents
+the Storage policy from becoming a weaker alternate verifier. It does not
+return a path, object ID, proof row, signed URL or token.
 
-No new table, trigger, column, RLS policy, direct table grant or dynamic SQL is
-required by this design.
+No new table, column, trigger, direct private-table grant or dynamic SQL is
+required. The only RLS/Storage-policy proposal is the object-scoped read
+allowance above, and it remains uninstalled.
 
 ## Function Checks
 
@@ -128,27 +152,30 @@ The database can validate stored metadata and object identity. It cannot prove
 that file bytes currently hash to the recorded SHA merely by querying a proof
 row.
 
-The future Next.js server route must:
+The implemented Next.js server route must:
 
 1. Call the snapshot RPC using the authenticated user's server-side Supabase
    client, never service role.
 2. Read selected `wos_reference_images` metadata through the same authenticated
    RLS client.
 3. Download each `wos-private` object through the user-scoped Storage client.
-4. Recompute SHA-256 over the exact downloaded bytes with Web Crypto.
+4. Recompute SHA-256 over the exact downloaded bytes with Node `node:crypto`
+   on the Node.js server runtime.
 5. Compare all recomputed hashes with the proof snapshot.
 6. Call the snapshot RPC again and require the same object identity/version,
    updated time, SHA, expiry and baseline fingerprint.
-7. Return verified only if both snapshots match, all bytes download, every hash
+7. Recheck expiry against the server's current wall clock after all downloads
+   and the second snapshot, not only against a database statement-start time.
+8. Return verified only if both snapshots match, all bytes download, every hash
    matches and no proof expires during the operation.
 
 This satisfies actual byte verification without service role. It relies on the
-existing `wos-private` Storage SELECT policies and fails closed if the caller
-cannot download.
+caller's JWT plus the proposed object-scoped Storage read policy, and fails
+closed if the caller cannot download.
 
-## Future Endpoint
+## Implemented Endpoint
 
-Proposed route:
+Route:
 
 `GET /api/workshop-orders/m4/proof-verifier?orderId=<uuid>`
 
@@ -162,7 +189,8 @@ Requirements:
 - no service role
 - no raw proof/table rows in response
 - no Storage path, object ID, access token or signed URL in response
-- strict timeout and order-level abort
+- 15-second deadline with `AbortController`, DB abort signals and fail-closed
+  `PROOF_VERIFIER_TIMEOUT`
 - `Cache-Control: no-store, private`
 
 Safe response shape:
@@ -217,10 +245,13 @@ Before any future installation:
 - Review concurrent object replacement, proof refresh, baseline supersession,
   receipt replay, role changes and profile deactivation.
 
-## PostgreSQL 17 Offline Test Plan
+## PostgreSQL 17 Offline Evidence
 
-This round does not create or execute the SQL. A future disposable local PG17
-test must cover:
+The forward and rollback drafts were executed only in disposable
+`postgres:17-alpine` containers with network mode `none`. No Supabase connection
+is used by the suite. A pre-install baseline stores deterministic row-content,
+table-ACL and schema-ACL hashes for comparison after rollback. The executed
+suite covers:
 
 ### Positive
 
@@ -244,12 +275,15 @@ test must cover:
 - proof expired or expires during verification
 - archived/delete-marked/changed Storage object
 - malformed SHA-256 or changed proof SHA
+- NULL or blank Storage object version
 - baseline superseded or multiple CURRENT baselines
 - same Office/Workshop signer
 - missing, ambiguous, inactive or cross-organization signer Profile
-- missing/duplicate/out-of-order M2 receipt
+- missing/duplicate/out-of-order/digest-tampered M2 receipt
+- tampered `result_json.canStart=true`
 - proof-set digest mismatch
-- transaction rollback leaves all rows/ACLs unchanged
+- direct Storage-path denial when the same snapshot invariants fail
+- transaction rollback leaves row contents and ACLs unchanged
 
 ## Rollback And Fingerprints
 
@@ -269,9 +303,27 @@ Before any future installation:
 7. Add a PG17 owner-escalation test proving the owner cannot be swapped to a
    higher-privilege role without changing the approved fingerprint and tests.
 
+The forward draft also refuses installation unless all P2/Office/M2 Gates are
+fully closed with no whitelist/TTL, `authenticated` still lacks direct private
+proof/receipt SELECT and M2 EXECUTE, the three reviewed M2 function
+fingerprints match, and the two Issue #274 QA orders retain their approved
+state/version. Project identity, Production auto-build suppression and domain
+state cannot be proved from inside SQL and remain mandatory external installer
+checks.
+
+## Current Deliverables
+
+- `GET /api/workshop-orders/m4/proof-verifier?orderId=<uuid>`
+- safe snapshot DTO parser and stable double-snapshot comparator
+- real-byte SHA-256 verification using the caller's Supabase Storage session
+- exact four-image and four-category validation
+- Forward/Rollback SQL drafts marked `INSTALL_NOT_AUTHORIZED`
+- disposable PostgreSQL 17 positive, negative, role/owner, Storage-policy and
+  rollback suite
+
 ## Explicit Non-Authorizations
 
-- no SQL creation or installation
+- no QA SQL installation
 - no table SELECT grant
 - no RLS disablement
 - no Storage policy change
