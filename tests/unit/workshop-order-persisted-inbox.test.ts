@@ -16,6 +16,7 @@ import {
   wosInboxVersionIdentity,
   wosInboxVersionKey,
 } from '../../src/lib/workshop-orders/persisted-inbox-state';
+import { buildWosQaImageObjectPath } from '../../src/lib/workshop-orders/qa-image-categories';
 
 const user = '11111111-1111-4111-8111-111111111111';
 const org = '0ff53d93-2b9e-48b9-8113-a4768c39cdd2';
@@ -234,8 +235,15 @@ const images = [
     file_name: 'current.png',
     uploaded_at: '2026-11-21T10:01:00+00:00',
     superseded_at: null,
+    supersedes_image_id: null,
     storage_bucket: 'wos-private',
-    storage_path: 'private/current-film.png',
+    storage_path: buildWosQaImageObjectPath({
+      organizationId: org,
+      orderId,
+      versionLabel: 'QA-R6',
+      imageId: '66666666-6666-4666-8666-666666666666',
+      category: 'FILM_PATTERN',
+    }),
   },
   {
     id: '77777777-7777-4777-8777-777777777777',
@@ -248,8 +256,15 @@ const images = [
     file_name: 'old.png',
     uploaded_at: '2026-11-18T12:00:00+00:00',
     superseded_at: '2026-11-21T10:00:00+00:00',
+    supersedes_image_id: null,
     storage_bucket: 'wos-private',
-    storage_path: 'private/old-product.png',
+    storage_path: buildWosQaImageObjectPath({
+      organizationId: org,
+      orderId,
+      versionLabel: 'V3',
+      imageId: '77777777-7777-4777-8777-777777777777',
+      category: 'FILM_PATTERN',
+    }),
   },
   {
     id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
@@ -262,8 +277,15 @@ const images = [
     file_name: 'current-product.png',
     uploaded_at: '2026-11-21T10:01:01+00:00',
     superseded_at: null,
+    supersedes_image_id: null,
     storage_bucket: 'wos-private',
-    storage_path: 'private/current-product.png',
+    storage_path: buildWosQaImageObjectPath({
+      organizationId: org,
+      orderId,
+      versionLabel: 'QA-R6',
+      imageId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      category: 'PRODUCT',
+    }),
   },
   {
     id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
@@ -276,8 +298,15 @@ const images = [
     file_name: 'current-customer-sample.png',
     uploaded_at: '2026-11-21T10:01:02+00:00',
     superseded_at: null,
+    supersedes_image_id: null,
     storage_bucket: 'wos-private',
-    storage_path: 'private/current-customer-sample.png',
+    storage_path: buildWosQaImageObjectPath({
+      organizationId: org,
+      orderId,
+      versionLabel: 'QA-R6',
+      imageId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+      category: 'CUSTOMER_APPROVED_SAMPLE',
+    }),
   },
   {
     id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
@@ -290,8 +319,15 @@ const images = [
     file_name: 'current-signed-sample.png',
     uploaded_at: '2026-11-21T10:01:03+00:00',
     superseded_at: null,
+    supersedes_image_id: null,
     storage_bucket: 'wos-private',
-    storage_path: 'private/current-signed-sample.png',
+    storage_path: buildWosQaImageObjectPath({
+      organizationId: org,
+      orderId,
+      versionLabel: 'QA-R6',
+      imageId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+      category: 'SIGNED_SAMPLE',
+    }),
   },
 ];
 const baselineItems = [images[0], ...images.slice(2)].map((image, index) => ({

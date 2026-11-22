@@ -280,7 +280,7 @@ async function readInboxDetail(
       .order('created_at', { ascending: true })
       .limit(WOS_INBOX_DETAIL_LIMIT + 1),
     client.from('wos_reference_images')
-      .select('id,organization_id,entity_type,entity_id,category,version_label,image_status,file_name,uploaded_at,superseded_at,storage_bucket,storage_path')
+      .select('id,organization_id,entity_type,entity_id,category,version_label,image_status,file_name,uploaded_at,superseded_at,supersedes_image_id,storage_bucket,storage_path')
       .eq('organization_id', actor.orgId).eq('entity_id', orderId)
       .eq('entity_type', 'PRODUCTION_ORDER').limit(WOS_INBOX_DETAIL_LIMIT + 1),
     client.from('wos_confirmations')

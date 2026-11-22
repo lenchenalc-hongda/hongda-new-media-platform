@@ -3,6 +3,7 @@ import type {
   WosM4MaterialSignoffResult,
   WosM4SignerEvidence,
 } from '@/lib/workshop-orders/m4-material-signoff';
+import { getWosM4ImageCategoryState } from '@/lib/workshop-orders/m4-material-signoff';
 import { WOS_QA_IMAGE_CATEGORIES } from '@/lib/workshop-orders/qa-image-categories';
 
 function display(value: unknown): string {
@@ -58,7 +59,6 @@ export default function MaterialSignoffWorkbench({
   workbench: WosM4MaterialSignoffResult;
 }) {
   const baseline = workbench.currentBaseline;
-  const currentSelected = workbench.images.filter(image => image.selectedInCurrentBaseline);
   return (
     <section className="space-y-4 rounded-md border border-slate-300 bg-slate-50 p-4"
       aria-label="物料齐套、现版图片与双签工作台">
@@ -169,18 +169,20 @@ export default function MaterialSignoffWorkbench({
         </div>
         <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
           {WOS_QA_IMAGE_CATEGORIES.map(category => {
-            const selected = currentSelected.filter(image => image.category === category);
-            const currentValid = selected.filter(image => image.currentReady);
+            const categoryState = getWosM4ImageCategoryState(workbench, category);
             const candidates = workbench.images.filter(image => image.category === category);
             return (
               <div key={category} className="rounded-md border border-slate-200 p-3 text-xs">
                 <p className="font-semibold text-slate-900">{candidates[0]?.categoryLabel || category}</p>
-                <p className={currentValid.length === 1 ? 'mt-1 text-emerald-800' : 'mt-1 text-amber-900'}>
-                  {currentValid.length === 1
+                <p className={categoryState === 'CURRENT_VALID'
+                  ? 'mt-1 text-emerald-800' : 'mt-1 text-amber-900'}>
+                  {categoryState === 'CURRENT_VALID'
                     ? '已进入当前基准'
-                    : selected.length === 0
-                      ? '未进入当前基准'
-                      : selected.length > 1 ? '重复关联' : '已关联但当前版本无效'}
+                    : categoryState === 'DUPLICATE'
+                      ? '重复关联'
+                      : categoryState === 'INVALID'
+                        ? '已关联但当前版本无效'
+                        : '未进入当前基准'}
                 </p>
                 {candidates.length === 0 ? (
                   <p className="mt-1 text-slate-600">未上传</p>

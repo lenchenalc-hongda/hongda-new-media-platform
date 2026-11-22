@@ -1,6 +1,7 @@
 import {
   WOS_QA_IMAGE_CATEGORIES,
   WOS_QA_IMAGE_CATEGORY_LABELS,
+  buildWosQaImageObjectPath,
   isWosQaImageCategory,
   type WosQaImageCategory,
 } from './qa-image-categories';
@@ -68,6 +69,7 @@ export interface WosM4ReferenceImageRecord {
   readonly file_name: string;
   readonly uploaded_at: string;
   readonly superseded_at: string | null;
+  readonly supersedes_image_id: string | null;
   readonly storage_bucket: string;
   readonly storage_path: string;
 }
@@ -208,6 +210,23 @@ export interface WosM4MaterialSignoffResult {
   readonly nextAction: string;
   readonly reviewReady: false;
   readonly canStart: false;
+}
+
+export type WosM4ImageCategoryState =
+  | 'CURRENT_VALID'
+  | 'DUPLICATE'
+  | 'INVALID'
+  | 'MISSING';
+
+export function getWosM4ImageCategoryState(
+  result: WosM4MaterialSignoffResult,
+  category: WosQaImageCategory,
+): WosM4ImageCategoryState {
+  const selected = result.images.filter(image =>
+    image.category === category && image.selectedInCurrentBaseline);
+  if (selected.length > 1) return 'DUPLICATE';
+  if (selected.length === 0) return 'MISSING';
+  return selected[0].currentReady ? 'CURRENT_VALID' : 'INVALID';
 }
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -566,6 +585,32 @@ export function evaluateWosM4MaterialSignoff(
       profileMap.set(profile.id, profile);
     }
   }
+  const hasReadySuperseder = (image: WosM4ReferenceImageRecord): boolean =>
+    input.images.some(candidate =>
+      candidate.id !== image.id
+      && candidate.organization_id === input.organizationId
+      && candidate.entity_type === 'PRODUCTION_ORDER'
+      && candidate.entity_id === input.orderId
+      && candidate.supersedes_image_id === image.id
+      && candidate.image_status === 'READY');
+  const isCanonicalCurrentImage = (
+    image: WosM4ReferenceImageRecord,
+  ): boolean => isWosQaImageCategory(image.category)
+    && image.organization_id === input.organizationId
+    && image.entity_type === 'PRODUCTION_ORDER'
+    && image.entity_id === input.orderId
+    && image.version_label === input.versionLabel
+    && image.image_status === 'READY'
+    && image.superseded_at === null
+    && !hasReadySuperseder(image)
+    && image.storage_bucket === 'wos-private'
+    && image.storage_path === buildWosQaImageObjectPath({
+      organizationId: input.organizationId,
+      orderId: input.orderId,
+      versionLabel: input.versionLabel,
+      imageId: image.id,
+      category: image.category,
+    });
   const materials = readiness.materials.map(spec => {
     const defined = WOS_P2_MATERIALS.find(material => material.code === spec.code);
     const acceptedStatus = defined?.acceptedStatus ?? 'UNKNOWN';
@@ -647,30 +692,20 @@ export function evaluateWosM4MaterialSignoff(
   const baselineImages = baselineItems.map(item =>
     input.images.filter(image => image?.id === item.reference_image_id));
   const oneImageEach = baselineImages.every(matches => matches.length === 1);
+  const exactFourDistinctImages = baselineItems.length === 4
+    && selectedIds.size === 4;
   const validImages = oneImageEach && baselineImages.every(([image]) =>
-    image.organization_id === input.organizationId
-    && image.entity_type === 'PRODUCTION_ORDER'
-    && image.entity_id === input.orderId
-    && image.version_label === input.versionLabel
-    && image.image_status === 'READY'
-    && image.superseded_at === null
-    && image.storage_bucket === 'wos-private'
-    && image.storage_path.trim().length > 0
-    && isWosQaImageCategory(image.category));
-  const categories = new Set<string>();
+    isCanonicalCurrentImage(image));
+  const categoryCounts = new Map<WosQaImageCategory, number>();
   for (const [image] of baselineImages) {
-    if (image
-      && image.version_label === input.versionLabel
-      && image.image_status === 'READY'
-      && image.superseded_at === null
-      && image.storage_bucket === 'wos-private'
-      && image.storage_path.trim().length > 0
-      && isWosQaImageCategory(image.category)) {
-      categories.add(image.category);
+    const category = image?.category;
+    if (image && isCanonicalCurrentImage(image) && isWosQaImageCategory(category)) {
+      categoryCounts.set(category, (categoryCounts.get(category) ?? 0) + 1);
     }
   }
-  const requiredCategoriesComplete = WOS_QA_IMAGE_CATEGORIES
-    .every(category => categories.has(category));
+  const requiredCategoriesComplete = exactFourDistinctImages
+    && validImages
+    && WOS_QA_IMAGE_CATEGORIES.every(category => categoryCounts.get(category) === 1);
   const baselineVersionMatched = !!baseline
     && baseline.version_label === input.versionLabel;
   const office = signerEvidence({
@@ -737,8 +772,7 @@ export function evaluateWosM4MaterialSignoff(
     && historyChain.actions[3]?.newVersion === input.transactionVersion;
   const historicalM2EvidenceComplete = readiness.materialsVerified
     && baselineVersionMatched
-    && selectedIds.size >= 4
-    && selectedIds.size === baselineItems.length
+    && exactFourDistinctImages
     && baselineItems.every(item => item.is_required === true)
     && validImages && requiredCategoriesComplete
     && independentSigners && proofSetDigestMatch
@@ -750,7 +784,8 @@ export function evaluateWosM4MaterialSignoff(
     issues.push('基准关联图片不是当前版本的有效私有图片记录');
   }
   if (baseline && !requiredCategoriesComplete) {
-    issues.push('当前基准缺少 PRODUCT / FILM_PATTERN / SIGNED_SAMPLE / CUSTOMER_APPROVED_SAMPLE');
+    issues.push('当前基准必须恰好包含四张不同图片，且四个必需类别各一张');
+    gaps.push('修正 CURRENT 基准为四张不同图片，PRODUCT / FILM_PATTERN / SIGNED_SAMPLE / CUSTOMER_APPROVED_SAMPLE 各一张');
   }
   if (baseline && !independentSigners) {
     issues.push('Office / Workshop 独立双签缺失、同人或时序异常');
@@ -798,11 +833,7 @@ export function evaluateWosM4MaterialSignoff(
         item.baseline_id === baseline?.id
         && item.reference_image_id === image.id && item.is_required),
       versionMatched: image.version_label === input.versionLabel,
-      currentReady: image.version_label === input.versionLabel
-        && image.image_status === 'READY'
-        && image.superseded_at === null
-        && image.storage_bucket === 'wos-private'
-        && image.storage_path.trim().length > 0,
+      currentReady: isCanonicalCurrentImage(image),
       superseded: image.superseded_at !== null,
       proofState: 'UNVERIFIED_AUTHENTICATED_RLS_PROOF_READ_UNAVAILABLE',
     });

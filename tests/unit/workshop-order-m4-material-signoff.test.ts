@@ -2,12 +2,17 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
   evaluateWosM4MaterialSignoff,
+  getWosM4ImageCategoryState,
   type WosM4MaterialSignoffInput,
 } from '../../src/lib/workshop-orders/m4-material-signoff';
 import {
   WOS_READ_ROLES,
   resolveWosApiActor,
 } from '../../src/lib/workshop-orders/api-contract';
+import {
+  WOS_QA_IMAGE_CATEGORIES,
+  buildWosQaImageObjectPath,
+} from '../../src/lib/workshop-orders/qa-image-categories';
 
 const org = '0ff53d93-2b9e-48b9-8113-a4768c39cdd2';
 const foreignOrg = 'fbdb0989-ae25-4ba4-92f9-3266cc845977';
@@ -96,9 +101,15 @@ function baseInput(): WosM4MaterialSignoffInput {
       file_name: categories[index].toLowerCase() + '.png',
       uploaded_at: '2026-11-21T10:04:06.000Z',
       superseded_at: null,
+      supersedes_image_id: null,
       storage_bucket: 'wos-private',
-      storage_path: 'organizations/' + org + '/wos/production-order/' + orderId
-        + '/images/' + categories[index].toLowerCase() + '/' + id + '.png',
+      storage_path: buildWosQaImageObjectPath({
+        organizationId: org,
+        orderId,
+        versionLabel: 'QA-R6',
+        imageId: id,
+        category: categories[index],
+      }),
     })),
     profiles: [
       {
@@ -169,6 +180,91 @@ assert.equal(base.m2History.chainComplete, true);
 assert.equal(base.reviewReady, false);
 assert.equal(base.canStart, false);
 assert.equal(base.materials.every(material => material.ready), true);
+assert.equal(WOS_QA_IMAGE_CATEGORIES.every(category =>
+  getWosM4ImageCategoryState(base, category) === 'CURRENT_VALID'), true);
+
+const fifthProductImage = {
+  id: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+  organization_id: org,
+  entity_type: 'PRODUCTION_ORDER',
+  entity_id: orderId,
+  category: 'PRODUCT',
+  version_label: 'QA-R6',
+  image_status: 'READY',
+  file_name: 'duplicate-product.png',
+  uploaded_at: '2026-11-21T10:04:16.000Z',
+  superseded_at: null,
+  supersedes_image_id: null,
+  storage_bucket: 'wos-private',
+  storage_path: buildWosQaImageObjectPath({
+    organizationId: org,
+    orderId,
+    versionLabel: 'QA-R6',
+    imageId: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+    category: 'PRODUCT',
+  }),
+};
+const duplicateProduct = evaluateWosM4MaterialSignoff({
+  ...baseInput(),
+  images: [...baseInput().images, fifthProductImage],
+  baselineItems: [...baseInput().baselineItems, {
+    baseline_id: baselineId,
+    reference_image_id: fifthProductImage.id,
+    display_order: 4,
+    is_required: true,
+  }],
+});
+assert.equal(duplicateProduct.currentBaseline.selectedImageCount, 5);
+assert.equal(duplicateProduct.currentBaseline.requiredCategoriesComplete, false);
+assert.equal(duplicateProduct.currentBaseline.historicalM2EvidenceComplete, false);
+assert.equal(getWosM4ImageCategoryState(duplicateProduct, 'PRODUCT'), 'DUPLICATE');
+assert(duplicateProduct.gaps.some(gap => gap.includes('四张不同图片')));
+
+const duplicateSignedSample = evaluateWosM4MaterialSignoff({
+  ...baseInput(),
+  images: [...baseInput().images, {
+    ...fifthProductImage,
+    id: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
+    category: 'SIGNED_SAMPLE',
+    file_name: 'duplicate-signed-sample.png',
+    storage_path: buildWosQaImageObjectPath({
+      organizationId: org,
+      orderId,
+      versionLabel: 'QA-R6',
+      imageId: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
+      category: 'SIGNED_SAMPLE',
+    }),
+  }],
+  baselineItems: [...baseInput().baselineItems, {
+    baseline_id: baselineId,
+    reference_image_id: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
+    display_order: 4,
+    is_required: true,
+  }],
+});
+assert.equal(duplicateSignedSample.currentBaseline.requiredCategoriesComplete, false);
+assert.equal(duplicateSignedSample.currentBaseline.historicalM2EvidenceComplete, false);
+assert.equal(getWosM4ImageCategoryState(duplicateSignedSample, 'SIGNED_SAMPLE'), 'DUPLICATE');
+
+const duplicateAndMissingCategory = evaluateWosM4MaterialSignoff({
+  ...baseInput(),
+  images: baseInput().images.map((image, index) =>
+    index === 1 ? {...image, category: 'PRODUCT'} : image),
+});
+assert.equal(duplicateAndMissingCategory.currentBaseline.requiredCategoriesComplete, false);
+assert.equal(duplicateAndMissingCategory.currentBaseline.historicalM2EvidenceComplete, false);
+assert.equal(getWosM4ImageCategoryState(duplicateAndMissingCategory, 'PRODUCT'), 'DUPLICATE');
+assert.equal(getWosM4ImageCategoryState(duplicateAndMissingCategory, 'FILM_PATTERN'), 'MISSING');
+
+const duplicateReferenceImage = evaluateWosM4MaterialSignoff({
+  ...baseInput(),
+  baselineItems: baseInput().baselineItems.map((item, index) =>
+    index === 3 ? {...item, reference_image_id: imageIds[2]} : item),
+});
+assert.equal(duplicateReferenceImage.currentBaseline.selectedImageCount, 3);
+assert.equal(duplicateReferenceImage.currentBaseline.requiredCategoriesComplete, false);
+assert.equal(duplicateReferenceImage.currentBaseline.historicalM2EvidenceComplete, false);
+
 const rlsHiddenOfficeProfile = evaluateWosM4MaterialSignoff({
   ...baseInput(),
   profiles: baseInput().profiles.filter(profile => profile.id !== officeProfile),
@@ -222,8 +318,15 @@ const missing = evaluateWosM4MaterialSignoff({
     file_name: 'qa-preview-proof.png',
     uploaded_at: '2026-11-17T12:18:53.000Z',
     superseded_at: null,
+    supersedes_image_id: null,
     storage_bucket: 'wos-private',
-    storage_path: 'private/V1/product.png',
+    storage_path: buildWosQaImageObjectPath({
+      organizationId: org,
+      orderId: '2071a963-1b35-4c96-81cd-709d8180ad49',
+      versionLabel: 'V1',
+      imageId: 'eb427d70-1812-4c90-81d8-d2f40bef1815',
+      category: 'PRODUCT',
+    }),
   }],
   profiles: [],
   history: [],
@@ -410,6 +513,77 @@ const failures: Array<[string, WosM4MaterialSignoffInput]> = [
     ...baseInput(),
     profiles: baseInput().profiles.map(profile =>
       profile.id === workshopProfile ? {...profile, is_active: false} : profile),
+  }],
+  ['39 arbitrary non-canonical private path', {
+    ...baseInput(),
+    images: baseInput().images.map((image, index) =>
+      index === 0 ? {...image, storage_path: 'not-a-canonical-private-path'} : image),
+  }],
+  ['40 cross-order canonical path', {
+    ...baseInput(),
+    images: baseInput().images.map((image, index) =>
+      index === 0 ? {
+        ...image,
+        storage_path: buildWosQaImageObjectPath({
+          organizationId: org,
+          orderId: '11111111-1111-4111-8111-111111111111',
+          versionLabel: 'QA-R6',
+          imageId: image.id,
+          category: 'CUSTOMER_APPROVED_SAMPLE',
+        }),
+      } : image),
+  }],
+  ['41 wrong-category canonical path', {
+    ...baseInput(),
+    images: baseInput().images.map((image, index) =>
+      index === 0 ? {
+        ...image,
+        storage_path: buildWosQaImageObjectPath({
+          organizationId: org,
+          orderId,
+          versionLabel: 'QA-R6',
+          imageId: image.id,
+          category: 'FILM_PATTERN',
+        }),
+      } : image),
+  }],
+  ['42 wrong-version canonical path', {
+    ...baseInput(),
+    images: baseInput().images.map((image, index) =>
+      index === 0 ? {
+        ...image,
+        storage_path: buildWosQaImageObjectPath({
+          organizationId: org,
+          orderId,
+          versionLabel: 'QA-R5',
+          imageId: image.id,
+          category: 'CUSTOMER_APPROVED_SAMPLE',
+        }),
+      } : image),
+  }],
+  ['43 traversal path', {
+    ...baseInput(),
+    images: baseInput().images.map((image, index) =>
+      index === 0 ? {
+        ...image,
+        storage_path: image.storage_path + '/../foreign',
+      } : image),
+  }],
+  ['44 newer READY superseder invalidates selected image', {
+    ...baseInput(),
+    images: [...baseInput().images, {
+      ...fifthProductImage,
+      id: 'ffffffff-ffff-4fff-8fff-ffffffffffff',
+      supersedes_image_id: imageIds[0],
+      file_name: 'replacement-customer-sample.png',
+      storage_path: buildWosQaImageObjectPath({
+        organizationId: org,
+        orderId,
+        versionLabel: 'QA-R6',
+        imageId: 'ffffffff-ffff-4fff-8fff-ffffffffffff',
+        category: 'PRODUCT',
+      }),
+    }],
   }],
 ];
 
