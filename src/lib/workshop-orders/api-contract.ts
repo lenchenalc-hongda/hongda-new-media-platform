@@ -12,6 +12,16 @@ import {
   type WosP2HandoffHistory,
   type WosP2HandoffResult,
 } from './p2-handoff-timeline';
+import {
+  evaluateWosM4MaterialSignoff,
+  type WosM4BaselineItemRecord,
+  type WosM4BaselineRecord,
+  type WosM4MaterialSignoffResult,
+  type WosM4ProfileRecord,
+  type WosM4ReferenceImageRecord,
+  type WosM4BlockerRecord,
+  type WosM4ResourceRecord,
+} from './m4-material-signoff';
 
 // Phase 5C: read-only, organization-scoped API contracts. No database writes
 // are permitted until a reviewed atomic submission RPC and audit gate exist.
@@ -94,6 +104,7 @@ export interface WosInboxHistoryRecord extends WosP2HandoffHistory {
   readonly organization_id: string;
   readonly entity_type: 'PRODUCTION_ORDER';
   readonly entity_id: string;
+  readonly actor_profile_id: string | null;
 }
 
 export interface WosInboxReferenceImageRecord {
@@ -128,6 +139,7 @@ export interface WosInboxReadDetail {
   readonly images: readonly WosInboxReferenceImageRecord[];
   readonly confirmations: readonly WosInboxConfirmationRecord[];
   readonly readiness: WosP2ReadinessResult;
+  readonly materialSignoff: WosM4MaterialSignoffResult;
   readonly handoff: WosP2HandoffResult;
   readonly canStart: false;
   readonly source: 'SUPABASE_RLS';
@@ -469,15 +481,20 @@ export function buildWosInboxDetail(input: {
   readonly item: WosInboxItem;
   readonly transaction: WosInboxTransactionEvidence;
   readonly production: WosInboxProductionRecord;
-  readonly resources: readonly WosP2ResourceRow[];
-  readonly blockers: readonly WosP2BlockerRow[];
-  readonly baselines: readonly WosP2BaselineRow[];
+  readonly resources: readonly WosM4ResourceRecord[];
+  readonly blockers: readonly WosM4BlockerRecord[];
+  readonly baselines: readonly WosM4BaselineRecord[];
+  readonly baselineItems: readonly WosM4BaselineItemRecord[];
   readonly history: readonly WosInboxHistoryRecord[];
-  readonly images: readonly WosInboxReferenceImageRecord[];
+  readonly images: readonly WosM4ReferenceImageRecord[];
+  readonly profiles: readonly WosM4ProfileRecord[];
   readonly confirmations: readonly WosInboxConfirmationRecord[];
 }): WosInboxDetailProjection {
   const { item, transaction, production } = input;
-  const batches = [input.resources, input.blockers, input.baselines, input.history, input.images, input.confirmations];
+  const batches = [
+    input.resources, input.blockers, input.baselines, input.baselineItems,
+    input.history, input.images, input.profiles, input.confirmations,
+  ];
   if (batches.some(batch => !Array.isArray(batch) || batch.length >= WOS_INBOX_DETAIL_LIMIT)) {
     return { ok: false, code: 'LIMIT_EXCEEDED' };
   }
@@ -509,7 +526,40 @@ export function buildWosInboxDetail(input: {
   for (const row of input.images) {
     if (row.organization_id !== item.organizationId
       || row.entity_type !== 'PRODUCTION_ORDER'
-      || row.entity_id !== item.id) {
+      || row.entity_id !== item.id
+      || row.storage_bucket !== 'wos-private'
+      || !text(row.storage_path)) {
+      return { ok: false, code: 'UNTRUSTED_DB_ROW' };
+    }
+  }
+  const baselineIds = new Set<string>();
+  for (const row of input.baselines) {
+    if (!uuid(row.id)
+      || row.organization_id !== item.organizationId
+      || row.entity_type !== 'PRODUCTION_ORDER'
+      || row.entity_id !== item.id
+      || baselineIds.has(row.id)) {
+      return { ok: false, code: 'UNTRUSTED_DB_ROW' };
+    }
+    baselineIds.add(row.id);
+  }
+  const imageIds = new Set(input.images.map(row => row.id));
+  for (const row of input.baselineItems) {
+    if (!uuid(row.baseline_id) || !baselineIds.has(row.baseline_id)
+      || !uuid(row.reference_image_id)
+      || !Number.isSafeInteger(row.display_order) || row.display_order < 0
+      || typeof row.is_required !== 'boolean') {
+      return { ok: false, code: 'UNTRUSTED_DB_ROW' };
+    }
+    if (!imageIds.has(row.reference_image_id)) {
+      // A baseline item with no image row is an incomplete read. Keep the
+      // detail fail-closed rather than silently dropping the missing image.
+      continue;
+    }
+  }
+  for (const row of input.profiles) {
+    if (!uuid(row.id) || row.org_id !== item.organizationId
+      || !text(row.role) || typeof row.is_active !== 'boolean') {
       return { ok: false, code: 'UNTRUSTED_DB_ROW' };
     }
   }
@@ -520,6 +570,23 @@ export function buildWosInboxDetail(input: {
     blockers: input.blockers,
     baselines: input.baselines,
     readVerified: true,
+  });
+  const materialSignoff = evaluateWosM4MaterialSignoff({
+    orderId: item.id,
+    organizationId: item.organizationId,
+    versionLabel: item.versionLabel,
+    transactionVersion: item.version,
+    workflowStatus: item.workflowStatus,
+    currentBatchQuantity: production.current_batch_quantity,
+    resources: input.resources,
+    blockers: input.blockers,
+    baselines: input.baselines,
+    baselineItems: input.baselineItems,
+    images: input.images,
+    profiles: input.profiles,
+    history: input.history,
+    readVerified: true,
+    nowIso: new Date().toISOString(),
   });
   const handoff = evaluateWosP2HandoffTimeline({
     history: input.history,
@@ -535,11 +602,28 @@ export function buildWosInboxDetail(input: {
       production,
       resources: input.resources,
       blockers: input.blockers,
-      baselines: input.baselines,
+      baselines: input.baselines.map(baseline => ({
+        version_label: baseline.version_label,
+        status: baseline.status,
+        office_confirmed_at: baseline.office_confirmed_at,
+        workshop_confirmed_at: baseline.workshop_confirmed_at,
+      })),
       history: input.history,
-      images: input.images,
+      images: input.images.map(image => ({
+        id: image.id,
+        organization_id: image.organization_id,
+        entity_type: 'PRODUCTION_ORDER',
+        entity_id: image.entity_id,
+        category: image.category,
+        version_label: image.version_label,
+        image_status: image.image_status,
+        file_name: image.file_name,
+        uploaded_at: image.uploaded_at,
+        superseded_at: image.superseded_at,
+      })),
       confirmations: input.confirmations,
       readiness,
+      materialSignoff,
       handoff,
       canStart: false,
       source: 'SUPABASE_RLS',

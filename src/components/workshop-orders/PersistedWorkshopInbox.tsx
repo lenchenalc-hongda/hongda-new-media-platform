@@ -1,7 +1,6 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { classifyWosInboxImages } from '@/lib/workshop-orders/api-contract';
 import type {
   WosInboxItem,
   WosInboxReadDetail,
@@ -15,6 +14,7 @@ import {
   wosInboxVersionKey,
 } from '@/lib/workshop-orders/persisted-inbox-state';
 import OperatorWorkflowActions from './OperatorWorkflowActions';
+import MaterialSignoffWorkbench from './MaterialSignoffWorkbench';
 
 interface ListResponse {
   readonly ok: boolean;
@@ -289,9 +289,6 @@ export default function PersistedWorkshopInbox() {
         {items.map(item => {
           const itemKey = wosInboxVersionKey(wosInboxVersionIdentity(item));
           const detail = details[itemKey];
-          const imageSet = detail
-            ? classifyWosInboxImages(detail.images, item)
-            : { current: [], historical: [] };
           return (
             <article key={item.entityType + ':' + item.id}
               className="rounded-lg border border-gray-200 bg-white p-4">
@@ -414,44 +411,7 @@ export default function PersistedWorkshopInbox() {
                     </section>
                   )}
 
-                  <section>
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <h4 className="text-xs font-semibold text-gray-900">四类物料只读核验</h4>
-                      <span className="text-xs text-amber-900">仅供核对，不代表允许开工</span>
-                    </div>
-                    <div className="mt-2 grid gap-2 sm:grid-cols-2">
-                      {detail.readiness.materials.map(material => (
-                        <div key={material.code} className="rounded border border-gray-200 p-3 text-xs">
-                          <p className="font-semibold text-gray-900">
-                            {material.title} · {material.ready ? '记录符合核验条件' : '尚未通过'}
-                          </p>
-                          <p className="mt-1 text-gray-600">{material.message}</p>
-                          {material.evidence && (
-                            <p className="mt-1 text-gray-600">
-                              版本 {material.evidence.versionLabel || '未登记'} ·
-                              实到 {display(material.evidence.quantityArrived)} ·
-                              核对时间 {material.evidence.confirmedAt || '未登记'}
-                            </p>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  </section>
-
-                  <section className="rounded border border-amber-200 bg-amber-50 p-3">
-                    <h4 className="text-xs font-semibold text-amber-950">图片签样基准</h4>
-                    <p className="mt-1 text-xs text-amber-900">
-                      CURRENT 基准 {detail.readiness.visualBaseline.currentCount} 条 ·
-                      版本 {detail.readiness.visualBaseline.versionLabel || '未登记'} ·
-                      当前版本匹配 {detail.readiness.visualBaseline.currentVersionMatched ? '是' : '否'} ·
-                      Office {detail.readiness.visualBaseline.officeConfirmed ? '已登记' : '未登记'} ·
-                      Workshop {detail.readiness.visualBaseline.workshopConfirmed ? '已登记' : '未登记'}。
-                    </p>
-                    <p className="mt-1 text-xs text-amber-800">
-                      当前版本图片 {imageSet.current.length} 条；历史或非当前记录 {imageSet.historical.length} 条。
-                      历史版本不会冒充当前基准。
-                    </p>
-                  </section>
+                  <MaterialSignoffWorkbench workbench={detail.materialSignoff} />
 
                   <section>
                     <h4 className="text-xs font-semibold text-gray-900">当前版本交接校验</h4>

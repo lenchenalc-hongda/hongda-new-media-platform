@@ -62,6 +62,7 @@ const history = [{
   entity_id: orderId,
   previous_status: 'NEEDS_INFORMATION',
   next_status: 'WORKSHOP_REVIEW',
+  actor_profile_id: '99999999-9999-4999-8999-999999999999',
   actor_role: 'admin',
   reason_code: 'QA_P2_OFFICE_RESUBMIT_CORRECTION',
   created_at: '2026-11-22T01:00:00.000Z',
