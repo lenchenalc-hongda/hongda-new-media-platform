@@ -1,9 +1,22 @@
 import { z } from 'zod';
 import { PRODUCTION_TRANSITIONS, SAMPLING_TRANSITIONS, type WosEntityType } from './domain';
+import {
+  evaluateWosP2Readiness,
+  type WosP2BaselineRow,
+  type WosP2BlockerRow,
+  type WosP2ReadinessResult,
+  type WosP2ResourceRow,
+} from './p2-qa-readiness';
+import {
+  evaluateWosP2HandoffTimeline,
+  type WosP2HandoffHistory,
+  type WosP2HandoffResult,
+} from './p2-handoff-timeline';
 
 // Phase 5C: read-only, organization-scoped API contracts. No database writes
 // are permitted until a reviewed atomic submission RPC and audit gate exist.
 export const WOS_INBOX_LIMIT_PER_TYPE = 200;
+export const WOS_INBOX_DETAIL_LIMIT = 100;
 export const WOS_API_INPUT_LIMIT_CHARS = 32768;
 export const WOS_READ_ROLES = ['admin', 'manager', 'sales', 'operator', 'workshop', 'technician'] as const;
 export const WOS_SUBMIT_ROLES = ['admin', 'manager', 'sales'] as const;
@@ -43,9 +56,94 @@ export interface WosInboxItem {
   readonly orderNumber: string | null;
 }
 
+export interface WosInboxTransactionEvidence {
+  readonly inboxId: string;
+  readonly submissionReceiptId: string;
+  readonly sourceRevision: number;
+  readonly sourceVersionLabel: string;
+  readonly originalWorkflowStatus: 'SUBMITTED';
+}
+
+export interface WosInboxProductionRecord {
+  readonly id: string;
+  readonly organization_id: string;
+  readonly order_number: string;
+  readonly customer_name_snapshot: string;
+  readonly project_name_snapshot: string | null;
+  readonly product_name: string;
+  readonly product_material: string | null;
+  readonly requested_quantity: number | null;
+  readonly current_batch_quantity: number;
+  readonly planned_ship_date: string | null;
+  readonly priority: string;
+  readonly surface_treatment: string | null;
+  readonly pattern_scope: string | null;
+  readonly seam_tolerance: string | null;
+  readonly position_reference: string | null;
+  readonly customer_acceptance_standard: string | null;
+  readonly packaging_method: string | null;
+  readonly carton_quantity: number | null;
+  readonly label_marking_rule: string | null;
+  readonly workflow_status: string;
+  readonly version: number;
+  readonly version_label: string;
+  readonly submitted_at: string;
+}
+
+export interface WosInboxHistoryRecord extends WosP2HandoffHistory {
+  readonly organization_id: string;
+  readonly entity_type: 'PRODUCTION_ORDER';
+  readonly entity_id: string;
+}
+
+export interface WosInboxReferenceImageRecord {
+  readonly id: string;
+  readonly organization_id: string;
+  readonly entity_type: 'PRODUCTION_ORDER';
+  readonly entity_id: string;
+  readonly category: string;
+  readonly version_label: string;
+  readonly image_status: string;
+  readonly file_name: string;
+  readonly uploaded_at: string;
+  readonly superseded_at: string | null;
+}
+
+export interface WosInboxConfirmationRecord {
+  readonly confirmation_type: string;
+  readonly decision: string;
+  readonly role_snapshot: string;
+  readonly note: string | null;
+  readonly confirmed_at: string;
+}
+
+export interface WosInboxReadDetail {
+  readonly item: WosInboxItem;
+  readonly transaction: WosInboxTransactionEvidence;
+  readonly production: WosInboxProductionRecord;
+  readonly resources: readonly WosP2ResourceRow[];
+  readonly blockers: readonly WosP2BlockerRow[];
+  readonly baselines: readonly WosP2BaselineRow[];
+  readonly history: readonly WosInboxHistoryRecord[];
+  readonly images: readonly WosInboxReferenceImageRecord[];
+  readonly confirmations: readonly WosInboxConfirmationRecord[];
+  readonly readiness: WosP2ReadinessResult;
+  readonly handoff: WosP2HandoffResult;
+  readonly canStart: false;
+  readonly source: 'SUPABASE_RLS';
+}
+
 export type WosInboxProjection =
   | { readonly ok: true; readonly items: readonly WosInboxItem[] }
   | { readonly ok: false; readonly code: 'UNTRUSTED_DB_ROW' | 'LIMIT_EXCEEDED' | 'DUPLICATE_SOURCE' };
+
+export type WosInboxReadRequest =
+  | { readonly ok: true; readonly orderId: string | null }
+  | { readonly ok: false; readonly code: 'INVALID_READ_QUERY' };
+
+export type WosInboxDetailProjection =
+  | { readonly ok: true; readonly detail: WosInboxReadDetail }
+  | { readonly ok: false; readonly code: 'UNTRUSTED_DB_ROW' | 'LIMIT_EXCEEDED' | 'TRANSACTION_MISMATCH' };
 
 function record(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -69,6 +167,22 @@ export function isWosNonproductionApiEnabled(input: {
   // Unknown or CI environments fail closed, even if an untrusted flag is set.
   return input.vercelEnv === 'preview'
     || (input.vercelEnv === undefined && input.nodeEnv === 'development');
+}
+
+export function isWosQaInboxReadonlyEnabled(input: {
+  readonly vercelEnv?: string;
+  readonly authMode?: string;
+  readonly enabled?: string;
+  readonly supabaseUrl?: string;
+}): boolean {
+  if (input.vercelEnv !== 'preview'
+    || input.authMode !== 'supabase'
+    || input.enabled !== 'true') return false;
+  return isApprovedWosSandboxUrl(input.supabaseUrl, {
+    nodeEnv: 'production',
+    allowLocal: 'false',
+    publicAllowLocal: 'false',
+  });
 }
 
 // Pin the nonproduction Preview to the vetted hongda-review-dev database.
@@ -127,6 +241,24 @@ export function isApprovedWosSandboxUrl(
       && isWosLoopbackSupabaseUrl(value);
   } catch {
     return false;
+  }
+}
+
+export function parseWosInboxReadRequest(requestUrl: string): WosInboxReadRequest {
+  try {
+    const search = new URL(requestUrl).searchParams;
+    const keys = Array.from(search.keys());
+    if (keys.length === 0) return { ok: true, orderId: null };
+    if (keys.length !== 1 || keys[0] !== 'orderId'
+      || search.getAll('orderId').length !== 1) {
+      return { ok: false, code: 'INVALID_READ_QUERY' };
+    }
+    const orderId = search.get('orderId');
+    return orderId && uuid(orderId)
+      ? { ok: true, orderId }
+      : { ok: false, code: 'INVALID_READ_QUERY' };
+  } catch {
+    return { ok: false, code: 'INVALID_READ_QUERY' };
   }
 }
 
@@ -331,4 +463,104 @@ export function buildWosLiveInbox(input: {
   items.sort((a, b) => b.submittedAt.localeCompare(a.submittedAt)
     || a.entityType.localeCompare(b.entityType) || a.id.localeCompare(b.id));
   return { ok: true, items };
+}
+
+export function buildWosInboxDetail(input: {
+  readonly item: WosInboxItem;
+  readonly transaction: WosInboxTransactionEvidence;
+  readonly production: WosInboxProductionRecord;
+  readonly resources: readonly WosP2ResourceRow[];
+  readonly blockers: readonly WosP2BlockerRow[];
+  readonly baselines: readonly WosP2BaselineRow[];
+  readonly history: readonly WosInboxHistoryRecord[];
+  readonly images: readonly WosInboxReferenceImageRecord[];
+  readonly confirmations: readonly WosInboxConfirmationRecord[];
+}): WosInboxDetailProjection {
+  const { item, transaction, production } = input;
+  const batches = [input.resources, input.blockers, input.baselines, input.history, input.images, input.confirmations];
+  if (batches.some(batch => !Array.isArray(batch) || batch.length >= WOS_INBOX_DETAIL_LIMIT)) {
+    return { ok: false, code: 'LIMIT_EXCEEDED' };
+  }
+  if (item.entityType !== 'PRODUCTION_ORDER'
+    || production.id !== item.id
+    || production.organization_id !== item.organizationId
+    || production.workflow_status !== item.workflowStatus
+    || production.version !== item.version
+    || production.version_label !== item.versionLabel
+    || !text(production.order_number)
+    || !Number.isSafeInteger(production.current_batch_quantity)
+    || production.current_batch_quantity < 1
+    || !uuid(transaction.inboxId)
+    || !uuid(transaction.submissionReceiptId)
+    || transaction.originalWorkflowStatus !== 'SUBMITTED'
+    || !Number.isSafeInteger(transaction.sourceRevision)
+    || transaction.sourceRevision < 1
+    || !text(transaction.sourceVersionLabel)
+    || transaction.sourceRevision + 1 > item.version) {
+    return { ok: false, code: 'TRANSACTION_MISMATCH' };
+  }
+  for (const row of input.history) {
+    if (row.organization_id !== item.organizationId
+      || row.entity_type !== 'PRODUCTION_ORDER'
+      || row.entity_id !== item.id) {
+      return { ok: false, code: 'UNTRUSTED_DB_ROW' };
+    }
+  }
+  for (const row of input.images) {
+    if (row.organization_id !== item.organizationId
+      || row.entity_type !== 'PRODUCTION_ORDER'
+      || row.entity_id !== item.id) {
+      return { ok: false, code: 'UNTRUSTED_DB_ROW' };
+    }
+  }
+  const readiness = evaluateWosP2Readiness({
+    versionLabel: item.versionLabel,
+    currentBatchQuantity: production.current_batch_quantity,
+    resources: input.resources,
+    blockers: input.blockers,
+    baselines: input.baselines,
+    readVerified: true,
+  });
+  const handoff = evaluateWosP2HandoffTimeline({
+    history: input.history,
+    currentStatus: item.workflowStatus,
+    currentVersion: item.version,
+    readVerified: true,
+  });
+  return {
+    ok: true,
+    detail: {
+      item,
+      transaction,
+      production,
+      resources: input.resources,
+      blockers: input.blockers,
+      baselines: input.baselines,
+      history: input.history,
+      images: input.images,
+      confirmations: input.confirmations,
+      readiness,
+      handoff,
+      canStart: false,
+      source: 'SUPABASE_RLS',
+    },
+  };
+}
+
+export function classifyWosInboxImages(
+  images: readonly WosInboxReferenceImageRecord[],
+  item: WosInboxItem,
+): {
+  readonly current: readonly WosInboxReferenceImageRecord[];
+  readonly historical: readonly WosInboxReferenceImageRecord[];
+} {
+  const current = images.filter(image =>
+    image.version_label === item.versionLabel
+    && image.image_status === 'READY'
+    && image.superseded_at === null);
+  const currentIds = new Set(current.map(image => image.id));
+  return {
+    current,
+    historical: images.filter(image => !currentIds.has(image.id)),
+  };
 }

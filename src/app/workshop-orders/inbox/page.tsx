@@ -2,30 +2,28 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import AppLayout from '@/components/layout/AppLayout';
 import PageHeader from '@/components/layout/PageHeader';
+import PersistedWorkshopInbox from '@/components/workshop-orders/PersistedWorkshopInbox';
 import WorkshopInbox from '@/components/workshop-orders/WorkshopInbox';
-import LiveQaWorkshopInbox from '@/components/workshop-orders/LiveQaWorkshopInbox';
-import { isApprovedWosSandboxUrl, isWosNonproductionApiEnabled } from '@/lib/workshop-orders/api-contract';
+import { isWosQaInboxReadonlyEnabled } from '@/lib/workshop-orders/api-contract';
 import { EMPTY_WORKSHOP_QUEUE } from '@/lib/workshop-orders/readiness';
 
 export const metadata: Metadata = {
   title: '车间收件箱与齐套检查 | 宏达车间',
-  description: '查看生产单和打样申请的非生产齐套展示模型。',
+  description: '读取当前组织已持久化并完成提交回执校验的车间订单。',
 };
 
 export default function WorkshopInboxPage() {
-  const qaLive = process.env.VERCEL_ENV === 'preview'
-    && isWosNonproductionApiEnabled({
-      vercelEnv: process.env.VERCEL_ENV,
-      nodeEnv: process.env.NODE_ENV,
-      enabled: process.env.WOS_P5C_NONPROD_API_ENABLED,
-    })
-    && process.env.WOS_P7_NONPROD_SUBMIT_ENABLED === 'true'
-    && isApprovedWosSandboxUrl(process.env.NEXT_PUBLIC_SUPABASE_URL);
+  const realReadEnabled = isWosQaInboxReadonlyEnabled({
+    vercelEnv: process.env.VERCEL_ENV,
+    authMode: process.env.AUTH_MODE,
+    enabled: process.env.WOS_QA_INBOX_READONLY_ENABLED,
+    supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL,
+  });
   return (
     <AppLayout>
       <PageHeader
         title="车间收件箱与齐套检查"
-        description="按生产单和打样申请分别查看状态、优先级及有序齐套阻断。"
+        description="查看当前组织已提交的持久化订单、当前版本与只读齐套证据。"
         actions={
           <Link
             href="/dashboard"
@@ -36,8 +34,8 @@ export default function WorkshopInboxPage() {
         }
       />
 
-      {qaLive
-        ? <LiveQaWorkshopInbox />
+      {realReadEnabled
+        ? <PersistedWorkshopInbox />
         : <WorkshopInbox queue={EMPTY_WORKSHOP_QUEUE} />}
     </AppLayout>
   );
