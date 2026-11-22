@@ -5,7 +5,11 @@ import PageHeader from '@/components/layout/PageHeader';
 import ProductionOrderForm from '@/components/workshop-orders/ProductionOrderForm';
 import LiveQaReturnedOrders from '@/components/workshop-orders/LiveQaReturnedOrders';
 import LiveQaM2OfficeBaseline from '@/components/workshop-orders/LiveQaM2OfficeBaseline';
-import { isApprovedWosSandboxUrl, isWosNonproductionApiEnabled } from '@/lib/workshop-orders/api-contract';
+import {
+  isApprovedWosSandboxUrl,
+  isWosNonproductionApiEnabled,
+  isWosQaInboxReadonlyEnabled,
+} from '@/lib/workshop-orders/api-contract';
 
 export const metadata: Metadata = {
   title: '生产下单 | 宏达车间',
@@ -21,6 +25,12 @@ export default function WorkshopProductionOrderNewPage() {
     })
     && process.env.WOS_P7_NONPROD_SUBMIT_ENABLED === 'true'
     && isApprovedWosSandboxUrl(process.env.NEXT_PUBLIC_SUPABASE_URL);
+  const returnedReadEnabled = isWosQaInboxReadonlyEnabled({
+    vercelEnv: process.env.VERCEL_ENV,
+    authMode: process.env.AUTH_MODE,
+    enabled: process.env.WOS_QA_INBOX_READONLY_ENABLED,
+    supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL,
+  });
   return (
     <AppLayout>
       <PageHeader
@@ -52,7 +62,7 @@ export default function WorkshopProductionOrderNewPage() {
         </p>
       </section>
 
-      {qaLive && <LiveQaReturnedOrders />}
+      {returnedReadEnabled && <LiveQaReturnedOrders />}
       {qaLive && <LiveQaM2OfficeBaseline />}
       <ProductionOrderForm qaLive={qaLive} />
     </AppLayout>

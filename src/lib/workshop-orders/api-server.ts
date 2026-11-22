@@ -31,6 +31,10 @@ import type {
   WosP2BlockerRow,
   WosP2ResourceRow,
 } from './p2-qa-readiness';
+import {
+  canActOnWosP2,
+  isWosP2QaMutationEnabled,
+} from './p2-action-contract';
 import type { WosEntityType } from './domain';
 import { submitWosProductionNonproduction } from './p7-nonprod-submit';
 
@@ -221,6 +225,17 @@ async function readInboxList(
     source: 'SUPABASE_RLS',
     items: projection.items,
     count: projection.items.length,
+    capabilities: {
+      canOperateWorkflow: canActOnWosP2(actor.role),
+      workflowWriteEnabled: isWosP2QaMutationEnabled({
+        vercelEnv: process.env.VERCEL_ENV,
+        nodeEnv: process.env.NODE_ENV,
+        flag: process.env.WOS_P2_QA_MUTATIONS_ENABLED,
+        supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL,
+        allowLocal: process.env.WOS_ALLOW_LOCAL_SUPABASE,
+        publicAllowLocal: process.env.NEXT_PUBLIC_WOS_ALLOW_LOCAL_SUPABASE,
+      }),
+    },
   });
 }
 
