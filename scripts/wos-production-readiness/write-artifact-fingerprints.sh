@@ -9,7 +9,6 @@ tmp="$(mktemp)"
 trap 'rm -f "$tmp"' EXIT INT TERM
 
 files=(
-  .github/workflows/wos-production-readiness.yml
   src/lib/workshop-orders/production-runtime-contract.ts
   tests/unit/workshop-order-production-runtime-contract.test.ts
   supabase/production-bootstrap/20261123_app_schema.sql
