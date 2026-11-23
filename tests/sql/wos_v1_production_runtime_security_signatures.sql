@@ -19,15 +19,23 @@ WITH function_rows AS (
     'config', COALESCE(to_jsonb(procedure.proconfig), '[]'::jsonb),
     'acl', COALESCE((
       SELECT jsonb_agg(jsonb_build_object(
+        'grantor', CASE
+          WHEN acl.grantor = 0 THEN 'PUBLIC'
+          ELSE pg_catalog.pg_get_userbyid(acl.grantor)
+        END,
         'grantee', CASE
           WHEN acl.grantee = 0 THEN 'PUBLIC'
           ELSE pg_catalog.pg_get_userbyid(acl.grantee)
         END,
-        'privilege', acl.privilege_type
+        'privilege', acl.privilege_type,
+        'is_grantable', acl.is_grantable
       ) ORDER BY
+        CASE WHEN acl.grantor = 0 THEN 'PUBLIC'
+          ELSE pg_catalog.pg_get_userbyid(acl.grantor) END,
         CASE WHEN acl.grantee = 0 THEN 'PUBLIC'
           ELSE pg_catalog.pg_get_userbyid(acl.grantee) END,
-        acl.privilege_type)
+        acl.privilege_type,
+        acl.is_grantable)
       FROM aclexplode(
         COALESCE(procedure.proacl, acldefault('f', procedure.proowner))
       ) acl
@@ -45,15 +53,23 @@ table_rows AS (
     'row_security', relation.relrowsecurity,
     'acl', COALESCE((
       SELECT jsonb_agg(jsonb_build_object(
+        'grantor', CASE
+          WHEN acl.grantor = 0 THEN 'PUBLIC'
+          ELSE pg_catalog.pg_get_userbyid(acl.grantor)
+        END,
         'grantee', CASE
           WHEN acl.grantee = 0 THEN 'PUBLIC'
           ELSE pg_catalog.pg_get_userbyid(acl.grantee)
         END,
-        'privilege', acl.privilege_type
+        'privilege', acl.privilege_type,
+        'is_grantable', acl.is_grantable
       ) ORDER BY
+        CASE WHEN acl.grantor = 0 THEN 'PUBLIC'
+          ELSE pg_catalog.pg_get_userbyid(acl.grantor) END,
         CASE WHEN acl.grantee = 0 THEN 'PUBLIC'
           ELSE pg_catalog.pg_get_userbyid(acl.grantee) END,
-        acl.privilege_type)
+        acl.privilege_type,
+        acl.is_grantable)
       FROM aclexplode(
         COALESCE(relation.relacl, acldefault('r', relation.relowner))
       ) acl

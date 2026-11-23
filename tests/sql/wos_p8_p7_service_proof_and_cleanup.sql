@@ -1,8 +1,25 @@
 -- WOS P8 nonproduction production-structure candidate: service-bound image proof,
 -- scoped private Storage policies, and recoverable cleanup lease protocol.
--- Not in supabase/migrations. NOT PRODUCTION AUTHORIZED.
+-- Not in supabase/migrations. INSTALL_NOT_AUTHORIZED.
 -- No SQL deletion of storage.objects, no physical file deletion.
 BEGIN;
+
+DO $install_gate$
+BEGIN
+  IF current_database() NOT IN (
+    'wos_prod_bootstrap_ci',
+    'wos_p8_replay_ci',
+    'wos_v1_rollback_ci'
+  )
+    AND current_setting(
+      'wos_v1.p7_service_proof_install_authorized',
+      true
+    ) IS DISTINCT FROM 'yes'
+  THEN
+    RAISE EXCEPTION 'WOS_V1_P7_SERVICE_PROOF_INSTALL_NOT_AUTHORIZED';
+  END IF;
+END;
+$install_gate$;
 
 CREATE OR REPLACE FUNCTION public.wos_p7_record_trusted_image_proof(
  p_image_id uuid, p_order_id uuid, p_actor_user_id uuid, p_storage_path text,
@@ -25,6 +42,8 @@ BEGIN
  IF p_image_id IS NULL OR p_order_id IS NULL OR p_actor_user_id IS NULL
  OR p_storage_object_id IS NULL OR p_storage_object_updated_at IS NULL
  OR p_storage_path IS NULL OR length(p_storage_path)>600
+ OR p_storage_object_version IS NULL
+ OR length(btrim(p_storage_object_version))=0
  OR p_sha256 !~ '^[a-f0-9]{64}$'
  THEN RAISE EXCEPTION 'INVALID_PROOF_INPUT' USING ERRCODE='22023'; END IF;
  SELECT * INTO v_actor FROM public.profiles

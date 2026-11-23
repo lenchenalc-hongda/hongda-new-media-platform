@@ -3,7 +3,11 @@
 -- never with DELETE FROM storage.buckets or storage.objects.
 BEGIN;
 DO $gate$ BEGIN
- IF current_database() NOT IN ('wos_p8_replay_ci','wos_prod_bootstrap_ci')
+ IF current_database() NOT IN (
+   'wos_p8_replay_ci',
+   'wos_prod_bootstrap_ci',
+   'wos_v1_rollback_ci'
+ )
  THEN RAISE EXCEPTION 'P8_DISPOSABLE_CI_ONLY'; END IF;
  IF EXISTS(SELECT 1 FROM storage.objects WHERE bucket_id='wos-private')
  THEN RAISE EXCEPTION 'P8_BINARY_OBJECTS_PRESENT'; END IF;

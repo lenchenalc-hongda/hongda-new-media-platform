@@ -179,12 +179,37 @@ Passed:
 The four proof fixtures use synthetic metadata and synthetic SHA-256 values.
 This is not a real Storage byte download or hosted Edge verification pass.
 
-## 7. Result
+## 7. Final integration hardening
+
+The independent review of the split 62-file business diff identified and this
+branch now closes four release-blocking gaps:
+
+- Runtime rollback refuses to drop receipt or revision tables once any audit
+  row exists. The PG17 runner proves both outcomes: populated-data rollback is
+  rejected without schema loss, while a separate empty disposable database
+  rolls back to the exact P7 signature and then to the 67-table baseline.
+- `wos_verified_image_proofs.storage_object_version` is non-null and non-empty,
+  and both service proof functions reject empty version inputs before
+  recording or validating a proof.
+- The service-only
+  `wos_p7_record_trusted_image_proof` prerequisite is now listed in the exact
+  migration sequence, carries `INSTALL_NOT_AUTHORIZED`, and rejects direct
+  non-disposable installation without its file-specific authorization GUC.
+- Security signatures now include ACL grantor and `is_grantable`; verification
+  fails if an application role receives a GRANT OPTION.
+
+The schema bootstrap also runs in a single PostgreSQL transaction. A synthetic
+mid-file failure is asserted to leave zero public application tables.
+
+## 8. Result
 
 `SCHEMA_ONLY_BOOTSTRAP=PASS`
+`BOOTSTRAP_ATOMIC_FAILURE=PASS`
 `HISTORICAL_LINEAGE_REPLAY=PASS`
 `APPLICATION_SCHEMA_PARITY=PASS`
 `WOS_RUNTIME_TRANSACTION_REHEARSAL=PASS`
+`RUNTIME_ROLLBACK_WITH_DATA_REJECTED=PASS`
+`APPLICATION_ROLE_GRANT_OPTIONS=ABSENT`
 `FULL_ROLLBACK_PARITY=PASS`
 `CPC_GLH_COMMERCIAL_NO_DRIFT=PASS`
 `WIDER_SUPABASE_AUTH_STORAGE_EDGE_PARITY=NOT_VERIFIED`

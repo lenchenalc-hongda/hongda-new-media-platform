@@ -5,7 +5,11 @@
 BEGIN;
 DO $wos_p8_gate$
 BEGIN
- IF current_database() IN ('wos_p8_replay_ci','wos_prod_bootstrap_ci') THEN RETURN; END IF;
+ IF current_database() IN (
+   'wos_p8_replay_ci',
+   'wos_prod_bootstrap_ci',
+   'wos_v1_rollback_ci'
+ ) THEN RETURN; END IF;
  IF current_database()<>'postgres'
     OR current_setting('wos_p8.approved_branch_ref',true) !~ '^[a-z0-9]{20}$'
     OR current_setting('wos_p8.approved_branch_ref',true)='amqpvxrurenevniilhtl'
@@ -100,7 +104,8 @@ CREATE TABLE public.wos_verified_image_proofs (
   storage_bucket text NOT NULL DEFAULT 'wos-private' CHECK(storage_bucket='wos-private'),
   storage_path text NOT NULL UNIQUE,
   storage_object_id uuid NOT NULL,
-  storage_object_version text,
+  storage_object_version text NOT NULL
+    CHECK (length(storage_object_version) BETWEEN 1 AND 512),
   storage_object_updated_at timestamptz NOT NULL,
   verified_sha256 text NOT NULL CHECK(verified_sha256 ~ '^[a-f0-9]{64}$'),
   verified_at timestamptz NOT NULL DEFAULT now(),

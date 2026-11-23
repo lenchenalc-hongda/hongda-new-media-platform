@@ -3,7 +3,12 @@
 -- Storage binaries or Production data are created.
 DO $guard$
 BEGIN
-  IF current_database() NOT IN ('wos_prod_bootstrap_ci', 'wos_p8_replay_ci') THEN
+  IF current_database() NOT IN (
+    'wos_prod_bootstrap_ci',
+    'wos_p8_replay_ci',
+    'wos_v1_bootstrap_failure_ci',
+    'wos_v1_rollback_ci'
+  ) THEN
     RAISE EXCEPTION 'WOS_PRODUCTION_BOOTSTRAP_DISPOSABLE_DATABASE_REQUIRED';
   END IF;
   IF EXISTS (

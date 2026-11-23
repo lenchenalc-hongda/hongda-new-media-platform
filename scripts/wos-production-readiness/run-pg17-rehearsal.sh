@@ -5,6 +5,8 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 CONTAINER="${WOS_PG_DOCKER_CONTAINER:-}"
 BOOTSTRAP_DB="wos_prod_bootstrap_ci"
 HISTORY_DB="wos_p8_replay_ci"
+ROLLBACK_DB="wos_v1_rollback_ci"
+FAILURE_DB="wos_v1_bootstrap_failure_ci"
 MANIFEST="$ROOT/docs/workshop-order-system/production-readiness/wos_v1_production_app_signature_manifest_20261123.json"
 RUNTIME_FORWARD="docs/workshop-order-system/production-readiness/sql/WOS_V1_PRODUCTION_RUNTIME_FORWARD_NOT_AUTHORIZED.sql"
 RUNTIME_ROLLBACK="docs/workshop-order-system/production-readiness/sql/WOS_V1_PRODUCTION_RUNTIME_ROLLBACK_NOT_AUTHORIZED.sql"
@@ -58,6 +60,12 @@ apply_file() {
   psql_db "$database" -q < "$ROOT/$file"
 }
 
+apply_file_transaction() {
+  local database="$1"
+  local file="$2"
+  psql_db "$database" -q -1 < "$ROOT/$file"
+}
+
 apply_files_transaction() {
   local database="$1"
   shift
@@ -67,6 +75,49 @@ apply_files_transaction() {
       printf '\n'
     done
   } | psql_db "$database" -q -1
+}
+
+apply_production_files_transaction() {
+  local database="$1"
+  shift
+  {
+    printf "SET wos_v1.production_migration_authorized = 'yes';\n"
+    for file in "$@"; do
+      cat "$ROOT/$file"
+      printf '\n'
+    done
+  } | psql_db "$database" -q -1
+}
+
+apply_production_migration_file() {
+  local database="$1"
+  local file="$2"
+  {
+    printf "SET wos_v1.production_migration_authorized = 'yes';\n"
+    cat "$ROOT/$file"
+  } | psql_db "$database" -q
+}
+
+apply_production_rollback_file() {
+  local database="$1"
+  local file="$2"
+  {
+    printf "SET wos_v1.production_rollback_authorized = 'yes';\n"
+    cat "$ROOT/$file"
+  } | psql_db "$database" -q
+}
+
+install_wos_baseline() {
+  local database="$1"
+  apply_file "$database" tests/sql/wos_production_bootstrap_fixture.sql
+  apply_file_transaction \
+    "$database" supabase/production-bootstrap/20261123_app_schema.sql
+  apply_production_files_transaction \
+    "$database" \
+    supabase/migrations/20261014102000_workshop_order_system_foundation.sql \
+    "$FOUNDATION_CONTAINMENT"
+  apply_file "$database" tests/sql/wos_p8_p7_production_compatible_candidate.sql
+  apply_file "$database" tests/sql/wos_p8_p7_service_proof_and_cleanup.sql
 }
 
 apply_authorized_activation() {
@@ -105,6 +156,10 @@ cleanup() {
     >/dev/null 2>&1 || true
   psql_db postgres -q -c "DROP DATABASE IF EXISTS \"$HISTORY_DB\" WITH (FORCE)" \
     >/dev/null 2>&1 || true
+  psql_db postgres -q -c "DROP DATABASE IF EXISTS \"$ROLLBACK_DB\" WITH (FORCE)" \
+    >/dev/null 2>&1 || true
+  psql_db postgres -q -c "DROP DATABASE IF EXISTS \"$FAILURE_DB\" WITH (FORCE)" \
+    >/dev/null 2>&1 || true
   exit "$status"
 }
 trap cleanup EXIT INT TERM
@@ -114,7 +169,8 @@ trap cleanup EXIT INT TERM
 
 recreate_db "$BOOTSTRAP_DB"
 apply_file "$BOOTSTRAP_DB" tests/sql/wos_production_bootstrap_fixture.sql
-apply_file "$BOOTSTRAP_DB" supabase/production-bootstrap/20261123_app_schema.sql
+apply_file_transaction \
+  "$BOOTSTRAP_DB" supabase/production-bootstrap/20261123_app_schema.sql
 
 [[ "$(query_value "$BOOTSTRAP_DB" "SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_type='BASE TABLE'")" = '67' ]] \
   || fail 'BOOTSTRAP_PUBLIC_TABLE_COUNT'
@@ -124,6 +180,25 @@ apply_file "$BOOTSTRAP_DB" supabase/production-bootstrap/20261123_app_schema.sql
   || fail 'BOOTSTRAP_PROFILE_DATA_PRESENT'
 [[ "$(query_value "$BOOTSTRAP_DB" "SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_name LIKE 'wos_%'")" = '0' ]] \
   || fail 'BOOTSTRAP_WOS_MUST_BE_ABSENT'
+
+recreate_db "$FAILURE_DB"
+apply_file "$FAILURE_DB" tests/sql/wos_production_bootstrap_fixture.sql
+if {
+  cat "$ROOT/supabase/production-bootstrap/20261123_app_schema.sql"
+  printf "\nDO \$synthetic_failure\$ BEGIN RAISE EXCEPTION 'WOS_V1_SYNTHETIC_BOOTSTRAP_ABORT'; END \$synthetic_failure\$;\n"
+} | psql_db "$FAILURE_DB" -q -1 \
+    > /tmp/wos-v1-bootstrap-failure.log 2>&1; then
+  fail 'BOOTSTRAP_SYNTHETIC_FAILURE_NOT_DETECTED'
+fi
+grep -q 'WOS_V1_SYNTHETIC_BOOTSTRAP_ABORT' \
+  /tmp/wos-v1-bootstrap-failure.log \
+  || fail 'BOOTSTRAP_SYNTHETIC_FAILURE_WRONG_ERROR'
+[[ "$(query_value "$FAILURE_DB" "
+  SELECT count(*)::text
+  FROM information_schema.tables
+  WHERE table_schema='public' AND table_type='BASE TABLE'
+")" = '0' ]] \
+  || fail 'BOOTSTRAP_PARTIAL_INSTALL_LEFTOVER'
 
 psql_db "$BOOTSTRAP_DB" -qAt \
   < "$ROOT/tests/sql/wos_production_app_schema_signatures.sql" \
@@ -331,35 +406,77 @@ grep -q 'WOS_V1_RUNTIME_ALREADY_PARTIALLY_INSTALLED' \
 apply_file "$BOOTSTRAP_DB" "$RUNTIME_SMOKE"
 WOS_PG_DOCKER_CONTAINER="$CONTAINER_ID" \
   bash "$ROOT/scripts/wos-production-readiness/run-runtime-concurrency.sh"
-apply_file "$BOOTSTRAP_DB" "$RUNTIME_ROLLBACK"
+
+if psql_db "$BOOTSTRAP_DB" -q < "$ROOT/$RUNTIME_ROLLBACK" \
+    > /tmp/wos-v1-runtime-rollback-with-data.log 2>&1; then
+  fail 'RUNTIME_ROLLBACK_DELETED_POPULATED_AUDIT_DATA'
+fi
+grep -q 'WOS_V1_RUNTIME_ROLLBACK_REQUIRES_DATA_RETENTION_DECISION' \
+  /tmp/wos-v1-runtime-rollback-with-data.log \
+  || fail 'RUNTIME_ROLLBACK_WITH_DATA_WRONG_ERROR'
+[[ "$(query_value "$BOOTSTRAP_DB" "
+  SELECT (
+    EXISTS (SELECT 1 FROM public.wos_order_create_receipts)
+    OR EXISTS (SELECT 1 FROM public.wos_operator_action_receipts)
+    OR EXISTS (SELECT 1 FROM public.wos_office_revisions)
+    OR EXISTS (SELECT 1 FROM public.wos_operator_review_receipts)
+  )::text
+")" = 'true' ]] \
+  || fail 'RUNTIME_ROLLBACK_DISCARDED_AUDIT_DATA'
+[[ "$(query_value "$BOOTSTRAP_DB" "
+  SELECT count(*)::text
+  FROM information_schema.tables
+  WHERE table_schema='public'
+    AND table_name IN (
+      'wos_order_create_receipts',
+      'wos_operator_action_receipts',
+      'wos_office_revisions',
+      'wos_operator_review_receipts'
+    )
+")" = '4' ]] \
+  || fail 'RUNTIME_ROLLBACK_WITH_DATA_CHANGED_SCHEMA'
+
+recreate_db "$ROLLBACK_DB"
+install_wos_baseline "$ROLLBACK_DB"
 write_runtime_security_signatures \
-  "$BOOTSTRAP_DB" /tmp/wos-v1-p7-security-after-runtime-rollback.ndjson
+  "$ROLLBACK_DB" /tmp/wos-v1-p7-security-for-runtime-rollback.ndjson
+if ! cmp -s \
+    /tmp/wos-v1-p7-security.ndjson \
+    /tmp/wos-v1-p7-security-for-runtime-rollback.ndjson; then
+  fail 'ROLLBACK_REHEARSAL_P7_BASELINE_MISMATCH'
+fi
+apply_production_migration_file "$ROLLBACK_DB" "$RUNTIME_FORWARD"
+apply_production_rollback_file "$ROLLBACK_DB" "$RUNTIME_ROLLBACK"
+write_runtime_security_signatures \
+  "$ROLLBACK_DB" /tmp/wos-v1-p7-security-after-runtime-rollback.ndjson
 if ! cmp -s \
     /tmp/wos-v1-p7-security.ndjson \
     /tmp/wos-v1-p7-security-after-runtime-rollback.ndjson; then
   fail 'RUNTIME_ROLLBACK_NOT_INVERSE_TO_P7'
 fi
-apply_file "$BOOTSTRAP_DB" tests/sql/wos_p8_p7_disposable_full_rollback.sql
+apply_file "$ROLLBACK_DB" tests/sql/wos_p8_p7_disposable_full_rollback.sql
 
-[[ "$(query_value "$BOOTSTRAP_DB" "SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_type='BASE TABLE'")" = '67' ]] \
+[[ "$(query_value "$ROLLBACK_DB" "SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_type='BASE TABLE'")" = '67' ]] \
   || fail 'ROLLBACK_TABLE_COUNT'
-[[ "$(query_value "$BOOTSTRAP_DB" "SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_name LIKE 'wos_%'")" = '0' ]] \
+[[ "$(query_value "$ROLLBACK_DB" "SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_name LIKE 'wos_%'")" = '0' ]] \
   || fail 'ROLLBACK_WOS_PRESENT'
-[[ "$(query_value "$BOOTSTRAP_DB" "SELECT count(*) FROM storage.buckets WHERE id='wos-private'")" = '0' ]] \
+[[ "$(query_value "$ROLLBACK_DB" "SELECT count(*) FROM storage.buckets WHERE id='wos-private'")" = '0' ]] \
   || fail 'ROLLBACK_PRIVATE_BUCKET_PRESENT'
 
-psql_db "$BOOTSTRAP_DB" -qAt \
+psql_db "$ROLLBACK_DB" -qAt \
   < "$ROOT/tests/sql/wos_production_app_schema_signatures.sql" \
   > /tmp/wos-v1-rollback-signatures.ndjson
 node "$ROOT/scripts/wos-production-readiness/schema-signature-manifest.mjs" \
   verify /tmp/wos-v1-rollback-signatures.ndjson "$MANIFEST"
 
 echo 'WOS_V1_PG17_SCHEMA_BOOTSTRAP=PASS'
+echo 'WOS_V1_PG17_BOOTSTRAP_ATOMIC_FAILURE=PASS'
 echo 'WOS_V1_PG17_HISTORICAL_LINEAGE_REPLAY=PASS'
 echo 'WOS_V1_PG17_PUBLIC_AND_COMMERCIAL_SCHEMA_PARITY=PASS'
 echo 'WOS_V1_PG17_WOS_RUNTIME_LIFECYCLE=PASS'
 echo 'WOS_V1_PG17_RPC_ACL_ACTIVATION_AND_DEACTIVATION=PASS'
 echo 'WOS_V1_PG17_RUNTIME_ROLLBACK_TO_P7_EXACT=PASS'
+echo 'WOS_V1_PG17_RUNTIME_ROLLBACK_WITH_DATA_REJECTED=PASS'
 echo 'WOS_V1_PG17_CONCURRENT_VERSION_CAS=PASS'
 echo 'WOS_V1_PG17_DUPLICATE_INSTALL_REJECTED=PASS'
 echo 'WOS_V1_PG17_FULL_ROLLBACK_PARITY=PASS'
