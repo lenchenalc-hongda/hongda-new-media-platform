@@ -1,0 +1,72 @@
+name: WOS V1 Production Readiness
+
+on:
+  pull_request:
+    branches: [master, main]
+    paths:
+      - 'supabase/production-bootstrap/**'
+      - 'docs/workshop-order-system/nonproduction-only/**'
+      - 'docs/workshop-order-system/production-readiness/**'
+      - 'scripts/wos-production-readiness/**'
+      - 'scripts/wos-p8/**'
+      - 'scripts/wos_p8_*.py'
+      - 'src/lib/workshop-orders/production-runtime-contract.ts'
+      - 'tests/sql/wos_p8_*'
+      - 'tests/sql/wos_production_*'
+      - 'tests/sql/wos_v1_*'
+      - 'tests/unit/workshop-order-production-runtime-contract.test.ts'
+      - 'tests/unit/workshop-order-suite.test.ts'
+      - 'supabase/migrations/20261014102000_workshop_order_system_foundation.sql'
+      - '.github/workflows/wos-production-readiness.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: wos-v1-production-readiness-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pg17-schema-and-runtime:
+    name: wos-v1-pg17-schema-bootstrap-and-runtime
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      WOS_PG_DOCKER_CONTAINER: codex-wos-prod-readiness-pg17-v1
+    steps:
+      - name: Checkout without privileged credentials
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+
+      - name: Start disposable PostgreSQL 17
+        run: |
+          set -euo pipefail
+          docker run -d \
+            --name "$WOS_PG_DOCKER_CONTAINER" \
+            --network none \
+            --label com.hongda.wos.disposable-pg17=true \
+            --label com.hongda.wos.test-purpose=wos-v1-production-readiness \
+            -e POSTGRES_PASSWORD=synthetic \
+            postgres:17-alpine
+          for _ in $(seq 1 30); do
+            if docker exec "$WOS_PG_DOCKER_CONTAINER" pg_isready -U postgres; then
+              exit 0
+            fi
+            sleep 1
+          done
+          docker logs "$WOS_PG_DOCKER_CONTAINER"
+          exit 1
+
+      - name: Run schema, lineage, lifecycle and rollback rehearsal
+        run: bash scripts/wos-production-readiness/run-pg17-rehearsal.sh
+
+      - name: Stop disposable PostgreSQL
+        if: always()
+        run: docker rm -f "$WOS_PG_DOCKER_CONTAINER" || true
