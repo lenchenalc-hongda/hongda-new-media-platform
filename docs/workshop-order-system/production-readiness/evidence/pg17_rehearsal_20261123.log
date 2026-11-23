@@ -1,0 +1,269 @@
+NOTICE:  database "wos_prod_bootstrap_ci" does not exist, skipping
+                        check_name
+----------------------------------------------------------
+ WOS_PRODUCTION_BOOTSTRAP_SYNTHETIC_SUPABASE_FIXTURE=PASS
+(1 row)
+
+ set_config
+------------
+
+(1 row)
+
+NOTICE:  database "wos_v1_bootstrap_failure_ci" does not exist, skipping
+                        check_name
+----------------------------------------------------------
+ WOS_PRODUCTION_BOOTSTRAP_SYNTHETIC_SUPABASE_FIXTURE=PASS
+(1 row)
+
+{
+  "passed": true,
+  "expectedRows": 383,
+  "actualRows": 383,
+  "missing": [],
+  "extra": [],
+  "changed": [],
+  "expectedAggregate": "745e7556931fd99abae835d7ab21a9e899eb8b624380ef1a95fb4f1773ae4f5b",
+  "actualAggregate": "745e7556931fd99abae835d7ab21a9e899eb8b624380ef1a95fb4f1773ae4f5b"
+}
+NOTICE:  database "wos_p8_replay_ci" does not exist, skipping
+WOS_P8_LEGACY_ZERO_DATA_BOOTSTRAP=APPLIED
+NOTICE:  policy "Update topics: admin/manager/operator" for relation "public.topics" does not exist, skipping
+NOTICE:  policy "Read own leads: sales" for relation "public.leads" does not exist, skipping
+NOTICE:  policy "Update own assigned leads: sales" for relation "public.leads" does not exist, skipping
+WOS_P8_PREHISTORY_APPLIED supabase/migrations/20260801000000_review_center_auth_forward_migration.sql
+NOTICE:  relation "uq_profiles_id_org" already exists, skipping
+WOS_P8_PREHISTORY_APPLIED supabase/migrations/20260817_review_center_phase2_core_foundation.sql
+WOS_P8_PREHISTORY_APPLIED supabase/migrations/20260817_review_center_phase2_policy_role_hardening.sql
+WOS_P8_PREHISTORY_APPLIED supabase/migrations/20260818_review_center_phase2_draft_mutation_foundation.sql
+WOS_P8_PREHISTORY_APPLIED supabase/migrations/20260818_review_center_phase2_jsonb_compat_hardening.sql
+WOS_P8_PREHISTORY_APPLIED supabase/migrations/20260819_review_center_profile_directory.sql
+WOS_P8_PREHISTORY_APPLIED supabase/migrations/20260820_review_center_participant_directory.sql
+WOS_P8_PREHISTORY_APPLIED supabase/migrations/20260825200000_review_center_lifecycle_foundation.sql
+WOS_P8_PREHISTORY_APPLIED supabase/migrations/20260825213000_review_center_lifecycle_submit_permission_null_safety.sql
+WOS_P8_PREHISTORY_APPLIED supabase/migrations/20260825221500_review_center_capa_schema_foundation.sql
+WOS_P8_PREHISTORY_APPLIED supabase/migrations/20260825223000_review_center_capa_mutation_foundation.sql
+WOS_P8_PREHISTORY_APPLIED supabase/migrations/20260825_review_center_event_actor_directory.sql
+WOS_P8_PREHISTORY_APPLIED supabase/migrations/20260826210336_review_center_metadata_foundation.sql
+WOS_P8_PREHISTORY_APPLIED supabase/migrations/20260827000000_review_center_case_core_foundation.sql
+WOS_P8_PREHISTORY_APPLIED supabase/migrations/20260827010000_review_center_case_mutation_foundation.sql
+WOS_P8_PREHISTORY_APPLIED supabase/migrations/20260916043000_review_center_submit_missing_fields.sql
+WOS_P8_PREHISTORY_APPLIED supabase/migrations/20260916053000_review_center_return_reason_required.sql
+WOS_P8_TRACKED_SOURCE_APPLIED 20261001143000
+WOS_P8_TRACKED_SOURCE_APPLIED 20261002024500
+WOS_P8_TRACKED_SOURCE_APPLIED 20261002033500
+WOS_P8_TRACKED_SOURCE_APPLIED 20261002050000
+WOS_P8_TRACKED_SOURCE_APPLIED 20261002065000
+WOS_P8_TRACKED_SOURCE_APPLIED 20261002073000
+WOS_P8_TRACKED_SOURCE_APPLIED 20261002090000
+WOS_P8_TRACKED_SOURCE_APPLIED 20261006140000
+WOS_P8_TRACKED_SOURCE_APPLIED 20261007020000
+WOS_P8_TRACKED_SOURCE_APPLIED 20261024053736
+WOS_P8_TRACKED_SOURCE_APPLIED 20261024054519
+WOS_P8_TRACKED_SOURCE_APPLIED 20261024054523
+WOS_P8_TRACKED_SOURCE_APPLIED 20261024054529
+WOS_P8_TRACKED_SOURCE_APPLIED 20261024054533
+WOS_P8_TRACKED_SOURCE_APPLIED 20261024054538
+WOS_P8_TRACKED_SOURCE_APPLIED 20261024145344
+WOS_P8_TRACKED_SOURCE_APPLIED 20261025132114
+WOS_P8_TRACKED_SOURCE_APPLIED 20261025135913
+WOS_P8_TRACKED_SOURCE_APPLIED 20261025141549
+WOS_P8_TRACKED_SOURCE_APPLIED 20261027005218
+WOS_P8_TRACKED_SOURCE_APPLIED 20261027005229
+WOS_P8_TRACKED_SOURCE_APPLIED 20261027020101
+WOS_P8_TRACKED_SOURCE_APPLIED 20261027020110
+WOS_P8_TRACKED_SOURCE_APPLIED 20261027020118
+WOS_P8_TRACKED_SOURCE_APPLIED 20261027100912
+WOS_P8_TRACKED_SOURCE_APPLIED 20261030030750
+WOS_P8_TRACKED_SOURCE_APPLIED 20261030060630
+WOS_P8_TRACKED_SOURCE_APPLIED 20261103070727
+WOS_P8_TRACKED_SOURCE_APPLIED 20261107063851
+WOS_P8_HISTORICAL_PROFILE_ACL_RLS_RECONSTRUCTED=PASS
+WOS_P8_P06_SCHEMA_REPLAY_67_OF_67=PASS
+WOS_P8_PRODUCTION_DATA=ABSENT; WOS_BASELINE=ABSENT
+WOS_P8_NATIVE_MIGRATION_TRACKING=NOT_MODIFIED
+               check_name
+-----------------------------------------
+ WOS_P8_HISTORICAL_POLICY_RECONCILE=PASS
+(1 row)
+
+                  check_name
+----------------------------------------------
+ WOS_P8_HISTORICAL_FUNCTION_COMPENSATION=PASS
+(1 row)
+
+               check_name
+-----------------------------------------
+ WOS_P8_HISTORICAL_ACL_COMPENSATION=PASS
+(1 row)
+
+WOS_P8_DISPOSABLE_EXPLICIT_TABLE_GRANT_PARITY=PASS
+WOS_P8_EFFECTIVE_PRODUCTION_ACL_AUTH_API_PARITY=NOT_VERIFIED
+WOS_P8_PRODUCTION_ROLE_CHANGES=NONE
+WOS_P8_PUBLIC_CATALOG_SIGNATURE_REPORT={"column_sig": {"count": 0, "tables_first_20": []}, "columns": {"count": 0, "tables_first_20": []}, "constraint_sig": {"count": 0, "tables_first_20": []}, "constraints": {"count": 0, "tables_first_20": []}, "index_sig": {"count": 0, "tables_first_20": []}, "indexes": {"count": 0, "tables_first_20": []}, "policies": {"count": 0, "tables_first_20": []}, "policy_sig": {"count": 0, "tables_first_20": []}}
+WOS_P8_PRODUCTION_PUBLIC_SCHEMA_SIGNATURE_EQUAL=YES
+WOS_P8_WIDER_SUPABASE_SCHEMA_STORAGE_EDGE_PARITY=NOT_VERIFIED
+WOS_P8_PUBLIC_DATA_OR_REAL_SUPABASE_WRITES=NONE
+WOS_P8_FUNCTION_TRIGGER_GRANT_PARITY={"functions": {"extra_count": 0, "extra_first_12": [], "local_count": 100, "missing_count": 0, "missing_first_12": [], "production_count": 100, "property_drift": {"anon_exec": {"count": 0, "first_8": []}, "auth_exec": {"count": 0, "first_8": []}, "definition_sig": {"count": 0, "first_8": []}, "language": {"count": 0, "first_8": []}, "result_type": {"count": 0, "first_8": []}, "security_definer": {"count": 0, "first_8": []}, "service_exec": {"count": 0, "first_8": []}, "settings": {"count": 0, "first_8": []}, "volatility": {"count": 0, "first_8": []}}}, "table_grants": {"extra_count": 0, "extra_first_12": [], "local_count": 67, "missing_count": 0, "missing_first_12": [], "production_count": 67, "property_drift": {"grant_sig": {"count": 0, "first_8": []}, "grants": {"count": 0, "first_8": []}}}, "triggers": {"extra_count": 0, "extra_first_12": [], "local_count": 32, "missing_count": 0, "missing_first_12": [], "production_count": 32, "property_drift": {"definition_sig": {"count": 0, "first_8": []}, "enabled_state": {"count": 0, "first_8": []}}}}
+WOS_P8_LIVE_SUPABASE_AUTH_STORAGE_EDGE_PARITY=NOT_VERIFIED
+WOS_P8_PRODUCTION_DATA_OR_WRITES=NONE
+{
+  "passed": true,
+  "expectedRows": 383,
+  "actualRows": 383,
+  "missing": [],
+  "extra": [],
+  "changed": [],
+  "expectedAggregate": "745e7556931fd99abae835d7ab21a9e899eb8b624380ef1a95fb4f1773ae4f5b",
+  "actualAggregate": "745e7556931fd99abae835d7ab21a9e899eb8b624380ef1a95fb4f1773ae4f5b"
+}
+WOS_V1_RUNTIME_SECURITY_MANIFEST_WRITTEN=/private/tmp/hongda-wos-prod-readiness-20261123/docs/workshop-order-system/production-readiness/wos_v1_runtime_security_inactive_manifest_20261123.json
+WOS_V1_RUNTIME_SECURITY_MANIFEST_WRITTEN=/private/tmp/hongda-wos-prod-readiness-20261123/docs/workshop-order-system/production-readiness/wos_v1_runtime_security_active_manifest_20261123.json
+            check_name
+-----------------------------------
+ WOS_V1_PRODUCTION_RPC_DEACTIVATED
+(1 row)
+
+WOS_V1_RUNTIME_SECURITY_SIGNATURES=INSTALLED-INACTIVE_PASS
+WOS_V1_RUNTIME_DEFINITION_ACL_TABLE_POLICY_MANIFEST=PASS
+WOS_V1_INTERNAL_IMAGE_SET_HELPER_HIDDEN=PASS
+WOS_V1_SERVICE_PROOF_NOT_BROWSER_EXECUTABLE=PASS
+WOS_V1_PRIVATE_BUCKET_AND_STORAGE_POLICIES=PASS
+WOS_V1_QA_GATE_OBJECTS_ABSENT=PASS
+WOS_V1_APPLICATION_ROLE_GRANT_OPTIONS=ABSENT
+              set_config
+--------------------------------------
+ 33fd493d-2164-4ba7-807a-36e1c2cd054d
+(1 row)
+
+                                                      set_config
+----------------------------------------------------------------------------------------------------------------------
+ organizations/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/wos/production-order/33fd493d-2164-4ba7-807a-36e1c2cd054d/images/
+(1 row)
+
+                                                                       wos_p7_record_trusted_image_proof
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ {"sha256": "1111111111111111111111111111111111111111111111111111111111111111", "status": "VERIFIED", "imageId": "71000000-0000-4000-8000-000000000001", "category": "product"}
+(1 row)
+
+                                                                          wos_p7_record_trusted_image_proof
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ {"sha256": "2222222222222222222222222222222222222222222222222222222222222222", "status": "VERIFIED", "imageId": "71000000-0000-4000-8000-000000000002", "category": "film_pattern"}
+(1 row)
+
+                                                                                wos_p7_record_trusted_image_proof
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ {"sha256": "3333333333333333333333333333333333333333333333333333333333333333", "status": "VERIFIED", "imageId": "71000000-0000-4000-8000-000000000003", "category": "customer_approved_sample"}
+(1 row)
+
+                                                                          wos_p7_record_trusted_image_proof
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ {"sha256": "4444444444444444444444444444444444444444444444444444444444444444", "status": "VERIFIED", "imageId": "71000000-0000-4000-8000-000000000004", "category": "signed_sample"}
+(1 row)
+
+                               wos_register_uploaded_reference_image
+---------------------------------------------------------------------------------------------------
+ {"bucket": "wos-private", "status": "CREATED", "imageId": "71000000-0000-4000-8000-000000000001"}
+(1 row)
+
+                               wos_register_uploaded_reference_image
+---------------------------------------------------------------------------------------------------
+ {"bucket": "wos-private", "status": "CREATED", "imageId": "71000000-0000-4000-8000-000000000002"}
+(1 row)
+
+                               wos_register_uploaded_reference_image
+---------------------------------------------------------------------------------------------------
+ {"bucket": "wos-private", "status": "CREATED", "imageId": "71000000-0000-4000-8000-000000000003"}
+(1 row)
+
+                               wos_register_uploaded_reference_image
+---------------------------------------------------------------------------------------------------
+ {"bucket": "wos-private", "status": "CREATED", "imageId": "71000000-0000-4000-8000-000000000004"}
+(1 row)
+
+   wos_confirm_office_completeness
+--------------------------------------
+ 43df49fb-6cf8-4ab1-bb21-27235cfeb7f1
+(1 row)
+
+                                                                                                                                  submit_order
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ {"status": "CREATED", "orderId": "33fd493d-2164-4ba7-807a-36e1c2cd054d", "canStart": false, "receiptId": "18c2e822-1380-4f2c-b632-31c65ec92812", "inboxTaskId": "eee76e39-0658-4d4c-b620-6a98f2a73157", "submittedAt": "2026-11-23T03:50:03.731472+00:00", "sourceRevision": 1}
+(1 row)
+
+                                                                                                                 operator_accept
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ {"status": "APPLIED", "orderId": "33fd493d-2164-4ba7-807a-36e1c2cd054d", "version": 3, "canStart": false, "requestId": "53000000-0000-4000-8000-000000000001", "versionLabel": "V1", "workflowStatus": "WORKSHOP_REVIEW", "expectedVersion": 2}
+(1 row)
+
+                                                                                                              operator_accept_replay
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ {"status": "REPLAYED", "orderId": "33fd493d-2164-4ba7-807a-36e1c2cd054d", "version": 3, "canStart": false, "requestId": "53000000-0000-4000-8000-000000000001", "versionLabel": "V1", "workflowStatus": "WORKSHOP_REVIEW", "expectedVersion": 2}
+(1 row)
+
+                                                                                                                  operator_return
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ {"status": "APPLIED", "orderId": "33fd493d-2164-4ba7-807a-36e1c2cd054d", "version": 4, "canStart": false, "requestId": "53000000-0000-4000-8000-000000000002", "versionLabel": "V1", "workflowStatus": "NEEDS_INFORMATION", "expectedVersion": 3}
+(1 row)
+
+                                                                                                        office_save
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ {"status": "SAVED", "orderId": "33fd493d-2164-4ba7-807a-36e1c2cd054d", "version": 5, "canStart": false, "requestId": "54000000-0000-4000-8000-000000000001", "versionLabel": "V2", "workflowStatus": "NEEDS_INFORMATION"}
+(1 row)
+
+                                                                                                        office_resubmit
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ {"status": "RESUBMITTED", "orderId": "33fd493d-2164-4ba7-807a-36e1c2cd054d", "version": 6, "canStart": false, "requestId": "54000000-0000-4000-8000-000000000002", "versionLabel": "V3", "workflowStatus": "WORKSHOP_REVIEW"}
+(1 row)
+
+                                                                                                                             operator_review
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ {"status": "REVIEWED", "orderId": "33fd493d-2164-4ba7-807a-36e1c2cd054d", "version": 7, "canStart": false, "requestId": "55000000-0000-4000-8000-000000000001", "versionLabel": "V3", "workflowStatus": "WAITING_MATERIAL", "expectedVersion": 6, "resolvedBlockers": 1}
+(1 row)
+
+WOS_V1_PRODUCTION_LIFECYCLE=PASS
+WOS_V1_OPERATOR_ACCEPT_RETURN=PASS
+WOS_V1_OFFICE_SAVE_RESUBMIT=PASS
+WOS_V1_OPERATOR_REVIEW_CORRECTION=PASS
+WOS_V1_IDEMPOTENCY=PASS
+WOS_V1_VIEWER_CROSS_ORG_DENIED=PASS
+WOS_V1_CAN_START_FALSE=PASS
+WOS_V1_PG17_CONCURRENT_VERSION_CAS=PASS
+NOTICE:  database "wos_v1_rollback_ci" does not exist, skipping
+                        check_name
+----------------------------------------------------------
+ WOS_PRODUCTION_BOOTSTRAP_SYNTHETIC_SUPABASE_FIXTURE=PASS
+(1 row)
+
+ set_config
+------------
+
+(1 row)
+
+          check_name
+------------------------------
+ WOS_V1_RUNTIME_ROLLBACK=PASS
+(1 row)
+
+WOS_P8_P07_SCHEMA_ROLLBACK_67_TABLES=PASS
+{
+  "passed": true,
+  "expectedRows": 383,
+  "actualRows": 383,
+  "missing": [],
+  "extra": [],
+  "changed": [],
+  "expectedAggregate": "745e7556931fd99abae835d7ab21a9e899eb8b624380ef1a95fb4f1773ae4f5b",
+  "actualAggregate": "745e7556931fd99abae835d7ab21a9e899eb8b624380ef1a95fb4f1773ae4f5b"
+}
+WOS_V1_PG17_SCHEMA_BOOTSTRAP=PASS
+WOS_V1_PG17_BOOTSTRAP_ATOMIC_FAILURE=PASS
+WOS_V1_PG17_HISTORICAL_LINEAGE_REPLAY=PASS
+WOS_V1_PG17_PUBLIC_AND_COMMERCIAL_SCHEMA_PARITY=PASS
+WOS_V1_PG17_WOS_RUNTIME_LIFECYCLE=PASS
+WOS_V1_PG17_RPC_ACL_ACTIVATION_AND_DEACTIVATION=PASS
+WOS_V1_PG17_RUNTIME_ROLLBACK_TO_P7_EXACT=PASS
+WOS_V1_PG17_RUNTIME_ROLLBACK_WITH_DATA_REJECTED=PASS
+WOS_V1_PG17_CONCURRENT_VERSION_CAS=PASS
+WOS_V1_PG17_DUPLICATE_INSTALL_REJECTED=PASS
+WOS_V1_PG17_FULL_ROLLBACK_PARITY=PASS
+WOS_V1_PG17_CPC_GLH_COMMERCIAL_NO_DRIFT=PASS
