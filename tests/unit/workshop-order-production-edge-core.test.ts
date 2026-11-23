@@ -3,12 +3,14 @@ import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { pngValid } from '../../supabase/functions/_shared/wos-png-integrity';
 import {
+  approvedBrowserOrigin,
   approvedSupabaseRuntimeUrl,
   canonicalWosV1ImagePath,
   deterministicProofRequestId,
   evaluateWosV1ImageAccess,
   isWosV1ProofResult,
   objectSnapshotStable,
+  parseAllowedOrigins,
   parseAllowedSupabaseRefs,
   parseWosV1ImageVerificationBody,
   snapshotMatchesUpload,
@@ -66,6 +68,21 @@ assert.equal(approvedSupabaseRuntimeUrl(
   'https://example.supabase.co',
   ['amqpvxrurenevniilhtl'],
 ), false);
+assert.deepEqual(parseAllowedOrigins(
+  'https://qa-preview.example.com,https://staging.example.com/',
+), ['https://qa-preview.example.com', 'https://staging.example.com']);
+assert.deepEqual(parseAllowedOrigins(
+  'http://qa-preview.example.com,https://qa-preview.example.com',
+), []);
+assert.equal(approvedBrowserOrigin(null, []), true);
+assert.equal(approvedBrowserOrigin(
+  'https://qa-preview.example.com',
+  ['https://qa-preview.example.com'],
+), true);
+assert.equal(approvedBrowserOrigin(
+  'https://evil.example.com',
+  ['https://qa-preview.example.com'],
+), false);
 assert.equal(approvedSupabaseRuntimeUrl(
   'http://amqpvxrurenevniilhtl.supabase.co',
   ['amqpvxrurenevniilhtl'],
@@ -85,7 +102,7 @@ const order = {
   sales_owner_profile_id: profileId,
   version: 5,
   version_label: 'V2',
-  workflow_status: 'NEEDS_INFORMATION',
+  workflow_status: 'DRAFT',
 } as const;
 assert.equal(evaluateWosV1ImageAccess({
   runtimeAuthorized: true,
@@ -93,6 +110,12 @@ assert.equal(evaluateWosV1ImageAccess({
   profile,
   order,
 }).code, 'ALLOWED');
+assert.equal(evaluateWosV1ImageAccess({
+  runtimeAuthorized: true,
+  writesEnabled: true,
+  profile,
+  order: { ...order, workflow_status: 'NEEDS_INFORMATION' },
+}).code, 'STATUS_DENIED');
 assert.equal(evaluateWosV1ImageAccess({
   runtimeAuthorized: true,
   writesEnabled: true,
@@ -190,6 +213,14 @@ const runtime = readFileSync(
   'docs/workshop-order-system/production-readiness/sql/WOS_V1_PRODUCTION_RUNTIME_FORWARD_NOT_AUTHORIZED.sql',
   'utf8',
 );
+const qaDependencies = readFileSync(
+  'docs/workshop-order-system/production-readiness/sql/WOS_V1_HOSTED_QA_DEPENDENCIES_NOT_AUTHORIZED.sql',
+  'utf8',
+);
+const edgeIndex = readFileSync(
+  'supabase/functions/wos-v1-verify-image/index.ts',
+  'utf8',
+);
 assert(candidate.includes('TRUSTED_BINARY_PROOF_REQUIRED'));
 assert(candidate.includes('FROM PUBLIC,anon,authenticated,service_role'));
 assert(candidate.includes("proof.expires_at>clock_timestamp()"));
@@ -199,8 +230,15 @@ assert(runtime.includes(
 assert(!runtime.includes(
   'GRANT EXECUTE ON FUNCTION public.wos_register_uploaded_reference_image(',
 ));
+assert(qaDependencies.indexOf('pg_advisory_xact_lock') <
+  qaDependencies.indexOf('SELECT * INTO v_order'));
+assert(qaDependencies.includes("'wos-qa-m2:' || p_order_id::text"));
+assert(edgeIndex.includes("request.method === 'OPTIONS'"));
+assert(edgeIndex.includes('WOS_V1_EDGE_ALLOWED_ORIGINS'));
+assert(edgeIndex.includes("'Access-Control-Allow-Methods'"));
 
 console.log('workshop-order-production-edge-core.test.ts: PASS');
 console.log('WOS_V1_EDGE_FOUR_CATEGORY_ACCESS=PASS');
 console.log('WOS_V1_EDGE_REAL_SHA256_AND_OBJECT_STABILITY=PASS');
 console.log('WOS_V1_DIRECT_REGISTER_REQUIRES_TRUSTED_PROOF=PASS');
+console.log('WOS_V1_EDGE_CORS_ORIGIN_ALLOWLIST=PASS');

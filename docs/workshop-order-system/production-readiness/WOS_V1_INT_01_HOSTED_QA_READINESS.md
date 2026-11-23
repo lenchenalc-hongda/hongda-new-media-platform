@@ -24,7 +24,8 @@ audit. It confirmed that these functions do not exist:
 The QA gate/table metadata evidence also has these properties:
 
 - Operator and Office Gate rows are OFF.
-- Neither Gate table has `allowed_order_id` or `allowed_organization_id`.
+- Both Gate tables currently include `allowed_order_id`,
+  `allowed_organization_id`, `allowed_profile_id` and `activated_at`.
 - Browser roles have no direct write grant on
   `wos_qa_verified_image_proofs`.
 - `wos_qa_verified_image_proofs.storage_object_version` remains nullable in
@@ -32,10 +33,24 @@ The QA gate/table metadata evidence also has these properties:
   and requires exact non-NULL object identity for new proofs without rewriting
   historical rows.
 
-A later refresh of the Supabase management connection failed with
-`28P01` for the temporary CLI role. Therefore order counts, current Gate rows
-and Storage inventory must be read again immediately before an authorized
-install. That connection failure did not execute SQL or change QA.
+Fresh read-only counts before this package were:
+
+```text
+orders=84
+submission_receipts=82
+inbox=82
+verified_proofs=31
+proof_receipts=4
+action_receipts=11
+office_revisions=4
+review_receipts=2
+m2_receipts=4
+```
+
+Target order `2071a963-1b35-4c96-81cd-709d8180ad49` remains
+`WAITING_MATERIAL / v7 / QA-R6`, with 2 action receipts, 2 Office revisions,
+1 review receipt, 1 verified Proof and 0 M2 receipts. Order counts, Gate rows
+and Storage inventory must still be captured again immediately before install.
 
 ## Edge contract
 
@@ -59,6 +74,10 @@ The Edge function obtains the object snapshot before and after the caller-JWT
 download, validates PNG/CRC/SHA-256, and only then performs renewal and proof
 recording through the service credential.
 
+Browser calls require an exact HTTPS match in
+`WOS_V1_EDGE_ALLOWED_ORIGINS`. The function implements OPTIONS preflight,
+allows only `POST, OPTIONS`, and echoes only an approved Origin.
+
 ## Minimal QA-only SQL package
 
 Forward file:
@@ -66,8 +85,8 @@ Forward file:
 `docs/workshop-order-system/production-readiness/sql/WOS_V1_HOSTED_QA_DEPENDENCIES_NOT_AUTHORIZED.sql`
 
 ```text
-SHA256=863b579cac72bde30f450be633e6bf9657c181c20b5ae43cb2c561b5c582d30a
-GIT_BLOB=dac30d5b87831811e507fa6091c7ae3e5a3692e6
+SHA256=0224bed24ede046e6dbdc2314d1bc49b2f95586098aa114e3423ef6639ea2a63
+GIT_BLOB=f91ca80f0cfaa2e12ff2c22f92dfd77af3f51cb2
 ```
 
 Rollback file:
@@ -90,11 +109,21 @@ Exact additive object scope:
 No table, column, index, constraint, trigger, RLS policy, Storage policy,
 bucket, Secret or role is created or altered.
 
+The QA HTTP adapter is wired into the normal Office and Workshop V1 pages.
+Source currently forces QA `writesEnabled=false` even if
+`WOS_V1_QA_APP_WRITES_ENABLED=true`. A future Hosted write package must add an
+order-scoped database Gate to the QA business RPC surface; a Next.js flag alone
+cannot stop direct PostgREST RPC calls.
+
 The functions reuse the existing QA private-object snapshot helper, Proof
 guard trigger, trusted-Proof receipt table, cleanup-claim checks and M2 signoff
 invalidation function. All three functions are `SECURITY DEFINER`,
 `search_path=''`, revoked from `PUBLIC`, `anon` and `authenticated`, and
 granted only to `service_role`.
+
+The proof writer takes the same `wos-qa-m2:<order-id>` transaction advisory
+lock used by QA M2 actions before locking the production-order row. This keeps
+lock ordering consistent and avoids a proof-vs-M2 deadlock.
 
 ## Offline PostgreSQL 17 evidence
 
@@ -132,7 +161,7 @@ The authorization must bind all of:
 
 - QA project `xulmpqaknlwqqculbsek` only
 - Forward SHA-256
-  `863b579cac72bde30f450be633e6bf9657c181c20b5ae43cb2c561b5c582d30a`
+  `0224bed24ede046e6dbdc2314d1bc49b2f95586098aa114e3423ef6639ea2a63`
 - Rollback SHA-256
   `ef4319e717e3219e2718a1737c4519e80f57c39d0df00d11fe9423affc4b5c79`
 - One transaction for the forward file with
@@ -170,6 +199,8 @@ test order, browser E2E or Production action.
 - The Edge function is not deployed to QA.
 - The QA adapter and bounded write Gate configuration must be deployed and
   exercised only after their own approval.
+- The current adapter is read-only; a separate QA business-RPC Gate design is
+  required before Hosted write authorization.
 - Real Storage bytes, object identity/version stability and browser HTTP flow
   remain unverified in Hosted QA.
 

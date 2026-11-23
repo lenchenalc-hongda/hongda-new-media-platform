@@ -130,7 +130,7 @@ export function evaluateWosV1ImageAccess(input: {
     && profile.id !== order.sales_owner_profile_id) {
     return { allowed: false, code: 'OWNER_DENIED' };
   }
-  if (!['DRAFT', 'NEEDS_INFORMATION'].includes(order.workflow_status)) {
+  if (order.workflow_status !== 'DRAFT') {
     return { allowed: false, code: 'STATUS_DENIED' };
   }
   if (!versionLabel.test(order.version_label)) {
@@ -146,6 +146,39 @@ export function parseAllowedSupabaseRefs(value: string | undefined): readonly st
     || refs.some(ref => !/^[a-z0-9]{20}$/.test(ref))
     || new Set(refs).size !== refs.length) return [];
   return refs;
+}
+
+export function parseAllowedOrigins(value: string | undefined): readonly string[] {
+  if (!value) return [];
+  const origins = value.split(',').map(origin => origin.trim()).filter(Boolean);
+  if (origins.length === 0 || origins.length > 20
+    || new Set(origins).size !== origins.length) return [];
+  try {
+    return origins.every(origin => {
+      const url = new URL(origin);
+      return url.protocol === 'https:'
+        && Boolean(url.hostname)
+        && !url.port
+        && !url.username
+        && !url.password
+        && (url.pathname === '/' || url.pathname === '')
+        && !url.search
+        && !url.hash
+        && url.origin === origin.replace(/\/$/, '');
+    }) ? origins.map(origin => origin.replace(/\/$/, '')) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function approvedBrowserOrigin(
+  origin: string | null,
+  allowedOrigins: readonly string[],
+): boolean {
+  return origin === null || (
+    origin.length > 0
+    && allowedOrigins.includes(origin)
+  );
 }
 
 export function approvedSupabaseRuntimeUrl(

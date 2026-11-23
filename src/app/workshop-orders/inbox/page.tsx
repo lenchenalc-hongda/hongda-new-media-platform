@@ -7,7 +7,10 @@ import ProductionWorkshopInbox from '@/components/workshop-orders/ProductionWork
 import WorkshopInbox from '@/components/workshop-orders/WorkshopInbox';
 import { isWosQaInboxReadonlyEnabled } from '@/lib/workshop-orders/api-contract';
 import { EMPTY_WORKSHOP_QUEUE } from '@/lib/workshop-orders/readiness';
-import { canExposeWosV1App } from '@/lib/workshop-orders/production-app-contract';
+import {
+  canExposeWosV1App,
+  resolveWosV1QaAppRuntime,
+} from '@/lib/workshop-orders/production-app-contract';
 
 export const metadata: Metadata = {
   title: '车间收件箱与齐套检查 | 宏达车间',
@@ -28,6 +31,14 @@ export default function WorkshopInboxPage() {
     appEnabled: process.env.WOS_V1_APP_ENABLED,
     writesEnabled: process.env.WOS_V1_APP_WRITES_ENABLED,
   });
+  const qaRuntime = resolveWosV1QaAppRuntime({
+    vercelEnv: process.env.VERCEL_ENV,
+    supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL,
+    authMode: process.env.AUTH_MODE,
+    qaEnabled: process.env.WOS_V1_QA_APP_ENABLED,
+    qaWritesEnabled: process.env.WOS_V1_QA_APP_WRITES_ENABLED,
+  });
+  const businessLive = productionLive || qaRuntime.readsEnabled;
   return (
     <AppLayout>
       <PageHeader
@@ -43,7 +54,7 @@ export default function WorkshopInboxPage() {
         }
       />
 
-      {productionLive
+      {businessLive
         ? <ProductionWorkshopInbox />
         : realReadEnabled
         ? <PersistedWorkshopInbox />

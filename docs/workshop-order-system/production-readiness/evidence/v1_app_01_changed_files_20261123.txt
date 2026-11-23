@@ -36,6 +36,8 @@ A	tests/sql/wos-v1-hosted-qa-dependencies-pg17-assertions.sql
 A	tests/sql/wos-v1-hosted-qa-dependencies-pg17-suite.sh
 A	tests/sql/wos-v1-hosted-qa-existing-prerequisites.sql
 A	tests/unit/server-only-stub.ts
+M	tests/unit/workshop-order-order-lifecycle-ui.test.ts
+M	tests/unit/workshop-order-p2-office-returns.test.ts
 A	tests/unit/workshop-order-production-app-contract.test.ts
 A	tests/unit/workshop-order-production-app-http.test.ts
 A	tests/unit/workshop-order-production-edge-core.test.ts

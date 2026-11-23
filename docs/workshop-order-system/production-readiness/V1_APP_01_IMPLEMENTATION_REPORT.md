@@ -59,13 +59,15 @@ Function source: `supabase/functions/wos-v1-verify-image`
 - Requires `WOS_SUPABASE_ALLOWED_REFS`
 - Requires default-OFF `WOS_V1_EDGE_WRITES_ENABLED=true`
 - Uses the caller JWT for Auth, Profile, order and Storage download
-- Requires the exact current DRAFT/NEEDS_INFORMATION version
+- Requires the exact current DRAFT version for new image verification
 - Accepts only four canonical PNG categories
 - Parses PNG chunks, CRC, structure and bounded inflation
 - Recomputes SHA-256 from downloaded bytes
 - Requires non-empty exact Storage object version and exact updated time
 - Verifies a stable first/second object snapshot
 - Uses a service credential only for the reviewed snapshot and proof writer RPC
+- Requires an exact `WOS_V1_EDGE_ALLOWED_ORIGINS` browser allowlist
+- Implements an explicit OPTIONS preflight for the normal browser client
 - Renews only a fully matching expired Proof through a separate reviewed,
   non-installed database source draft
 - Returns no private path, object ID or raw proof record
@@ -80,8 +82,10 @@ orphan objects must be included in cleanup and quota review.
 - Reuses the Production handler, request schemas and business RPC contracts
 - Requires Preview, Supabase auth and the exact QA project ref
 - Requires separate default-OFF server read/write flags
+- Keeps QA writes disabled in source until an order-scoped database Gate exists
 - Rejects Production in the QA route and QA in the Production route
 - Cannot be selected through headers, cookies, URL parameters or client claims
+- Is wired into the normal Office and Workshop V1 page surfaces
 - Keeps `canStart=false` in every response
 
 The browser path selector is build configuration only. The server-side adapter

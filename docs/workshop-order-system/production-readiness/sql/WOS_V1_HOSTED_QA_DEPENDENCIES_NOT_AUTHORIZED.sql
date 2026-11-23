@@ -24,8 +24,46 @@ BEGIN
     OR to_regprocedure(
       'public.wos_qa_p2_m2_invalidate_signoff(uuid,uuid,uuid)'
     ) IS NULL
+    OR to_regprocedure(
+      'public.wos_qa_revision_gate_allows(uuid,uuid,uuid)'
+    ) IS NULL
+    OR to_regclass('public.wos_qa_p2_m2_receipts') IS NULL
   THEN
     RAISE EXCEPTION 'WOS_V1_HOSTED_QA_PREREQUISITE_MISSING';
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_trigger trigger
+    WHERE trigger.tgrelid =
+      'public.wos_qa_verified_image_proofs'::regclass
+      AND trigger.tgname = 'wos_qa_trusted_proof_guard'
+      AND NOT trigger.tgisinternal
+  ) THEN
+    RAISE EXCEPTION 'WOS_V1_HOSTED_QA_PROOF_GUARD_MISSING';
+  END IF;
+  IF (
+    SELECT count(*)
+    FROM information_schema.columns column_def
+    WHERE column_def.table_schema = 'public'
+      AND column_def.table_name = 'wos_qa_trusted_proof_receipts'
+      AND column_def.column_name IN (
+        'request_id',
+        'organization_id',
+        'order_id',
+        'image_id',
+        'actor_user_id',
+        'actor_profile_id',
+        'expected_version',
+        'payload_fingerprint',
+        'proof_status',
+        'after_sha256',
+        'storage_object_id',
+        'storage_object_version',
+        'storage_object_updated_at',
+        'result_json'
+      )
+  ) <> 14 THEN
+    RAISE EXCEPTION 'WOS_V1_HOSTED_QA_RECEIPT_SHAPE_MISMATCH';
   END IF;
   IF to_regprocedure(
       'public.wos_p7_service_storage_snapshot(text)'
@@ -123,6 +161,9 @@ BEGIN
     RAISE EXCEPTION 'PROOF_ACTOR_NOT_AUTHORIZED' USING ERRCODE = '42501';
   END IF;
 
+  PERFORM pg_advisory_xact_lock(
+    hashtextextended('wos-qa-m2:' || p_order_id::text, 0)
+  );
   SELECT * INTO v_order
   FROM public.wos_production_orders production_order
   WHERE production_order.id = p_order_id
@@ -221,9 +262,6 @@ BEGIN
     || substr(md5('wos-v1-qa-proof|' || v_fingerprint), 21, 12)
   )::uuid;
 
-  PERFORM pg_advisory_xact_lock(
-    hashtextextended('wos-v1-qa-proof:' || p_order_id::text, 0)
-  );
   SELECT * INTO v_receipt
   FROM public.wos_qa_trusted_proof_receipts receipt
   WHERE receipt.request_id = v_request_id

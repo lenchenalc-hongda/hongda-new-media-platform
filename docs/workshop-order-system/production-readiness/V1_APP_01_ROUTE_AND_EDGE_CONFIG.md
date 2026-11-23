@@ -65,9 +65,12 @@ route rejects the Production project, and the Production route rejects the QA
 project. Request headers, cookies, URLs and database values cannot switch the
 selected adapter.
 
-For an approved write window, `WOS_V1_QA_APP_WRITES_ENABLED=true` is required
-in addition to the database Gate and exact Owner authorization. It remains
-default OFF and never changes `canStart=false`.
+The adapter is wired into the normal Office and Workshop V1 pages. QA source
+currently forces `writesEnabled=false` even if an environment flag is set.
+Hosted QA writes must remain blocked until a separate order-scoped QA
+business-RPC database Gate is designed, installed and reviewed. The future gate
+must also stop direct PostgREST RPC calls from bypassing the Next.js route.
+`canStart=false` remains immutable.
 
 ## Project-neutral Edge function
 
@@ -77,12 +80,18 @@ Deployment-specific allowlist:
 
 ```ini
 WOS_SUPABASE_ALLOWED_REFS=amqpvxrurenevniilhtl
+WOS_V1_EDGE_ALLOWED_ORIGINS=https://www.hongdaprinting.tech
 WOS_V1_EDGE_WRITES_ENABLED=false
 ```
 
 For an isolated QA deployment the value must be changed to only the approved QA
 project ref. The function reads the actual `SUPABASE_URL` and requires its
 project ref to appear in this allowlist.
+
+The function also requires every browser Origin to exactly match an HTTPS entry
+in `WOS_V1_EDGE_ALLOWED_ORIGINS`. It implements an explicit OPTIONS preflight,
+allows only `POST, OPTIONS`, and echoes only an approved Origin. Server calls
+without an Origin remain supported.
 
 The browser never receives the service-role secret. The caller JWT performs
 profile/order checks and the private Storage download. The service credential is

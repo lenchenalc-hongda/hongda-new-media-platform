@@ -61,6 +61,13 @@ assert.equal(qaPreview.project, 'qa');
 assert.equal(qaPreview.readsEnabled, true);
 assert.equal(qaPreview.writesEnabled, false);
 assert.equal(qaPreview.adapter, 'qa-preview');
+assert.equal(resolveWosV1QaAppRuntime({
+  vercelEnv: 'preview',
+  authMode: 'supabase',
+  supabaseUrl: 'https://xulmpqaknlwqqculbsek.supabase.co',
+  qaEnabled: 'true',
+  qaWritesEnabled: 'true',
+}).writesEnabled, false, 'QA writes require a future database Gate implementation');
 for (const rejected of [
   resolveWosV1QaAppRuntime({
     vercelEnv: 'production',
@@ -287,6 +294,14 @@ const appClient = readFileSync(
   'src/lib/workshop-orders/production-app-client.ts',
   'utf8',
 );
+const officePage = readFileSync(
+  'src/app/workshop-orders/production/new/page.tsx',
+  'utf8',
+);
+const workshopPage = readFileSync(
+  'src/app/workshop-orders/inbox/page.tsx',
+  'utf8',
+);
 for (const marker of [
   'WOS_V1_WRITES_DISABLED',
   'x-wos-v1-action',
@@ -334,6 +349,10 @@ for (const marker of [
 assert(appClient.includes("functions.invoke('wos-v1-verify-image'"));
 assert(appClient.includes('NEXT_PUBLIC_WOS_V1_QA_PREVIEW'));
 assert(appClient.includes('/api/workshop-orders/v1-qa'));
+for (const page of [officePage, workshopPage]) {
+  assert(page.includes('resolveWosV1QaAppRuntime'));
+  assert(page.includes('WOS_V1_QA_APP_ENABLED'));
+}
 for (const marker of [
   "query: '?view=inbox'",
   "'OPERATOR_ACTION'",

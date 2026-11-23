@@ -2,12 +2,14 @@ import { createClient } from 'npm:@supabase/supabase-js@2.58.0';
 import { pngValid } from '../_shared/wos-png-integrity.ts';
 import {
   approvedSupabaseRuntimeUrl,
+  approvedBrowserOrigin,
   canonicalWosV1ImagePath,
   deterministicProofRequestId,
   evaluateWosV1ImageAccess,
   isWosV1ProofResult,
   objectSnapshotStable,
   parseAllowedSupabaseRefs,
+  parseAllowedOrigins,
   parseWosV1ImageVerificationBody,
   snapshotMatchesUpload,
   type WosV1ImageOrder,
@@ -18,16 +20,30 @@ import {
 const MAX_REQUEST_BYTES = 4096;
 const BODY_READ_TIMEOUT_MS = 5000;
 const MAX_EXECUTION_MS = 20000;
-const headers = {
+const baseHeaders = {
   'Cache-Control': 'no-store, private',
   'Content-Type': 'application/json; charset=utf-8',
 };
 
 function output(
+  request: Request | null,
   code: string,
   status: number,
   data: Record<string, unknown> | null = null,
 ): Response {
+  const origin = request?.headers.get('origin') ?? null;
+  const allowedOrigins = parseAllowedOrigins(
+    Deno.env.get('WOS_V1_EDGE_ALLOWED_ORIGINS'),
+  );
+  const headers = new Headers(baseHeaders);
+  if (origin && allowedOrigins.includes(origin)) {
+    headers.set('Access-Control-Allow-Origin', origin);
+    headers.set('Access-Control-Allow-Headers',
+      'authorization, apikey, content-type, x-client-info');
+    headers.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
+    headers.set('Access-Control-Max-Age', '600');
+    headers.set('Vary', 'Origin');
+  }
   return new Response(JSON.stringify({
     ok: status === 200,
     code,
@@ -128,38 +144,61 @@ async function readBoundedText(
 }
 
 Deno.serve(async request => {
-  if (request.method !== 'POST') return output('METHOD_NOT_ALLOWED', 405);
+  const origin = request.headers.get('origin');
+  const allowedOrigins = parseAllowedOrigins(
+    Deno.env.get('WOS_V1_EDGE_ALLOWED_ORIGINS'),
+  );
+  if (!approvedBrowserOrigin(origin, allowedOrigins)) {
+    return output(null, 'WOS_V1_EDGE_ORIGIN_DENIED', 403);
+  }
+  if (request.method === 'OPTIONS') {
+    if (origin === null) {
+      return output(null, 'WOS_V1_EDGE_ORIGIN_REQUIRED', 403);
+    }
+    const headers = new Headers(baseHeaders);
+    headers.delete('Content-Type');
+    headers.set('Access-Control-Allow-Origin', origin);
+    headers.set('Access-Control-Allow-Headers',
+      'authorization, apikey, content-type, x-client-info');
+    headers.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
+    headers.set('Access-Control-Max-Age', '600');
+    headers.set('Vary', 'Origin');
+    return new Response(null, { status: 204, headers });
+  }
+  if (request.method !== 'POST') {
+    return output(request, 'METHOD_NOT_ALLOWED', 405);
+  }
   const runtimeUrl = Deno.env.get('SUPABASE_URL');
   const allowedRefs = parseAllowedSupabaseRefs(
     Deno.env.get('WOS_SUPABASE_ALLOWED_REFS'),
   );
   if (!approvedSupabaseRuntimeUrl(runtimeUrl, allowedRefs)) {
-    return output('WOS_V1_EDGE_RUNTIME_DENIED', 503);
+    return output(request, 'WOS_V1_EDGE_RUNTIME_DENIED', 503);
   }
   if (Deno.env.get('WOS_V1_EDGE_WRITES_ENABLED') !== 'true') {
-    return output('WOS_V1_EDGE_WRITES_DISABLED', 503);
+    return output(request, 'WOS_V1_EDGE_WRITES_DISABLED', 503);
   }
   if (!request.headers.get('content-type')?.startsWith('application/json')) {
-    return output('INVALID_INPUT', 400);
+    return output(request, 'INVALID_INPUT', 400);
   }
   const authorization = request.headers.get('authorization') || '';
   if (!/^Bearer [^\s]+$/.test(authorization)) {
-    return output('UNAUTHENTICATED', 401);
+    return output(request, 'UNAUTHENTICATED', 401);
   }
   const publishable = publicKey();
   const service = secretKey();
   if (!publishable || !service) {
-    return output('WOS_V1_EDGE_SERVER_CONFIG_INCOMPLETE', 503);
+    return output(request, 'WOS_V1_EDGE_SERVER_CONFIG_INCOMPLETE', 503);
   }
   let body: ReturnType<typeof parseWosV1ImageVerificationBody>;
   try {
     const text = await readBoundedText(request, MAX_REQUEST_BYTES);
-    if (text === null) return output('INVALID_INPUT', 400);
+    if (text === null) return output(request, 'INVALID_INPUT', 400);
     body = parseWosV1ImageVerificationBody(JSON.parse(text));
   } catch {
-    return output('INVALID_INPUT', 400);
+    return output(request, 'INVALID_INPUT', 400);
   }
-  if (!body) return output('INVALID_INPUT', 400);
+  if (!body) return output(request, 'INVALID_INPUT', 400);
 
   try {
     return await withTimeout((async () => {
@@ -170,7 +209,7 @@ Deno.serve(async request => {
       });
       const auth = await userDb.auth.getUser(token);
       if (auth.error || !auth.data.user?.id) {
-        return output('UNAUTHENTICATED', 401);
+        return output(request, 'UNAUTHENTICATED', 401);
       }
       const profileResult = await userDb.from('profiles')
         .select('id,user_id,org_id,role,is_active')
@@ -195,7 +234,11 @@ Deno.serve(async request => {
         order,
       });
       if (!access.allowed || !profile || !order) {
-        return output(access.code, access.code === 'ORDER_NOT_FOUND' ? 404 : 403);
+        return output(
+          request,
+          access.code,
+          access.code === 'ORDER_NOT_FOUND' ? 404 : 403,
+        );
       }
       const path = canonicalWosV1ImagePath({
         organizationId: profile.org_id,
@@ -205,7 +248,7 @@ Deno.serve(async request => {
         category: body.category,
       });
       if (path !== body.storagePath) {
-        return output('INVALID_IMAGE_PATH', 400);
+        return output(request, 'INVALID_IMAGE_PATH', 400);
       }
 
       const admin = createClient(runtimeUrl!, service, {
@@ -224,23 +267,23 @@ Deno.serve(async request => {
       const declaredSize = first ? Number(first.byteSize) : Number.NaN;
       if (!first
         || !snapshotMatchesUpload(first, auth.data.user.id, declaredSize)) {
-        return output('PRIVATE_OBJECT_NOT_VERIFIED', 409);
+        return output(request, 'PRIVATE_OBJECT_NOT_VERIFIED', 409);
       }
       const downloaded = await userDb.storage.from('wos-private').download(path);
       if (downloaded.error || !downloaded.data
         || downloaded.data.size !== declaredSize) {
-        return output('PRIVATE_BINARY_UNAVAILABLE', 409);
+        return output(request, 'PRIVATE_BINARY_UNAVAILABLE', 409);
       }
       const bytes = new Uint8Array(await downloaded.data.arrayBuffer());
       if (bytes.length !== declaredSize) {
-        return output('PRIVATE_BINARY_SIZE_MISMATCH', 409);
+        return output(request, 'PRIVATE_BINARY_SIZE_MISMATCH', 409);
       }
       if (!await pngValid(bytes, body.sha256)) {
-        return output('PNG_OR_SHA256_VERIFICATION_FAILED', 422);
+        return output(request, 'PNG_OR_SHA256_VERIFICATION_FAILED', 422);
       }
       const second = await snapshot();
       if (!second || !objectSnapshotStable(first, second)) {
-        return output('OBJECT_CHANGED_DURING_VERIFICATION', 409);
+        return output(request, 'OBJECT_CHANGED_DURING_VERIFICATION', 409);
       }
 
       const proofRequestId = await deterministicProofRequestId([
@@ -272,7 +315,7 @@ Deno.serve(async request => {
         || !['ABSENT', 'UNCHANGED', 'RENEWED'].includes(
           String((renewal.data as Record<string, unknown>).status),
         )) {
-        return output('WOS_V1_PROOF_RENEWAL_UNAVAILABLE', 503);
+        return output(request, 'WOS_V1_PROOF_RENEWAL_UNAVAILABLE', 503);
       }
       const proof = await admin.rpc('wos_p7_record_trusted_image_proof', {
         p_image_id: body.imageId,
@@ -290,18 +333,18 @@ Deno.serve(async request => {
           category: body.category,
           sha256: body.sha256,
         })) {
-        return output('WOS_V1_PROOF_WRITE_UNAVAILABLE', 503);
+        return output(request, 'WOS_V1_PROOF_WRITE_UNAVAILABLE', 503);
       }
       const result = proof.data as { status: string };
-      return output('WOS_V1_TRUSTED_IMAGE_PROOF_ISSUED', 200, {
+      return output(request, 'WOS_V1_TRUSTED_IMAGE_PROOF_ISSUED', 200, {
         sha256: body.sha256,
         proofStatus: result.status,
       });
     })());
   } catch (error) {
     if (error instanceof Error && error.message === 'WOS_V1_IMAGE_VERIFY_TIMEOUT') {
-      return output('WOS_V1_IMAGE_VERIFY_TIMEOUT', 504);
+      return output(request, 'WOS_V1_IMAGE_VERIFY_TIMEOUT', 504);
     }
-    return output('WOS_V1_IMAGE_VERIFY_UNAVAILABLE', 503);
+    return output(request, 'WOS_V1_IMAGE_VERIFY_UNAVAILABLE', 503);
   }
 });

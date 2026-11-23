@@ -11,7 +11,10 @@ import {
   isWosNonproductionApiEnabled,
   isWosQaInboxReadonlyEnabled,
 } from '@/lib/workshop-orders/api-contract';
-import { resolveWosV1AppRuntime } from '@/lib/workshop-orders/production-app-contract';
+import {
+  resolveWosV1AppRuntime,
+  resolveWosV1QaAppRuntime,
+} from '@/lib/workshop-orders/production-app-contract';
 
 export const metadata: Metadata = {
   title: '生产下单 | 宏达车间',
@@ -41,6 +44,17 @@ export default function WorkshopProductionOrderNewPage() {
     writesEnabled: process.env.WOS_V1_APP_WRITES_ENABLED,
   });
   const productionLive = productionRuntime.readsEnabled;
+  const qaRuntime = resolveWosV1QaAppRuntime({
+    vercelEnv: process.env.VERCEL_ENV,
+    supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL,
+    authMode: process.env.AUTH_MODE,
+    qaEnabled: process.env.WOS_V1_QA_APP_ENABLED,
+    qaWritesEnabled: process.env.WOS_V1_QA_APP_WRITES_ENABLED,
+  });
+  const businessLive = productionLive || qaRuntime.readsEnabled;
+  const businessWritesEnabled = productionLive
+    ? productionRuntime.writesEnabled
+    : qaRuntime.writesEnabled;
   return (
     <AppLayout>
       <PageHeader
@@ -56,33 +70,33 @@ export default function WorkshopProductionOrderNewPage() {
         }
       />
 
-      <section className={qaLive || productionLive
+      <section className={qaLive || businessLive
         ? "mb-5 rounded-lg border border-blue-200 bg-blue-50 p-4"
         : "mb-5 rounded-lg border border-amber-200 bg-amber-50 p-4"}>
         <h2 className="text-sm font-semibold text-amber-950">本阶段录入说明</h2>
         <p className="mt-1 max-w-4xl text-xs leading-5 text-amber-900">
           {qaLive
             ? '受保护的 QA Preview 已开启：本页将通过真实 Supabase Auth、私有图片存储、办公室齐套确认和同源 HTTP API 提交合成测试订单。不会进入实际生产。'
-            : productionLive
+            : businessLive
               ? '正式业务源码已启用：本页通过真实 Supabase Auth、组织 RLS、正式事务 RPC 和项目无关图片验证服务创建并提交订单。服务器写开关仍可独立关闭。'
             : '当前页面仅用于本地录入和完整性检查，不连接 Supabase，不保存或上传资料，也不会提交正式生产单。'}
         </p>
         <p className="mt-1 max-w-4xl text-xs leading-5 text-amber-900">
           {qaLive
             ? '此流程只接受 QA-NONPROD 合成订单。正式签样、技术确认、排期和开工放行仍然禁止。请先选择 QA 图片并使用下方专用按钮。'
-            : productionLive
+            : businessLive
               ? '提交需要四张当前版本私有 PNG Proof、当前资料版本和数据库原子回执。任何 Gate、身份或数据库条件不满足都会 Fail Closed。'
             : '车间确认、资源齐套、生产基准图片和正式提交将在后续受控任务中开放，不得用本页面替代正式签样。'}
         </p>
       </section>
 
-      {returnedReadEnabled && <LiveQaReturnedOrders />}
-      {productionLive && <ProductionOfficeOrders />}
-      {qaLive && <LiveQaM2OfficeBaseline />}
+      {returnedReadEnabled && !qaRuntime.readsEnabled && <LiveQaReturnedOrders />}
+      {businessLive && <ProductionOfficeOrders />}
+      {qaLive && !qaRuntime.readsEnabled && <LiveQaM2OfficeBaseline />}
       <ProductionOrderForm
-        qaLive={qaLive}
-        productionLive={productionLive}
-        productionWritesEnabled={productionRuntime.writesEnabled}
+        qaLive={qaLive && !qaRuntime.readsEnabled}
+        productionLive={businessLive}
+        productionWritesEnabled={businessWritesEnabled}
       />
     </AppLayout>
   );
