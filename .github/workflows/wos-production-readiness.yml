@@ -2,7 +2,6 @@ name: WOS V1 Production Readiness
 
 on:
   pull_request:
-    branches: [master, main]
     paths:
       - 'supabase/production-bootstrap/**'
       - 'docs/workshop-order-system/nonproduction-only/**'
