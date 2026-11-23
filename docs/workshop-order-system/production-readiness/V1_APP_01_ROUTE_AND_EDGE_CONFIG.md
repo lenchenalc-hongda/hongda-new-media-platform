@@ -37,6 +37,38 @@ in cleanup/quota review before the next write window.
 The client cannot select QA or Production by query parameter, header or public
 flag. QA and foreign Supabase project URLs fail closed in the Production route.
 
+## Isolated Hosted QA adapter
+
+The QA adapter is a separate route and is default OFF:
+
+```text
+GET|POST /api/workshop-orders/v1-qa
+```
+
+It reuses the same handler, schemas, identity resolution, organization/role
+checks, RPC contracts and read models as the Production route. It is enabled
+only when all of these exact server-side conditions match:
+
+```ini
+VERCEL_ENV=preview
+AUTH_MODE=supabase
+NEXT_PUBLIC_SUPABASE_URL=https://xulmpqaknlwqqculbsek.supabase.co
+WOS_V1_QA_APP_ENABLED=true
+WOS_V1_QA_APP_WRITES_ENABLED=false
+```
+
+The public path selector
+`NEXT_PUBLIC_WOS_V1_QA_PREVIEW=true` only lets the browser choose the QA route.
+It does not authorize the route: a Production runtime, Production Supabase
+project, missing server flag or wrong auth mode still fails closed. The QA
+route rejects the Production project, and the Production route rejects the QA
+project. Request headers, cookies, URLs and database values cannot switch the
+selected adapter.
+
+For an approved write window, `WOS_V1_QA_APP_WRITES_ENABLED=true` is required
+in addition to the database Gate and exact Owner authorization. It remains
+default OFF and never changes `canStart=false`.
+
 ## Project-neutral Edge function
 
 Function name: `wos-v1-verify-image`

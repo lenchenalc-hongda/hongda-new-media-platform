@@ -48,6 +48,24 @@ function hasAcl(definition, grantee, privilege = 'EXECUTE') {
     entry.grantee === grantee && entry.privilege === privilege);
 }
 
+function assertNoApplicationGrantOptions(rows) {
+  const applicationRoles = new Set([
+    'PUBLIC',
+    'anon',
+    'authenticated',
+    'service_role',
+  ]);
+  for (const row of rows) {
+    for (const entry of row.acl ?? []) {
+      if (applicationRoles.has(entry.grantee) && entry.is_grantable === true) {
+        throw new Error(
+          `APPLICATION_ROLE_GRANT_OPTION_EXPOSED_${row.kind}_${row.name}_${entry.grantee}`,
+        );
+      }
+    }
+  }
+}
+
 function verify(inputPath, manifestPath, phase) {
   const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
   const rows = parseRows(inputPath);
@@ -86,6 +104,7 @@ function verify(inputPath, manifestPath, phase) {
     || summary.qa_named_object_count !== 0) {
     throw new Error('QA_ONLY_OBJECT_PRESENT_IN_PRODUCTION_RUNTIME');
   }
+  assertNoApplicationGrantOptions(rows);
 
   const businessFunctions = [
     'wos_create_production_order(uuid,jsonb)',
@@ -155,6 +174,7 @@ function verify(inputPath, manifestPath, phase) {
   console.log('WOS_V1_SERVICE_PROOF_NOT_BROWSER_EXECUTABLE=PASS');
   console.log('WOS_V1_PRIVATE_BUCKET_AND_STORAGE_POLICIES=PASS');
   console.log('WOS_V1_QA_GATE_OBJECTS_ABSENT=PASS');
+  console.log('WOS_V1_APPLICATION_ROLE_GRANT_OPTIONS=ABSENT');
 }
 
 const [mode, inputPath, outputPath, phase] = process.argv.slice(2);

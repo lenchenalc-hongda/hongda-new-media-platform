@@ -9,6 +9,12 @@ NOTICE:  database "wos_prod_bootstrap_ci" does not exist, skipping
 
 (1 row)
 
+NOTICE:  database "wos_v1_bootstrap_failure_ci" does not exist, skipping
+                        check_name
+----------------------------------------------------------
+ WOS_PRODUCTION_BOOTSTRAP_SYNTHETIC_SUPABASE_FIXTURE=PASS
+(1 row)
+
 {
   "passed": true,
   "expectedRows": 383,
@@ -110,18 +116,8 @@ WOS_P8_PRODUCTION_DATA_OR_WRITES=NONE
   "expectedAggregate": "745e7556931fd99abae835d7ab21a9e899eb8b624380ef1a95fb4f1773ae4f5b",
   "actualAggregate": "745e7556931fd99abae835d7ab21a9e899eb8b624380ef1a95fb4f1773ae4f5b"
 }
-WOS_V1_RUNTIME_SECURITY_SIGNATURES=INSTALLED-INACTIVE_PASS
-WOS_V1_RUNTIME_DEFINITION_ACL_TABLE_POLICY_MANIFEST=PASS
-WOS_V1_INTERNAL_IMAGE_SET_HELPER_HIDDEN=PASS
-WOS_V1_SERVICE_PROOF_NOT_BROWSER_EXECUTABLE=PASS
-WOS_V1_PRIVATE_BUCKET_AND_STORAGE_POLICIES=PASS
-WOS_V1_QA_GATE_OBJECTS_ABSENT=PASS
-WOS_V1_RUNTIME_SECURITY_SIGNATURES=ACTIVATED_PASS
-WOS_V1_RUNTIME_DEFINITION_ACL_TABLE_POLICY_MANIFEST=PASS
-WOS_V1_INTERNAL_IMAGE_SET_HELPER_HIDDEN=PASS
-WOS_V1_SERVICE_PROOF_NOT_BROWSER_EXECUTABLE=PASS
-WOS_V1_PRIVATE_BUCKET_AND_STORAGE_POLICIES=PASS
-WOS_V1_QA_GATE_OBJECTS_ABSENT=PASS
+WOS_V1_RUNTIME_SECURITY_MANIFEST_WRITTEN=/private/tmp/hongda-wos-v1-app-01-20261123/docs/workshop-order-system/production-readiness/wos_v1_runtime_security_inactive_manifest_20261123.json
+WOS_V1_RUNTIME_SECURITY_MANIFEST_WRITTEN=/private/tmp/hongda-wos-v1-app-01-20261123/docs/workshop-order-system/production-readiness/wos_v1_runtime_security_active_manifest_20261123.json
             check_name
 -----------------------------------
  WOS_V1_PRODUCTION_RPC_DEACTIVATED
@@ -133,15 +129,16 @@ WOS_V1_INTERNAL_IMAGE_SET_HELPER_HIDDEN=PASS
 WOS_V1_SERVICE_PROOF_NOT_BROWSER_EXECUTABLE=PASS
 WOS_V1_PRIVATE_BUCKET_AND_STORAGE_POLICIES=PASS
 WOS_V1_QA_GATE_OBJECTS_ABSENT=PASS
+WOS_V1_APPLICATION_ROLE_GRANT_OPTIONS=ABSENT
 WOS_V1_CROSS_ORG_AND_UNSUPPORTED_SPLIT_DELIVERY_REJECTED=PASS
               set_config
 --------------------------------------
- ce2ef077-792d-43c4-876e-ed45de4b9623
+ dfd064ca-9adc-41e3-b013-54544a0b7347
 (1 row)
 
                                                       set_config
 ----------------------------------------------------------------------------------------------------------------------
- organizations/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/wos/production-order/ce2ef077-792d-43c4-876e-ed45de4b9623/images/
+ organizations/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/wos/production-order/dfd064ca-9adc-41e3-b013-54544a0b7347/images/
 (1 row)
 
                                                                        wos_p7_record_trusted_image_proof
@@ -187,42 +184,42 @@ WOS_V1_EXPIRED_PROOF_RENEWAL=PASS
 
    wos_confirm_office_completeness
 --------------------------------------
- 3a9200c3-c2e6-44b6-8476-3c4b162b40c5
+ ba716506-03b2-4a65-916d-171b013f66fb
 (1 row)
 
                                                                                                                                   submit_order
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- {"status": "CREATED", "orderId": "ce2ef077-792d-43c4-876e-ed45de4b9623", "canStart": false, "receiptId": "ff0e7539-5e48-4a73-ad4e-03dd803a26b4", "inboxTaskId": "0bfa6748-318c-4a71-80e3-dd89d3e292c4", "submittedAt": "2026-11-23T03:12:33.159493+00:00", "sourceRevision": 1}
+ {"status": "CREATED", "orderId": "dfd064ca-9adc-41e3-b013-54544a0b7347", "canStart": false, "receiptId": "90e93ce3-7f68-4485-8ed0-0610ac115b13", "inboxTaskId": "611301e3-732a-4d99-9e08-c7693c01d8ab", "submittedAt": "2026-11-23T03:58:54.179135+00:00", "sourceRevision": 1}
 (1 row)
 
                                                                                                                  operator_accept
 -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- {"status": "APPLIED", "orderId": "ce2ef077-792d-43c4-876e-ed45de4b9623", "version": 3, "canStart": false, "requestId": "53000000-0000-4000-8000-000000000001", "versionLabel": "V1", "workflowStatus": "WORKSHOP_REVIEW", "expectedVersion": 2}
+ {"status": "APPLIED", "orderId": "dfd064ca-9adc-41e3-b013-54544a0b7347", "version": 3, "canStart": false, "requestId": "53000000-0000-4000-8000-000000000001", "versionLabel": "V1", "workflowStatus": "WORKSHOP_REVIEW", "expectedVersion": 2}
 (1 row)
 
                                                                                                               operator_accept_replay
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- {"status": "REPLAYED", "orderId": "ce2ef077-792d-43c4-876e-ed45de4b9623", "version": 3, "canStart": false, "requestId": "53000000-0000-4000-8000-000000000001", "versionLabel": "V1", "workflowStatus": "WORKSHOP_REVIEW", "expectedVersion": 2}
+ {"status": "REPLAYED", "orderId": "dfd064ca-9adc-41e3-b013-54544a0b7347", "version": 3, "canStart": false, "requestId": "53000000-0000-4000-8000-000000000001", "versionLabel": "V1", "workflowStatus": "WORKSHOP_REVIEW", "expectedVersion": 2}
 (1 row)
 
                                                                                                                   operator_return
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- {"status": "APPLIED", "orderId": "ce2ef077-792d-43c4-876e-ed45de4b9623", "version": 4, "canStart": false, "requestId": "53000000-0000-4000-8000-000000000002", "versionLabel": "V1", "workflowStatus": "NEEDS_INFORMATION", "expectedVersion": 3}
+ {"status": "APPLIED", "orderId": "dfd064ca-9adc-41e3-b013-54544a0b7347", "version": 4, "canStart": false, "requestId": "53000000-0000-4000-8000-000000000002", "versionLabel": "V1", "workflowStatus": "NEEDS_INFORMATION", "expectedVersion": 3}
 (1 row)
 
                                                                                                         office_save
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- {"status": "SAVED", "orderId": "ce2ef077-792d-43c4-876e-ed45de4b9623", "version": 5, "canStart": false, "requestId": "54000000-0000-4000-8000-000000000001", "versionLabel": "V2", "workflowStatus": "NEEDS_INFORMATION"}
+ {"status": "SAVED", "orderId": "dfd064ca-9adc-41e3-b013-54544a0b7347", "version": 5, "canStart": false, "requestId": "54000000-0000-4000-8000-000000000001", "versionLabel": "V2", "workflowStatus": "NEEDS_INFORMATION"}
 (1 row)
 
                                                                                                         office_resubmit
 -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- {"status": "RESUBMITTED", "orderId": "ce2ef077-792d-43c4-876e-ed45de4b9623", "version": 6, "canStart": false, "requestId": "54000000-0000-4000-8000-000000000002", "versionLabel": "V3", "workflowStatus": "WORKSHOP_REVIEW"}
+ {"status": "RESUBMITTED", "orderId": "dfd064ca-9adc-41e3-b013-54544a0b7347", "version": 6, "canStart": false, "requestId": "54000000-0000-4000-8000-000000000002", "versionLabel": "V3", "workflowStatus": "WORKSHOP_REVIEW"}
 (1 row)
 
                                                                                                                              operator_review
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- {"status": "REVIEWED", "orderId": "ce2ef077-792d-43c4-876e-ed45de4b9623", "version": 7, "canStart": false, "requestId": "55000000-0000-4000-8000-000000000001", "versionLabel": "V3", "workflowStatus": "WAITING_MATERIAL", "expectedVersion": 6, "resolvedBlockers": 1}
+ {"status": "REVIEWED", "orderId": "dfd064ca-9adc-41e3-b013-54544a0b7347", "version": 7, "canStart": false, "requestId": "55000000-0000-4000-8000-000000000001", "versionLabel": "V3", "workflowStatus": "WAITING_MATERIAL", "expectedVersion": 6, "resolvedBlockers": 1}
 (1 row)
 
 WOS_V1_PRODUCTION_LIFECYCLE=PASS
@@ -233,6 +230,17 @@ WOS_V1_IDEMPOTENCY=PASS
 WOS_V1_VIEWER_CROSS_ORG_DENIED=PASS
 WOS_V1_CAN_START_FALSE=PASS
 WOS_V1_PG17_CONCURRENT_VERSION_CAS=PASS
+NOTICE:  database "wos_v1_rollback_ci" does not exist, skipping
+                        check_name
+----------------------------------------------------------
+ WOS_PRODUCTION_BOOTSTRAP_SYNTHETIC_SUPABASE_FIXTURE=PASS
+(1 row)
+
+ set_config
+------------
+
+(1 row)
+
           check_name
 ------------------------------
  WOS_V1_RUNTIME_ROLLBACK=PASS
@@ -250,11 +258,13 @@ WOS_P8_P07_SCHEMA_ROLLBACK_67_TABLES=PASS
   "actualAggregate": "745e7556931fd99abae835d7ab21a9e899eb8b624380ef1a95fb4f1773ae4f5b"
 }
 WOS_V1_PG17_SCHEMA_BOOTSTRAP=PASS
+WOS_V1_PG17_BOOTSTRAP_ATOMIC_FAILURE=PASS
 WOS_V1_PG17_HISTORICAL_LINEAGE_REPLAY=PASS
 WOS_V1_PG17_PUBLIC_AND_COMMERCIAL_SCHEMA_PARITY=PASS
 WOS_V1_PG17_WOS_RUNTIME_LIFECYCLE=PASS
 WOS_V1_PG17_RPC_ACL_ACTIVATION_AND_DEACTIVATION=PASS
 WOS_V1_PG17_RUNTIME_ROLLBACK_TO_P7_EXACT=PASS
+WOS_V1_PG17_RUNTIME_ROLLBACK_WITH_DATA_REJECTED=PASS
 WOS_V1_PG17_CONCURRENT_VERSION_CAS=PASS
 WOS_V1_PG17_DUPLICATE_INSTALL_REJECTED=PASS
 WOS_V1_PG17_FULL_ROLLBACK_PARITY=PASS

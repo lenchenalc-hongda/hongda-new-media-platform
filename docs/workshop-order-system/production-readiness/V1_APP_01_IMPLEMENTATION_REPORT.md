@@ -2,7 +2,7 @@
 
 Project: `WOS_V1_APP_01_PRODUCTION_NEUTRAL`
 
-Base: PR #276 / `cc46a28b083b6eef78448d26b79e0014cb172d0c`
+Base: PR #276 / `b1937311fc3281439939c43bc5abcdd699f608bc`
 
 ## Delivered source
 
@@ -74,6 +74,19 @@ The Storage INSERT policy is a third release surface. Outside the approved write
 window its policy/INSERT authorization must be revoked, and retained DRAFTs and
 orphan objects must be included in cleanup and quota review.
 
+### Isolated Hosted QA adapter
+
+- `GET|POST /api/workshop-orders/v1-qa`
+- Reuses the Production handler, request schemas and business RPC contracts
+- Requires Preview, Supabase auth and the exact QA project ref
+- Requires separate default-OFF server read/write flags
+- Rejects Production in the QA route and QA in the Production route
+- Cannot be selected through headers, cookies, URL parameters or client claims
+- Keeps `canStart=false` in every response
+
+The browser path selector is build configuration only. The server-side adapter
+remains authoritative and default-deny.
+
 ## Verified locally
 
 ```text
@@ -112,6 +125,9 @@ Split-delivery unsupported path
 
 PG17 schema, runtime, ACL, rollback and CPC/GLH/commercial no-drift
   PASS
+
+Hosted QA three-function dependency install / rollback / browser denial
+  PASS (offline PG17)
 ```
 
 The HTTP test uses the real handler over a local Node HTTP server and an
@@ -123,6 +139,8 @@ SQL transaction, RLS, ACL and rollback semantics.
 - Database installation
 - Hosted Edge deployment
 - Real hosted Storage byte download
+- Hosted QA SQL installation
+- Bounded Hosted QA Office/Operator write E2E
 - Production employee accounts or role provisioning
 - Production browser acceptance
 - Production feature flag activation

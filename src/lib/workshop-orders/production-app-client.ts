@@ -6,6 +6,10 @@ import {
   type WOS_V1_IMAGE_CATEGORIES,
 } from './production-app-contract';
 
+const WOS_V1_HTTP_PATH = process.env.NEXT_PUBLIC_WOS_V1_QA_PREVIEW === 'true'
+  ? '/api/workshop-orders/v1-qa'
+  : '/api/workshop-orders/v1';
+
 export interface WosV1HttpResult {
   readonly status: number;
   readonly ok: boolean;
@@ -21,7 +25,7 @@ export async function fetchWosV1(
     readonly signal?: AbortSignal;
   },
 ): Promise<WosV1HttpResult> {
-  const response = await fetch('/api/workshop-orders/v1' + (options.query ?? ''), {
+  const response = await fetch(WOS_V1_HTTP_PATH + (options.query ?? ''), {
     method: options.method,
     credentials: 'same-origin',
     cache: 'no-store',

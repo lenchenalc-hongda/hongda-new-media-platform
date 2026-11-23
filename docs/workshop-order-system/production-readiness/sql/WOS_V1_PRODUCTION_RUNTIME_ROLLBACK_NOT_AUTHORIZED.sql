@@ -8,6 +8,9 @@
 BEGIN;
 
 DO $guard$
+DECLARE
+  v_table text;
+  v_has_rows boolean;
 BEGIN
   IF current_database() <> 'wos_prod_bootstrap_ci'
     AND current_setting('wos_v1.production_rollback_authorized', true)
@@ -27,6 +30,25 @@ BEGIN
   THEN
     RAISE EXCEPTION 'WOS_V1_RUNTIME_ROLLBACK_BACKUP_MISSING';
   END IF;
+
+  FOREACH v_table IN ARRAY ARRAY[
+    'wos_operator_review_receipts',
+    'wos_office_revisions',
+    'wos_operator_action_receipts',
+    'wos_order_create_receipts'
+  ]
+  LOOP
+    IF to_regclass('public.' || v_table) IS NOT NULL THEN
+      EXECUTE format(
+        'SELECT EXISTS (SELECT 1 FROM public.%I)',
+        v_table
+      ) INTO v_has_rows;
+      IF v_has_rows THEN
+        RAISE EXCEPTION
+          'WOS_V1_RUNTIME_ROLLBACK_REQUIRES_DATA_RETENTION_DECISION';
+      END IF;
+    END IF;
+  END LOOP;
 END;
 $guard$;
 

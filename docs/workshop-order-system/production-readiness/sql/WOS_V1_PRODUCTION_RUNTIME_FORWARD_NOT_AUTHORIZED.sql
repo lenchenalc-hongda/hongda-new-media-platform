@@ -385,6 +385,8 @@ BEGIN
     OR p_storage_object_updated_at IS NULL
     OR p_storage_path IS NULL
     OR length(p_storage_path) > 600
+    OR p_storage_object_version IS NULL
+    OR length(btrim(p_storage_object_version)) = 0
     OR p_sha256 !~ '^[a-f0-9]{64}$'
   THEN
     RAISE EXCEPTION 'INVALID_PROOF_INPUT' USING ERRCODE = '22023';

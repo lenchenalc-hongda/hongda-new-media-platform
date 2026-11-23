@@ -42,6 +42,13 @@ authorization:
    - It creates the private `wos-private` PNG bucket, grants only the reviewed
      read surfaces, installs four-category Storage RLS, and leaves browser write
      RPCs revoked.
+   - The same exact release input must also include
+     `tests/sql/wos_p8_p7_service_proof_and_cleanup.sql`. It installs the
+     service-only `wos_p7_record_trusted_image_proof` prerequisite required by
+     the runtime forward, plus the reviewed orphan-cleanup lease functions.
+     The file is marked `INSTALL_NOT_AUTHORIZED`, rejects direct non-disposable
+     installation without its file-specific authorization GUC, and must be
+     fingerprinted in the same approved manifest as the P7 candidate.
 4. `docs/workshop-order-system/production-readiness/sql/WOS_V1_PRODUCTION_RUNTIME_FORWARD_NOT_AUTHORIZED.sql`
    - Adds production-neutral order lifecycle receipts and RPCs with browser
      EXECUTE still revoked.
@@ -159,6 +166,12 @@ Do not drop WOS business history, Proof or receipts as a generic rollback step
 without a data-retention decision. If data was written and must be retained,
 rollback means fail-closed code/RPC deactivation plus a forward-fix plan, not
 blind table deletion.
+
+The runtime rollback draft enforces this rule. It raises
+`WOS_V1_RUNTIME_ROLLBACK_REQUIRES_DATA_RETENTION_DECISION` if any row exists in
+the order-create, Operator-action, Office-revision or Operator-review receipt
+tables. A post-data incident must use the deactivation/fail-closed path below,
+not table deletion.
 
 ## 8. Current gate
 

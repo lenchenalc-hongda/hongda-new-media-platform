@@ -8,6 +8,7 @@ import {
   parseWosV1AppRequest,
   parseWosV1ReadQuery,
   resolveWosV1AppRuntime,
+  resolveWosV1QaAppRuntime,
   wosV1OperationRoleAllowed,
   wosV1RpcInvocation,
 } from '../../src/lib/workshop-orders/production-app-contract';
@@ -48,6 +49,51 @@ assert.equal(resolveWosV1AppRuntime({
   appEnabled: 'true',
   writesEnabled: 'true',
 }).writesEnabled, false);
+
+const qaPreview = resolveWosV1QaAppRuntime({
+  vercelEnv: 'preview',
+  authMode: 'supabase',
+  supabaseUrl: 'https://xulmpqaknlwqqculbsek.supabase.co',
+  qaEnabled: 'true',
+  qaWritesEnabled: 'false',
+});
+assert.equal(qaPreview.project, 'qa');
+assert.equal(qaPreview.readsEnabled, true);
+assert.equal(qaPreview.writesEnabled, false);
+assert.equal(qaPreview.adapter, 'qa-preview');
+for (const rejected of [
+  resolveWosV1QaAppRuntime({
+    vercelEnv: 'production',
+    authMode: 'supabase',
+    supabaseUrl: 'https://xulmpqaknlwqqculbsek.supabase.co',
+    qaEnabled: 'true',
+    qaWritesEnabled: 'true',
+  }),
+  resolveWosV1QaAppRuntime({
+    vercelEnv: 'preview',
+    authMode: 'supabase',
+    supabaseUrl: 'https://amqpvxrurenevniilhtl.supabase.co',
+    qaEnabled: 'true',
+    qaWritesEnabled: 'true',
+  }),
+  resolveWosV1QaAppRuntime({
+    vercelEnv: 'preview',
+    authMode: 'supabase',
+    supabaseUrl: 'https://example.supabase.co',
+    qaEnabled: 'true',
+    qaWritesEnabled: 'true',
+  }),
+  resolveWosV1QaAppRuntime({
+    vercelEnv: 'preview',
+    authMode: 'supabase',
+    supabaseUrl: 'https://xulmpqaknlwqqculbsek.supabase.co',
+    qaEnabled: 'false',
+    qaWritesEnabled: 'true',
+  }),
+]) {
+  assert.equal(rejected.readsEnabled, false);
+  assert.equal(rejected.writesEnabled, false);
+}
 
 assert.equal(parseWosV1ReadQuery('https://example.test/api?view=inbox')?.view, 'inbox');
 assert.equal(parseWosV1ReadQuery(
@@ -217,6 +263,10 @@ const route = readFileSync(
   'src/app/api/workshop-orders/v1/route.ts',
   'utf8',
 );
+const qaRoute = readFileSync(
+  'src/app/api/workshop-orders/v1-qa/route.ts',
+  'utf8',
+);
 const edge = readFileSync(
   'supabase/functions/wos-v1-verify-image/index.ts',
   'utf8',
@@ -250,6 +300,12 @@ for (const marker of [
 ]) assert(server.includes(marker), 'production app server missing ' + marker);
 assert(!server.includes('service_role'));
 assert(!route.includes('service_role'));
+assert(!qaRoute.includes('service_role'));
+for (const marker of [
+  'createWosV1QaHandlerDependencies',
+  'handleWosV1Request',
+  'WOS_V1_QA_EXECUTION_TIMEOUT',
+]) assert(qaRoute.includes(marker), 'QA app route missing ' + marker);
 for (const marker of [
   'WOS_SUPABASE_ALLOWED_REFS',
   'WOS_V1_EDGE_WRITES_ENABLED',
@@ -276,6 +332,8 @@ for (const marker of [
   'canStart=false',
 ]) assert(officeWorkflow.includes(marker), 'Office production UI missing ' + marker);
 assert(appClient.includes("functions.invoke('wos-v1-verify-image'"));
+assert(appClient.includes('NEXT_PUBLIC_WOS_V1_QA_PREVIEW'));
+assert(appClient.includes('/api/workshop-orders/v1-qa'));
 for (const marker of [
   "query: '?view=inbox'",
   "'OPERATOR_ACTION'",
@@ -298,3 +356,4 @@ console.log('workshop-order-production-app-contract.test.ts: PASS');
 console.log('WOS_V1_APP_PRODUCTION_ONLY_RUNTIME=PASS');
 console.log('WOS_V1_APP_ROLE_AND_RESULT_CONTRACTS=PASS');
 console.log('WOS_V1_PROJECT_NEUTRAL_EDGE_SOURCE=PASS');
+console.log('WOS_V1_QA_ADAPTER_DEFAULT_DENY=PASS');

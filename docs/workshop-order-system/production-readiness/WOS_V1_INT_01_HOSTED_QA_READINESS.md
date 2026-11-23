@@ -1,0 +1,176 @@
+# WOS V1-INT-01 Hosted QA Readiness Package
+
+Status: **AUTHORIZATION_PREPARATION_ONLY**
+
+No QA SQL, RLS, Storage policy, Secret, Edge function or Vercel configuration
+was installed or changed by this document.
+
+## Live code and environment baseline
+
+- Repository: `lenchenalc-hongda/hongda-new-media-platform`
+- QA Supabase: `xulmpqaknlwqqculbsek`
+- Production Supabase: `amqpvxrurenevniilhtl`
+- PR #276 remains Draft and unmerged.
+- PR #277 remains Draft, stacked on PR #276 until a separately authorized
+  protected merge changes master.
+
+The QA function catalog was read successfully immediately before the final
+audit. It confirmed that these functions do not exist:
+
+- `wos_p7_service_storage_snapshot`
+- `wos_v1_renew_expired_image_proof`
+- `wos_p7_record_trusted_image_proof`
+
+The QA gate/table metadata evidence also has these properties:
+
+- Operator and Office Gate rows are OFF.
+- Neither Gate table has `allowed_order_id` or `allowed_organization_id`.
+- Browser roles have no direct write grant on
+  `wos_qa_verified_image_proofs`.
+- `wos_qa_verified_image_proofs.storage_object_version` remains nullable in
+  the historical QA schema. The new verifier rejects NULL/empty version input
+  and requires exact non-NULL object identity for new proofs without rewriting
+  historical rows.
+
+A later refresh of the Supabase management connection failed with
+`28P01` for the temporary CLI role. Therefore order counts, current Gate rows
+and Storage inventory must be read again immediately before an authorized
+install. That connection failure did not execute SQL or change QA.
+
+## Edge contract
+
+The project-neutral Edge function invokes exactly:
+
+```text
+wos_p7_service_storage_snapshot(p_path)
+wos_v1_renew_expired_image_proof(
+  p_image_id, p_order_id, p_actor_user_id, p_storage_path,
+  p_storage_object_id, p_storage_object_version,
+  p_storage_object_updated_at, p_sha256
+)
+wos_p7_record_trusted_image_proof(
+  p_image_id, p_order_id, p_actor_user_id, p_storage_path,
+  p_storage_object_id, p_storage_object_version,
+  p_storage_object_updated_at, p_sha256
+)
+```
+
+The Edge function obtains the object snapshot before and after the caller-JWT
+download, validates PNG/CRC/SHA-256, and only then performs renewal and proof
+recording through the service credential.
+
+## Minimal QA-only SQL package
+
+Forward file:
+
+`docs/workshop-order-system/production-readiness/sql/WOS_V1_HOSTED_QA_DEPENDENCIES_NOT_AUTHORIZED.sql`
+
+```text
+SHA256=863b579cac72bde30f450be633e6bf9657c181c20b5ae43cb2c561b5c582d30a
+GIT_BLOB=dac30d5b87831811e507fa6091c7ae3e5a3692e6
+```
+
+Rollback file:
+
+`docs/workshop-order-system/production-readiness/sql/WOS_V1_HOSTED_QA_DEPENDENCIES_ROLLBACK_NOT_AUTHORIZED.sql`
+
+```text
+SHA256=ef4319e717e3219e2718a1737c4519e80f57c39d0df00d11fe9423affc4b5c79
+GIT_BLOB=ff54250c3f37d5fb379bd5d49c7ed4aa2b10fd35
+```
+
+Exact additive object scope:
+
+1. Function `public.wos_p7_service_storage_snapshot(text)`
+2. Function
+   `public.wos_p7_record_trusted_image_proof(uuid,uuid,uuid,text,uuid,text,timestamptz,text)`
+3. Function
+   `public.wos_v1_renew_expired_image_proof(uuid,uuid,uuid,text,uuid,text,timestamptz,text)`
+
+No table, column, index, constraint, trigger, RLS policy, Storage policy,
+bucket, Secret or role is created or altered.
+
+The functions reuse the existing QA private-object snapshot helper, Proof
+guard trigger, trusted-Proof receipt table, cleanup-claim checks and M2 signoff
+invalidation function. All three functions are `SECURITY DEFINER`,
+`search_path=''`, revoked from `PUBLIC`, `anon` and `authenticated`, and
+granted only to `service_role`.
+
+## Offline PostgreSQL 17 evidence
+
+The disposable suite installs the reviewed existing QA M2/revision baseline,
+installs this exact forward draft, exercises it and then applies the rollback:
+
+```text
+WOS_V1_HOSTED_QA_DEPENDENCIES_PG17=PASS
+WOS_V1_HOSTED_QA_ROLLBACK_PRESERVES_PROOF_HISTORY=PASS
+WOS_V1_HOSTED_QA_BROWSER_ACCESS=DENIED
+```
+
+Covered behavior:
+
+- service-role snapshot contract
+- real PNG object metadata/version snapshot
+- source.png canonical version path
+- proof creation
+- deterministic proof request idempotency
+- expired Proof renewal
+- NULL Storage version rejection (`22023`)
+- authenticated and anonymous EXECUTE denial
+- browser table-write denial
+- rollback removes only the three functions and preserves Proof history
+
+This is offline evidence. It is not a Hosted QA pass.
+
+## Separate Owner install authorization
+
+The next gate is:
+
+`OWNER_AUTHORIZE_EXACT_QA_HOSTED_DEPENDENCIES_INSTALL`
+
+The authorization must bind all of:
+
+- QA project `xulmpqaknlwqqculbsek` only
+- Forward SHA-256
+  `863b579cac72bde30f450be633e6bf9657c181c20b5ae43cb2c561b5c582d30a`
+- Rollback SHA-256
+  `ef4319e717e3219e2718a1737c4519e80f57c39d0df00d11fe9423affc4b5c79`
+- One transaction for the forward file with
+  `wos_v1.qa_hosted_install_authorized=yes`
+- Fresh pre-install Gate, order, Proof and function-fingerprint capture
+- Function/ACL post-install verification without opening write Gates
+- Immediate rollback authority if any fingerprint or permission differs
+
+The install authorization does not authorize an Edge deployment, write Gate,
+test order, browser E2E or Production action.
+
+## Hosted QA execution sequence after separate authorization
+
+1. Capture target QA order, organization, actor profiles, row counts, Gates,
+   Proof/receipt counts and Storage inventory.
+2. Install the exact functions and verify ACLs and fingerprints.
+3. Deploy `wos-v1-verify-image` only to the isolated QA project with
+   `WOS_SUPABASE_ALLOWED_REFS=xulmpqaknlwqqculbsek`.
+4. Configure the isolated Preview with the QA adapter flags and all writes OFF.
+5. Prove reads, Viewer/cross-org/anonymous denial and Gate-OFF write denial.
+6. Obtain a separate bounded write authorization and create a new synthetic
+   `QA-` order. Do not reuse historical orders or Proof records.
+7. Run the Office → Operator accept/return → Office revision/resubmit →
+   Operator review path with real JWT, four real PNGs and database readback.
+8. Close both Gates immediately and prove all later writes fail even if an old
+   Preview deployment retains old environment variables.
+9. Compare all unrelated QA and Production evidence to the pre-install
+   baseline.
+
+## Current blockers
+
+- PR #276 has no merge authorization in this turn.
+- PR #277 cannot receive Master-target CI until #276 is separately merged.
+- Exact QA function installation is not authorized.
+- The Edge function is not deployed to QA.
+- The QA adapter and bounded write Gate configuration must be deployed and
+  exercised only after their own approval.
+- Real Storage bytes, object identity/version stability and browser HTTP flow
+  remain unverified in Hosted QA.
+
+`HOSTED_QA_PASS=NO`

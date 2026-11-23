@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import {
   WOS_PRODUCTION_SUPABASE_REF,
   WOS_QA_SUPABASE_REF,
@@ -88,8 +90,39 @@ assert.deepEqual(wosV1ReadOnlyInvariant(), {
   canStart: false,
 });
 
+const runtimeForwardSql = readFileSync(resolve(
+  'docs/workshop-order-system/production-readiness/sql/',
+  'WOS_V1_PRODUCTION_RUNTIME_FORWARD_NOT_AUTHORIZED.sql',
+), 'utf8');
+const runtimeRollbackSql = readFileSync(resolve(
+  'docs/workshop-order-system/production-readiness/sql/',
+  'WOS_V1_PRODUCTION_RUNTIME_ROLLBACK_NOT_AUTHORIZED.sql',
+), 'utf8');
+const p7CandidateSql = readFileSync(resolve(
+  'tests/sql/wos_p8_p7_production_compatible_candidate.sql',
+), 'utf8');
+
+assert.match(
+  runtimeForwardSql,
+  /p_storage_object_version IS NULL[\s\S]*length\(btrim\(p_storage_object_version\)\) = 0/,
+);
+assert.match(
+  p7CandidateSql,
+  /storage_object_version text NOT NULL[\s\S]*length\(storage_object_version\) BETWEEN 1 AND 512/,
+);
+assert.match(
+  runtimeRollbackSql,
+  /WOS_V1_RUNTIME_ROLLBACK_REQUIRES_DATA_RETENTION_DECISION/,
+);
+assert.match(
+  runtimeRollbackSql,
+  /FOREACH v_table IN ARRAY ARRAY\[[\s\S]*wos_order_create_receipts/,
+);
+
 console.log('workshop-order-production-runtime-contract.test.ts: PASS');
 console.log('WOS_V1_PRODUCTION_PROJECT_PIN=PASS');
 console.log('WOS_V1_PRODUCTION_WRITES_DEFAULT_OFF=PASS');
 console.log('WOS_V1_QA_PROJECT_NOT_PRODUCTION_RUNTIME=PASS');
 console.log('WOS_V1_CAN_START_FALSE=PASS');
+console.log('WOS_V1_STORAGE_VERSION_STRICT=PASS');
+console.log('WOS_V1_RUNTIME_ROLLBACK_DATA_GUARD=PASS');

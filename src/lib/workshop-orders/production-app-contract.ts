@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import {
   classifyWosSupabaseRuntime,
+  WOS_QA_SUPABASE_REF,
   type WosSupabaseRuntime,
 } from './production-runtime-contract';
 
@@ -221,6 +222,18 @@ export interface WosV1AppRuntimeState {
   readonly writesEnabled: boolean;
 }
 
+export interface WosV1QaAppRuntimeInput {
+  readonly vercelEnv?: string;
+  readonly supabaseUrl?: string;
+  readonly authMode?: string;
+  readonly qaEnabled?: string;
+  readonly qaWritesEnabled?: string;
+}
+
+export interface WosV1QaAppRuntimeState extends WosV1AppRuntimeState {
+  readonly adapter: 'qa-preview';
+}
+
 export function resolveWosV1AppRuntime(
   input: WosV1AppRuntimeInput,
 ): WosV1AppRuntimeState {
@@ -238,6 +251,24 @@ export function resolveWosV1AppRuntime(
 
 export function canExposeWosV1App(input: WosV1AppRuntimeInput): boolean {
   return resolveWosV1AppRuntime(input).readsEnabled;
+}
+
+export function resolveWosV1QaAppRuntime(
+  input: WosV1QaAppRuntimeInput,
+): WosV1QaAppRuntimeState {
+  const project = classifyWosSupabaseRuntime(input.supabaseUrl);
+  const qaProjectPinned = project === 'qa'
+    && input.supabaseUrl === 'https://' + WOS_QA_SUPABASE_REF + '.supabase.co';
+  const readsEnabled = qaProjectPinned
+    && input.vercelEnv === 'preview'
+    && input.authMode === 'supabase'
+    && input.qaEnabled === 'true';
+  return {
+    project,
+    readsEnabled,
+    writesEnabled: readsEnabled && input.qaWritesEnabled === 'true',
+    adapter: 'qa-preview',
+  };
 }
 
 export function canWosV1Read(role: unknown): boolean {

@@ -20,7 +20,10 @@ files=(
   docs/workshop-order-system/production-readiness/sql/WOS_V1_PRODUCTION_FOUNDATION_CONTAINMENT_NOT_AUTHORIZED.sql
   docs/workshop-order-system/production-readiness/sql/V1_APP_01_PROOF_RENEWAL_NOT_AUTHORIZED.sql
   docs/workshop-order-system/production-readiness/sql/V1_APP_01_PROOF_RENEWAL_ROLLBACK_NOT_AUTHORIZED.sql
+  docs/workshop-order-system/production-readiness/sql/WOS_V1_HOSTED_QA_DEPENDENCIES_NOT_AUTHORIZED.sql
+  docs/workshop-order-system/production-readiness/sql/WOS_V1_HOSTED_QA_DEPENDENCIES_ROLLBACK_NOT_AUTHORIZED.sql
   src/app/api/workshop-orders/v1/route.ts
+  src/app/api/workshop-orders/v1-qa/route.ts
   src/app/workshop-orders/inbox/page.tsx
   src/app/workshop-orders/production/new/page.tsx
   src/components/workshop-orders/ProductionOfficeOrders.tsx
@@ -38,6 +41,9 @@ files=(
   tests/unit/workshop-order-production-app-contract.test.ts
   tests/unit/workshop-order-production-app-http.test.ts
   tests/unit/workshop-order-production-edge-core.test.ts
+  tests/sql/wos-v1-hosted-qa-dependencies-pg17-assertions.sql
+  tests/sql/wos-v1-hosted-qa-dependencies-pg17-suite.sh
+  tests/sql/wos-v1-hosted-qa-existing-prerequisites.sql
   tests/sql/wos_production_bootstrap_fixture.sql
   tests/sql/wos_production_app_schema_signatures.sql
   tests/sql/wos_v1_production_runtime_security_signatures.sql
@@ -69,6 +75,7 @@ files=(
   docs/workshop-order-system/production-readiness/WOS_V1_FIRST_RELEASE_BLOCKERS_20261123.md
   docs/workshop-order-system/production-readiness/V1_APP_01_IMPLEMENTATION_REPORT.md
   docs/workshop-order-system/production-readiness/V1_APP_01_ROUTE_AND_EDGE_CONFIG.md
+  docs/workshop-order-system/production-readiness/WOS_V1_INT_01_HOSTED_QA_READINESS.md
   scripts/wos-production-readiness/write-artifact-fingerprints.sh
 )
 
