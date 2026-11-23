@@ -1,0 +1,1084 @@
+{
+  "schema_version": 1,
+  "project_ref": "amqpvxrurenevniilhtl",
+  "scope": [
+    "public",
+    "commercial_private",
+    "commercial_audit"
+  ],
+  "observed_utc": "2026-11-23T00:08:38.629Z",
+  "contains_business_rows": false,
+  "contains_function_source": false,
+  "contains_storage_paths": false,
+  "row_count": 212,
+  "categories": {
+    "default_acl": 6,
+    "function": 104,
+    "schema": 3,
+    "table": 67,
+    "trigger": 32
+  },
+  "aggregate_sha256": "4c7c9d91506aa86933ac2bd31a94807af2253f65b4e61e955097043eb36c4170",
+  "rows": [
+    {
+      "category": "default_acl",
+      "object_name": "postgres:public:f",
+      "details_sha256": "737e79ee06301f176979895d5519346c47c0cd620b73d069906bc8fc6658106f"
+    },
+    {
+      "category": "default_acl",
+      "object_name": "postgres:public:r",
+      "details_sha256": "73faa3181a89278839299f107ca1030b101df0c1ed1d52baafb274725fe8bce6"
+    },
+    {
+      "category": "default_acl",
+      "object_name": "postgres:public:S",
+      "details_sha256": "86d354303b50ed16d5dca291c97e952699145fe3451402b23a10e7c121b187fc"
+    },
+    {
+      "category": "default_acl",
+      "object_name": "supabase_admin:public:f",
+      "details_sha256": "4f1c7335a9e5ad4ac06f516bbac417799b31eaeaf5df66b3b3ba02d373bdf020"
+    },
+    {
+      "category": "default_acl",
+      "object_name": "supabase_admin:public:r",
+      "details_sha256": "671ad2712fa4ecc5329924ca6c998d86345fef3050aba7230fd3517827451f6c"
+    },
+    {
+      "category": "default_acl",
+      "object_name": "supabase_admin:public:S",
+      "details_sha256": "363e6073afa0569d47c01202e9149e8a0da281afdc242c8b8594ca49faf58c94"
+    },
+    {
+      "category": "function",
+      "object_name": "commercial_audit.record_commercial_draft_revision()",
+      "details_sha256": "d31434d74505cf590a1836162b9cbab0fcbdf4ba6fcf37a7d8f8d23fe2ecfba9"
+    },
+    {
+      "category": "function",
+      "object_name": "commercial_private.freeze_confirmed_payment_method()",
+      "details_sha256": "77dd1c8d05324146a5859a01562c8fef02681d19b10df299c06c63d1ac52df68"
+    },
+    {
+      "category": "function",
+      "object_name": "commercial_private.guard_confirmed_quote_header()",
+      "details_sha256": "141118f8bd350a64bfe59975ef08f10158e16896f69efb92b7ee0371fe01f2f4"
+    },
+    {
+      "category": "function",
+      "object_name": "commercial_private.guard_confirmed_quote_version()",
+      "details_sha256": "d377b108657cbc7627e5030b0ffdd28bd53fdedc9ab0b3069b5cd23d9c41ce1c"
+    },
+    {
+      "category": "function",
+      "object_name": "public.auth_has_role(required_role text)",
+      "details_sha256": "0050a90f8c13a206bce404b24f315a6b3647328ed97c5c2a78231adcd6cfa8d7"
+    },
+    {
+      "category": "function",
+      "object_name": "public.auth_org_id()",
+      "details_sha256": "9f25e2faaf1a3e02f3d763de0282bfa52b47da0ffaa26a6a657f2534babea65e"
+    },
+    {
+      "category": "function",
+      "object_name": "public.auth_profile_id()",
+      "details_sha256": "716831b0a24c90195139dbc1c3aa02b47b3dd4ceb8f7646ca5ae321c9ce43732"
+    },
+    {
+      "category": "function",
+      "object_name": "public.auth_user_id()",
+      "details_sha256": "2c1f26bdc87a69c86069983e2f081d30a093002714e5cff99371c3970b3aa268"
+    },
+    {
+      "category": "function",
+      "object_name": "public.confirm_commercial_quote(p_request_id uuid, p_quote_id uuid, p_expected_version integer, p_draft_id uuid, p_snapshot jsonb, p_amount_thousandths bigint)",
+      "details_sha256": "d26685586dcaab7fb540ed4205bcfafa49f99adf135f5aa012ccab17db333f92"
+    },
+    {
+      "category": "function",
+      "object_name": "public.cpc_accept_ai_draft(p_ai_draft_id uuid, p_expected_version integer, p_request_id uuid)",
+      "details_sha256": "1f8124e9ee056b55b1a1b99c5fdbe0053fb073b1d5fde2f5f626320fe7b1abcc"
+    },
+    {
+      "category": "function",
+      "object_name": "public.cpc_build_daily_report_metrics(p_org_id uuid, p_subject_profile_id uuid, p_business_date date)",
+      "details_sha256": "dc4437e1d5188169ec7774fc73cde58b9f7a4b908d44ec389e20cbf15dca1665"
+    },
+    {
+      "category": "function",
+      "object_name": "public.cpc_can_assess_customer_rating(p_customer_reference_id uuid, p_org_id uuid)",
+      "details_sha256": "989b3d9c7cc1024fd019a64454b6fbeda3f1f9a419f8a5e90e44b485ebeb8556"
+    },
+    {
+      "category": "function",
+      "object_name": "public.cpc_can_follow_customer(p_customer_reference_id uuid, p_org_id uuid)",
+      "details_sha256": "aa7a520e320a62cc71e4defdfc5575d8bf255c3b2e2778d582cf90dbcd50a334"
+    },
+    {
+      "category": "function",
+      "object_name": "public.cpc_can_read_ai_draft(p_ai_draft_id uuid, p_org_id uuid)",
+      "details_sha256": "623d29925c8492424fbcdb1a105b21ed965bd038135656b4b6aaf81ec89ab124"
+    },
+    {
+      "category": "function",
+      "object_name": "public.cpc_can_read_customer_reference(p_customer_reference_id uuid, p_org_id uuid)",
+      "details_sha256": "002b4bfc72cd0063fd3984cdfdad703f10eaaf53f027540fd87286f3cef3f4ba"
+    },
+    {
+      "category": "function",
+      "object_name": "public.cpc_can_read_project(p_project_id uuid, p_org_id uuid)",
+      "details_sha256": "89c168d98e6d67243103403580408dbf39e044d58c6df7bf17c0613101268d6f"
+    },
+    {
+      "category": "function",
+      "object_name": "public.cpc_can_read_report(p_report_id uuid, p_org_id uuid)",
+      "details_sha256": "45dab54c220836ed79c0551cf1c6e0996836df5862dc533a63874a21be221066"
+    },
+    {
+      "category": "function",
+      "object_name": "public.cpc_can_read_work_item(p_work_item_id uuid, p_org_id uuid)",
+      "details_sha256": "730f785f7fb302e45feb13f777ad66520f352014cada24af0f08395715f884f4"
+    },
+    {
+      "category": "function",
+      "object_name": "public.cpc_can_self_rate_customer(p_customer_reference_id uuid, p_org_id uuid)",
+      "details_sha256": "7b08060421773535b486aa3298a75f2507741f66eeb6b658e338c8bb86c4883a"
+    },
+    {
+      "category": "function",
+      "object_name": "public.cpc_create_ai_work_item_draft(p_customer_reference_id uuid, p_project_id uuid, p_work_item_type text, p_title text, p_description text, p_due_at timestamp with time zone, p_priority text, p_raw_input text, p_expires_at timestamp with time zone, p_request_id uuid)",
+      "details_sha256": "362f0c8181f308738b9ee37dc9817b93b18b43e346aa37f0c55f7e592156de65"
+    },
+    {
+      "category": "function",
+      "object_name": "public.cpc_create_project(p_customer_reference_id uuid, p_title text, p_objective_summary text, p_project_type text, p_stage text, p_priority text, p_owner_profile_id uuid, p_initial_next_action_title text, p_initial_next_action_due_at timestamp with time zone, p_waiting_on text, p_next_check_at timestamp with time zone, p_request_id uuid)",
+      "details_sha256": "23ddded3bed51a4c4b38e598d4f5ea794d1ea67afb8c422b3aad84b9b0d03b81"
+    },
+    {
+      "category": "function",
+      "object_name": "public.cpc_create_provisional_customer_reference(p_display_name_snapshot text, p_provisional_source_reference text, p_request_id uuid)",
+      "details_sha256": "1c409e4661e253878df8d3a04ddb65ff6ac96400576b2dc875e318085590d00c"
+    },
+    {
+      "category": "function",
+      "object_name": "public.cpc_create_report_correction(p_report_id uuid, p_expected_version integer, p_reason text, p_request_id uuid)",
+      "details_sha256": "ecaf4e73328ce4c4f51c32498844b84708ae92c998ef9b9cb9fb71a506e2fa8d"
+    },
+    {
+      "category": "function",
+      "object_name": "public.cpc_create_work_item(p_customer_reference_id uuid, p_project_id uuid, p_work_item_type text, p_title text, p_description text, p_due_at timestamp with time zone, p_priority text, p_request_id uuid)",
+      "details_sha256": "0427c71cf43f75fd39f7301149f179f993fc1610d10de3995c1c727647b99d16"
+    },
+    {
+      "category": "function",
+      "object_name": "public.cpc_customer_maintenance_owners(p_customer_ids uuid[])",
+      "details_sha256": "c4eb0875c56c4055d7c4b0acbef3c58162b54a899c659e6ffb80cc6b76459c06"
+    },
+    {
+      "category": "function",
+      "object_name": "public.cpc_customer_self_rating_access(p_customer_ids uuid[])",
+      "details_sha256": "f3e06024711be0dbbf41294db4676841b4bd0485feba3ef3ae2bb0d2678f1bf1"
+    },
+    {
+      "category": "function",
+      "object_name": "public.cpc_enforce_active_project_invariant()",
+      "details_sha256": "a5521081fb7d158f4162c8dfa12fbd357d86e9a85fc90328aba04cf6f5c02d10"
+    },
+    {
+      "category": "function",
+      "object_name": "public.cpc_event_category(p_event_type text)",
+      "details_sha256": "fcd7c03018a192eea712b4f4b36eb3215c9872181c6e2280f093fa54b34d170c"
+    },
+    {
+      "category": "function",
+      "object_name": "public.cpc_event_payload_is_valid(p_event_type text, p_payload jsonb)",
+      "details_sha256": "6586b5de43adc4f3a5a163e386999d23035d94d958c3ec4af7555225411c12a5"
+    },
+    {
+      "category": "function",
+      "object_name": "public.cpc_generate_daily_report_draft(p_business_date date, p_request_id uuid)",
+      "details_sha256": "5cd64aa9cbb7051a2dc9f783fda0b71f184c3f3aef65e7323b068c6372c0514f"
+    },
+    {
+      "category": "function",
+      "object_name": "public.cpc_guard_submitted_report_immutability()",
+      "details_sha256": "b99457bc7a572a7eaf3e6f00c105c5655bc6254364fdc476ab1e6d10b2153ed2"
+    },
+    {
+      "category": "function",
+      "object_name": "public.cpc_project_owner_names(p_project_ids uuid[])",
+      "details_sha256": "f3f12723fdecce181c25e6ceaad954a1ac32d18689fe5b05fc1853530b71de0c"
+    },
+    {
+      "category": "function",
+      "object_name": "public.cpc_project_transition_is_valid(p_from_status text, p_to_status text)",
+      "details_sha256": "47649fd2d078dc6a2f7a1736067a1b4b47450ad7d4339615f7cb6d04cefc4a0e"
+    },
+    {
+      "category": "function",
+      "object_name": "public.cpc_record_customer_follow_up(p_customer_reference_id uuid, p_event_type text, p_result_summary text, p_occurred_at timestamp with time zone, p_current_follow_up_id uuid, p_next_follow_up_title text, p_next_follow_up_due_at timestamp with time zone, p_next_follow_up_priority text, p_request_id uuid)",
+      "details_sha256": "1509de06f6754003151f4c7c5584e98c48d2b045007eb9eede792eaae65afdd4"
+    },
+    {
+      "category": "function",
+      "object_name": "public.cpc_record_progress(p_project_id uuid, p_expected_version integer, p_event_type text, p_raw_input text, p_payload jsonb, p_occurred_at timestamp with time zone, p_new_stage text, p_next_action_title text, p_next_action_due_at timestamp with time zone, p_waiting_on text, p_next_check_at timestamp with time zone, p_request_id uuid)",
+      "details_sha256": "82cc914cb97b1738809f7003a107d16c937ade0ebccbe12e3c97c9f966831f7b"
+    },
+    {
+      "category": "function",
+      "object_name": "public.cpc_reject_ai_draft(p_ai_draft_id uuid, p_expected_version integer, p_reason text, p_request_id uuid)",
+      "details_sha256": "e92899b9f69fea5b3554fc75f2e1dd0c82d344f1a93884ed2ea08a42035019c4"
+    },
+    {
+      "category": "function",
+      "object_name": "public.cpc_reject_append_only_mutation()",
+      "details_sha256": "7621d08afedc85b82b76702bb737b22155b17e8a19dc926d814402c14d200219"
+    },
+    {
+      "category": "function",
+      "object_name": "public.cpc_reschedule_work_item(p_work_item_id uuid, p_expected_version integer, p_to_due_at timestamp with time zone, p_reason text, p_request_id uuid)",
+      "details_sha256": "eb82bbb1acf168f322378e15db9b96d95706c98038d1fc2745ee5b89c684061d"
+    },
+    {
+      "category": "function",
+      "object_name": "public.cpc_review_customer_potential_rating(p_customer_reference_id uuid, p_expected_version integer, p_decision text, p_review_note text, p_request_id uuid)",
+      "details_sha256": "ef2fe71a708c47edfb8d917a1ea139852e77334d0115a2e6e2ef20f3f9e9232f"
+    },
+    {
+      "category": "function",
+      "object_name": "public.cpc_rpc_error(p_code text, p_message text, p_data jsonb)",
+      "details_sha256": "04e4a84588d7dc7a0dd811bda8667a8c97aa9b97687b530b3d5bd374080c11fe"
+    },
+    {
+      "category": "function",
+      "object_name": "public.cpc_save_customer_development_plan(p_customer_reference_id uuid, p_opportunity_summary text, p_estimated_annual_opportunity_cny_yuan bigint, p_next_action text, p_next_check_on date, p_expected_version integer, p_request_id uuid)",
+      "details_sha256": "0866b3d3b09e10c673a086c9861a333e64eafc6b6b5d1fb9c372054828037230"
+    },
+    {
+      "category": "function",
+      "object_name": "public.cpc_save_customer_note(p_customer_reference_id uuid, p_note text, p_expected_version integer, p_request_id uuid)",
+      "details_sha256": "6a31f9ffd642b6e3be23cc87fa075fd121df6310f410609ae425217e0bca6eb9"
+    },
+    {
+      "category": "function",
+      "object_name": "public.cpc_save_customer_potential_rating(p_customer_reference_id uuid, p_scores jsonb, p_evidence_summary text, p_opportunity_summary text, p_estimated_annual_opportunity_cny_yuan bigint, p_next_action text, p_next_check_on date, p_submit boolean, p_expected_version integer, p_request_id uuid)",
+      "details_sha256": "ac7a48b3355caebe52c9a0ef945973ec452700fbc7f3ba9324ce693da9505ea9"
+    },
+    {
+      "category": "function",
+      "object_name": "public.cpc_set_waiting_state(p_project_id uuid, p_expected_version integer, p_waiting_on text, p_next_check_at timestamp with time zone, p_reason text, p_request_id uuid)",
+      "details_sha256": "18dec0c7d1abfec91f0a741e2c5d87426c3017d7c6e622960ba488b531d4924a"
+    },
+    {
+      "category": "function",
+      "object_name": "public.cpc_stage_is_valid(p_project_type text, p_stage text)",
+      "details_sha256": "49d08698dae0f790095dba0ae453f3f32905bfc3796ad3f867af7916e2d2dc84"
+    },
+    {
+      "category": "function",
+      "object_name": "public.cpc_submit_report(p_report_id uuid, p_expected_version integer, p_request_id uuid)",
+      "details_sha256": "7c8484353bb1d1e4f52fa2e7f1c836de696e4cbd7c079710731a27c33289f7dd"
+    },
+    {
+      "category": "function",
+      "object_name": "public.cpc_transition_project(p_project_id uuid, p_expected_version integer, p_to_status text, p_reason text, p_pause_next_check_at timestamp with time zone, p_reopen_next_action_title text, p_reopen_next_action_due_at timestamp with time zone, p_reopen_waiting_on text, p_reopen_next_check_at timestamp with time zone, p_request_id uuid)",
+      "details_sha256": "a66545a4c9343d46c95a4be9bd621b6ebf389a209cecafaefbaa9265fc09712f"
+    },
+    {
+      "category": "function",
+      "object_name": "public.cpc_transition_work_item(p_work_item_id uuid, p_expected_version integer, p_to_status text, p_reason text, p_request_id uuid)",
+      "details_sha256": "a1834c1eaa5618d917bf81b5b3f9d529a4c958d1c8b33b5c8d5811d5e82def65"
+    },
+    {
+      "category": "function",
+      "object_name": "public.cpc_work_item_transition_is_valid(p_from_status text, p_to_status text)",
+      "details_sha256": "721f7bfddb17d2a0abf07c795aeef1296c5bf5f6cebd221514595e536be75535"
+    },
+    {
+      "category": "function",
+      "object_name": "public.glh_assign_lead(p_lead_id uuid, p_assignee_profile_id uuid, p_expected_version integer, p_reason text)",
+      "details_sha256": "7ad2d514635a4a21396edde37d707b510990e6914497f5a0888306f4f482112c"
+    },
+    {
+      "category": "function",
+      "object_name": "public.glh_can_access_contact(p_contact_id uuid)",
+      "details_sha256": "e83ac5ff6c8fda03b0a7671337c9fb063cc2b762d29646c2f18af5f25ae8e077"
+    },
+    {
+      "category": "function",
+      "object_name": "public.glh_can_access_conversation(p_conversation_id uuid)",
+      "details_sha256": "3eeaffa5bbed4fb16df2776ae10f90b27c98b2e2cff2573664d1da3c26efcb18"
+    },
+    {
+      "category": "function",
+      "object_name": "public.glh_can_access_lead(p_lead_id uuid)",
+      "details_sha256": "157713df65b1105ab587f5440e0ae6fc7dfdb3e708ded179eca95c949f6d7738"
+    },
+    {
+      "category": "function",
+      "object_name": "public.glh_can_manage_org(p_org_id uuid)",
+      "details_sha256": "2dc7e3869b34040df8d3a80364fd68e25a8577ee8dd347323d6a46229a889aa3"
+    },
+    {
+      "category": "function",
+      "object_name": "public.glh_change_manual_lead_stage(p_lead_id uuid, p_expected_version integer, p_stage text, p_reason text)",
+      "details_sha256": "3284769c7593abd2c69d8a621ee15411df7581e17c5eba9d221e9459f8498cc3"
+    },
+    {
+      "category": "function",
+      "object_name": "public.glh_create_manual_production_lead(p_request_key uuid, p_display_name text, p_company_name text, p_country_code text, p_whatsapp text, p_email text, p_requirement_type text, p_owner_profile_id uuid, p_product text, p_material text, p_quantity text, p_notes text, p_source_detail text)",
+      "details_sha256": "a87c473893a059701cba2b6773296eb67dd5dd283e5cbf05146d70d97b434fed"
+    },
+    {
+      "category": "function",
+      "object_name": "public.glh_create_manual_test_lead(p_manual_creation_guard text, p_display_name text, p_company_name text, p_country_code text, p_whatsapp text, p_email text, p_source_platform text, p_requirement_type text, p_lifecycle_state text, p_conversation_mode text, p_priority_grade text, p_score integer, p_completeness integer, p_owner_profile_id uuid, p_product text, p_material text, p_quantity text, p_notes text)",
+      "details_sha256": "6172cc83e50f38ac3d3cae92f8ab73ec36b0e2b1f12001a80f06dc727be21c1f"
+    },
+    {
+      "category": "function",
+      "object_name": "public.glh_create_task_or_followup(p_lead_id uuid, p_work_kind text, p_work_type text, p_title text, p_due_at timestamp with time zone, p_assignee_profile_id uuid)",
+      "details_sha256": "7b1773636c100236da8d0aea1de274730c00cae3667948ce8eebe62febdc9648"
+    },
+    {
+      "category": "function",
+      "object_name": "public.glh_current_profile_id()",
+      "details_sha256": "df4bd888e721c048f5ceddb6cb8fe5a45d4b5b39a55306ee2077a852061ebbcb"
+    },
+    {
+      "category": "function",
+      "object_name": "public.glh_finish_manual_work(p_work_kind text, p_work_id uuid, p_expected_version integer)",
+      "details_sha256": "deae8bf26cce3418b7fca01c15c4e49179319cee0136ca2c625958f5554750e2"
+    },
+    {
+      "category": "function",
+      "object_name": "public.glh_ingest_whatsapp_inbound(p_external_event_id text, p_provider_account_id text, p_external_contact_id text, p_external_conversation_id text, p_contact_display_name text, p_message_type text, p_message_text text, p_media_metadata jsonb, p_provider_timestamp timestamp with time zone, p_referral jsonb, p_raw_payload jsonb)",
+      "details_sha256": "28fc9cc922df0d98126cd234f808264a10a4868844708c1cd207cc6538b567d0"
+    },
+    {
+      "category": "function",
+      "object_name": "public.glh_queue_human_message(p_conversation_id uuid, p_lead_id uuid, p_expected_mode text, p_message_text text, p_idempotency_key text)",
+      "details_sha256": "a7914b38321e109a3a5999bb1894ebb89efa1e236f6a69a0c7afaf4a7d0e4ab7"
+    },
+    {
+      "category": "function",
+      "object_name": "public.glh_take_over_conversation(p_conversation_id uuid, p_lead_id uuid, p_expected_mode text, p_expected_lead_version integer, p_reason text)",
+      "details_sha256": "b7b4eb8223b59961909bd54a95e539a5b0b580cf2fbe40f1d3e28f85e849f790"
+    },
+    {
+      "category": "function",
+      "object_name": "public.organizations_protect_immutable()",
+      "details_sha256": "8d6ad5d1ebf3518df8d0faff18c701c9b73f4949bb1da2aba61e581246071b18"
+    },
+    {
+      "category": "function",
+      "object_name": "public.review_action_cancel(p_review_id uuid, p_action_id uuid, p_expected_version integer, p_reason text)",
+      "details_sha256": "548cc505a2e65458f1b27a1ff8017c07a40221322f9f399d365018e8ed755441"
+    },
+    {
+      "category": "function",
+      "object_name": "public.review_action_create(p_review_id uuid, p_title text, p_description text, p_action_type text, p_owner_profile_id uuid, p_due_date date)",
+      "details_sha256": "5a5f710407a7c00082ae0d1c29817c189a95024a962d43e07325287747c9954d"
+    },
+    {
+      "category": "function",
+      "object_name": "public.review_action_return(p_review_id uuid, p_action_id uuid, p_expected_version integer, p_reason text)",
+      "details_sha256": "ba7a50593628ca9f70d426c7a3d97bc0c0ae1c1870f24ac9f9b91dec8b2f741b"
+    },
+    {
+      "category": "function",
+      "object_name": "public.review_action_start(p_review_id uuid, p_action_id uuid, p_expected_version integer)",
+      "details_sha256": "a06ba2e8744f8d614b0b1bd791defdeffcb83b3cfa24412550bff0f2b341c97b"
+    },
+    {
+      "category": "function",
+      "object_name": "public.review_action_submit_for_verification(p_review_id uuid, p_action_id uuid, p_expected_version integer, p_completion_note text)",
+      "details_sha256": "593079be07c36c4fda3b4e3345ae88669e9350ecfaced165ddefdbca719e07a5"
+    },
+    {
+      "category": "function",
+      "object_name": "public.review_action_update(p_review_id uuid, p_action_id uuid, p_expected_version integer, p_title text, p_description text, p_action_type text, p_owner_profile_id uuid, p_due_date date)",
+      "details_sha256": "5d74a65323c60311b6deaeab0a9075c7e36f406b1c329d76b828373adf8a3576"
+    },
+    {
+      "category": "function",
+      "object_name": "public.review_action_verify(p_review_id uuid, p_action_id uuid, p_expected_version integer, p_verification_note text)",
+      "details_sha256": "14bdaad63c4e43cc6d0a2f1195833ab3fc9337fbb844bc99081bda07baf1dbc2"
+    },
+    {
+      "category": "function",
+      "object_name": "public.review_add_member(p_review_id uuid, p_expected_version integer, p_profile_id uuid, p_member_role text)",
+      "details_sha256": "498a057d289383d8fcfb151429b0caca336cb6e40a29d6a04ff8171e4655ac39"
+    },
+    {
+      "category": "function",
+      "object_name": "public.review_case_admin_detail(p_case_no text)",
+      "details_sha256": "ae1376caca2b02b916691d18668333e76a28c77ee50988b6280f357668560039"
+    },
+    {
+      "category": "function",
+      "object_name": "public.review_case_allocate_number(p_org_id uuid, p_year integer)",
+      "details_sha256": "5d7ad4b2b404d1a6b552bf59dee66a16eda140a8c89705c1e6e9d372eb8a000c"
+    },
+    {
+      "category": "function",
+      "object_name": "public.review_case_audit(p_case_id uuid, p_limit integer, p_offset integer)",
+      "details_sha256": "443710bddbda596ce28a79e1f730b594aac70203c132fd7c2302c216cba65259"
+    },
+    {
+      "category": "function",
+      "object_name": "public.review_case_candidates(p_limit integer, p_offset integer, p_query text)",
+      "details_sha256": "0ac29a0d36bfb9680437938d99f8736ccc7881752a1c90ef1b7c0097c116f09f"
+    },
+    {
+      "category": "function",
+      "object_name": "public.review_case_create_from_review(p_review_id uuid, p_expected_review_version integer, p_title text)",
+      "details_sha256": "3024226e09491176b58e61f5975cdea46e4cbafbcb2842507e0be705311205c4"
+    },
+    {
+      "category": "function",
+      "object_name": "public.review_case_detail(p_case_no text)",
+      "details_sha256": "d10b08012b8f57d04b6d63b0b1ce57e2191b1cc6e30013583d01c64e4c1b9692"
+    },
+    {
+      "category": "function",
+      "object_name": "public.review_case_hide(p_case_id uuid, p_expected_version integer, p_reason text)",
+      "details_sha256": "750a28247cdfeec43e5b28109ff67fb2298d1338b8254d90ec322304ffcb7e4d"
+    },
+    {
+      "category": "function",
+      "object_name": "public.review_case_library(p_query text, p_material_codes text[], p_process_codes text[], p_problem_domain_codes text[], p_problem_symptom_codes text[], p_review_types text[], p_risk_levels text[], p_published_from timestamp with time zone, p_published_to timestamp with time zone, p_limit integer, p_offset integer)",
+      "details_sha256": "8e01635e0dc23a941f72ff856733e61f3837a65c456d452bb08eb8e639905c78"
+    },
+    {
+      "category": "function",
+      "object_name": "public.review_case_publish(p_case_id uuid, p_expected_version integer, p_expected_source_review_version integer)",
+      "details_sha256": "4c4954ad39333818db6b0d31e2875d5ce15c7f56770e66632bee4135e5f40d99"
+    },
+    {
+      "category": "function",
+      "object_name": "public.review_case_reopen_curation(p_case_id uuid, p_expected_version integer)",
+      "details_sha256": "8a31b9a772c869a03b0bb4009c58d01ddd2a9d7840a94258a0acff130e72ce44"
+    },
+    {
+      "category": "function",
+      "object_name": "public.review_case_replace_snapshot(p_case_id uuid, p_org_id uuid, p_review_id uuid)",
+      "details_sha256": "94e77d33d272cde41ad24038115f60d6d215f8e91bc0a11c46dcf0a2437bf736"
+    },
+    {
+      "category": "function",
+      "object_name": "public.review_case_safe_mutation_dto(p_case_id uuid, p_org_id uuid)",
+      "details_sha256": "fd2f8a1192d0c67bee4e195ee0bb6785b31c305c5453609580d0145fde0a5cf0"
+    },
+    {
+      "category": "function",
+      "object_name": "public.review_case_update_draft(p_case_id uuid, p_expected_version integer, p_patch jsonb)",
+      "details_sha256": "3776e83e4709641595138dc2b66a814cb934aadc81f65a1cb236bb92b2c86dfc"
+    },
+    {
+      "category": "function",
+      "object_name": "public.review_case_validate_publish_metadata(p_review_id uuid, p_org_id uuid)",
+      "details_sha256": "f735d45ce37c46aa65795ef6012f8404160e609c55d0ac48df592cff7f4cc968"
+    },
+    {
+      "category": "function",
+      "object_name": "public.review_close(p_review_id uuid, p_expected_version integer)",
+      "details_sha256": "373c90c5736cef3554b54ca261705f3977265cb94539ff85d9e034ce42077e71"
+    },
+    {
+      "category": "function",
+      "object_name": "public.review_create_audit_trigger()",
+      "details_sha256": "a671724033bff25305a254a551f61af2a2062013a74021c371525fcd3886f202"
+    },
+    {
+      "category": "function",
+      "object_name": "public.review_event_actor_directory(p_review_id uuid, p_purpose text)",
+      "details_sha256": "c24ae10954ac74b765b7fed3b4563d99262df6650310521257174cd90a2ea0e4"
+    },
+    {
+      "category": "function",
+      "object_name": "public.review_metadata_submit_missing(p_review_id uuid, p_org_id uuid)",
+      "details_sha256": "9ec11483124564b2189f8d329433b69fbaa243123c2283a8c06732db6b148e67"
+    },
+    {
+      "category": "function",
+      "object_name": "public.review_participant_directory(p_review_id uuid)",
+      "details_sha256": "cf616d7f7800008e14f45907c7e168853e22a45618de0498a80c53f6197260c5"
+    },
+    {
+      "category": "function",
+      "object_name": "public.review_profile_directory(p_purpose text)",
+      "details_sha256": "e9a1f4de84b6c13d89ced38d125deaba5891d242089c5b94eeaee115d4d935fc"
+    },
+    {
+      "category": "function",
+      "object_name": "public.review_remove_member(p_review_id uuid, p_expected_version integer, p_member_id uuid)",
+      "details_sha256": "e40c753d3965a05823b5cd78d304a80ed3c968e2c00884187a2fe584ae45eed9"
+    },
+    {
+      "category": "function",
+      "object_name": "public.review_reopen(p_review_id uuid, p_expected_version integer, p_reason text)",
+      "details_sha256": "426ca03820a3a36468fa2de0a304ed50f24bc67c1556b81ba509eedf0f09c9e3"
+    },
+    {
+      "category": "function",
+      "object_name": "public.review_rpc_error(p_code text, p_message text)",
+      "details_sha256": "7c873123c725badaf57f9e3c153eaf0d52457d06a23b43027bad04031566022f"
+    },
+    {
+      "category": "function",
+      "object_name": "public.review_set_draft_assignments(p_review_id uuid, p_expected_version integer, p_owner_profile_id uuid, p_pmo_profile_id uuid)",
+      "details_sha256": "6e3ea27d4ad8fb6fef7657304fc57399cdd003980368d52c7026ee46e4bbfce1"
+    },
+    {
+      "category": "function",
+      "object_name": "public.review_set_primary_member(p_review_id uuid, p_expected_version integer, p_member_id uuid)",
+      "details_sha256": "e4271f5557fe9ea2fb58d54184a363c5e0855085a4fa57b920094e8d69f5b0d2"
+    },
+    {
+      "category": "function",
+      "object_name": "public.review_submit(p_review_id uuid, p_expected_version integer)",
+      "details_sha256": "ce40a0025de709080da3ae969c6555f1bd4e607d82818554ed882ac43578ebcb"
+    },
+    {
+      "category": "function",
+      "object_name": "public.review_type_details_key_allowed(p_review_type text, p_key text)",
+      "details_sha256": "745845e3f0879ef3406c5e72f498e3d9e580bf026224e305c888d90c351fe3a0"
+    },
+    {
+      "category": "function",
+      "object_name": "public.review_update_draft_public(p_review_id uuid, p_expected_version integer, p_patch jsonb)",
+      "details_sha256": "7e89b5dd7545e0a048c4c7fe4b376a455acc0adfb3504e11611d3fcaac17c89d"
+    },
+    {
+      "category": "function",
+      "object_name": "public.review_upsert_metadata(p_review_id uuid, p_expected_version integer, p_metadata jsonb)",
+      "details_sha256": "8f0a94b54613ce766f6e319a88596292661b27d1ff8ee5012fba5974fcb7fdb1"
+    },
+    {
+      "category": "function",
+      "object_name": "public.review_upsert_type_details(p_review_id uuid, p_expected_version integer, p_patch jsonb)",
+      "details_sha256": "cf1d3446d76abe84c879bafc01703aa8f66868e4da8878a3ff83bbf893470ccb"
+    },
+    {
+      "category": "function",
+      "object_name": "public.set_updated_at()",
+      "details_sha256": "deababe2ec393c572c735e49e565b03e8b56abfbec4bb17231850e7b82e98d0b"
+    },
+    {
+      "category": "function",
+      "object_name": "public.update_site_data_timestamp()",
+      "details_sha256": "294ff80ea5820f5172eacd47b7d1c7717655cdac2bb348b19024c16d2c68c2be"
+    },
+    {
+      "category": "schema",
+      "object_name": "commercial_audit",
+      "details_sha256": "9b14f244d6b47fe7aa9925da8846833a4423272625f99ca5d78065f22e5f913c"
+    },
+    {
+      "category": "schema",
+      "object_name": "commercial_private",
+      "details_sha256": "9b14f244d6b47fe7aa9925da8846833a4423272625f99ca5d78065f22e5f913c"
+    },
+    {
+      "category": "schema",
+      "object_name": "public",
+      "details_sha256": "d4af5146b57057fcc97167d538468f6ebae74d598089fda40761993f6c856354"
+    },
+    {
+      "category": "table",
+      "object_name": "public.account_rules",
+      "details_sha256": "54b13fb18c4bb275f6b137f024380159757e580c3086c37feeba1120e5ce2853"
+    },
+    {
+      "category": "table",
+      "object_name": "public.accounts",
+      "details_sha256": "4e43c5603b98d9ea548e1266f3d870e73f56779cc2edc4ab0ad15455444682fc"
+    },
+    {
+      "category": "table",
+      "object_name": "public.ai_runs",
+      "details_sha256": "0df08d2b2bab2a9feff24e682c914e65c4e40f96131f89696b3f03b21ccdc5ef"
+    },
+    {
+      "category": "table",
+      "object_name": "public.commercial_confirmed_quote_versions",
+      "details_sha256": "e234f46c1a2e553222c296c5b7e6e44373996cf0508b7f292f1d287f364345e4"
+    },
+    {
+      "category": "table",
+      "object_name": "public.commercial_confirmed_quotes",
+      "details_sha256": "afb1d64bd56fa85fd6900700d442d26cc41ee30c45c085f3de2ccc0a8915c182"
+    },
+    {
+      "category": "table",
+      "object_name": "public.commercial_payment_methods",
+      "details_sha256": "0e63c108d69fe672e434cf37d397fbe3afdf2529ddceb22e1eb194c3284d845c"
+    },
+    {
+      "category": "table",
+      "object_name": "public.commercial_quotation_draft_revisions",
+      "details_sha256": "38659a18633ad45737f868d73ff3e3f35ce1167ded61b059bce07e2615e0818e"
+    },
+    {
+      "category": "table",
+      "object_name": "public.commercial_quotation_drafts",
+      "details_sha256": "d6320d0cf38baec992dc4398d241e608a41a83f62f6d6102d1537002354789de"
+    },
+    {
+      "category": "table",
+      "object_name": "public.cpc_ai_drafts",
+      "details_sha256": "5dffde006597b856bb86c79b2b6ad173ce81bb6c4631f00576c44453f1ec9c53"
+    },
+    {
+      "category": "table",
+      "object_name": "public.cpc_audit_log",
+      "details_sha256": "c80f73fbc8f093f53f7407c275d5fb1184984a5b7ea8b71f0818e19113884fb9"
+    },
+    {
+      "category": "table",
+      "object_name": "public.cpc_customer_potential_assessments",
+      "details_sha256": "1893a9a4aa3a90ea76b2ba64c8ef86ff95b53fba3358b415c4082dd0b733f8e9"
+    },
+    {
+      "category": "table",
+      "object_name": "public.cpc_customer_references",
+      "details_sha256": "fb996e136763e95e6ba66fe2fde4c43f82e9c6afe63b406196814c1fc09711b9"
+    },
+    {
+      "category": "table",
+      "object_name": "public.cpc_customer_workspaces",
+      "details_sha256": "fc20f2a4dded7245d531aac0d848ca7b6f0c36bcf7339955060078ff81616678"
+    },
+    {
+      "category": "table",
+      "object_name": "public.cpc_external_profile_mappings",
+      "details_sha256": "b224b5253db41fdbc6e63a4fe88c342e1317b9c4cfd7e541e7475425d4603090"
+    },
+    {
+      "category": "table",
+      "object_name": "public.cpc_project_events",
+      "details_sha256": "833480a6749c6c44f19c255a4574acba0c99a71fa1123476a5a88b9d66cd777d"
+    },
+    {
+      "category": "table",
+      "object_name": "public.cpc_project_members",
+      "details_sha256": "48dab7e29e63c0d39ffee2de218b53eb4801d7c91e7f89fadbd477535d08a7bf"
+    },
+    {
+      "category": "table",
+      "object_name": "public.cpc_projects",
+      "details_sha256": "2cbcf88a5a49073d08723f8a09373725f278fbad157ff710c0a93f0e24f271b7"
+    },
+    {
+      "category": "table",
+      "object_name": "public.cpc_reports",
+      "details_sha256": "886a86a14536279e03b13fdcb32dc99a31b28f544ae7214f1fd8486f1acb904b"
+    },
+    {
+      "category": "table",
+      "object_name": "public.cpc_work_items",
+      "details_sha256": "4ae7442397220253a971e7324daeac11670c45022676f14d80381f1de6e2d42d"
+    },
+    {
+      "category": "table",
+      "object_name": "public.glh_activity_events",
+      "details_sha256": "df9da6d666ed233a7e3306a150cd3555e58864c3ee7e6ebdccc50b2a0f43b7b8"
+    },
+    {
+      "category": "table",
+      "object_name": "public.glh_ad_campaigns",
+      "details_sha256": "f7e5b7f855e6545ffa993d9025592c59fee2735a934adc3a92cf333556249ea4"
+    },
+    {
+      "category": "table",
+      "object_name": "public.glh_ad_creatives",
+      "details_sha256": "46c458e6afa42f638734c11d3c9895c9767ccd1ca340f60c09cc140208c6ec72"
+    },
+    {
+      "category": "table",
+      "object_name": "public.glh_ai_actions",
+      "details_sha256": "50319d8efa715e90f0a8a4f79568485f096f3a121b690c5d41591c9a301de31a"
+    },
+    {
+      "category": "table",
+      "object_name": "public.glh_assignments",
+      "details_sha256": "05927185d4c079f1ce2dad0f1b0dd8f0da096c7e8991b748689b0c6973c3599a"
+    },
+    {
+      "category": "table",
+      "object_name": "public.glh_audit_events",
+      "details_sha256": "105581636558732f6e599ada94cae26ddedccff777b42289bb6acc445fb4cd12"
+    },
+    {
+      "category": "table",
+      "object_name": "public.glh_automation_runs",
+      "details_sha256": "9a4796d0f4eef562411a614f5099bf5006b7f2dc74a0e5be8d6348709b47e9cd"
+    },
+    {
+      "category": "table",
+      "object_name": "public.glh_channel_accounts",
+      "details_sha256": "a5228d799b3f23bfc0b84b20f7cc807fb52db65b407897458817a188e7bde6d1"
+    },
+    {
+      "category": "table",
+      "object_name": "public.glh_contacts",
+      "details_sha256": "ca647b36a1b4249b8010992414f43640db172b68657270dfb35dd7a96f1a4e54"
+    },
+    {
+      "category": "table",
+      "object_name": "public.glh_conversations",
+      "details_sha256": "0f0ac2aef42c5093b31baffaa1ac92be2d6e949ab48284563991f2f5d93bbbaa"
+    },
+    {
+      "category": "table",
+      "object_name": "public.glh_followups",
+      "details_sha256": "56f4a5b7d40ca393eb48a8578ae96b696a086ae91da23acfd21ca90fde750072"
+    },
+    {
+      "category": "table",
+      "object_name": "public.glh_lead_profiles",
+      "details_sha256": "7d7c095d09e986ab24864df67286bc3570065e9a776770a273a3ce6d2335e783"
+    },
+    {
+      "category": "table",
+      "object_name": "public.glh_lead_scores",
+      "details_sha256": "3b45d8031481e4f28793e1a4d9f538ed28ffc2bffe317428cafc9675a2ec42b8"
+    },
+    {
+      "category": "table",
+      "object_name": "public.glh_leads",
+      "details_sha256": "9ea637248a79e88e44c9db88bf01de108b4489489337f2337325a4116f464159"
+    },
+    {
+      "category": "table",
+      "object_name": "public.glh_manual_intake_requests",
+      "details_sha256": "e42a9c6d5310048f0e95ad10af6420722c13e25cd2cb076cd808cf4582eaaf06"
+    },
+    {
+      "category": "table",
+      "object_name": "public.glh_manual_work_updates",
+      "details_sha256": "7110ff7ced5746181a2778374bdc3b2e518cb782490535076ae4fd4d734d06e8"
+    },
+    {
+      "category": "table",
+      "object_name": "public.glh_messages",
+      "details_sha256": "729e0ac8ea91faf28024c48c54f7c484b5915a802d072c48042b845b9ee9570d"
+    },
+    {
+      "category": "table",
+      "object_name": "public.glh_role_bindings",
+      "details_sha256": "cf36cc8bc839fe57fe06383a83112cdd79cffd1b9253c7b4881d76037de95057"
+    },
+    {
+      "category": "table",
+      "object_name": "public.glh_tasks",
+      "details_sha256": "a4f89dcddce300411f265e884a1aa79f5e4dcb3d15cf8a200194a79e2358771a"
+    },
+    {
+      "category": "table",
+      "object_name": "public.glh_webhook_events",
+      "details_sha256": "1ccc3003c7066ab4b884e844a665c5cb5684e46ce586f1300f414c790b634b64"
+    },
+    {
+      "category": "table",
+      "object_name": "public.knowledge_cards",
+      "details_sha256": "cf62f68bb7f31ccebdd1b8526a379fc888bcfccd70f47e409d500695ef9fe1ad"
+    },
+    {
+      "category": "table",
+      "object_name": "public.lead_interactions",
+      "details_sha256": "c04aec0e184f3b2563b3941fc33a3e6b4b56fd83d5c4377517b8aaf67d8da13a"
+    },
+    {
+      "category": "table",
+      "object_name": "public.leads",
+      "details_sha256": "cf45f95675553c41cb8fa584ebb0f6a7b10edbde1bb2199927ec164c243b0287"
+    },
+    {
+      "category": "table",
+      "object_name": "public.media_assets",
+      "details_sha256": "d6a7f8dfc1a04590b0871d8ec6337aab57a633675e4484e04f9bb72f1b7ec4ef"
+    },
+    {
+      "category": "table",
+      "object_name": "public.organizations",
+      "details_sha256": "d2779aace98a84de3adbd19713ea83b5ab80b5548f5a029e2f204eb19ddd03ac"
+    },
+    {
+      "category": "table",
+      "object_name": "public.post_metrics",
+      "details_sha256": "d76300e607f3ae8b5a724dbcc64ebf55abf34fda0238a292354c7bc87029a1ec"
+    },
+    {
+      "category": "table",
+      "object_name": "public.posts",
+      "details_sha256": "85782d1d27198ce17aedb3f9696ebca555fc9bf510b2fc12f78127422766ea2f"
+    },
+    {
+      "category": "table",
+      "object_name": "public.profiles",
+      "details_sha256": "310d123598c952067361b9553f3dc1ecd0e79ec289d7e9b0bd321b1f11a6a2fd"
+    },
+    {
+      "category": "table",
+      "object_name": "public.review_actions",
+      "details_sha256": "b1f878c86df1c75e0fe25d351bd619c18b22e68446d9176c2cd5500233f58da4"
+    },
+    {
+      "category": "table",
+      "object_name": "public.review_audit_logs",
+      "details_sha256": "79e16e6daf2ae198ec7822bba077e0d886c7e58a5345d345b79043f5f24344d1"
+    },
+    {
+      "category": "table",
+      "object_name": "public.review_case_audit_logs",
+      "details_sha256": "e17a4bf95bf0779a852288200b0fc03236dfd46a1c3e8d5a1a1f691e9c0f8a9f"
+    },
+    {
+      "category": "table",
+      "object_name": "public.review_case_number_counters",
+      "details_sha256": "a9cce3da28402e214ebbd5a183128923e80df3e42f919976253f2f635e95dfc2"
+    },
+    {
+      "category": "table",
+      "object_name": "public.review_cases",
+      "details_sha256": "455d6b6099cb548e0c5dc503a5c19687b479441a2734ef54de8734fe8d036178"
+    },
+    {
+      "category": "table",
+      "object_name": "public.review_dict_items",
+      "details_sha256": "7c22ff4d96ae8ca4810da47ef6d8f2e369a34b2518fcd6eb6d5509baff930f96"
+    },
+    {
+      "category": "table",
+      "object_name": "public.review_knowledge_case_metadata",
+      "details_sha256": "2e4fd9cfdf6b79632533fc764912e6af3faf54e904e577c62972851cc9b7bee6"
+    },
+    {
+      "category": "table",
+      "object_name": "public.review_knowledge_case_metadata_items",
+      "details_sha256": "1f675a1c2075a05bc21f67bc42210c7da863548d9e149f740601505229d01cc4"
+    },
+    {
+      "category": "table",
+      "object_name": "public.review_knowledge_cases",
+      "details_sha256": "f35642b050be1e268e2b9cc5f253ea0f40c07eb6c978903a5d6c61917de95d80"
+    },
+    {
+      "category": "table",
+      "object_name": "public.review_members",
+      "details_sha256": "b040590a01f259f039e4800eab05cbcf4afa8fea5900d2667565325bd7b5bdde"
+    },
+    {
+      "category": "table",
+      "object_name": "public.review_metadata",
+      "details_sha256": "3b32c21c4b06fad7ce680f518d559903a0899e1fcbe11150c7c666e5cb11c344"
+    },
+    {
+      "category": "table",
+      "object_name": "public.review_metadata_items",
+      "details_sha256": "d5936759400b3243e0e1b13698ef7eeb95c319f1e1cc29b853b8a9d8d5439f3c"
+    },
+    {
+      "category": "table",
+      "object_name": "public.review_timeline_events",
+      "details_sha256": "426c79ad020c94a1befdedd49a1bb2e085319a991f613e2730e534986ad2d10e"
+    },
+    {
+      "category": "table",
+      "object_name": "public.review_type_details",
+      "details_sha256": "35037dd59bcfc77ddea0c06a921aa90effadc436c27e37f293c1057f058243d4"
+    },
+    {
+      "category": "table",
+      "object_name": "public.reviews",
+      "details_sha256": "bc9f7543db285999d08ec6cb014f08d1379328ac3e5acb77dd6d42b4ce114456"
+    },
+    {
+      "category": "table",
+      "object_name": "public.scripts",
+      "details_sha256": "2d7cfdb8499cf1235ac31b007ecd45d120c87c5cc81e85edcf468a7a201cffc7"
+    },
+    {
+      "category": "table",
+      "object_name": "public.site_data",
+      "details_sha256": "899626b296c3084e701480c3c795dc70ed1cc4eaeaa04a4e9c60b3d85a519256"
+    },
+    {
+      "category": "table",
+      "object_name": "public.tasks",
+      "details_sha256": "a87f3e5bf066d97a264e14a1ccc565bb320782cb71355edbac04a398c41e3cd3"
+    },
+    {
+      "category": "table",
+      "object_name": "public.topics",
+      "details_sha256": "43c51a4f20f022917c27d6fe0e02896296fed6be92d9dc7ec3dc147166f2431d"
+    },
+    {
+      "category": "table",
+      "object_name": "public.viral_teardowns",
+      "details_sha256": "f7261486557ab05e8e242b468f8ea4b9aafb1b8b65331b2031c0ee2f05d788f6"
+    },
+    {
+      "category": "trigger",
+      "object_name": "public.commercial_confirmed_quote_versions.confirmed_quote_payment_snapshot",
+      "details_sha256": "f14d3944531dec17d279b00249f273bccbb4ad31ed73fb776e8d635e136f9b0f"
+    },
+    {
+      "category": "trigger",
+      "object_name": "public.commercial_confirmed_quote_versions.confirmed_quote_version_guard",
+      "details_sha256": "03b046f2bd1db14064e378ed50228aabb51e9ed53e342335bedd2bb9fb32aa7d"
+    },
+    {
+      "category": "trigger",
+      "object_name": "public.commercial_confirmed_quotes.confirmed_quote_header_guard",
+      "details_sha256": "b67736c2797619de3ece506ddb393cf5621a0ad465cfb7e78f896575bd46e11f"
+    },
+    {
+      "category": "trigger",
+      "object_name": "public.commercial_quotation_drafts.record_commercial_draft_revision",
+      "details_sha256": "af95f57d1443e537385c6cba7bcf696ae6490fa497853f4748063c373ac595b0"
+    },
+    {
+      "category": "trigger",
+      "object_name": "public.cpc_audit_log.trg_cpc_audit_log_append_only",
+      "details_sha256": "50eaa998bd4450107eec131d62137abfc9704223a514a36a9eed9f2326599ece"
+    },
+    {
+      "category": "trigger",
+      "object_name": "public.cpc_customer_potential_assessments.trg_cpc_rating_updated_at",
+      "details_sha256": "7e9883388fdf324e84a7d5d57fac39e7a1bbbfccb5d434a2b10997a072d98902"
+    },
+    {
+      "category": "trigger",
+      "object_name": "public.cpc_customer_references.trg_cpc_customer_references_updated_at",
+      "details_sha256": "0c00c6941a3e381d0ddd5c761f8151d7d8ff186bdf4f46dceeeb6929a6ac0279"
+    },
+    {
+      "category": "trigger",
+      "object_name": "public.cpc_customer_workspaces.trg_cpc_workspace_updated_at",
+      "details_sha256": "a885cb602e84e0d47dfe42b07e07ff68afcd9e3ef2ffdae07002deef394cdd27"
+    },
+    {
+      "category": "trigger",
+      "object_name": "public.cpc_external_profile_mappings.trg_cpc_external_profile_mappings_updated_at",
+      "details_sha256": "f636cf13a9d6df1c365325bf69dcd2a82bef411de13493430ddf0698655eb27e"
+    },
+    {
+      "category": "trigger",
+      "object_name": "public.cpc_project_events.trg_cpc_project_events_append_only",
+      "details_sha256": "fa863cd4745e0445ffef4c3058fbc9e45ee590613c9b2e50f589ac04597b3a67"
+    },
+    {
+      "category": "trigger",
+      "object_name": "public.cpc_projects.cpc_active_project_invariant_project",
+      "details_sha256": "1eb40fbbde5a4bcf382f011d6812dcafadfcd3e08a997cbd8b4b1f79c7da67b0"
+    },
+    {
+      "category": "trigger",
+      "object_name": "public.cpc_projects.trg_cpc_projects_updated_at",
+      "details_sha256": "dcf8ba7ba7dd8d49325dd19381aaf593114ceada9baf1b7d8ff79371807dd79e"
+    },
+    {
+      "category": "trigger",
+      "object_name": "public.cpc_reports.trg_cpc_reports_submitted_immutable",
+      "details_sha256": "d7f3ef1b6d751fa93328064e49406678e791c9bf30f26f7ec01ce195cba80d83"
+    },
+    {
+      "category": "trigger",
+      "object_name": "public.cpc_work_items.cpc_active_project_invariant_work_items",
+      "details_sha256": "72b9d4d05cce1ea9e54d4248ac99982b5e812a49eb4bffc8a888a17c6b3ccd3d"
+    },
+    {
+      "category": "trigger",
+      "object_name": "public.cpc_work_items.trg_cpc_work_items_updated_at",
+      "details_sha256": "6b3ce7e15feb06fb097888c4fb07b93cb773b7278e1153f482fccef4b12796ce"
+    },
+    {
+      "category": "trigger",
+      "object_name": "public.glh_ad_campaigns.trg_glh_ad_campaigns_updated_at",
+      "details_sha256": "1095e452ea3b7e337976fcd63a0d93845f25d744fc01e4ac2c6496af91c50216"
+    },
+    {
+      "category": "trigger",
+      "object_name": "public.glh_ad_creatives.trg_glh_ad_creatives_updated_at",
+      "details_sha256": "70aeef24ec0348541c994c03b630acd1fd62b25aea6721a9fccc38bfae0988e8"
+    },
+    {
+      "category": "trigger",
+      "object_name": "public.glh_channel_accounts.trg_glh_channel_accounts_updated_at",
+      "details_sha256": "d9f27213422cc95be608c263bc7c749b547a9c7dc3d149e08b469573d867f28a"
+    },
+    {
+      "category": "trigger",
+      "object_name": "public.glh_contacts.trg_glh_contacts_updated_at",
+      "details_sha256": "e6d6c3ae760ac251fd6ad87324212c355f8bf30b41e1a8bb13858aede68c600a"
+    },
+    {
+      "category": "trigger",
+      "object_name": "public.glh_conversations.trg_glh_conversations_updated_at",
+      "details_sha256": "1bad339819c5e739e77b6fec42ef6c7a3b7e4ae412cdcc719504175250d77c15"
+    },
+    {
+      "category": "trigger",
+      "object_name": "public.glh_followups.trg_glh_followups_updated_at",
+      "details_sha256": "4b721086720f0ab827c5633d13534667e3f35eea4d4dff39c82cdecf7fee08fd"
+    },
+    {
+      "category": "trigger",
+      "object_name": "public.glh_lead_profiles.trg_glh_lead_profiles_updated_at",
+      "details_sha256": "e919a307a731be2d26cba9f132702e22fd13ff3659deb7c04cb2e055c447305a"
+    },
+    {
+      "category": "trigger",
+      "object_name": "public.glh_leads.trg_glh_leads_updated_at",
+      "details_sha256": "2b5dc5993aead23f78699e70fbf487cf10e249ae06a3ba8116eb2ccb654aa3c1"
+    },
+    {
+      "category": "trigger",
+      "object_name": "public.glh_tasks.trg_glh_tasks_updated_at",
+      "details_sha256": "5990797ee5903e91bb536a93ee61f8435635c043cb1098f12f8bd311d3349c18"
+    },
+    {
+      "category": "trigger",
+      "object_name": "public.organizations.trg_organizations_protect_immutable",
+      "details_sha256": "9524925cd9cd062071af8b346b6003e92fd78158395d28b764dee726d181c7d5"
+    },
+    {
+      "category": "trigger",
+      "object_name": "public.organizations.trg_organizations_set_updated_at",
+      "details_sha256": "6f758a4199abbaa79d0c2f3723cf05254b7f59545d17b602fe9047de357685d5"
+    },
+    {
+      "category": "trigger",
+      "object_name": "public.review_cases.trg_review_cases_create_audit",
+      "details_sha256": "767a1fb699c7e6c30c37203256bdb8628c441de215e2a7d1da05650486640351"
+    },
+    {
+      "category": "trigger",
+      "object_name": "public.review_cases.trg_review_cases_set_updated_at",
+      "details_sha256": "3529c4b3f7c771a42e25b5ca14c02e2f276efb9795dfe527e88d60282bd4cb62"
+    },
+    {
+      "category": "trigger",
+      "object_name": "public.review_dict_items.trg_review_dict_items_set_updated_at",
+      "details_sha256": "36dd1a86199edc4790dc2366e0de48b5a3d91e2700ea7636c6516019d3493a6c"
+    },
+    {
+      "category": "trigger",
+      "object_name": "public.review_knowledge_cases.trg_review_knowledge_cases_set_updated_at",
+      "details_sha256": "8163a4d86e55f9ca7b878a59ad884bfa045eb99db8f0c5b55a6eca24d8eb879e"
+    },
+    {
+      "category": "trigger",
+      "object_name": "public.review_type_details.trg_review_type_details_set_updated_at",
+      "details_sha256": "651be75a1d037733cbd41f461743c736876b73387bdd3d7283e2f6fbd6a6d236"
+    },
+    {
+      "category": "trigger",
+      "object_name": "public.site_data.set_site_data_timestamp",
+      "details_sha256": "510d470c2bbda49ecf5cd69ebf7ada0a8b7ada35a2951026056ecc1f7ff12ec4"
+    }
+  ]
+}
