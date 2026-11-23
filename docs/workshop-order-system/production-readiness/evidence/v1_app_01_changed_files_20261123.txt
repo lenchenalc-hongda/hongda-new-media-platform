@@ -3,6 +3,7 @@ A	docs/workshop-order-system/production-readiness/V1_APP_01_ROUTE_AND_EDGE_CONFI
 A	docs/workshop-order-system/production-readiness/WOS_V1_INT_01_HOSTED_QA_READINESS.md
 M	docs/workshop-order-system/production-readiness/WOS_V1_PRODUCTION_MIGRATION_RUNBOOK_NOT_AUTHORIZED_20261123.md
 M	docs/workshop-order-system/production-readiness/evidence/ARTIFACT_FINGERPRINTS_20261123.txt
+A	docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_DATA_BASELINE_20261123.json
 A	docs/workshop-order-system/production-readiness/evidence/v1_app_01_changed_files_20261123.txt
 A	docs/workshop-order-system/production-readiness/evidence/v1_app_01_pg17_rehearsal_20261123.log
 A	docs/workshop-order-system/production-readiness/evidence/wos_v1_hosted_qa_dependencies_pg17_20261123.log

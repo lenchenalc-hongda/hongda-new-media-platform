@@ -52,6 +52,18 @@ Target order `2071a963-1b35-4c96-81cd-709d8180ad49` remains
 1 review receipt, 1 verified Proof and 0 M2 receipts. Order counts, Gate rows
 and Storage inventory must still be captured again immediately before install.
 
+Exact machine-readable baseline:
+
+```text
+docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_DATA_BASELINE_20261123.json
+SHA256=174b8c750f52a505ae74efda6cf4b459d723669406b87b2d5d2e2fb4989f20ac
+```
+
+It records all Gate rows OFF with no active order/org/profile scope, zero
+NULL/empty historical proof versions, all three target functions absent and the
+target order/receipt counts above. It contains no customer records, private
+Storage paths or credentials.
+
 ## Edge contract
 
 The project-neutral Edge function invokes exactly:
@@ -188,6 +200,8 @@ The authorization must bind all of:
 - Fresh pre-install Gate, order, Proof and function-fingerprint capture
 - Function/ACL post-install verification without opening write Gates
 - Immediate rollback authority if any fingerprint or permission differs
+- Expected QA data baseline SHA-256
+  `174b8c750f52a505ae74efda6cf4b459d723669406b87b2d5d2e2fb4989f20ac`
 
 The install authorization does not authorize an Edge deployment, write Gate,
 test order, browser E2E or Production action.

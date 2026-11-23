@@ -70,6 +70,7 @@ files=(
   docs/workshop-order-system/production-readiness/evidence/supabase_production_migration_list_20261123.txt
   docs/workshop-order-system/production-readiness/evidence/v1_app_01_pg17_rehearsal_20261123.log
   docs/workshop-order-system/production-readiness/evidence/wos_v1_hosted_qa_dependencies_pg17_20261123.log
+  docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_DATA_BASELINE_20261123.json
   docs/workshop-order-system/production-readiness/WOS_V1_PRODUCTION_SCHEMA_COMPATIBILITY_REPORT_20261123.md
   docs/workshop-order-system/production-readiness/WOS_V1_PRODUCTION_MIGRATION_RUNBOOK_NOT_AUTHORIZED_20261123.md
   docs/workshop-order-system/production-readiness/WOS_V1_SOURCE_GAP_AUDIT_20261123.md
