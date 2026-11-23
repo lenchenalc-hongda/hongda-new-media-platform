@@ -1,0 +1,19 @@
+NOTICE:  database "wos_v1_hosted_qa_dependencies" does not exist, skipping
+NOTICE:  trigger "wos_qa_p2_m2_reference_image_guard" for relation "public.wos_reference_images" does not exist, skipping
+NOTICE:  trigger "wos_qa_trusted_proof_write_guard" for relation "public.wos_qa_verified_image_proofs" does not exist, skipping
+NOTICE:  trigger "wos_qa_p2_m2_verified_proof_guard" for relation "public.wos_qa_verified_image_proofs" does not exist, skipping
+NOTICE:  trigger "wos_qa_trusted_proof_guard" for relation "public.wos_qa_verified_image_proofs" does not exist, skipping
+NOTICE:  policy "wos_qa_revision_object_insert" for relation "storage.objects" does not exist, skipping
+               check_name
+-----------------------------------------
+ WOS_V1_HOSTED_QA_DEPENDENCIES_PG17=PASS
+(1 row)
+
+                 check_name
+---------------------------------------------
+ WOS_V1_HOSTED_QA_DEPENDENCIES_ROLLBACK=PASS
+(1 row)
+
+WOS_V1_HOSTED_QA_DEPENDENCIES_PG17=PASS
+WOS_V1_HOSTED_QA_ROLLBACK_PRESERVES_PROOF_HISTORY=PASS
+WOS_V1_HOSTED_QA_BROWSER_ACCESS=DENIED

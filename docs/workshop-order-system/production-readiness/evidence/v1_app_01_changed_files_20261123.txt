@@ -5,6 +5,7 @@ M	docs/workshop-order-system/production-readiness/WOS_V1_PRODUCTION_MIGRATION_RU
 M	docs/workshop-order-system/production-readiness/evidence/ARTIFACT_FINGERPRINTS_20261123.txt
 A	docs/workshop-order-system/production-readiness/evidence/v1_app_01_changed_files_20261123.txt
 A	docs/workshop-order-system/production-readiness/evidence/v1_app_01_pg17_rehearsal_20261123.log
+A	docs/workshop-order-system/production-readiness/evidence/wos_v1_hosted_qa_dependencies_pg17_20261123.log
 M	docs/workshop-order-system/production-readiness/evidence/wos_v1_runtime_security_signatures_20261123.ndjson
 A	docs/workshop-order-system/production-readiness/sql/V1_APP_01_PROOF_RENEWAL_NOT_AUTHORIZED.sql
 A	docs/workshop-order-system/production-readiness/sql/V1_APP_01_PROOF_RENEWAL_ROLLBACK_NOT_AUTHORIZED.sql
