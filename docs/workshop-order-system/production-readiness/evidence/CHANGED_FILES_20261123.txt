@@ -1,4 +1,3 @@
-A	.github/workflows/wos-production-readiness.yml
 A	docs/workshop-order-system/nonproduction-only/wos_p8_production_drift_details_20261109.json
 A	docs/workshop-order-system/nonproduction-only/wos_p8_production_public_function_signatures_20261109.json
 A	docs/workshop-order-system/nonproduction-only/wos_p8_production_public_grant_details_20261109.json
