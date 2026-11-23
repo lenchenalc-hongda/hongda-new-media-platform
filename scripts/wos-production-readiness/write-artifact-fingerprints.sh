@@ -18,15 +18,28 @@ files=(
   docs/workshop-order-system/production-readiness/sql/WOS_V1_PRODUCTION_RUNTIME_SMOKE_PG17.sql
   docs/workshop-order-system/production-readiness/sql/WOS_V1_PRODUCTION_RPC_ACTIVATION_TEMPLATE_NOT_AUTHORIZED.sql
   docs/workshop-order-system/production-readiness/sql/WOS_V1_PRODUCTION_RPC_DEACTIVATE_NOT_AUTHORIZED.sql
+  docs/workshop-order-system/production-readiness/sql/WOS_V1_PRODUCTION_FOUNDATION_CONTAINMENT_NOT_AUTHORIZED.sql
   tests/sql/wos_production_bootstrap_fixture.sql
   tests/sql/wos_production_app_schema_signatures.sql
   tests/sql/wos_v1_production_runtime_security_signatures.sql
   tests/sql/wos_v1_production_concurrency_setup.sql
+  tests/sql/wos_p8_p7_production_compatible_candidate.sql
+  tests/sql/wos_p8_p7_service_proof_and_cleanup.sql
+  tests/sql/wos_p8_p7_disposable_full_rollback.sql
+  tests/sql/wos_p8_historical_acl_compensation.sql
+  scripts/wos-p8/replay-history.mjs
+  scripts/wos-p8/replay-manifest.json
+  scripts/wos-p8/source-pins.mjs
+  scripts/wos_p8_compare_public_catalog_signatures.py
+  scripts/wos_p8_compare_function_trigger_grants.py
+  scripts/wos_p8_reconcile_table_grants_ci_only.py
   scripts/wos-production-readiness/run-pg17-rehearsal.sh
   scripts/wos-production-readiness/run-runtime-concurrency.sh
   scripts/wos-production-readiness/verify-runtime-security-signatures.mjs
   scripts/wos-production-readiness/schema-signature-manifest.mjs
   docs/workshop-order-system/production-readiness/wos_v1_production_app_signature_manifest_20261123.json
+  docs/workshop-order-system/production-readiness/wos_v1_runtime_security_inactive_manifest_20261123.json
+  docs/workshop-order-system/production-readiness/wos_v1_runtime_security_active_manifest_20261123.json
   docs/workshop-order-system/production-readiness/evidence/pg17_rehearsal_20261123.log
   docs/workshop-order-system/production-readiness/evidence/wos_v1_runtime_security_signatures_20261123.ndjson
   docs/workshop-order-system/production-readiness/evidence/supabase_production_migration_list_20261123.txt

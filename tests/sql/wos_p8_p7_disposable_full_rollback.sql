@@ -36,7 +36,13 @@ DROP TABLE
  public.wos_sampling_requests,
  public.wos_production_orders
 RESTRICT;
+DELETE FROM storage.buckets
+WHERE id='wos-private'
+  AND NOT EXISTS (
+    SELECT 1 FROM storage.objects WHERE bucket_id='wos-private'
+  );
 DO $assert$ DECLARE t integer; f integer; p integer;
+ b integer;
 BEGIN
  SELECT count(*) INTO t FROM information_schema.tables
  WHERE table_schema='public' AND table_type='BASE TABLE';
@@ -44,8 +50,12 @@ BEGIN
  WHERE n.nspname='public' AND x.proname LIKE 'wos_%';
  SELECT count(*) INTO p FROM pg_policies WHERE schemaname='storage' AND tablename='objects'
  AND policyname LIKE 'wos_%';
- IF t<>67 OR f<>0 OR p<>0
- THEN RAISE EXCEPTION 'P8_ROLLBACK_PARITY_FAILED tables=%,functions=%,storage_policies=%',t,f,p; END IF;
+ SELECT count(*) INTO b FROM storage.buckets WHERE id='wos-private';
+ IF t<>67 OR f<>0 OR p<>0 OR b<>0
+ THEN RAISE EXCEPTION
+   'P8_ROLLBACK_PARITY_FAILED tables=%,functions=%,storage_policies=%,bucket=%',
+   t,f,p,b;
+ END IF;
 END $assert$;
 COMMIT;
 \echo WOS_P8_P07_SCHEMA_ROLLBACK_67_TABLES=PASS

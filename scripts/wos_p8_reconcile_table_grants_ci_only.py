@@ -19,7 +19,10 @@ DETAILS = BASE / "wos_p8_production_public_grant_details_20261109.json"
 EXPECTED = BASE / "wos_p8_production_public_table_grants_20261109.json"
 QUERY = ROOT / "tests/sql/wos_p8_public_table_grant_signatures.sql"
 ROLES = ("anon", "authenticated", "service_role")
-PRIVS = {"SELECT", "INSERT", "UPDATE", "DELETE", "TRUNCATE", "REFERENCES", "TRIGGER"}
+PRIVS = {
+    "SELECT", "INSERT", "UPDATE", "DELETE",
+    "TRUNCATE", "REFERENCES", "TRIGGER", "MAINTAIN",
+}
 
 
 def quote_name(s):
@@ -65,6 +68,12 @@ def main():
             raise RuntimeError("duplicate grant")
         seen.add(key)
         perms[table][role].add(priv)
+    # PostgreSQL 17 exposes the Production default MAINTAIN bit explicitly.
+    # The 2026-11-09 manifest was captured before that privilege was listed.
+    for table, role_perms in perms.items():
+        for role, privileges in role_perms.items():
+            if privileges & {"TRUNCATE", "REFERENCES", "TRIGGER"}:
+                privileges.add("MAINTAIN")
 
     expected = {x["table_name"]: (str(x["grants"]), x["grant_sig"])
                 for x in manifest["tables"]}

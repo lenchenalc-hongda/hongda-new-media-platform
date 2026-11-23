@@ -38,6 +38,13 @@ ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public
 ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public
   GRANT ALL ON FUNCTIONS TO postgres, anon, authenticated, service_role;
 
+GRANT EXECUTE ON FUNCTION public.auth_user_id()
+  TO anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.organizations_protect_immutable()
+  TO anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.set_updated_at()
+  TO anon, authenticated;
+
 COMMIT;
 
 SELECT 'WOS_P8_HISTORICAL_ACL_COMPENSATION=PASS' AS check_name;

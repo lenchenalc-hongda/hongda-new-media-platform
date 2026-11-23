@@ -6,6 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { verifyManifestSourcePins } from './source-pins.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const manifest = JSON.parse(fs.readFileSync(path.join(root, 'scripts/wos-p8/replay-manifest.json'), 'utf8'));
@@ -26,6 +27,7 @@ function verifyManifest() {
   if (new Set(all.map(x=>x.file)).size !== all.length) throw new Error('DUPLICATE_SOURCE_FILE');
   for (const entry of all) source(entry.file);
   if (all.some(x=>/workshop_order_system|commercial_supplier_order/.test(x.file))) throw new Error('PRODUCTION_UNAPPLIED_MIGRATION_SELECTED');
+  verifyManifestSourcePins(manifest, root);
 }
 verifyManifest();
 

@@ -58,6 +58,8 @@ def main():
           ("YES" if all(not diff["count"] for diff in diffs.values()) else "NO"))
     print("WOS_P8_WIDER_SUPABASE_SCHEMA_STORAGE_EDGE_PARITY=NOT_VERIFIED")
     print("WOS_P8_PUBLIC_DATA_OR_REAL_SUPABASE_WRITES=NONE")
+    if any(diff["count"] for diff in diffs.values()):
+        raise RuntimeError("WOS_P8_PUBLIC_CATALOG_SIGNATURE_DRIFT")
     return 0
 
 

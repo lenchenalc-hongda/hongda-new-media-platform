@@ -11,7 +11,11 @@ RUNTIME_ROLLBACK="docs/workshop-order-system/production-readiness/sql/WOS_V1_PRO
 RUNTIME_SMOKE="docs/workshop-order-system/production-readiness/sql/WOS_V1_PRODUCTION_RUNTIME_SMOKE_PG17.sql"
 RUNTIME_ACTIVATION="docs/workshop-order-system/production-readiness/sql/WOS_V1_PRODUCTION_RPC_ACTIVATION_TEMPLATE_NOT_AUTHORIZED.sql"
 RUNTIME_DEACTIVATE="docs/workshop-order-system/production-readiness/sql/WOS_V1_PRODUCTION_RPC_DEACTIVATE_NOT_AUTHORIZED.sql"
+FOUNDATION_CONTAINMENT="docs/workshop-order-system/production-readiness/sql/WOS_V1_PRODUCTION_FOUNDATION_CONTAINMENT_NOT_AUTHORIZED.sql"
 RUNTIME_SECURITY_SIGNATURES="docs/workshop-order-system/production-readiness/evidence/wos_v1_runtime_security_signatures_20261123.ndjson"
+RUNTIME_SECURITY_INACTIVE_MANIFEST="docs/workshop-order-system/production-readiness/wos_v1_runtime_security_inactive_manifest_20261123.json"
+RUNTIME_SECURITY_ACTIVE_MANIFEST="docs/workshop-order-system/production-readiness/wos_v1_runtime_security_active_manifest_20261123.json"
+CAPTURE_RUNTIME_MANIFESTS="${WOS_CAPTURE_RUNTIME_SECURITY_MANIFESTS:-0}"
 
 fail() {
   printf 'WOS_V1_PG17_REHEARSAL_FAILED=%s\n' "$1" >&2
@@ -52,6 +56,17 @@ apply_file() {
   local database="$1"
   local file="$2"
   psql_db "$database" -q < "$ROOT/$file"
+}
+
+apply_files_transaction() {
+  local database="$1"
+  shift
+  {
+    for file in "$@"; do
+      cat "$ROOT/$file"
+      printf '\n'
+    done
+  } | psql_db "$database" -q -1
 }
 
 apply_authorized_activation() {
@@ -178,30 +193,132 @@ psql_db "$HISTORY_DB" -qAt \
 node "$ROOT/scripts/wos-production-readiness/schema-signature-manifest.mjs" \
   verify /tmp/wos-v1-history-signatures.ndjson "$MANIFEST"
 
-apply_file "$BOOTSTRAP_DB" supabase/migrations/20261014102000_workshop_order_system_foundation.sql
+apply_files_transaction \
+  "$BOOTSTRAP_DB" \
+  supabase/migrations/20261014102000_workshop_order_system_foundation.sql \
+  "$FOUNDATION_CONTAINMENT"
+
+[[ "$(query_value "$BOOTSTRAP_DB" "
+  SELECT (
+    pg_catalog.has_table_privilege(
+      'authenticated','public.wos_production_orders',
+      'SELECT,INSERT,UPDATE,DELETE'
+    )
+    OR pg_catalog.has_table_privilege(
+      'authenticated','public.wos_reference_images',
+      'SELECT,INSERT,UPDATE,DELETE'
+    )
+  )::text
+")" = 'false' ]] \
+  || fail 'FOUNDATION_CONTAINMENT_NOT_FAIL_CLOSED'
+
 apply_file "$BOOTSTRAP_DB" tests/sql/wos_p8_p7_production_compatible_candidate.sql
 apply_file "$BOOTSTRAP_DB" tests/sql/wos_p8_p7_service_proof_and_cleanup.sql
+
+[[ "$(query_value "$BOOTSTRAP_DB" "
+  SELECT (
+    pg_catalog.has_table_privilege(
+      'authenticated','public.wos_production_orders',
+      'INSERT,UPDATE,DELETE'
+    )
+    OR pg_catalog.has_table_privilege(
+      'authenticated','public.wos_reference_images',
+      'INSERT,UPDATE,DELETE'
+    )
+    OR pg_catalog.has_function_privilege(
+      'authenticated',
+      'public.wos_confirm_office_completeness(uuid,integer,text,text)',
+      'EXECUTE'
+    )
+    OR pg_catalog.has_function_privilege(
+      'authenticated',
+      'public.wos_submit_production_order(uuid,integer,text,uuid)',
+      'EXECUTE'
+    )
+    OR pg_catalog.has_function_privilege(
+      'authenticated',
+      'public.wos_register_uploaded_reference_image(uuid,uuid,text,text)',
+      'EXECUTE'
+    )
+  )::text
+")" = 'false' ]] \
+  || fail 'P7_INSTALL_NOT_FAIL_CLOSED'
+
+[[ "$(query_value "$BOOTSTRAP_DB" "
+  SELECT count(*)::text
+  FROM storage.buckets
+  WHERE id='wos-private' AND name='wos-private' AND public=false
+    AND file_size_limit=20971520
+    AND allowed_mime_types=ARRAY['image/png']
+")" = '1' ]] \
+  || fail 'PRIVATE_BUCKET_CONTRACT'
+
+psql_db "$BOOTSTRAP_DB" -q -c "
+  CREATE POLICY wos_unreviewed_test_policy ON storage.objects
+  FOR SELECT TO authenticated USING (true)
+"
+if psql_db "$BOOTSTRAP_DB" -q < "$ROOT/$RUNTIME_FORWARD" \
+    > /tmp/wos-v1-extra-storage-policy.log 2>&1; then
+  fail 'EXTRA_WOS_STORAGE_POLICY_ACCEPTED'
+fi
+grep -q 'WOS_V1_PRIVATE_STORAGE_RLS_MISMATCH' \
+  /tmp/wos-v1-extra-storage-policy.log \
+  || fail 'EXTRA_STORAGE_POLICY_WRONG_ERROR'
+psql_db "$BOOTSTRAP_DB" -q -c "
+  DROP POLICY wos_unreviewed_test_policy ON storage.objects
+"
+
+write_runtime_security_signatures \
+  "$BOOTSTRAP_DB" /tmp/wos-v1-p7-security.ndjson
+
 apply_file "$BOOTSTRAP_DB" "$RUNTIME_FORWARD"
 
 [[ "$(query_value "$BOOTSTRAP_DB" "SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_name LIKE 'wos_%'")" = '19' ]] \
   || fail 'WOS_RUNTIME_TABLE_COUNT'
 
 write_runtime_security_signatures \
-  "$BOOTSTRAP_DB" "$ROOT/$RUNTIME_SECURITY_SIGNATURES"
-node "$ROOT/scripts/wos-production-readiness/verify-runtime-security-signatures.mjs" \
-  "$ROOT/$RUNTIME_SECURITY_SIGNATURES" installed-inactive
+  "$BOOTSTRAP_DB" /tmp/wos-v1-runtime-security-inactive.ndjson
+if [[ "$CAPTURE_RUNTIME_MANIFESTS" = '1' ]]; then
+  node "$ROOT/scripts/wos-production-readiness/verify-runtime-security-signatures.mjs" \
+    build \
+    /tmp/wos-v1-runtime-security-inactive.ndjson \
+    "$ROOT/$RUNTIME_SECURITY_INACTIVE_MANIFEST" \
+    installed-inactive
+  cp /tmp/wos-v1-runtime-security-inactive.ndjson \
+    "$ROOT/$RUNTIME_SECURITY_SIGNATURES"
+else
+  node "$ROOT/scripts/wos-production-readiness/verify-runtime-security-signatures.mjs" \
+    verify \
+    /tmp/wos-v1-runtime-security-inactive.ndjson \
+    "$ROOT/$RUNTIME_SECURITY_INACTIVE_MANIFEST" \
+    installed-inactive
+fi
 
 apply_authorized_activation "$BOOTSTRAP_DB" "$RUNTIME_ACTIVATION"
 write_runtime_security_signatures \
   "$BOOTSTRAP_DB" /tmp/wos-v1-runtime-security-active.ndjson
-node "$ROOT/scripts/wos-production-readiness/verify-runtime-security-signatures.mjs" \
-  /tmp/wos-v1-runtime-security-active.ndjson activated
+if [[ "$CAPTURE_RUNTIME_MANIFESTS" = '1' ]]; then
+  node "$ROOT/scripts/wos-production-readiness/verify-runtime-security-signatures.mjs" \
+    build \
+    /tmp/wos-v1-runtime-security-active.ndjson \
+    "$ROOT/$RUNTIME_SECURITY_ACTIVE_MANIFEST" \
+    activated
+else
+  node "$ROOT/scripts/wos-production-readiness/verify-runtime-security-signatures.mjs" \
+    verify \
+    /tmp/wos-v1-runtime-security-active.ndjson \
+    "$ROOT/$RUNTIME_SECURITY_ACTIVE_MANIFEST" \
+    activated
+fi
 
 apply_file "$BOOTSTRAP_DB" "$RUNTIME_DEACTIVATE"
 write_runtime_security_signatures \
   "$BOOTSTRAP_DB" /tmp/wos-v1-runtime-security-deactivated.ndjson
 node "$ROOT/scripts/wos-production-readiness/verify-runtime-security-signatures.mjs" \
-  /tmp/wos-v1-runtime-security-deactivated.ndjson installed-inactive
+  verify \
+  /tmp/wos-v1-runtime-security-deactivated.ndjson \
+  "$ROOT/$RUNTIME_SECURITY_INACTIVE_MANIFEST" \
+  installed-inactive
 
 if psql_db "$BOOTSTRAP_DB" -q < "$ROOT/$RUNTIME_FORWARD" \
     > /tmp/wos-v1-duplicate-install.log 2>&1; then
@@ -215,12 +332,21 @@ apply_file "$BOOTSTRAP_DB" "$RUNTIME_SMOKE"
 WOS_PG_DOCKER_CONTAINER="$CONTAINER_ID" \
   bash "$ROOT/scripts/wos-production-readiness/run-runtime-concurrency.sh"
 apply_file "$BOOTSTRAP_DB" "$RUNTIME_ROLLBACK"
+write_runtime_security_signatures \
+  "$BOOTSTRAP_DB" /tmp/wos-v1-p7-security-after-runtime-rollback.ndjson
+if ! cmp -s \
+    /tmp/wos-v1-p7-security.ndjson \
+    /tmp/wos-v1-p7-security-after-runtime-rollback.ndjson; then
+  fail 'RUNTIME_ROLLBACK_NOT_INVERSE_TO_P7'
+fi
 apply_file "$BOOTSTRAP_DB" tests/sql/wos_p8_p7_disposable_full_rollback.sql
 
 [[ "$(query_value "$BOOTSTRAP_DB" "SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_type='BASE TABLE'")" = '67' ]] \
   || fail 'ROLLBACK_TABLE_COUNT'
 [[ "$(query_value "$BOOTSTRAP_DB" "SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_name LIKE 'wos_%'")" = '0' ]] \
   || fail 'ROLLBACK_WOS_PRESENT'
+[[ "$(query_value "$BOOTSTRAP_DB" "SELECT count(*) FROM storage.buckets WHERE id='wos-private'")" = '0' ]] \
+  || fail 'ROLLBACK_PRIVATE_BUCKET_PRESENT'
 
 psql_db "$BOOTSTRAP_DB" -qAt \
   < "$ROOT/tests/sql/wos_production_app_schema_signatures.sql" \
@@ -233,6 +359,7 @@ echo 'WOS_V1_PG17_HISTORICAL_LINEAGE_REPLAY=PASS'
 echo 'WOS_V1_PG17_PUBLIC_AND_COMMERCIAL_SCHEMA_PARITY=PASS'
 echo 'WOS_V1_PG17_WOS_RUNTIME_LIFECYCLE=PASS'
 echo 'WOS_V1_PG17_RPC_ACL_ACTIVATION_AND_DEACTIVATION=PASS'
+echo 'WOS_V1_PG17_RUNTIME_ROLLBACK_TO_P7_EXACT=PASS'
 echo 'WOS_V1_PG17_CONCURRENT_VERSION_CAS=PASS'
 echo 'WOS_V1_PG17_DUPLICATE_INSTALL_REJECTED=PASS'
 echo 'WOS_V1_PG17_FULL_ROLLBACK_PARITY=PASS'

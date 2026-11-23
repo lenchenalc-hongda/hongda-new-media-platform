@@ -11,13 +11,13 @@ NOTICE:  database "wos_prod_bootstrap_ci" does not exist, skipping
 
 {
   "passed": true,
-  "expectedRows": 212,
-  "actualRows": 212,
+  "expectedRows": 383,
+  "actualRows": 383,
   "missing": [],
   "extra": [],
   "changed": [],
-  "expectedAggregate": "4c7c9d91506aa86933ac2bd31a94807af2253f65b4e61e955097043eb36c4170",
-  "actualAggregate": "4c7c9d91506aa86933ac2bd31a94807af2253f65b4e61e955097043eb36c4170"
+  "expectedAggregate": "745e7556931fd99abae835d7ab21a9e899eb8b624380ef1a95fb4f1773ae4f5b",
+  "actualAggregate": "745e7556931fd99abae835d7ab21a9e899eb8b624380ef1a95fb4f1773ae4f5b"
 }
 NOTICE:  database "wos_p8_replay_ci" does not exist, skipping
 WOS_P8_LEGACY_ZERO_DATA_BOOTSTRAP=APPLIED
@@ -102,21 +102,25 @@ WOS_P8_LIVE_SUPABASE_AUTH_STORAGE_EDGE_PARITY=NOT_VERIFIED
 WOS_P8_PRODUCTION_DATA_OR_WRITES=NONE
 {
   "passed": true,
-  "expectedRows": 212,
-  "actualRows": 212,
+  "expectedRows": 383,
+  "actualRows": 383,
   "missing": [],
   "extra": [],
   "changed": [],
-  "expectedAggregate": "4c7c9d91506aa86933ac2bd31a94807af2253f65b4e61e955097043eb36c4170",
-  "actualAggregate": "4c7c9d91506aa86933ac2bd31a94807af2253f65b4e61e955097043eb36c4170"
+  "expectedAggregate": "745e7556931fd99abae835d7ab21a9e899eb8b624380ef1a95fb4f1773ae4f5b",
+  "actualAggregate": "745e7556931fd99abae835d7ab21a9e899eb8b624380ef1a95fb4f1773ae4f5b"
 }
 WOS_V1_RUNTIME_SECURITY_SIGNATURES=INSTALLED-INACTIVE_PASS
+WOS_V1_RUNTIME_DEFINITION_ACL_TABLE_POLICY_MANIFEST=PASS
 WOS_V1_INTERNAL_IMAGE_SET_HELPER_HIDDEN=PASS
 WOS_V1_SERVICE_PROOF_NOT_BROWSER_EXECUTABLE=PASS
+WOS_V1_PRIVATE_BUCKET_AND_STORAGE_POLICIES=PASS
 WOS_V1_QA_GATE_OBJECTS_ABSENT=PASS
 WOS_V1_RUNTIME_SECURITY_SIGNATURES=ACTIVATED_PASS
+WOS_V1_RUNTIME_DEFINITION_ACL_TABLE_POLICY_MANIFEST=PASS
 WOS_V1_INTERNAL_IMAGE_SET_HELPER_HIDDEN=PASS
 WOS_V1_SERVICE_PROOF_NOT_BROWSER_EXECUTABLE=PASS
+WOS_V1_PRIVATE_BUCKET_AND_STORAGE_POLICIES=PASS
 WOS_V1_QA_GATE_OBJECTS_ABSENT=PASS
             check_name
 -----------------------------------
@@ -124,12 +128,19 @@ WOS_V1_QA_GATE_OBJECTS_ABSENT=PASS
 (1 row)
 
 WOS_V1_RUNTIME_SECURITY_SIGNATURES=INSTALLED-INACTIVE_PASS
+WOS_V1_RUNTIME_DEFINITION_ACL_TABLE_POLICY_MANIFEST=PASS
 WOS_V1_INTERNAL_IMAGE_SET_HELPER_HIDDEN=PASS
 WOS_V1_SERVICE_PROOF_NOT_BROWSER_EXECUTABLE=PASS
+WOS_V1_PRIVATE_BUCKET_AND_STORAGE_POLICIES=PASS
 WOS_V1_QA_GATE_OBJECTS_ABSENT=PASS
               set_config
 --------------------------------------
- 7083e5c5-9350-47fe-9886-1f0fa426137f
+ 83dfa455-1c15-484f-b030-22268c4240fe
+(1 row)
+
+                                                      set_config
+----------------------------------------------------------------------------------------------------------------------
+ organizations/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/wos/production-order/83dfa455-1c15-484f-b030-22268c4240fe/images/
 (1 row)
 
                                                                        wos_p7_record_trusted_image_proof
@@ -174,42 +185,42 @@ WOS_V1_QA_GATE_OBJECTS_ABSENT=PASS
 
    wos_confirm_office_completeness
 --------------------------------------
- dcb3a8e8-29f0-43b7-bad4-23e1b83826cf
+ aa7543c6-5544-4f19-bbf1-c60240d42451
 (1 row)
 
                                                                                                                                   submit_order
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- {"status": "CREATED", "orderId": "7083e5c5-9350-47fe-9886-1f0fa426137f", "canStart": false, "receiptId": "58122e2d-9040-4e09-ac66-98ff6a896e30", "inboxTaskId": "1928281b-baec-4646-95d6-243036438f42", "submittedAt": "2026-11-23T00:22:11.176539+00:00", "sourceRevision": 1}
+ {"status": "CREATED", "orderId": "83dfa455-1c15-484f-b030-22268c4240fe", "canStart": false, "receiptId": "255eebab-8af7-4d1a-be9d-9d9f20b3082f", "inboxTaskId": "6690ee30-cc92-4b00-9d1e-7195e132d78a", "submittedAt": "2026-11-23T01:49:45.149384+00:00", "sourceRevision": 1}
 (1 row)
 
                                                                                                                  operator_accept
 -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- {"status": "APPLIED", "orderId": "7083e5c5-9350-47fe-9886-1f0fa426137f", "version": 3, "canStart": false, "requestId": "53000000-0000-4000-8000-000000000001", "versionLabel": "V1", "workflowStatus": "WORKSHOP_REVIEW", "expectedVersion": 2}
+ {"status": "APPLIED", "orderId": "83dfa455-1c15-484f-b030-22268c4240fe", "version": 3, "canStart": false, "requestId": "53000000-0000-4000-8000-000000000001", "versionLabel": "V1", "workflowStatus": "WORKSHOP_REVIEW", "expectedVersion": 2}
 (1 row)
 
                                                                                                               operator_accept_replay
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- {"status": "REPLAYED", "orderId": "7083e5c5-9350-47fe-9886-1f0fa426137f", "version": 3, "canStart": false, "requestId": "53000000-0000-4000-8000-000000000001", "versionLabel": "V1", "workflowStatus": "WORKSHOP_REVIEW", "expectedVersion": 2}
+ {"status": "REPLAYED", "orderId": "83dfa455-1c15-484f-b030-22268c4240fe", "version": 3, "canStart": false, "requestId": "53000000-0000-4000-8000-000000000001", "versionLabel": "V1", "workflowStatus": "WORKSHOP_REVIEW", "expectedVersion": 2}
 (1 row)
 
                                                                                                                   operator_return
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- {"status": "APPLIED", "orderId": "7083e5c5-9350-47fe-9886-1f0fa426137f", "version": 4, "canStart": false, "requestId": "53000000-0000-4000-8000-000000000002", "versionLabel": "V1", "workflowStatus": "NEEDS_INFORMATION", "expectedVersion": 3}
+ {"status": "APPLIED", "orderId": "83dfa455-1c15-484f-b030-22268c4240fe", "version": 4, "canStart": false, "requestId": "53000000-0000-4000-8000-000000000002", "versionLabel": "V1", "workflowStatus": "NEEDS_INFORMATION", "expectedVersion": 3}
 (1 row)
 
                                                                                                         office_save
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- {"status": "SAVED", "orderId": "7083e5c5-9350-47fe-9886-1f0fa426137f", "version": 5, "canStart": false, "requestId": "54000000-0000-4000-8000-000000000001", "versionLabel": "V2", "workflowStatus": "NEEDS_INFORMATION"}
+ {"status": "SAVED", "orderId": "83dfa455-1c15-484f-b030-22268c4240fe", "version": 5, "canStart": false, "requestId": "54000000-0000-4000-8000-000000000001", "versionLabel": "V2", "workflowStatus": "NEEDS_INFORMATION"}
 (1 row)
 
                                                                                                         office_resubmit
 -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- {"status": "RESUBMITTED", "orderId": "7083e5c5-9350-47fe-9886-1f0fa426137f", "version": 6, "canStart": false, "requestId": "54000000-0000-4000-8000-000000000002", "versionLabel": "V3", "workflowStatus": "WORKSHOP_REVIEW"}
+ {"status": "RESUBMITTED", "orderId": "83dfa455-1c15-484f-b030-22268c4240fe", "version": 6, "canStart": false, "requestId": "54000000-0000-4000-8000-000000000002", "versionLabel": "V3", "workflowStatus": "WORKSHOP_REVIEW"}
 (1 row)
 
                                                                                                                              operator_review
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- {"status": "REVIEWED", "orderId": "7083e5c5-9350-47fe-9886-1f0fa426137f", "version": 7, "canStart": false, "requestId": "55000000-0000-4000-8000-000000000001", "versionLabel": "V3", "workflowStatus": "WAITING_MATERIAL", "expectedVersion": 6, "resolvedBlockers": 1}
+ {"status": "REVIEWED", "orderId": "83dfa455-1c15-484f-b030-22268c4240fe", "version": 7, "canStart": false, "requestId": "55000000-0000-4000-8000-000000000001", "versionLabel": "V3", "workflowStatus": "WAITING_MATERIAL", "expectedVersion": 6, "resolvedBlockers": 1}
 (1 row)
 
 WOS_V1_PRODUCTION_LIFECYCLE=PASS
@@ -228,19 +239,20 @@ WOS_V1_PG17_CONCURRENT_VERSION_CAS=PASS
 WOS_P8_P07_SCHEMA_ROLLBACK_67_TABLES=PASS
 {
   "passed": true,
-  "expectedRows": 212,
-  "actualRows": 212,
+  "expectedRows": 383,
+  "actualRows": 383,
   "missing": [],
   "extra": [],
   "changed": [],
-  "expectedAggregate": "4c7c9d91506aa86933ac2bd31a94807af2253f65b4e61e955097043eb36c4170",
-  "actualAggregate": "4c7c9d91506aa86933ac2bd31a94807af2253f65b4e61e955097043eb36c4170"
+  "expectedAggregate": "745e7556931fd99abae835d7ab21a9e899eb8b624380ef1a95fb4f1773ae4f5b",
+  "actualAggregate": "745e7556931fd99abae835d7ab21a9e899eb8b624380ef1a95fb4f1773ae4f5b"
 }
 WOS_V1_PG17_SCHEMA_BOOTSTRAP=PASS
 WOS_V1_PG17_HISTORICAL_LINEAGE_REPLAY=PASS
 WOS_V1_PG17_PUBLIC_AND_COMMERCIAL_SCHEMA_PARITY=PASS
 WOS_V1_PG17_WOS_RUNTIME_LIFECYCLE=PASS
 WOS_V1_PG17_RPC_ACL_ACTIVATION_AND_DEACTIVATION=PASS
+WOS_V1_PG17_RUNTIME_ROLLBACK_TO_P7_EXACT=PASS
 WOS_V1_PG17_CONCURRENT_VERSION_CAS=PASS
 WOS_V1_PG17_DUPLICATE_INSTALL_REJECTED=PASS
 WOS_V1_PG17_FULL_ROLLBACK_PARITY=PASS

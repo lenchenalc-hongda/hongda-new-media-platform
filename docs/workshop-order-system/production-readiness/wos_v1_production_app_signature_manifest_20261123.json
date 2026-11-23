@@ -6,19 +6,21 @@
     "commercial_private",
     "commercial_audit"
   ],
-  "observed_utc": "2026-11-23T00:08:38.629Z",
+  "observed_utc": "2026-11-23T01:34:46.922Z",
   "contains_business_rows": false,
   "contains_function_source": false,
   "contains_storage_paths": false,
-  "row_count": 212,
+  "row_count": 383,
   "categories": {
     "default_acl": 6,
     "function": 104,
+    "function_acl": 104,
     "schema": 3,
     "table": 67,
+    "table_acl": 67,
     "trigger": 32
   },
-  "aggregate_sha256": "4c7c9d91506aa86933ac2bd31a94807af2253f65b4e61e955097043eb36c4170",
+  "aggregate_sha256": "745e7556931fd99abae835d7ab21a9e899eb8b624380ef1a95fb4f1773ae4f5b",
   "rows": [
     {
       "category": "default_acl",
@@ -571,6 +573,526 @@
       "details_sha256": "294ff80ea5820f5172eacd47b7d1c7717655cdac2bb348b19024c16d2c68c2be"
     },
     {
+      "category": "function_acl",
+      "object_name": "commercial_audit.record_commercial_draft_revision()",
+      "details_sha256": "4b66eae555027258814f4f42689525b4a3bffb506bc59c70c7847246887b9ad3"
+    },
+    {
+      "category": "function_acl",
+      "object_name": "commercial_private.freeze_confirmed_payment_method()",
+      "details_sha256": "4b66eae555027258814f4f42689525b4a3bffb506bc59c70c7847246887b9ad3"
+    },
+    {
+      "category": "function_acl",
+      "object_name": "commercial_private.guard_confirmed_quote_header()",
+      "details_sha256": "4b66eae555027258814f4f42689525b4a3bffb506bc59c70c7847246887b9ad3"
+    },
+    {
+      "category": "function_acl",
+      "object_name": "commercial_private.guard_confirmed_quote_version()",
+      "details_sha256": "4b66eae555027258814f4f42689525b4a3bffb506bc59c70c7847246887b9ad3"
+    },
+    {
+      "category": "function_acl",
+      "object_name": "public.auth_has_role(required_role text)",
+      "details_sha256": "999d143de6e089561a40bc50f3094b9bc77e601567abac08ecd97c610ec76b7c"
+    },
+    {
+      "category": "function_acl",
+      "object_name": "public.auth_org_id()",
+      "details_sha256": "999d143de6e089561a40bc50f3094b9bc77e601567abac08ecd97c610ec76b7c"
+    },
+    {
+      "category": "function_acl",
+      "object_name": "public.auth_profile_id()",
+      "details_sha256": "999d143de6e089561a40bc50f3094b9bc77e601567abac08ecd97c610ec76b7c"
+    },
+    {
+      "category": "function_acl",
+      "object_name": "public.auth_user_id()",
+      "details_sha256": "3f0e1d0d16b7eea84984c6858400131ce2485d1bb5739f4e6734dc25d9e3bda2"
+    },
+    {
+      "category": "function_acl",
+      "object_name": "public.confirm_commercial_quote(p_request_id uuid, p_quote_id uuid, p_expected_version integer, p_draft_id uuid, p_snapshot jsonb, p_amount_thousandths bigint)",
+      "details_sha256": "999d143de6e089561a40bc50f3094b9bc77e601567abac08ecd97c610ec76b7c"
+    },
+    {
+      "category": "function_acl",
+      "object_name": "public.cpc_accept_ai_draft(p_ai_draft_id uuid, p_expected_version integer, p_request_id uuid)",
+      "details_sha256": "999d143de6e089561a40bc50f3094b9bc77e601567abac08ecd97c610ec76b7c"
+    },
+    {
+      "category": "function_acl",
+      "object_name": "public.cpc_build_daily_report_metrics(p_org_id uuid, p_subject_profile_id uuid, p_business_date date)",
+      "details_sha256": "4b66eae555027258814f4f42689525b4a3bffb506bc59c70c7847246887b9ad3"
+    },
+    {
+      "category": "function_acl",
+      "object_name": "public.cpc_can_assess_customer_rating(p_customer_reference_id uuid, p_org_id uuid)",
+      "details_sha256": "999d143de6e089561a40bc50f3094b9bc77e601567abac08ecd97c610ec76b7c"
+    },
+    {
+      "category": "function_acl",
+      "object_name": "public.cpc_can_follow_customer(p_customer_reference_id uuid, p_org_id uuid)",
+      "details_sha256": "999d143de6e089561a40bc50f3094b9bc77e601567abac08ecd97c610ec76b7c"
+    },
+    {
+      "category": "function_acl",
+      "object_name": "public.cpc_can_read_ai_draft(p_ai_draft_id uuid, p_org_id uuid)",
+      "details_sha256": "999d143de6e089561a40bc50f3094b9bc77e601567abac08ecd97c610ec76b7c"
+    },
+    {
+      "category": "function_acl",
+      "object_name": "public.cpc_can_read_customer_reference(p_customer_reference_id uuid, p_org_id uuid)",
+      "details_sha256": "999d143de6e089561a40bc50f3094b9bc77e601567abac08ecd97c610ec76b7c"
+    },
+    {
+      "category": "function_acl",
+      "object_name": "public.cpc_can_read_project(p_project_id uuid, p_org_id uuid)",
+      "details_sha256": "999d143de6e089561a40bc50f3094b9bc77e601567abac08ecd97c610ec76b7c"
+    },
+    {
+      "category": "function_acl",
+      "object_name": "public.cpc_can_read_report(p_report_id uuid, p_org_id uuid)",
+      "details_sha256": "999d143de6e089561a40bc50f3094b9bc77e601567abac08ecd97c610ec76b7c"
+    },
+    {
+      "category": "function_acl",
+      "object_name": "public.cpc_can_read_work_item(p_work_item_id uuid, p_org_id uuid)",
+      "details_sha256": "999d143de6e089561a40bc50f3094b9bc77e601567abac08ecd97c610ec76b7c"
+    },
+    {
+      "category": "function_acl",
+      "object_name": "public.cpc_can_self_rate_customer(p_customer_reference_id uuid, p_org_id uuid)",
+      "details_sha256": "999d143de6e089561a40bc50f3094b9bc77e601567abac08ecd97c610ec76b7c"
+    },
+    {
+      "category": "function_acl",
+      "object_name": "public.cpc_create_ai_work_item_draft(p_customer_reference_id uuid, p_project_id uuid, p_work_item_type text, p_title text, p_description text, p_due_at timestamp with time zone, p_priority text, p_raw_input text, p_expires_at timestamp with time zone, p_request_id uuid)",
+      "details_sha256": "999d143de6e089561a40bc50f3094b9bc77e601567abac08ecd97c610ec76b7c"
+    },
+    {
+      "category": "function_acl",
+      "object_name": "public.cpc_create_project(p_customer_reference_id uuid, p_title text, p_objective_summary text, p_project_type text, p_stage text, p_priority text, p_owner_profile_id uuid, p_initial_next_action_title text, p_initial_next_action_due_at timestamp with time zone, p_waiting_on text, p_next_check_at timestamp with time zone, p_request_id uuid)",
+      "details_sha256": "999d143de6e089561a40bc50f3094b9bc77e601567abac08ecd97c610ec76b7c"
+    },
+    {
+      "category": "function_acl",
+      "object_name": "public.cpc_create_provisional_customer_reference(p_display_name_snapshot text, p_provisional_source_reference text, p_request_id uuid)",
+      "details_sha256": "999d143de6e089561a40bc50f3094b9bc77e601567abac08ecd97c610ec76b7c"
+    },
+    {
+      "category": "function_acl",
+      "object_name": "public.cpc_create_report_correction(p_report_id uuid, p_expected_version integer, p_reason text, p_request_id uuid)",
+      "details_sha256": "999d143de6e089561a40bc50f3094b9bc77e601567abac08ecd97c610ec76b7c"
+    },
+    {
+      "category": "function_acl",
+      "object_name": "public.cpc_create_work_item(p_customer_reference_id uuid, p_project_id uuid, p_work_item_type text, p_title text, p_description text, p_due_at timestamp with time zone, p_priority text, p_request_id uuid)",
+      "details_sha256": "999d143de6e089561a40bc50f3094b9bc77e601567abac08ecd97c610ec76b7c"
+    },
+    {
+      "category": "function_acl",
+      "object_name": "public.cpc_customer_maintenance_owners(p_customer_ids uuid[])",
+      "details_sha256": "999d143de6e089561a40bc50f3094b9bc77e601567abac08ecd97c610ec76b7c"
+    },
+    {
+      "category": "function_acl",
+      "object_name": "public.cpc_customer_self_rating_access(p_customer_ids uuid[])",
+      "details_sha256": "999d143de6e089561a40bc50f3094b9bc77e601567abac08ecd97c610ec76b7c"
+    },
+    {
+      "category": "function_acl",
+      "object_name": "public.cpc_enforce_active_project_invariant()",
+      "details_sha256": "4b66eae555027258814f4f42689525b4a3bffb506bc59c70c7847246887b9ad3"
+    },
+    {
+      "category": "function_acl",
+      "object_name": "public.cpc_event_category(p_event_type text)",
+      "details_sha256": "4b66eae555027258814f4f42689525b4a3bffb506bc59c70c7847246887b9ad3"
+    },
+    {
+      "category": "function_acl",
+      "object_name": "public.cpc_event_payload_is_valid(p_event_type text, p_payload jsonb)",
+      "details_sha256": "4b66eae555027258814f4f42689525b4a3bffb506bc59c70c7847246887b9ad3"
+    },
+    {
+      "category": "function_acl",
+      "object_name": "public.cpc_generate_daily_report_draft(p_business_date date, p_request_id uuid)",
+      "details_sha256": "999d143de6e089561a40bc50f3094b9bc77e601567abac08ecd97c610ec76b7c"
+    },
+    {
+      "category": "function_acl",
+      "object_name": "public.cpc_guard_submitted_report_immutability()",
+      "details_sha256": "a53004eb985b2bbc84ba6d9dc2038b2cdd8d41efcec2edca0938818a1161b174"
+    },
+    {
+      "category": "function_acl",
+      "object_name": "public.cpc_project_owner_names(p_project_ids uuid[])",
+      "details_sha256": "999d143de6e089561a40bc50f3094b9bc77e601567abac08ecd97c610ec76b7c"
+    },
+    {
+      "category": "function_acl",
+      "object_name": "public.cpc_project_transition_is_valid(p_from_status text, p_to_status text)",
+      "details_sha256": "4b66eae555027258814f4f42689525b4a3bffb506bc59c70c7847246887b9ad3"
+    },
+    {
+      "category": "function_acl",
+      "object_name": "public.cpc_record_customer_follow_up(p_customer_reference_id uuid, p_event_type text, p_result_summary text, p_occurred_at timestamp with time zone, p_current_follow_up_id uuid, p_next_follow_up_title text, p_next_follow_up_due_at timestamp with time zone, p_next_follow_up_priority text, p_request_id uuid)",
+      "details_sha256": "999d143de6e089561a40bc50f3094b9bc77e601567abac08ecd97c610ec76b7c"
+    },
+    {
+      "category": "function_acl",
+      "object_name": "public.cpc_record_progress(p_project_id uuid, p_expected_version integer, p_event_type text, p_raw_input text, p_payload jsonb, p_occurred_at timestamp with time zone, p_new_stage text, p_next_action_title text, p_next_action_due_at timestamp with time zone, p_waiting_on text, p_next_check_at timestamp with time zone, p_request_id uuid)",
+      "details_sha256": "999d143de6e089561a40bc50f3094b9bc77e601567abac08ecd97c610ec76b7c"
+    },
+    {
+      "category": "function_acl",
+      "object_name": "public.cpc_reject_ai_draft(p_ai_draft_id uuid, p_expected_version integer, p_reason text, p_request_id uuid)",
+      "details_sha256": "999d143de6e089561a40bc50f3094b9bc77e601567abac08ecd97c610ec76b7c"
+    },
+    {
+      "category": "function_acl",
+      "object_name": "public.cpc_reject_append_only_mutation()",
+      "details_sha256": "4b66eae555027258814f4f42689525b4a3bffb506bc59c70c7847246887b9ad3"
+    },
+    {
+      "category": "function_acl",
+      "object_name": "public.cpc_reschedule_work_item(p_work_item_id uuid, p_expected_version integer, p_to_due_at timestamp with time zone, p_reason text, p_request_id uuid)",
+      "details_sha256": "999d143de6e089561a40bc50f3094b9bc77e601567abac08ecd97c610ec76b7c"
+    },
+    {
+      "category": "function_acl",
+      "object_name": "public.cpc_review_customer_potential_rating(p_customer_reference_id uuid, p_expected_version integer, p_decision text, p_review_note text, p_request_id uuid)",
+      "details_sha256": "4b66eae555027258814f4f42689525b4a3bffb506bc59c70c7847246887b9ad3"
+    },
+    {
+      "category": "function_acl",
+      "object_name": "public.cpc_rpc_error(p_code text, p_message text, p_data jsonb)",
+      "details_sha256": "4b66eae555027258814f4f42689525b4a3bffb506bc59c70c7847246887b9ad3"
+    },
+    {
+      "category": "function_acl",
+      "object_name": "public.cpc_save_customer_development_plan(p_customer_reference_id uuid, p_opportunity_summary text, p_estimated_annual_opportunity_cny_yuan bigint, p_next_action text, p_next_check_on date, p_expected_version integer, p_request_id uuid)",
+      "details_sha256": "999d143de6e089561a40bc50f3094b9bc77e601567abac08ecd97c610ec76b7c"
+    },
+    {
+      "category": "function_acl",
+      "object_name": "public.cpc_save_customer_note(p_customer_reference_id uuid, p_note text, p_expected_version integer, p_request_id uuid)",
+      "details_sha256": "999d143de6e089561a40bc50f3094b9bc77e601567abac08ecd97c610ec76b7c"
+    },
+    {
+      "category": "function_acl",
+      "object_name": "public.cpc_save_customer_potential_rating(p_customer_reference_id uuid, p_scores jsonb, p_evidence_summary text, p_opportunity_summary text, p_estimated_annual_opportunity_cny_yuan bigint, p_next_action text, p_next_check_on date, p_submit boolean, p_expected_version integer, p_request_id uuid)",
+      "details_sha256": "999d143de6e089561a40bc50f3094b9bc77e601567abac08ecd97c610ec76b7c"
+    },
+    {
+      "category": "function_acl",
+      "object_name": "public.cpc_set_waiting_state(p_project_id uuid, p_expected_version integer, p_waiting_on text, p_next_check_at timestamp with time zone, p_reason text, p_request_id uuid)",
+      "details_sha256": "999d143de6e089561a40bc50f3094b9bc77e601567abac08ecd97c610ec76b7c"
+    },
+    {
+      "category": "function_acl",
+      "object_name": "public.cpc_stage_is_valid(p_project_type text, p_stage text)",
+      "details_sha256": "4b66eae555027258814f4f42689525b4a3bffb506bc59c70c7847246887b9ad3"
+    },
+    {
+      "category": "function_acl",
+      "object_name": "public.cpc_submit_report(p_report_id uuid, p_expected_version integer, p_request_id uuid)",
+      "details_sha256": "999d143de6e089561a40bc50f3094b9bc77e601567abac08ecd97c610ec76b7c"
+    },
+    {
+      "category": "function_acl",
+      "object_name": "public.cpc_transition_project(p_project_id uuid, p_expected_version integer, p_to_status text, p_reason text, p_pause_next_check_at timestamp with time zone, p_reopen_next_action_title text, p_reopen_next_action_due_at timestamp with time zone, p_reopen_waiting_on text, p_reopen_next_check_at timestamp with time zone, p_request_id uuid)",
+      "details_sha256": "999d143de6e089561a40bc50f3094b9bc77e601567abac08ecd97c610ec76b7c"
+    },
+    {
+      "category": "function_acl",
+      "object_name": "public.cpc_transition_work_item(p_work_item_id uuid, p_expected_version integer, p_to_status text, p_reason text, p_request_id uuid)",
+      "details_sha256": "999d143de6e089561a40bc50f3094b9bc77e601567abac08ecd97c610ec76b7c"
+    },
+    {
+      "category": "function_acl",
+      "object_name": "public.cpc_work_item_transition_is_valid(p_from_status text, p_to_status text)",
+      "details_sha256": "4b66eae555027258814f4f42689525b4a3bffb506bc59c70c7847246887b9ad3"
+    },
+    {
+      "category": "function_acl",
+      "object_name": "public.glh_assign_lead(p_lead_id uuid, p_assignee_profile_id uuid, p_expected_version integer, p_reason text)",
+      "details_sha256": "999d143de6e089561a40bc50f3094b9bc77e601567abac08ecd97c610ec76b7c"
+    },
+    {
+      "category": "function_acl",
+      "object_name": "public.glh_can_access_contact(p_contact_id uuid)",
+      "details_sha256": "999d143de6e089561a40bc50f3094b9bc77e601567abac08ecd97c610ec76b7c"
+    },
+    {
+      "category": "function_acl",
+      "object_name": "public.glh_can_access_conversation(p_conversation_id uuid)",
+      "details_sha256": "999d143de6e089561a40bc50f3094b9bc77e601567abac08ecd97c610ec76b7c"
+    },
+    {
+      "category": "function_acl",
+      "object_name": "public.glh_can_access_lead(p_lead_id uuid)",
+      "details_sha256": "999d143de6e089561a40bc50f3094b9bc77e601567abac08ecd97c610ec76b7c"
+    },
+    {
+      "category": "function_acl",
+      "object_name": "public.glh_can_manage_org(p_org_id uuid)",
+      "details_sha256": "999d143de6e089561a40bc50f3094b9bc77e601567abac08ecd97c610ec76b7c"
+    },
+    {
+      "category": "function_acl",
+      "object_name": "public.glh_change_manual_lead_stage(p_lead_id uuid, p_expected_version integer, p_stage text, p_reason text)",
+      "details_sha256": "999d143de6e089561a40bc50f3094b9bc77e601567abac08ecd97c610ec76b7c"
+    },
+    {
+      "category": "function_acl",
+      "object_name": "public.glh_create_manual_production_lead(p_request_key uuid, p_display_name text, p_company_name text, p_country_code text, p_whatsapp text, p_email text, p_requirement_type text, p_owner_profile_id uuid, p_product text, p_material text, p_quantity text, p_notes text, p_source_detail text)",
+      "details_sha256": "999d143de6e089561a40bc50f3094b9bc77e601567abac08ecd97c610ec76b7c"
+    },
+    {
+      "category": "function_acl",
+      "object_name": "public.glh_create_manual_test_lead(p_manual_creation_guard text, p_display_name text, p_company_name text, p_country_code text, p_whatsapp text, p_email text, p_source_platform text, p_requirement_type text, p_lifecycle_state text, p_conversation_mode text, p_priority_grade text, p_score integer, p_completeness integer, p_owner_profile_id uuid, p_product text, p_material text, p_quantity text, p_notes text)",
+      "details_sha256": "999d143de6e089561a40bc50f3094b9bc77e601567abac08ecd97c610ec76b7c"
+    },
+    {
+      "category": "function_acl",
+      "object_name": "public.glh_create_task_or_followup(p_lead_id uuid, p_work_kind text, p_work_type text, p_title text, p_due_at timestamp with time zone, p_assignee_profile_id uuid)",
+      "details_sha256": "999d143de6e089561a40bc50f3094b9bc77e601567abac08ecd97c610ec76b7c"
+    },
+    {
+      "category": "function_acl",
+      "object_name": "public.glh_current_profile_id()",
+      "details_sha256": "999d143de6e089561a40bc50f3094b9bc77e601567abac08ecd97c610ec76b7c"
+    },
+    {
+      "category": "function_acl",
+      "object_name": "public.glh_finish_manual_work(p_work_kind text, p_work_id uuid, p_expected_version integer)",
+      "details_sha256": "999d143de6e089561a40bc50f3094b9bc77e601567abac08ecd97c610ec76b7c"
+    },
+    {
+      "category": "function_acl",
+      "object_name": "public.glh_ingest_whatsapp_inbound(p_external_event_id text, p_provider_account_id text, p_external_contact_id text, p_external_conversation_id text, p_contact_display_name text, p_message_type text, p_message_text text, p_media_metadata jsonb, p_provider_timestamp timestamp with time zone, p_referral jsonb, p_raw_payload jsonb)",
+      "details_sha256": "38fe965cf34ffb6822ca108492afb7d6386c88ce298122bd6abf22a18452ea3c"
+    },
+    {
+      "category": "function_acl",
+      "object_name": "public.glh_queue_human_message(p_conversation_id uuid, p_lead_id uuid, p_expected_mode text, p_message_text text, p_idempotency_key text)",
+      "details_sha256": "999d143de6e089561a40bc50f3094b9bc77e601567abac08ecd97c610ec76b7c"
+    },
+    {
+      "category": "function_acl",
+      "object_name": "public.glh_take_over_conversation(p_conversation_id uuid, p_lead_id uuid, p_expected_mode text, p_expected_lead_version integer, p_reason text)",
+      "details_sha256": "999d143de6e089561a40bc50f3094b9bc77e601567abac08ecd97c610ec76b7c"
+    },
+    {
+      "category": "function_acl",
+      "object_name": "public.organizations_protect_immutable()",
+      "details_sha256": "a5e97a72eddb136a496411d40f25e74746019863af0baaede64fa438620eb8ae"
+    },
+    {
+      "category": "function_acl",
+      "object_name": "public.review_action_cancel(p_review_id uuid, p_action_id uuid, p_expected_version integer, p_reason text)",
+      "details_sha256": "999d143de6e089561a40bc50f3094b9bc77e601567abac08ecd97c610ec76b7c"
+    },
+    {
+      "category": "function_acl",
+      "object_name": "public.review_action_create(p_review_id uuid, p_title text, p_description text, p_action_type text, p_owner_profile_id uuid, p_due_date date)",
+      "details_sha256": "999d143de6e089561a40bc50f3094b9bc77e601567abac08ecd97c610ec76b7c"
+    },
+    {
+      "category": "function_acl",
+      "object_name": "public.review_action_return(p_review_id uuid, p_action_id uuid, p_expected_version integer, p_reason text)",
+      "details_sha256": "999d143de6e089561a40bc50f3094b9bc77e601567abac08ecd97c610ec76b7c"
+    },
+    {
+      "category": "function_acl",
+      "object_name": "public.review_action_start(p_review_id uuid, p_action_id uuid, p_expected_version integer)",
+      "details_sha256": "999d143de6e089561a40bc50f3094b9bc77e601567abac08ecd97c610ec76b7c"
+    },
+    {
+      "category": "function_acl",
+      "object_name": "public.review_action_submit_for_verification(p_review_id uuid, p_action_id uuid, p_expected_version integer, p_completion_note text)",
+      "details_sha256": "999d143de6e089561a40bc50f3094b9bc77e601567abac08ecd97c610ec76b7c"
+    },
+    {
+      "category": "function_acl",
+      "object_name": "public.review_action_update(p_review_id uuid, p_action_id uuid, p_expected_version integer, p_title text, p_description text, p_action_type text, p_owner_profile_id uuid, p_due_date date)",
+      "details_sha256": "999d143de6e089561a40bc50f3094b9bc77e601567abac08ecd97c610ec76b7c"
+    },
+    {
+      "category": "function_acl",
+      "object_name": "public.review_action_verify(p_review_id uuid, p_action_id uuid, p_expected_version integer, p_verification_note text)",
+      "details_sha256": "999d143de6e089561a40bc50f3094b9bc77e601567abac08ecd97c610ec76b7c"
+    },
+    {
+      "category": "function_acl",
+      "object_name": "public.review_add_member(p_review_id uuid, p_expected_version integer, p_profile_id uuid, p_member_role text)",
+      "details_sha256": "999d143de6e089561a40bc50f3094b9bc77e601567abac08ecd97c610ec76b7c"
+    },
+    {
+      "category": "function_acl",
+      "object_name": "public.review_case_admin_detail(p_case_no text)",
+      "details_sha256": "999d143de6e089561a40bc50f3094b9bc77e601567abac08ecd97c610ec76b7c"
+    },
+    {
+      "category": "function_acl",
+      "object_name": "public.review_case_allocate_number(p_org_id uuid, p_year integer)",
+      "details_sha256": "4b66eae555027258814f4f42689525b4a3bffb506bc59c70c7847246887b9ad3"
+    },
+    {
+      "category": "function_acl",
+      "object_name": "public.review_case_audit(p_case_id uuid, p_limit integer, p_offset integer)",
+      "details_sha256": "999d143de6e089561a40bc50f3094b9bc77e601567abac08ecd97c610ec76b7c"
+    },
+    {
+      "category": "function_acl",
+      "object_name": "public.review_case_candidates(p_limit integer, p_offset integer, p_query text)",
+      "details_sha256": "999d143de6e089561a40bc50f3094b9bc77e601567abac08ecd97c610ec76b7c"
+    },
+    {
+      "category": "function_acl",
+      "object_name": "public.review_case_create_from_review(p_review_id uuid, p_expected_review_version integer, p_title text)",
+      "details_sha256": "999d143de6e089561a40bc50f3094b9bc77e601567abac08ecd97c610ec76b7c"
+    },
+    {
+      "category": "function_acl",
+      "object_name": "public.review_case_detail(p_case_no text)",
+      "details_sha256": "999d143de6e089561a40bc50f3094b9bc77e601567abac08ecd97c610ec76b7c"
+    },
+    {
+      "category": "function_acl",
+      "object_name": "public.review_case_hide(p_case_id uuid, p_expected_version integer, p_reason text)",
+      "details_sha256": "999d143de6e089561a40bc50f3094b9bc77e601567abac08ecd97c610ec76b7c"
+    },
+    {
+      "category": "function_acl",
+      "object_name": "public.review_case_library(p_query text, p_material_codes text[], p_process_codes text[], p_problem_domain_codes text[], p_problem_symptom_codes text[], p_review_types text[], p_risk_levels text[], p_published_from timestamp with time zone, p_published_to timestamp with time zone, p_limit integer, p_offset integer)",
+      "details_sha256": "999d143de6e089561a40bc50f3094b9bc77e601567abac08ecd97c610ec76b7c"
+    },
+    {
+      "category": "function_acl",
+      "object_name": "public.review_case_publish(p_case_id uuid, p_expected_version integer, p_expected_source_review_version integer)",
+      "details_sha256": "999d143de6e089561a40bc50f3094b9bc77e601567abac08ecd97c610ec76b7c"
+    },
+    {
+      "category": "function_acl",
+      "object_name": "public.review_case_reopen_curation(p_case_id uuid, p_expected_version integer)",
+      "details_sha256": "999d143de6e089561a40bc50f3094b9bc77e601567abac08ecd97c610ec76b7c"
+    },
+    {
+      "category": "function_acl",
+      "object_name": "public.review_case_replace_snapshot(p_case_id uuid, p_org_id uuid, p_review_id uuid)",
+      "details_sha256": "4b66eae555027258814f4f42689525b4a3bffb506bc59c70c7847246887b9ad3"
+    },
+    {
+      "category": "function_acl",
+      "object_name": "public.review_case_safe_mutation_dto(p_case_id uuid, p_org_id uuid)",
+      "details_sha256": "4b66eae555027258814f4f42689525b4a3bffb506bc59c70c7847246887b9ad3"
+    },
+    {
+      "category": "function_acl",
+      "object_name": "public.review_case_update_draft(p_case_id uuid, p_expected_version integer, p_patch jsonb)",
+      "details_sha256": "999d143de6e089561a40bc50f3094b9bc77e601567abac08ecd97c610ec76b7c"
+    },
+    {
+      "category": "function_acl",
+      "object_name": "public.review_case_validate_publish_metadata(p_review_id uuid, p_org_id uuid)",
+      "details_sha256": "4b66eae555027258814f4f42689525b4a3bffb506bc59c70c7847246887b9ad3"
+    },
+    {
+      "category": "function_acl",
+      "object_name": "public.review_close(p_review_id uuid, p_expected_version integer)",
+      "details_sha256": "999d143de6e089561a40bc50f3094b9bc77e601567abac08ecd97c610ec76b7c"
+    },
+    {
+      "category": "function_acl",
+      "object_name": "public.review_create_audit_trigger()",
+      "details_sha256": "4b66eae555027258814f4f42689525b4a3bffb506bc59c70c7847246887b9ad3"
+    },
+    {
+      "category": "function_acl",
+      "object_name": "public.review_event_actor_directory(p_review_id uuid, p_purpose text)",
+      "details_sha256": "a132faae2747537755a3258e546a7adc065b55d0d01c8a4bd4157f51825ef288"
+    },
+    {
+      "category": "function_acl",
+      "object_name": "public.review_metadata_submit_missing(p_review_id uuid, p_org_id uuid)",
+      "details_sha256": "4b66eae555027258814f4f42689525b4a3bffb506bc59c70c7847246887b9ad3"
+    },
+    {
+      "category": "function_acl",
+      "object_name": "public.review_participant_directory(p_review_id uuid)",
+      "details_sha256": "999d143de6e089561a40bc50f3094b9bc77e601567abac08ecd97c610ec76b7c"
+    },
+    {
+      "category": "function_acl",
+      "object_name": "public.review_profile_directory(p_purpose text)",
+      "details_sha256": "999d143de6e089561a40bc50f3094b9bc77e601567abac08ecd97c610ec76b7c"
+    },
+    {
+      "category": "function_acl",
+      "object_name": "public.review_remove_member(p_review_id uuid, p_expected_version integer, p_member_id uuid)",
+      "details_sha256": "999d143de6e089561a40bc50f3094b9bc77e601567abac08ecd97c610ec76b7c"
+    },
+    {
+      "category": "function_acl",
+      "object_name": "public.review_reopen(p_review_id uuid, p_expected_version integer, p_reason text)",
+      "details_sha256": "999d143de6e089561a40bc50f3094b9bc77e601567abac08ecd97c610ec76b7c"
+    },
+    {
+      "category": "function_acl",
+      "object_name": "public.review_rpc_error(p_code text, p_message text)",
+      "details_sha256": "4b66eae555027258814f4f42689525b4a3bffb506bc59c70c7847246887b9ad3"
+    },
+    {
+      "category": "function_acl",
+      "object_name": "public.review_set_draft_assignments(p_review_id uuid, p_expected_version integer, p_owner_profile_id uuid, p_pmo_profile_id uuid)",
+      "details_sha256": "999d143de6e089561a40bc50f3094b9bc77e601567abac08ecd97c610ec76b7c"
+    },
+    {
+      "category": "function_acl",
+      "object_name": "public.review_set_primary_member(p_review_id uuid, p_expected_version integer, p_member_id uuid)",
+      "details_sha256": "999d143de6e089561a40bc50f3094b9bc77e601567abac08ecd97c610ec76b7c"
+    },
+    {
+      "category": "function_acl",
+      "object_name": "public.review_submit(p_review_id uuid, p_expected_version integer)",
+      "details_sha256": "999d143de6e089561a40bc50f3094b9bc77e601567abac08ecd97c610ec76b7c"
+    },
+    {
+      "category": "function_acl",
+      "object_name": "public.review_type_details_key_allowed(p_review_type text, p_key text)",
+      "details_sha256": "4b66eae555027258814f4f42689525b4a3bffb506bc59c70c7847246887b9ad3"
+    },
+    {
+      "category": "function_acl",
+      "object_name": "public.review_update_draft_public(p_review_id uuid, p_expected_version integer, p_patch jsonb)",
+      "details_sha256": "999d143de6e089561a40bc50f3094b9bc77e601567abac08ecd97c610ec76b7c"
+    },
+    {
+      "category": "function_acl",
+      "object_name": "public.review_upsert_metadata(p_review_id uuid, p_expected_version integer, p_metadata jsonb)",
+      "details_sha256": "999d143de6e089561a40bc50f3094b9bc77e601567abac08ecd97c610ec76b7c"
+    },
+    {
+      "category": "function_acl",
+      "object_name": "public.review_upsert_type_details(p_review_id uuid, p_expected_version integer, p_patch jsonb)",
+      "details_sha256": "999d143de6e089561a40bc50f3094b9bc77e601567abac08ecd97c610ec76b7c"
+    },
+    {
+      "category": "function_acl",
+      "object_name": "public.set_updated_at()",
+      "details_sha256": "a5e97a72eddb136a496411d40f25e74746019863af0baaede64fa438620eb8ae"
+    },
+    {
+      "category": "function_acl",
+      "object_name": "public.update_site_data_timestamp()",
+      "details_sha256": "a53004eb985b2bbc84ba6d9dc2038b2cdd8d41efcec2edca0938818a1161b174"
+    },
+    {
       "category": "schema",
       "object_name": "commercial_audit",
       "details_sha256": "9b14f244d6b47fe7aa9925da8846833a4423272625f99ca5d78065f22e5f913c"
@@ -919,6 +1441,341 @@
       "category": "table",
       "object_name": "public.viral_teardowns",
       "details_sha256": "f7261486557ab05e8e242b468f8ea4b9aafb1b8b65331b2031c0ee2f05d788f6"
+    },
+    {
+      "category": "table_acl",
+      "object_name": "public.account_rules",
+      "details_sha256": "8844aaf1b5c45f2864445a85073049f6ca9a96fdb09b931637fc3521561d3402"
+    },
+    {
+      "category": "table_acl",
+      "object_name": "public.accounts",
+      "details_sha256": "8844aaf1b5c45f2864445a85073049f6ca9a96fdb09b931637fc3521561d3402"
+    },
+    {
+      "category": "table_acl",
+      "object_name": "public.ai_runs",
+      "details_sha256": "8844aaf1b5c45f2864445a85073049f6ca9a96fdb09b931637fc3521561d3402"
+    },
+    {
+      "category": "table_acl",
+      "object_name": "public.commercial_confirmed_quote_versions",
+      "details_sha256": "afbb03829325858e63d7857b7a87c3b1780f4a7457f87a2abbdfcda90ebe076e"
+    },
+    {
+      "category": "table_acl",
+      "object_name": "public.commercial_confirmed_quotes",
+      "details_sha256": "afbb03829325858e63d7857b7a87c3b1780f4a7457f87a2abbdfcda90ebe076e"
+    },
+    {
+      "category": "table_acl",
+      "object_name": "public.commercial_payment_methods",
+      "details_sha256": "b452f4fbb57b0025b987e1699ff04cdd38c7e5eb2fa0bf6ae8afd843b80731d3"
+    },
+    {
+      "category": "table_acl",
+      "object_name": "public.commercial_quotation_draft_revisions",
+      "details_sha256": "afbb03829325858e63d7857b7a87c3b1780f4a7457f87a2abbdfcda90ebe076e"
+    },
+    {
+      "category": "table_acl",
+      "object_name": "public.commercial_quotation_drafts",
+      "details_sha256": "b452f4fbb57b0025b987e1699ff04cdd38c7e5eb2fa0bf6ae8afd843b80731d3"
+    },
+    {
+      "category": "table_acl",
+      "object_name": "public.cpc_ai_drafts",
+      "details_sha256": "afbb03829325858e63d7857b7a87c3b1780f4a7457f87a2abbdfcda90ebe076e"
+    },
+    {
+      "category": "table_acl",
+      "object_name": "public.cpc_audit_log",
+      "details_sha256": "afbb03829325858e63d7857b7a87c3b1780f4a7457f87a2abbdfcda90ebe076e"
+    },
+    {
+      "category": "table_acl",
+      "object_name": "public.cpc_customer_potential_assessments",
+      "details_sha256": "afbb03829325858e63d7857b7a87c3b1780f4a7457f87a2abbdfcda90ebe076e"
+    },
+    {
+      "category": "table_acl",
+      "object_name": "public.cpc_customer_references",
+      "details_sha256": "afbb03829325858e63d7857b7a87c3b1780f4a7457f87a2abbdfcda90ebe076e"
+    },
+    {
+      "category": "table_acl",
+      "object_name": "public.cpc_customer_workspaces",
+      "details_sha256": "afbb03829325858e63d7857b7a87c3b1780f4a7457f87a2abbdfcda90ebe076e"
+    },
+    {
+      "category": "table_acl",
+      "object_name": "public.cpc_external_profile_mappings",
+      "details_sha256": "afbb03829325858e63d7857b7a87c3b1780f4a7457f87a2abbdfcda90ebe076e"
+    },
+    {
+      "category": "table_acl",
+      "object_name": "public.cpc_project_events",
+      "details_sha256": "afbb03829325858e63d7857b7a87c3b1780f4a7457f87a2abbdfcda90ebe076e"
+    },
+    {
+      "category": "table_acl",
+      "object_name": "public.cpc_project_members",
+      "details_sha256": "afbb03829325858e63d7857b7a87c3b1780f4a7457f87a2abbdfcda90ebe076e"
+    },
+    {
+      "category": "table_acl",
+      "object_name": "public.cpc_projects",
+      "details_sha256": "afbb03829325858e63d7857b7a87c3b1780f4a7457f87a2abbdfcda90ebe076e"
+    },
+    {
+      "category": "table_acl",
+      "object_name": "public.cpc_reports",
+      "details_sha256": "afbb03829325858e63d7857b7a87c3b1780f4a7457f87a2abbdfcda90ebe076e"
+    },
+    {
+      "category": "table_acl",
+      "object_name": "public.cpc_work_items",
+      "details_sha256": "afbb03829325858e63d7857b7a87c3b1780f4a7457f87a2abbdfcda90ebe076e"
+    },
+    {
+      "category": "table_acl",
+      "object_name": "public.glh_activity_events",
+      "details_sha256": "afbb03829325858e63d7857b7a87c3b1780f4a7457f87a2abbdfcda90ebe076e"
+    },
+    {
+      "category": "table_acl",
+      "object_name": "public.glh_ad_campaigns",
+      "details_sha256": "afbb03829325858e63d7857b7a87c3b1780f4a7457f87a2abbdfcda90ebe076e"
+    },
+    {
+      "category": "table_acl",
+      "object_name": "public.glh_ad_creatives",
+      "details_sha256": "afbb03829325858e63d7857b7a87c3b1780f4a7457f87a2abbdfcda90ebe076e"
+    },
+    {
+      "category": "table_acl",
+      "object_name": "public.glh_ai_actions",
+      "details_sha256": "afbb03829325858e63d7857b7a87c3b1780f4a7457f87a2abbdfcda90ebe076e"
+    },
+    {
+      "category": "table_acl",
+      "object_name": "public.glh_assignments",
+      "details_sha256": "afbb03829325858e63d7857b7a87c3b1780f4a7457f87a2abbdfcda90ebe076e"
+    },
+    {
+      "category": "table_acl",
+      "object_name": "public.glh_audit_events",
+      "details_sha256": "afbb03829325858e63d7857b7a87c3b1780f4a7457f87a2abbdfcda90ebe076e"
+    },
+    {
+      "category": "table_acl",
+      "object_name": "public.glh_automation_runs",
+      "details_sha256": "afbb03829325858e63d7857b7a87c3b1780f4a7457f87a2abbdfcda90ebe076e"
+    },
+    {
+      "category": "table_acl",
+      "object_name": "public.glh_channel_accounts",
+      "details_sha256": "afbb03829325858e63d7857b7a87c3b1780f4a7457f87a2abbdfcda90ebe076e"
+    },
+    {
+      "category": "table_acl",
+      "object_name": "public.glh_contacts",
+      "details_sha256": "afbb03829325858e63d7857b7a87c3b1780f4a7457f87a2abbdfcda90ebe076e"
+    },
+    {
+      "category": "table_acl",
+      "object_name": "public.glh_conversations",
+      "details_sha256": "afbb03829325858e63d7857b7a87c3b1780f4a7457f87a2abbdfcda90ebe076e"
+    },
+    {
+      "category": "table_acl",
+      "object_name": "public.glh_followups",
+      "details_sha256": "afbb03829325858e63d7857b7a87c3b1780f4a7457f87a2abbdfcda90ebe076e"
+    },
+    {
+      "category": "table_acl",
+      "object_name": "public.glh_lead_profiles",
+      "details_sha256": "afbb03829325858e63d7857b7a87c3b1780f4a7457f87a2abbdfcda90ebe076e"
+    },
+    {
+      "category": "table_acl",
+      "object_name": "public.glh_lead_scores",
+      "details_sha256": "afbb03829325858e63d7857b7a87c3b1780f4a7457f87a2abbdfcda90ebe076e"
+    },
+    {
+      "category": "table_acl",
+      "object_name": "public.glh_leads",
+      "details_sha256": "afbb03829325858e63d7857b7a87c3b1780f4a7457f87a2abbdfcda90ebe076e"
+    },
+    {
+      "category": "table_acl",
+      "object_name": "public.glh_manual_intake_requests",
+      "details_sha256": "cbe506b5f2b22282a3cedd73e3503f0758e25688d01ffebe13756efae1ff58cf"
+    },
+    {
+      "category": "table_acl",
+      "object_name": "public.glh_manual_work_updates",
+      "details_sha256": "afbb03829325858e63d7857b7a87c3b1780f4a7457f87a2abbdfcda90ebe076e"
+    },
+    {
+      "category": "table_acl",
+      "object_name": "public.glh_messages",
+      "details_sha256": "afbb03829325858e63d7857b7a87c3b1780f4a7457f87a2abbdfcda90ebe076e"
+    },
+    {
+      "category": "table_acl",
+      "object_name": "public.glh_role_bindings",
+      "details_sha256": "afbb03829325858e63d7857b7a87c3b1780f4a7457f87a2abbdfcda90ebe076e"
+    },
+    {
+      "category": "table_acl",
+      "object_name": "public.glh_tasks",
+      "details_sha256": "afbb03829325858e63d7857b7a87c3b1780f4a7457f87a2abbdfcda90ebe076e"
+    },
+    {
+      "category": "table_acl",
+      "object_name": "public.glh_webhook_events",
+      "details_sha256": "afbb03829325858e63d7857b7a87c3b1780f4a7457f87a2abbdfcda90ebe076e"
+    },
+    {
+      "category": "table_acl",
+      "object_name": "public.knowledge_cards",
+      "details_sha256": "8844aaf1b5c45f2864445a85073049f6ca9a96fdb09b931637fc3521561d3402"
+    },
+    {
+      "category": "table_acl",
+      "object_name": "public.lead_interactions",
+      "details_sha256": "8844aaf1b5c45f2864445a85073049f6ca9a96fdb09b931637fc3521561d3402"
+    },
+    {
+      "category": "table_acl",
+      "object_name": "public.leads",
+      "details_sha256": "8844aaf1b5c45f2864445a85073049f6ca9a96fdb09b931637fc3521561d3402"
+    },
+    {
+      "category": "table_acl",
+      "object_name": "public.media_assets",
+      "details_sha256": "8844aaf1b5c45f2864445a85073049f6ca9a96fdb09b931637fc3521561d3402"
+    },
+    {
+      "category": "table_acl",
+      "object_name": "public.organizations",
+      "details_sha256": "8844aaf1b5c45f2864445a85073049f6ca9a96fdb09b931637fc3521561d3402"
+    },
+    {
+      "category": "table_acl",
+      "object_name": "public.post_metrics",
+      "details_sha256": "8844aaf1b5c45f2864445a85073049f6ca9a96fdb09b931637fc3521561d3402"
+    },
+    {
+      "category": "table_acl",
+      "object_name": "public.posts",
+      "details_sha256": "8844aaf1b5c45f2864445a85073049f6ca9a96fdb09b931637fc3521561d3402"
+    },
+    {
+      "category": "table_acl",
+      "object_name": "public.profiles",
+      "details_sha256": "4c65ce823218824e4eb6dd5b081fd4f9b90ad9e11fdec0e4011118bb3b824aa8"
+    },
+    {
+      "category": "table_acl",
+      "object_name": "public.review_actions",
+      "details_sha256": "afbb03829325858e63d7857b7a87c3b1780f4a7457f87a2abbdfcda90ebe076e"
+    },
+    {
+      "category": "table_acl",
+      "object_name": "public.review_audit_logs",
+      "details_sha256": "afbb03829325858e63d7857b7a87c3b1780f4a7457f87a2abbdfcda90ebe076e"
+    },
+    {
+      "category": "table_acl",
+      "object_name": "public.review_case_audit_logs",
+      "details_sha256": "cbe506b5f2b22282a3cedd73e3503f0758e25688d01ffebe13756efae1ff58cf"
+    },
+    {
+      "category": "table_acl",
+      "object_name": "public.review_case_number_counters",
+      "details_sha256": "cbe506b5f2b22282a3cedd73e3503f0758e25688d01ffebe13756efae1ff58cf"
+    },
+    {
+      "category": "table_acl",
+      "object_name": "public.review_cases",
+      "details_sha256": "2fc0f7f2c1d22b675b38edac1817b7fceb03baa6f7dd71ebbe9895581d7f54cf"
+    },
+    {
+      "category": "table_acl",
+      "object_name": "public.review_dict_items",
+      "details_sha256": "4c65ce823218824e4eb6dd5b081fd4f9b90ad9e11fdec0e4011118bb3b824aa8"
+    },
+    {
+      "category": "table_acl",
+      "object_name": "public.review_knowledge_case_metadata",
+      "details_sha256": "cbe506b5f2b22282a3cedd73e3503f0758e25688d01ffebe13756efae1ff58cf"
+    },
+    {
+      "category": "table_acl",
+      "object_name": "public.review_knowledge_case_metadata_items",
+      "details_sha256": "cbe506b5f2b22282a3cedd73e3503f0758e25688d01ffebe13756efae1ff58cf"
+    },
+    {
+      "category": "table_acl",
+      "object_name": "public.review_knowledge_cases",
+      "details_sha256": "cbe506b5f2b22282a3cedd73e3503f0758e25688d01ffebe13756efae1ff58cf"
+    },
+    {
+      "category": "table_acl",
+      "object_name": "public.review_members",
+      "details_sha256": "afbb03829325858e63d7857b7a87c3b1780f4a7457f87a2abbdfcda90ebe076e"
+    },
+    {
+      "category": "table_acl",
+      "object_name": "public.review_metadata",
+      "details_sha256": "afbb03829325858e63d7857b7a87c3b1780f4a7457f87a2abbdfcda90ebe076e"
+    },
+    {
+      "category": "table_acl",
+      "object_name": "public.review_metadata_items",
+      "details_sha256": "afbb03829325858e63d7857b7a87c3b1780f4a7457f87a2abbdfcda90ebe076e"
+    },
+    {
+      "category": "table_acl",
+      "object_name": "public.review_timeline_events",
+      "details_sha256": "afbb03829325858e63d7857b7a87c3b1780f4a7457f87a2abbdfcda90ebe076e"
+    },
+    {
+      "category": "table_acl",
+      "object_name": "public.review_type_details",
+      "details_sha256": "afbb03829325858e63d7857b7a87c3b1780f4a7457f87a2abbdfcda90ebe076e"
+    },
+    {
+      "category": "table_acl",
+      "object_name": "public.reviews",
+      "details_sha256": "8844aaf1b5c45f2864445a85073049f6ca9a96fdb09b931637fc3521561d3402"
+    },
+    {
+      "category": "table_acl",
+      "object_name": "public.scripts",
+      "details_sha256": "8844aaf1b5c45f2864445a85073049f6ca9a96fdb09b931637fc3521561d3402"
+    },
+    {
+      "category": "table_acl",
+      "object_name": "public.site_data",
+      "details_sha256": "85e041f8a1a26ac8bf390a92c92165fb1fb7cf0d2bfaacd3f6a9ef1e1dd5ee09"
+    },
+    {
+      "category": "table_acl",
+      "object_name": "public.tasks",
+      "details_sha256": "8844aaf1b5c45f2864445a85073049f6ca9a96fdb09b931637fc3521561d3402"
+    },
+    {
+      "category": "table_acl",
+      "object_name": "public.topics",
+      "details_sha256": "8844aaf1b5c45f2864445a85073049f6ca9a96fdb09b931637fc3521561d3402"
+    },
+    {
+      "category": "table_acl",
+      "object_name": "public.viral_teardowns",
+      "details_sha256": "8844aaf1b5c45f2864445a85073049f6ca9a96fdb09b931637fc3521561d3402"
     },
     {
       "category": "trigger",

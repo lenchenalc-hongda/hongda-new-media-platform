@@ -18,45 +18,163 @@ BEGIN
   THEN
     RAISE EXCEPTION 'WOS_V1_PRODUCTION_MIGRATION_NOT_AUTHORIZED';
   END IF;
-  IF to_regclass('public.wos_production_orders') IS NULL
-    OR to_regclass('public.wos_verified_image_proofs') IS NULL
-    OR to_regprocedure('public.wos_submit_production_order(uuid,integer,text,uuid)')
-      IS NULL
-  THEN
-    RAISE EXCEPTION 'WOS_V1_P7_PREREQUISITE_MISSING';
-  END IF;
   IF to_regclass('public.wos_order_create_receipts') IS NOT NULL
     OR to_regclass('public.wos_operator_action_receipts') IS NOT NULL
     OR to_regclass('public.wos_office_revisions') IS NOT NULL
     OR to_regclass('public.wos_operator_review_receipts') IS NOT NULL
+    OR to_regprocedure(
+      'public.wos_v1_pre_runtime_confirm_office_completeness(uuid,integer,text,text)'
+    ) IS NOT NULL
+    OR to_regprocedure(
+      'public.wos_v1_pre_runtime_submit_production_order(uuid,integer,text,uuid)'
+    ) IS NOT NULL
+    OR to_regprocedure(
+      'public.wos_v1_pre_runtime_record_trusted_image_proof(uuid,uuid,uuid,text,uuid,text,timestamptz,text)'
+    ) IS NOT NULL
   THEN
     RAISE EXCEPTION 'WOS_V1_RUNTIME_ALREADY_PARTIALLY_INSTALLED';
+  END IF;
+  IF to_regclass('public.wos_production_orders') IS NULL
+    OR to_regclass('public.wos_sampling_requests') IS NULL
+    OR to_regclass('public.wos_resource_readiness') IS NULL
+    OR to_regclass('public.wos_reference_images') IS NULL
+    OR to_regclass('public.wos_visual_baselines') IS NULL
+    OR to_regclass('public.wos_visual_baseline_items') IS NULL
+    OR to_regclass('public.wos_blockers') IS NULL
+    OR to_regclass('public.wos_confirmations') IS NULL
+    OR to_regclass('public.wos_sampling_technical_records') IS NULL
+    OR to_regclass('public.wos_status_history') IS NULL
+    OR to_regclass('public.wos_office_readiness_receipts') IS NULL
+    OR to_regclass('public.wos_submission_receipts') IS NULL
+    OR to_regclass('public.wos_workshop_inbox') IS NULL
+    OR to_regclass('public.wos_verified_image_proofs') IS NULL
+    OR to_regclass('public.wos_orphan_cleanup_claims') IS NULL
+    OR to_regclass('public.organizations') IS NULL
+    OR to_regclass('public.profiles') IS NULL
+    OR to_regclass('public.cpc_customer_references') IS NULL
+    OR to_regclass('public.cpc_projects') IS NULL
+    OR to_regclass('storage.objects') IS NULL
+    OR to_regclass('storage.buckets') IS NULL
+    OR to_regprocedure(
+      'public.wos_confirm_office_completeness(uuid,integer,text,text)'
+    ) IS NULL
+    OR to_regprocedure('public.wos_submit_production_order(uuid,integer,text,uuid)')
+      IS NULL
+    OR to_regprocedure(
+      'public.wos_p7_record_trusted_image_proof(uuid,uuid,uuid,text,uuid,text,timestamptz,text)'
+    ) IS NULL
+  THEN
+    RAISE EXCEPTION 'WOS_V1_P7_PREREQUISITE_MISSING';
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1
+    FROM storage.buckets
+    WHERE id = 'wos-private'
+      AND name = 'wos-private'
+      AND public = false
+      AND file_size_limit = 20971520
+      AND allowed_mime_types = ARRAY['image/png']
+  ) THEN
+    RAISE EXCEPTION 'WOS_V1_PRIVATE_BUCKET_MISSING_OR_MISMATCHED';
+  END IF;
+  IF (
+    SELECT count(*)
+    FROM pg_catalog.pg_policies policy
+    WHERE policy.schemaname = 'storage'
+      AND policy.tablename = 'objects'
+      AND policy.policyname LIKE 'wos\_%' ESCAPE '\'
+  ) <> 2
+    OR NOT EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_policies policy
+    WHERE policy.schemaname = 'storage'
+      AND policy.tablename = 'objects'
+      AND policy.policyname = 'wos_p8_private_insert'
+      AND policy.cmd = 'INSERT'
+      AND policy.permissive = 'PERMISSIVE'
+      AND policy.roles = ARRAY['authenticated']::name[]
+      AND md5(COALESCE(policy.with_check, ''))
+        = '4178cd6c4759bd9d0ad33560415f6bc8'
+      AND md5(COALESCE(policy.qual, ''))
+        = 'd41d8cd98f00b204e9800998ecf8427e'
+  ) OR NOT EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_policies policy
+    WHERE policy.schemaname = 'storage'
+      AND policy.tablename = 'objects'
+      AND policy.policyname = 'wos_p8_private_select'
+      AND policy.cmd = 'SELECT'
+      AND policy.permissive = 'PERMISSIVE'
+      AND policy.roles = ARRAY['authenticated']::name[]
+      AND md5(COALESCE(policy.with_check, ''))
+        = 'd41d8cd98f00b204e9800998ecf8427e'
+      AND md5(COALESCE(policy.qual, ''))
+        = '365f79545fe118582bc24a32ccc15f57'
+  ) THEN
+    RAISE EXCEPTION 'WOS_V1_PRIVATE_STORAGE_RLS_MISMATCH';
+  END IF;
+  IF pg_catalog.has_table_privilege(
+      'authenticated',
+      'public.wos_production_orders',
+      'INSERT'
+    )
+    OR pg_catalog.has_table_privilege(
+      'authenticated',
+      'public.wos_production_orders',
+      'UPDATE'
+    )
+    OR pg_catalog.has_table_privilege(
+      'authenticated',
+      'public.wos_production_orders',
+      'DELETE'
+    )
+    OR pg_catalog.has_table_privilege(
+      'authenticated',
+      'public.wos_reference_images',
+      'INSERT'
+    )
+    OR pg_catalog.has_table_privilege(
+      'authenticated',
+      'public.wos_reference_images',
+      'UPDATE'
+    )
+    OR pg_catalog.has_table_privilege(
+      'authenticated',
+      'public.wos_reference_images',
+      'DELETE'
+    )
+    OR EXISTS (
+      SELECT 1
+      FROM pg_catalog.pg_policies
+      WHERE schemaname = 'public'
+        AND tablename IN (
+          'wos_production_orders',
+          'wos_sampling_requests',
+          'wos_reference_images'
+        )
+        AND policyname IN (
+          'wos_production_orders_insert_draft_same_org',
+          'wos_sampling_requests_insert_draft_same_org',
+          'wos_reference_images_insert_same_org'
+        )
+    )
+  THEN
+    RAISE EXCEPTION 'WOS_V1_FOUNDATION_CONTAINMENT_REQUIRED';
   END IF;
 END;
 $guard$;
 
--- Direct browser DML is not part of the Production contract. All writes go
--- through order-scoped RPCs below.
-DROP POLICY IF EXISTS wos_production_orders_insert_draft_same_org
-  ON public.wos_production_orders;
-DROP POLICY IF EXISTS wos_sampling_requests_insert_draft_same_org
-  ON public.wos_sampling_requests;
-DROP POLICY IF EXISTS wos_reference_images_insert_same_org
-  ON public.wos_reference_images;
-
-REVOKE INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER
-ON TABLE
-  public.wos_production_orders,
-  public.wos_sampling_requests,
-  public.wos_resource_readiness,
-  public.wos_reference_images,
-  public.wos_visual_baselines,
-  public.wos_visual_baseline_items,
-  public.wos_blockers,
-  public.wos_confirmations,
-  public.wos_sampling_technical_records,
-  public.wos_status_history
-FROM anon, authenticated;
+-- Preserve the exact P7 functions under private backup names so rollback can
+-- restore definitions and ACLs without reconstructing either from memory.
+ALTER FUNCTION public.wos_confirm_office_completeness(
+  uuid,integer,text,text
+) RENAME TO wos_v1_pre_runtime_confirm_office_completeness;
+ALTER FUNCTION public.wos_submit_production_order(
+  uuid,integer,text,uuid
+) RENAME TO wos_v1_pre_runtime_submit_production_order;
+ALTER FUNCTION public.wos_p7_record_trusted_image_proof(
+  uuid,uuid,uuid,text,uuid,text,timestamptz,text
+) RENAME TO wos_v1_pre_runtime_record_trusted_image_proof;
 
 CREATE TABLE public.wos_order_create_receipts (
   request_id uuid PRIMARY KEY,
@@ -231,7 +349,7 @@ REVOKE ALL ON FUNCTION public.wos_v1_assert_current_image_set(
   uuid,uuid,text
 ) FROM PUBLIC, anon, authenticated, service_role;
 
-CREATE OR REPLACE FUNCTION public.wos_p7_record_trusted_image_proof(
+CREATE FUNCTION public.wos_p7_record_trusted_image_proof(
   p_image_id uuid,
   p_order_id uuid,
   p_actor_user_id uuid,
@@ -398,7 +516,7 @@ GRANT EXECUTE ON FUNCTION public.wos_p7_record_trusted_image_proof(
   uuid,uuid,uuid,text,uuid,text,timestamptz,text
 ) TO service_role;
 
-CREATE OR REPLACE FUNCTION public.wos_confirm_office_completeness(
+CREATE FUNCTION public.wos_confirm_office_completeness(
   p_order_id uuid,
   p_expected_revision integer,
   p_expected_label text,
@@ -486,7 +604,7 @@ BEGIN
 END;
 $confirm$;
 
-CREATE OR REPLACE FUNCTION public.wos_submit_production_order(
+CREATE FUNCTION public.wos_submit_production_order(
   p_order_id uuid,
   p_expected_revision integer,
   p_expected_label text,
@@ -755,6 +873,39 @@ BEGIN
     WHEN NULLIF(p_payload->>'plannedShipDate', '') IS NULL THEN NULL
     ELSE (p_payload->>'plannedShipDate')::date
   END;
+
+  IF v_customer_id IS NOT NULL
+    AND NOT EXISTS (
+      SELECT 1
+      FROM public.cpc_customer_references customer
+      WHERE customer.id = v_customer_id
+        AND customer.org_id = v_actor.org_id
+    )
+  THEN
+    RAISE EXCEPTION 'CUSTOMER_ORGANIZATION_MISMATCH' USING ERRCODE = '42501';
+  END IF;
+  IF v_project_id IS NOT NULL
+    AND NOT EXISTS (
+      SELECT 1
+      FROM public.cpc_projects project
+      WHERE project.id = v_project_id
+        AND project.org_id = v_actor.org_id
+    )
+  THEN
+    RAISE EXCEPTION 'PROJECT_ORGANIZATION_MISMATCH' USING ERRCODE = '42501';
+  END IF;
+  IF v_customer_id IS NOT NULL
+    AND v_project_id IS NOT NULL
+    AND NOT EXISTS (
+      SELECT 1
+      FROM public.cpc_projects project
+      WHERE project.id = v_project_id
+        AND project.org_id = v_actor.org_id
+        AND project.customer_reference_id = v_customer_id
+    )
+  THEN
+    RAISE EXCEPTION 'PROJECT_CUSTOMER_MISMATCH' USING ERRCODE = '42501';
+  END IF;
 
   IF v_batch_quantity > v_requested_quantity
     OR (v_carton_quantity IS NOT NULL AND v_carton_quantity < 1)

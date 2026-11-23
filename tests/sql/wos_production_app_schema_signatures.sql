@@ -100,6 +100,66 @@ signature_rows AS (
   UNION ALL
 
   SELECT
+    'table_acl',
+    n.nspname || '.' || c.relname,
+    pg_catalog.jsonb_build_object(
+      'effective_acl', (
+        SELECT pg_catalog.jsonb_agg(pg_catalog.jsonb_build_object(
+          'grantor', pg_catalog.pg_get_userbyid(acl.grantor),
+          'grantee', CASE
+            WHEN acl.grantee = 0 THEN 'PUBLIC'
+            ELSE pg_catalog.pg_get_userbyid(acl.grantee)
+          END,
+          'privilege', acl.privilege_type,
+          'grantable', acl.is_grantable
+        ) ORDER BY
+          CASE WHEN acl.grantee = 0 THEN 'PUBLIC'
+            ELSE pg_catalog.pg_get_userbyid(acl.grantee) END,
+          acl.privilege_type,
+          acl.is_grantable)
+        FROM aclexplode(
+          COALESCE(c.relacl, acldefault('r', c.relowner))
+        ) acl
+      )
+    )
+  FROM app_schemas n
+  JOIN pg_catalog.pg_class c ON c.relnamespace = n.oid
+  WHERE c.relkind IN ('r', 'p')
+
+  UNION ALL
+
+  SELECT
+    'column_acl',
+    n.nspname || '.' || c.relname || '.' || a.attname,
+    pg_catalog.jsonb_build_object(
+      'grants', (
+        SELECT pg_catalog.jsonb_agg(pg_catalog.jsonb_build_object(
+          'grantor', pg_catalog.pg_get_userbyid(acl.grantor),
+          'grantee', CASE
+            WHEN acl.grantee = 0 THEN 'PUBLIC'
+            ELSE pg_catalog.pg_get_userbyid(acl.grantee)
+          END,
+          'privilege', acl.privilege_type,
+          'grantable', acl.is_grantable
+        ) ORDER BY
+          CASE WHEN acl.grantee = 0 THEN 'PUBLIC'
+            ELSE pg_catalog.pg_get_userbyid(acl.grantee) END,
+          acl.privilege_type,
+          acl.is_grantable)
+        FROM aclexplode(a.attacl) acl
+      )
+    )
+  FROM app_schemas n
+  JOIN pg_catalog.pg_class c ON c.relnamespace = n.oid
+  JOIN pg_catalog.pg_attribute a ON a.attrelid = c.oid
+  WHERE c.relkind IN ('r', 'p')
+    AND a.attnum > 0
+    AND NOT a.attisdropped
+    AND a.attacl IS NOT NULL
+
+  UNION ALL
+
+  SELECT
     'function',
     n.nspname || '.' || p.proname || '(' ||
       pg_catalog.pg_get_function_identity_arguments(p.oid) || ')',
@@ -121,6 +181,36 @@ signature_rows AS (
   FROM app_schemas n
   JOIN pg_catalog.pg_proc p ON p.pronamespace = n.oid
   JOIN pg_catalog.pg_language l ON l.oid = p.prolang
+  WHERE p.prokind IN ('f', 'p')
+
+  UNION ALL
+
+  SELECT
+    'function_acl',
+    n.nspname || '.' || p.proname || '(' ||
+      pg_catalog.pg_get_function_identity_arguments(p.oid) || ')',
+    pg_catalog.jsonb_build_object(
+      'effective_acl', (
+        SELECT pg_catalog.jsonb_agg(pg_catalog.jsonb_build_object(
+          'grantor', pg_catalog.pg_get_userbyid(acl.grantor),
+          'grantee', CASE
+            WHEN acl.grantee = 0 THEN 'PUBLIC'
+            ELSE pg_catalog.pg_get_userbyid(acl.grantee)
+          END,
+          'privilege', acl.privilege_type,
+          'grantable', acl.is_grantable
+        ) ORDER BY
+          CASE WHEN acl.grantee = 0 THEN 'PUBLIC'
+            ELSE pg_catalog.pg_get_userbyid(acl.grantee) END,
+          acl.privilege_type,
+          acl.is_grantable)
+        FROM aclexplode(
+          COALESCE(p.proacl, acldefault('f', p.proowner))
+        ) acl
+      )
+    )
+  FROM app_schemas n
+  JOIN pg_catalog.pg_proc p ON p.pronamespace = n.oid
   WHERE p.prokind IN ('f', 'p')
 
   UNION ALL

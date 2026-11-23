@@ -83,16 +83,163 @@ INSERT INTO public.profiles (id,user_id,org_id,role,is_active) VALUES
     true
   );
 
+INSERT INTO public.cpc_customer_references (
+  id,org_id,reference_kind,provisional_source_reference,
+  display_name_snapshot,status,created_by_profile_id
+) VALUES
+  (
+    '81000000-0000-4000-8000-000000000001',
+    'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+    'provisional',
+    'synthetic-same-org-customer',
+    'Synthetic Same Org Customer',
+    'pending_review',
+    '11111111-1111-4111-8111-111111111111'
+  ),
+  (
+    '81000000-0000-4000-8000-000000000002',
+    'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+    'provisional',
+    'synthetic-foreign-customer',
+    'Synthetic Foreign Customer',
+    'pending_review',
+    '44444444-4444-4444-8444-444444444444'
+  ),
+  (
+    '81000000-0000-4000-8000-000000000003',
+    'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+    'provisional',
+    'synthetic-other-same-org-customer',
+    'Synthetic Other Same Org Customer',
+    'pending_review',
+    '11111111-1111-4111-8111-111111111111'
+  );
+INSERT INTO public.cpc_projects (
+  id,org_id,customer_reference_id,title,objective_summary,project_type,
+  owner_profile_id,stage,priority,created_by_profile_id
+) VALUES
+  (
+    '82000000-0000-4000-8000-000000000001',
+    'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+    '81000000-0000-4000-8000-000000000001',
+    'Synthetic Same Org Project',
+    'Synthetic WOS cross-organization test',
+    'transfer_film',
+    '11111111-1111-4111-8111-111111111111',
+    'discovery',
+    'medium',
+    '11111111-1111-4111-8111-111111111111'
+  ),
+  (
+    '82000000-0000-4000-8000-000000000002',
+    'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+    '81000000-0000-4000-8000-000000000002',
+    'Synthetic Foreign Project',
+    'Synthetic WOS foreign organization test',
+    'transfer_film',
+    '44444444-4444-4444-8444-444444444444',
+    'discovery',
+    'medium',
+    '44444444-4444-4444-8444-444444444444'
+  ),
+  (
+    '82000000-0000-4000-8000-000000000003',
+    'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+    '81000000-0000-4000-8000-000000000003',
+    'Synthetic Other Same Org Project',
+    'Synthetic mismatched project/customer test',
+    'transfer_film',
+    '11111111-1111-4111-8111-111111111111',
+    'discovery',
+    'medium',
+    '11111111-1111-4111-8111-111111111111'
+  );
+
 SET request.jwt.claim.sub='10101010-1010-4010-8010-101010101010';
 SET request.jwt.claim.role='authenticated';
 SET ROLE authenticated;
+
+DO $cross_org_rejections$
+BEGIN
+  BEGIN
+    PERFORM public.wos_create_production_order(
+      '51000000-0000-4000-8000-000000000091',
+      jsonb_build_object(
+        'orderNumber','WOS-PROD-CI-FOREIGN-CUSTOMER',
+        'customerId','81000000-0000-4000-8000-000000000002',
+        'customerNameSnapshot','Synthetic Foreign Customer',
+        'productName','Synthetic Product',
+        'salesOwnerProfileId','11111111-1111-4111-8111-111111111111',
+        'projectOwnerProfileId','11111111-1111-4111-8111-111111111111',
+        'priority','MEDIUM',
+        'requestedQuantity',100,
+        'currentBatchQuantity',100,
+        'productMaterial','Synthetic Material'
+      )
+    );
+    RAISE EXCEPTION 'CROSS_ORG_CUSTOMER_ACCEPTED';
+  EXCEPTION
+    WHEN SQLSTATE '42501' THEN NULL;
+  END;
+
+  BEGIN
+    PERFORM public.wos_create_production_order(
+      '51000000-0000-4000-8000-000000000092',
+      jsonb_build_object(
+        'orderNumber','WOS-PROD-CI-FOREIGN-PROJECT',
+        'projectId','82000000-0000-4000-8000-000000000002',
+        'customerNameSnapshot','Synthetic Customer',
+        'productName','Synthetic Product',
+        'salesOwnerProfileId','11111111-1111-4111-8111-111111111111',
+        'projectOwnerProfileId','11111111-1111-4111-8111-111111111111',
+        'priority','MEDIUM',
+        'requestedQuantity',100,
+        'currentBatchQuantity',100,
+        'productMaterial','Synthetic Material'
+      )
+    );
+    RAISE EXCEPTION 'CROSS_ORG_PROJECT_ACCEPTED';
+  EXCEPTION
+    WHEN SQLSTATE '42501' THEN NULL;
+  END;
+
+  BEGIN
+    PERFORM public.wos_create_production_order(
+      '51000000-0000-4000-8000-000000000093',
+      jsonb_build_object(
+        'orderNumber','WOS-PROD-CI-MISMATCHED-LINK',
+        'customerId','81000000-0000-4000-8000-000000000001',
+        'projectId','82000000-0000-4000-8000-000000000003',
+        'customerNameSnapshot','Synthetic Customer',
+        'productName','Synthetic Product',
+        'salesOwnerProfileId','11111111-1111-4111-8111-111111111111',
+        'projectOwnerProfileId','11111111-1111-4111-8111-111111111111',
+        'priority','MEDIUM',
+        'requestedQuantity',100,
+        'currentBatchQuantity',100,
+        'productMaterial','Synthetic Material'
+      )
+    );
+    RAISE EXCEPTION 'MISMATCHED_PROJECT_CUSTOMER_ACCEPTED';
+  EXCEPTION
+    WHEN SQLSTATE '42501' THEN NULL;
+  END;
+
+  IF (SELECT count(*) FROM public.wos_production_orders) <> 0 THEN
+    RAISE EXCEPTION 'CROSS_ORG_ORDER_ROW_PERSISTED';
+  END IF;
+END;
+$cross_org_rejections$;
 
 SELECT (
   public.wos_create_production_order(
   '51000000-0000-4000-8000-000000000099',
   jsonb_build_object(
     'orderNumber','WOS-PROD-CI-001',
+    'customerId','81000000-0000-4000-8000-000000000001',
     'customerNameSnapshot','Synthetic Customer',
+    'projectId','82000000-0000-4000-8000-000000000001',
+    'projectNameSnapshot','Synthetic Same Org Project',
     'productName','Synthetic Product',
     'salesOwnerProfileId','11111111-1111-4111-8111-111111111111',
     'projectOwnerProfileId','11111111-1111-4111-8111-111111111111',
@@ -109,11 +256,29 @@ SELECT (
 SELECT 'organizations/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/wos/production-order/'
   || :'order_id' || '/images/' AS order_prefix \gset
 SELECT set_config('wos_v1.smoke_order_id', :'order_id', false);
+SELECT set_config('wos_v1.smoke_order_prefix', :'order_prefix', false);
 
-RESET ROLE;
-
-INSERT INTO storage.buckets (id,name,public,file_size_limit,allowed_mime_types)
-VALUES ('wos-private','wos-private',false,20971520,ARRAY['image/png']);
+DO $storage_policy_negative$
+BEGIN
+  BEGIN
+    INSERT INTO storage.objects (
+      id,bucket_id,name,owner_id,metadata,version,updated_at
+    ) VALUES (
+      '61000000-0000-4000-8000-000000000099',
+      'wos-private',
+      current_setting('wos_v1.smoke_order_prefix')
+        || 'other/versions/V1/71000000-0000-4000-8000-000000000099/proof.png',
+      '10101010-1010-4010-8010-101010101010',
+      '{"mimetype":"image/png","size":"100"}'::jsonb,
+      'v-invalid',
+      '2026-11-23T00:00:09.123456Z'
+    );
+    RAISE EXCEPTION 'INVALID_STORAGE_CATEGORY_ACCEPTED';
+  EXCEPTION
+    WHEN SQLSTATE '42501' THEN NULL;
+  END;
+END;
+$storage_policy_negative$;
 
 INSERT INTO storage.objects (
   id,bucket_id,name,owner_id,metadata,version,updated_at
@@ -155,6 +320,15 @@ INSERT INTO storage.objects (
     '2026-11-23T00:00:03.123456Z'
   );
 
+DO $office_storage_read$
+BEGIN
+  IF (SELECT count(*) FROM storage.objects WHERE bucket_id='wos-private') <> 4 THEN
+    RAISE EXCEPTION 'OFFICE_FOUR_CATEGORY_STORAGE_READ_FAILED';
+  END IF;
+END;
+$office_storage_read$;
+
+RESET ROLE;
 SET request.jwt.claim.role='service_role';
 SELECT public.wos_p7_record_trusted_image_proof(
   '71000000-0000-4000-8000-000000000001',
@@ -242,6 +416,13 @@ RESET ROLE;
 SET request.jwt.claim.sub='20202020-2020-4020-8020-202020202020';
 SET request.jwt.claim.role='authenticated';
 SET ROLE authenticated;
+DO $operator_storage_read$
+BEGIN
+  IF (SELECT count(*) FROM storage.objects WHERE bucket_id='wos-private') <> 4 THEN
+    RAISE EXCEPTION 'OPERATOR_STORAGE_READ_FAILED';
+  END IF;
+END;
+$operator_storage_read$;
 SELECT public.wos_operator_order_action(
   :'order_id',
   2,
@@ -356,6 +537,7 @@ DO $viewer$
 BEGIN
   IF (SELECT count(*) FROM public.wos_production_orders) <> 0
     OR (SELECT count(*) FROM public.wos_workshop_inbox) <> 0
+    OR (SELECT count(*) FROM storage.objects WHERE bucket_id='wos-private') <> 0
   THEN
     RAISE EXCEPTION 'WOS_V1_VIEWER_READ_LEAK';
   END IF;
@@ -369,6 +551,7 @@ DO $foreign$
 BEGIN
   IF (SELECT count(*) FROM public.wos_production_orders) <> 0
     OR (SELECT count(*) FROM public.wos_workshop_inbox) <> 0
+    OR (SELECT count(*) FROM storage.objects WHERE bucket_id='wos-private') <> 0
   THEN
     RAISE EXCEPTION 'WOS_V1_CROSS_ORG_READ_LEAK';
   END IF;

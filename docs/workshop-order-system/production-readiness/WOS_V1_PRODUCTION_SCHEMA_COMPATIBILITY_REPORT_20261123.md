@@ -86,13 +86,20 @@ Canonical application signature:
 - 3 schemas
 - 67 tables
 - 104 functions across all three application schemas
+- 104 expanded function ACL records
+- 67 expanded table ACL records
 - 32 triggers
 - 6 default-ACL rows
-- 212 total signature rows
+- 383 total signature rows
 - aggregate SHA-256:
-  `4c7c9d91506aa86933ac2bd31a94807af2253f65b4e61e955097043eb36c4170`
+  `745e7556931fd99abae835d7ab21a9e899eb8b624380ef1a95fb4f1773ae4f5b`
 
-The schema-only bootstrap reproduced this exact 212-row signature in PG17 and
+The ACL expansion includes direct `PUBLIC`, `anon`, `authenticated`,
+`service_role` and owner privileges with grant option state. No explicit
+column-level ACL entries were present in the Production schema dump, so no
+invented column grants were added.
+
+The schema-only bootstrap reproduced this exact 383-row signature in PG17 and
 had zero organization/profile/WOS business rows.
 
 ## 5. Historical migration replay
@@ -104,7 +111,8 @@ It reconstructed all 67 Production `public` tables and matched:
 - all 100 public function signatures and definitions
 - all 32 trigger definitions and enabled states
 - all 67 explicit table grant signatures
-- the full 212-row application signature
+- explicit function and table ACLs, including `PUBLIC`
+- the full 383-row application signature
 
 Guarded CI-only compensations are required:
 
@@ -112,6 +120,8 @@ Guarded CI-only compensations are required:
 - restore explicit public ACL/default ACL metadata
 - replace four named historical function bodies with exact Production
   definitions
+- restore three historical function ACLs and the PostgreSQL 17 `MAINTAIN`
+  table bit that the older grant manifest did not record
 - reproduce one existing `service_role` grant only inside the throwaway
   database
 
@@ -134,6 +144,12 @@ a disposable database.
 Passed:
 
 - Office order creation
+- four Storage objects inserted through the Office JWT Storage RLS policy
+- rejection of an unauthorized fifth category through Storage RLS
+- four same-organization customer/project links
+- rejection of foreign-organization customer/project links
+- rejection of a same-organization customer linked to a different
+  same-organization project
 - four synthetic trusted PNG proof registrations
 - Office completeness and order submission
 - Operator accept
@@ -146,13 +162,18 @@ Passed:
 - seven history events
 - one original submission receipt and Inbox task
 - Viewer and cross-organization read denial
+- Operator private Storage read for the submitted/current order
 - `canStart=false`
 - two concurrent Operator accepts: exactly one succeeds and one receives
   `VERSION_CONFLICT`
 - duplicate runtime installation rejected
 - RPC ACL activation and deactivation
 - internal image-set helper hidden from browser roles
-- full runtime rollback to 67 tables and the exact Production signature
+- immutable runtime security manifests including private bucket and Storage
+  policy signatures
+- runtime rollback restored the exact P7 function/table/policy/ACL signature
+- full disposable rollback removed the empty `wos-private` bucket and returned
+  to 67 tables plus the exact Production signature
 - no CPC/GLH/commercial drift
 
 The four proof fixtures use synthetic metadata and synthetic SHA-256 values.

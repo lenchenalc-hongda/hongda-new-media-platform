@@ -5,6 +5,7 @@ on:
     branches: [master, main]
     paths:
       - 'supabase/production-bootstrap/**'
+      - 'docs/workshop-order-system/nonproduction-only/**'
       - 'docs/workshop-order-system/production-readiness/**'
       - 'scripts/wos-production-readiness/**'
       - 'scripts/wos-p8/**'

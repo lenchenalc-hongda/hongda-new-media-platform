@@ -19,6 +19,19 @@ It is covered by
 `tests/unit/workshop-order-production-runtime-contract.test.ts` through the
 existing WOS suite.
 
+Additional source-level hardening completed in this branch:
+
+- Foundation direct browser grants/insert policies are contained in the same
+  transaction as the Foundation installation.
+- P7 leaves all browser write RPCs revoked.
+- Private Storage RLS now accepts each of the four required PNG categories and
+  lets Operator read `SUBMITTED`, `WORKSHOP_REVIEW` and `WAITING_MATERIAL`
+  orders while denying Viewer, cross-organization and anonymous reads.
+- Production order creation rejects foreign-organization customer/project IDs
+  and mismatched project/customer links.
+- Runtime security evidence is compared against reviewed manifests rather than
+  being regenerated from the implementation under test.
+
 ## 2. Existing bindings that block Production use
 
 ### Inbox read

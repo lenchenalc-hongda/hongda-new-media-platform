@@ -9,7 +9,7 @@ This list measures production delivery readiness, not PR count.
      separate Owner authorization binds the exact project, SQL hashes,
      operator, window and rollback files.
 2. **Production schema drift baseline**
-   - Capture a fresh read-only 212-row application signature immediately
+   - Capture a fresh read-only 383-row application signature immediately
      before the migration window and abort on unreviewed delta.
 3. **Project-neutral private-image proof service**
    - Replace the QA URL/RPC Edge function with a reviewed Production service.
@@ -49,7 +49,7 @@ This list measures production delivery readiness, not PR count.
 
 - exact schema-only bootstrap
 - 67/67 historical public-table replay
-- 212/212 application signature parity
+- 383/383 application signature parity including table/function ACLs
 - WOS Foundation and production-neutral lifecycle
 - idempotency replay
 - actual two-session version CAS conflict

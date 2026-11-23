@@ -85,6 +85,17 @@ def main():
           json.dumps(out,sort_keys=True))
     print("WOS_P8_LIVE_SUPABASE_AUTH_STORAGE_EDGE_PARITY=NOT_VERIFIED")
     print("WOS_P8_PRODUCTION_DATA_OR_WRITES=NONE")
+    drift = any(
+        item[key] != 0
+        for item in out.values()
+        for key in ("missing_count", "extra_count")
+    ) or any(
+        change["count"] != 0
+        for item in out.values()
+        for change in item["property_drift"].values()
+    )
+    if drift:
+        raise RuntimeError("WOS_P8_FUNCTION_TRIGGER_GRANT_DRIFT")
     return 0
 
 

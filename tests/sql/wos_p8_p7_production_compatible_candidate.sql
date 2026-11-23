@@ -20,8 +20,37 @@ BEGIN
  IF to_regclass('public.wos_production_orders') IS NULL
     OR to_regclass('public.profiles') IS NULL
     OR to_regclass('storage.objects') IS NULL
+    OR to_regclass('storage.buckets') IS NULL
  THEN RAISE EXCEPTION 'WOS_P8_FOUNDATION_REQUIRED'; END IF;
+ IF pg_catalog.has_table_privilege(
+      'authenticated',
+      'public.wos_production_orders',
+      'INSERT,UPDATE,DELETE'
+    )
+    OR pg_catalog.has_table_privilege(
+      'authenticated',
+      'public.wos_reference_images',
+      'INSERT,UPDATE,DELETE'
+    )
+ THEN RAISE EXCEPTION 'WOS_P8_FOUNDATION_CONTAINMENT_REQUIRED'; END IF;
+ IF EXISTS (
+   SELECT 1 FROM storage.buckets
+   WHERE id='wos-private' OR name='wos-private'
+ ) THEN RAISE EXCEPTION 'WOS_PRIVATE_BUCKET_ALREADY_EXISTS'; END IF;
 END $preflight$;
+
+INSERT INTO storage.buckets(id,name,public,file_size_limit,allowed_mime_types)
+VALUES('wos-private','wos-private',false,20971520,ARRAY['image/png'])
+ON CONFLICT (id) DO NOTHING;
+DO $bucket_check$
+BEGIN
+ IF NOT EXISTS (
+   SELECT 1 FROM storage.buckets
+   WHERE id='wos-private' AND name='wos-private' AND public=false
+     AND file_size_limit=20971520
+     AND allowed_mime_types=ARRAY['image/png']
+ ) THEN RAISE EXCEPTION 'WOS_PRIVATE_BUCKET_CONFLICT'; END IF;
+END $bucket_check$;
 
 -- 5 P7 incremental tables + RLS and permissions.
 -- Three P7 transactional tables, aligned with the QA structural contract.
@@ -113,6 +142,14 @@ REVOKE ALL ON public.wos_orphan_cleanup_claims FROM PUBLIC,anon,authenticated;
 GRANT SELECT ON public.wos_office_readiness_receipts TO authenticated;
 GRANT SELECT ON public.wos_submission_receipts TO authenticated;
 GRANT SELECT ON public.wos_workshop_inbox TO authenticated;
+GRANT SELECT ON public.wos_production_orders TO authenticated;
+GRANT SELECT ON public.wos_reference_images TO authenticated;
+GRANT SELECT ON public.wos_status_history TO authenticated;
+GRANT SELECT ON public.wos_resource_readiness TO authenticated;
+GRANT SELECT ON public.wos_visual_baselines TO authenticated;
+GRANT SELECT ON public.wos_visual_baseline_items TO authenticated;
+GRANT SELECT ON public.wos_blockers TO authenticated;
+GRANT SELECT ON public.wos_confirmations TO authenticated;
 GRANT SELECT,INSERT,UPDATE ON public.wos_verified_image_proofs TO service_role;
 GRANT SELECT,INSERT,UPDATE ON public.wos_orphan_cleanup_claims TO service_role;
 
@@ -149,9 +186,37 @@ CREATE POLICY wos_p8_history_reader_roles ON public.wos_status_history
   SELECT 1 FROM public.profiles p WHERE p.user_id=auth.uid() AND p.is_active
    AND p.org_id=wos_status_history.organization_id
    AND p.role IN ('admin','manager','sales','operator')));
+CREATE POLICY wos_p8_resource_reader_roles ON public.wos_resource_readiness
+ AS RESTRICTIVE FOR SELECT TO authenticated USING (EXISTS (
+  SELECT 1 FROM public.profiles p WHERE p.user_id=auth.uid() AND p.is_active
+   AND p.org_id=wos_resource_readiness.organization_id
+   AND p.role IN ('admin','manager','sales','operator')));
+CREATE POLICY wos_p8_baseline_reader_roles ON public.wos_visual_baselines
+ AS RESTRICTIVE FOR SELECT TO authenticated USING (EXISTS (
+  SELECT 1 FROM public.profiles p WHERE p.user_id=auth.uid() AND p.is_active
+   AND p.org_id=wos_visual_baselines.organization_id
+   AND p.role IN ('admin','manager','sales','operator')));
+CREATE POLICY wos_p8_baseline_item_reader_roles ON public.wos_visual_baseline_items
+ AS RESTRICTIVE FOR SELECT TO authenticated USING (EXISTS (
+  SELECT 1
+  FROM public.wos_visual_baselines baseline
+  JOIN public.profiles p ON p.org_id=baseline.organization_id
+  WHERE baseline.id=wos_visual_baseline_items.baseline_id
+    AND p.user_id=auth.uid() AND p.is_active
+    AND p.role IN ('admin','manager','sales','operator')));
+CREATE POLICY wos_p8_blocker_reader_roles ON public.wos_blockers
+ AS RESTRICTIVE FOR SELECT TO authenticated USING (EXISTS (
+  SELECT 1 FROM public.profiles p WHERE p.user_id=auth.uid() AND p.is_active
+   AND p.org_id=wos_blockers.organization_id
+   AND p.role IN ('admin','manager','sales','operator')));
+CREATE POLICY wos_p8_confirmation_reader_roles ON public.wos_confirmations
+ AS RESTRICTIVE FOR SELECT TO authenticated USING (EXISTS (
+  SELECT 1 FROM public.profiles p WHERE p.user_id=auth.uid() AND p.is_active
+   AND p.org_id=wos_confirmations.organization_id
+   AND p.role IN ('admin','manager','sales','operator')));
 
--- No Storage API, Edge Functions, SQL SECURITY DEFINER RPCs, cleanup workers,
--- or physical deletion is deployed/represented by this contract.
+-- P7 creates the private PNG bucket and read-only browser surfaces. Browser
+-- write RPCs remain revoked until the later exact-SQL activation.
 
 -- Atomic readiness and idempotent submission RPCs.
 CREATE OR REPLACE FUNCTION public.wos_confirm_office_completeness(
@@ -292,10 +357,10 @@ BEGIN
  'sourceRevision',p_expected_revision,'submittedAt',v_receipt.created_at);
 END $fn$;
 
-REVOKE ALL ON FUNCTION public.wos_confirm_office_completeness(uuid,integer,text,text) FROM PUBLIC,anon,authenticated;
-REVOKE ALL ON FUNCTION public.wos_submit_production_order(uuid,integer,text,uuid) FROM PUBLIC,anon,authenticated;
-GRANT EXECUTE ON FUNCTION public.wos_confirm_office_completeness(uuid,integer,text,text) TO authenticated;
-GRANT EXECUTE ON FUNCTION public.wos_submit_production_order(uuid,integer,text,uuid) TO authenticated;
+REVOKE ALL ON FUNCTION public.wos_confirm_office_completeness(uuid,integer,text,text)
+ FROM PUBLIC,anon,authenticated,service_role;
+REVOKE ALL ON FUNCTION public.wos_submit_production_order(uuid,integer,text,uuid)
+ FROM PUBLIC,anon,authenticated,service_role;
 
 -- Edge-bound service-only storage snapshot and authenticated registration.
 CREATE OR REPLACE FUNCTION public.wos_p7_service_storage_snapshot(p_path text)
@@ -413,7 +478,5 @@ END $fn$;
 
 
 REVOKE ALL ON FUNCTION public.wos_register_uploaded_reference_image(uuid,uuid,text,text)
- FROM PUBLIC,anon,authenticated;
-GRANT EXECUTE ON FUNCTION public.wos_register_uploaded_reference_image(uuid,uuid,text,text)
- TO authenticated;
+ FROM PUBLIC,anon,authenticated,service_role;
 COMMIT;

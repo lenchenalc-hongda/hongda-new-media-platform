@@ -39,7 +39,11 @@ BEGIN
       AND v_actor.id<>v_order.sales_owner_profile_id)
  THEN RAISE EXCEPTION 'PROOF_ORDER_NOT_EDITABLE' USING ERRCODE='42501'; END IF;
  v_prefix:='organizations/'||v_actor.org_id||'/wos/production-order/'||p_order_id||
-  '/images/product/versions/'||v_order.version_label||'/'||p_image_id||'/';
+  '/images/'||(storage.foldername(p_storage_path))[7]||'/versions/'||
+  v_order.version_label||'/'||p_image_id||'/';
+ IF (storage.foldername(p_storage_path))[7] NOT IN (
+   'product','film-pattern','customer-approved-sample','signed-sample'
+ ) THEN RAISE EXCEPTION 'PROOF_CATEGORY_PATH_INVALID' USING ERRCODE='23514'; END IF;
  IF left(p_storage_path,length(v_prefix))<>v_prefix
  OR (storage.filename(p_storage_path) !~ '^[A-Za-z0-9][A-Za-z0-9._-]{0,199}[.]png$' OR position('..' in storage.filename(p_storage_path))>0)
  THEN RAISE EXCEPTION 'PROOF_IMAGE_PATH_MISMATCH' USING ERRCODE='23514'; END IF;
@@ -221,7 +225,9 @@ WITH CHECK (
   AND (storage.foldername(name))[3]='wos'
   AND (storage.foldername(name))[4]='production-order'
   AND (storage.foldername(name))[6]='images'
-  AND (storage.foldername(name))[7]='product'
+  AND (storage.foldername(name))[7] IN (
+    'product','film-pattern','customer-approved-sample','signed-sample'
+  )
   AND (storage.foldername(name))[8]='versions'
   AND (storage.foldername(name))[9] ~ '^V[1-9][0-9]{0,20}$'
   AND (storage.foldername(name))[10] ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
@@ -252,7 +258,9 @@ USING (
       AND o.id::text=(storage.foldername(storage.objects.name))[5]
       AND (p.role IN ('admin','manager')
         OR (p.role='sales' AND (p.id=o.created_by_profile_id OR p.id=o.sales_owner_profile_id))
-        OR (p.role='operator' AND o.workflow_status='SUBMITTED'))
+        OR (p.role='operator' AND o.workflow_status IN (
+          'SUBMITTED','WORKSHOP_REVIEW','WAITING_MATERIAL'
+        )))
   )
 );
 COMMIT;

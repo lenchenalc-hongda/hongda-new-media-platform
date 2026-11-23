@@ -29,12 +29,19 @@ authorization:
      environment. It must not be replayed over the existing populated
      Production database.
 2. `supabase/migrations/20261014102000_workshop_order_system_foundation.sql`
-   - Adds WOS Foundation with all application writes still unavailable.
+   together with
+   `WOS_V1_PRODUCTION_FOUNDATION_CONTAINMENT_NOT_AUTHORIZED.sql`
+   - Must run in one `psql --single-transaction` invocation. The containment
+     file removes the Foundation draft's direct browser table grants and insert
+     policies before the transaction can commit.
 3. Reviewed production-compatible P7 schema/function candidate
    - Current candidate:
      `tests/sql/wos_p8_p7_production_compatible_candidate.sql`
    - It remains under test documentation until promoted to a production
      migration artifact with its own authorization.
+   - It creates the private `wos-private` PNG bucket, grants only the reviewed
+     read surfaces, installs four-category Storage RLS, and leaves browser write
+     RPCs revoked.
 4. `docs/workshop-order-system/production-readiness/sql/WOS_V1_PRODUCTION_RUNTIME_FORWARD_NOT_AUTHORIZED.sql`
    - Adds production-neutral order lifecycle receipts and RPCs with browser
      EXECUTE still revoked.
@@ -68,8 +75,8 @@ Record:
 - current `master` SHA and application deployment SHA
 - `public` table/function/trigger/policy counts
 - 29 Production migration versions
-- exact 212-row application signature
-- current table grants and default ACLs
+- exact 383-row application signature
+- expanded table/function ACLs, including direct `PUBLIC` entries
 - WOS object count, expected zero
 - `wos-private` bucket state, expected absent before P7
 - Storage object count and bucket inventory
@@ -135,7 +142,11 @@ Preferred order:
 5. Apply the reviewed P7 rollback.
 6. Apply the WOS Foundation rollback only when preserving no WOS Production
    data is explicitly approved.
-7. Re-run the 212-row application signature and compare with the pre-window
+7. Remove the empty `wos-private` bucket only through an approved Storage API
+   step after independently proving that no object references remain. The
+   PostgreSQL disposable rollback intentionally does not model a production
+   Storage bucket deletion.
+8. Re-run the 383-row application signature and compare with the pre-window
    manifest.
 
 Do not drop WOS business history, Proof or receipts as a generic rollback step

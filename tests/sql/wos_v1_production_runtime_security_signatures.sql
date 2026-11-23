@@ -82,6 +82,24 @@ policy_rows AS (
   WHERE policy.schemaname = 'public'
     AND policy.tablename LIKE 'wos\_%' ESCAPE '\'
 ),
+storage_policy_rows AS (
+  SELECT jsonb_build_object(
+    'kind', 'storage_policy',
+    'name', policy.schemaname || '.' || policy.tablename || '.'
+      || policy.policyname,
+    'command', policy.cmd,
+    'roles', policy.roles,
+    'permissive', policy.permissive,
+    'using_expression_md5',
+      md5(COALESCE(policy.qual, '')),
+    'check_expression_md5',
+      md5(COALESCE(policy.with_check, ''))
+  ) AS row
+  FROM pg_catalog.pg_policies policy
+  WHERE policy.schemaname = 'storage'
+    AND policy.tablename = 'objects'
+    AND policy.policyname LIKE 'wos\_%' ESCAPE '\'
+),
 summary_rows AS (
   SELECT jsonb_build_object(
     'kind', 'summary',
@@ -109,6 +127,27 @@ summary_rows AS (
       ) qa_objects
     )
   ) AS row
+  UNION ALL
+  SELECT jsonb_build_object(
+    'kind', 'summary',
+    'name', 'private_bucket_contract',
+    'bucket_count', (
+      SELECT count(*)
+      FROM storage.buckets
+      WHERE id = 'wos-private'
+        AND name = 'wos-private'
+        AND public = false
+        AND file_size_limit = 20971520
+        AND allowed_mime_types = ARRAY['image/png']
+    ),
+    'storage_policy_count', (
+      SELECT count(*)
+      FROM pg_catalog.pg_policies
+      WHERE schemaname = 'storage'
+        AND tablename = 'objects'
+        AND policyname LIKE 'wos\_%' ESCAPE '\'
+    )
+  ) AS row
 )
 SELECT row::text
 FROM (
@@ -117,6 +156,8 @@ FROM (
   SELECT row FROM table_rows
   UNION ALL
   SELECT row FROM policy_rows
+  UNION ALL
+  SELECT row FROM storage_policy_rows
   UNION ALL
   SELECT row FROM summary_rows
 ) signatures
