@@ -119,6 +119,34 @@ assert.equal(evaluateWosV1ImageAccess({
 assert.equal(evaluateWosV1ImageAccess({
   runtimeAuthorized: true,
   writesEnabled: true,
+  qaRevisionAuthorized: false,
+  profile,
+  order: { ...order, workflow_status: 'WAITING_MATERIAL', version_label: 'QA-R6' },
+}).code, 'STATUS_DENIED');
+assert.equal(evaluateWosV1ImageAccess({
+  runtimeAuthorized: true,
+  writesEnabled: true,
+  qaRevisionAuthorized: true,
+  profile,
+  order: { ...order, workflow_status: 'WAITING_MATERIAL', version_label: 'QA-R6' },
+}).code, 'ALLOWED');
+assert.equal(evaluateWosV1ImageAccess({
+  runtimeAuthorized: true,
+  writesEnabled: true,
+  qaRevisionAuthorized: true,
+  profile,
+  order: { ...order, workflow_status: 'WAITING_MATERIAL', version_label: 'V1' },
+}).code, 'VERSION_INVALID');
+assert.equal(evaluateWosV1ImageAccess({
+  runtimeAuthorized: true,
+  writesEnabled: true,
+  qaRevisionAuthorized: true,
+  profile,
+  order: { ...order, workflow_status: 'DRAFT', version_label: 'QA-R6' },
+}).code, 'VERSION_INVALID');
+assert.equal(evaluateWosV1ImageAccess({
+  runtimeAuthorized: true,
+  writesEnabled: true,
   profile: { ...profile, role: 'operator' },
   order,
 }).code, 'ROLE_FORBIDDEN');
@@ -242,3 +270,4 @@ console.log('WOS_V1_EDGE_FOUR_CATEGORY_ACCESS=PASS');
 console.log('WOS_V1_EDGE_REAL_SHA256_AND_OBJECT_STABILITY=PASS');
 console.log('WOS_V1_DIRECT_REGISTER_REQUIRES_TRUSTED_PROOF=PASS');
 console.log('WOS_V1_EDGE_CORS_ORIGIN_ALLOWLIST=PASS');
+console.log('WOS_V1_QA_REVISION_STATE_CONTRACT=PASS');

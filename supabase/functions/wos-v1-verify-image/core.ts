@@ -20,6 +20,14 @@ export interface WosV1ImageVerificationBody {
   readonly storagePath: string;
 }
 
+export interface WosV1ImageAccessInput {
+  readonly runtimeAuthorized: boolean;
+  readonly writesEnabled: boolean;
+  readonly qaRevisionAuthorized?: boolean;
+  readonly profile: WosV1ImageProfile | null | undefined;
+  readonly order: WosV1ImageOrder | null | undefined;
+}
+
 export interface WosV1ImageProfile {
   readonly id: string;
   readonly user_id: string;
@@ -91,12 +99,7 @@ export function canonicalWosV1ImagePath(input: {
   ].join('/');
 }
 
-export function evaluateWosV1ImageAccess(input: {
-  readonly runtimeAuthorized: boolean;
-  readonly writesEnabled: boolean;
-  readonly profile: WosV1ImageProfile | null | undefined;
-  readonly order: WosV1ImageOrder | null | undefined;
-}): {
+export function evaluateWosV1ImageAccess(input: WosV1ImageAccessInput): {
   readonly allowed: boolean;
   readonly code:
     | 'ALLOWED'
@@ -130,13 +133,21 @@ export function evaluateWosV1ImageAccess(input: {
     && profile.id !== order.sales_owner_profile_id) {
     return { allowed: false, code: 'OWNER_DENIED' };
   }
-  if (order.workflow_status !== 'DRAFT') {
-    return { allowed: false, code: 'STATUS_DENIED' };
+  if (order.workflow_status === 'DRAFT') {
+    return versionLabel.test(order.version_label)
+      ? { allowed: true, code: 'ALLOWED' }
+      : { allowed: false, code: 'VERSION_INVALID' };
   }
-  if (!versionLabel.test(order.version_label)) {
-    return { allowed: false, code: 'VERSION_INVALID' };
+  if (order.workflow_status === 'WAITING_MATERIAL'
+    || order.workflow_status === 'READINESS_CHECK') {
+    if (input.qaRevisionAuthorized !== true) {
+      return { allowed: false, code: 'STATUS_DENIED' };
+    }
+    return /^QA-R[1-9][0-9]*$/.test(order.version_label)
+      ? { allowed: true, code: 'ALLOWED' }
+      : { allowed: false, code: 'VERSION_INVALID' };
   }
-  return { allowed: true, code: 'ALLOWED' };
+  return { allowed: false, code: 'STATUS_DENIED' };
 }
 
 export function parseAllowedSupabaseRefs(value: string | undefined): readonly string[] {

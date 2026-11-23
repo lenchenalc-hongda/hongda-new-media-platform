@@ -78,6 +78,14 @@ Browser calls require an exact HTTPS match in
 `WOS_V1_EDGE_ALLOWED_ORIGINS`. The function implements OPTIONS preflight,
 allows only `POST, OPTIONS`, and echoes only an approved Origin.
 
+Version acceptance is state-bound:
+
+- `DRAFT` orders accept only `V1`, `V2`, ... labels.
+- QA revision states `WAITING_MATERIAL` / `READINESS_CHECK` accept only
+  `QA-R1`, `QA-R2`, ... labels.
+- Revision verification additionally requires the exact order/organization
+  `M2_OFFICE_WRITES` Gate, a live TTL and a non-placeholder approval reference.
+
 ## Minimal QA-only SQL package
 
 Forward file:
@@ -85,8 +93,8 @@ Forward file:
 `docs/workshop-order-system/production-readiness/sql/WOS_V1_HOSTED_QA_DEPENDENCIES_NOT_AUTHORIZED.sql`
 
 ```text
-SHA256=0224bed24ede046e6dbdc2314d1bc49b2f95586098aa114e3423ef6639ea2a63
-GIT_BLOB=f91ca80f0cfaa2e12ff2c22f92dfd77af3f51cb2
+SHA256=9acce427e96cc928aa11c0e4fa20060fec4df75972ab09c122c1f578dc57858f
+GIT_BLOB=911349aeebbef95d45dab4705820ebc75178d4f3
 ```
 
 Rollback file:
@@ -125,6 +133,10 @@ The proof writer takes the same `wos-qa-m2:<order-id>` transaction advisory
 lock used by QA M2 actions before locking the production-order row. This keeps
 lock ordering consistent and avoids a proof-vs-M2 deadlock.
 
+Recording and renewal share the same state/version binding. A `V*` label in a
+QA revision state and a `QA-R*` label in `DRAFT` are rejected before Storage or
+Proof mutation.
+
 ## Offline PostgreSQL 17 evidence
 
 The disposable suite installs the reviewed existing QA M2/revision baseline,
@@ -145,6 +157,13 @@ Covered behavior:
 - deterministic proof request idempotency
 - expired Proof renewal
 - NULL Storage version rejection (`22023`)
+- DRAFT `V*` proof creation
+- real `WAITING_MATERIAL / QA-R6` revision proof creation
+- correct scoped `M2_OFFICE_WRITES` Gate acceptance
+- wrong Gate and wrong-order Gate rejection
+- old `QA-R5` path rejection for a current `QA-R6` order
+- `V*` / `QA-R*` state-label mismatch rejection
+- revision Proof renewal under the scoped Gate
 - authenticated and anonymous EXECUTE denial
 - browser table-write denial
 - rollback removes only the three functions and preserves Proof history
@@ -161,7 +180,7 @@ The authorization must bind all of:
 
 - QA project `xulmpqaknlwqqculbsek` only
 - Forward SHA-256
-  `0224bed24ede046e6dbdc2314d1bc49b2f95586098aa114e3423ef6639ea2a63`
+  `9acce427e96cc928aa11c0e4fa20060fec4df75972ab09c122c1f578dc57858f`
 - Rollback SHA-256
   `ef4319e717e3219e2718a1737c4519e80f57c39d0df00d11fe9423affc4b5c79`
 - One transaction for the forward file with

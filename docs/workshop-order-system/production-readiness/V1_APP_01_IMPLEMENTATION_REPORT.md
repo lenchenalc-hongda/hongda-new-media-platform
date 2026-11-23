@@ -59,7 +59,9 @@ Function source: `supabase/functions/wos-v1-verify-image`
 - Requires `WOS_SUPABASE_ALLOWED_REFS`
 - Requires default-OFF `WOS_V1_EDGE_WRITES_ENABLED=true`
 - Uses the caller JWT for Auth, Profile, order and Storage download
-- Requires the exact current DRAFT version for new image verification
+- Requires the exact current DRAFT `V*` version for new image verification
+- Allows QA revision verification only for `WAITING_MATERIAL` /
+  `READINESS_CHECK`, `QA-R*`, the exact M2 Office Gate and QA pin
 - Accepts only four canonical PNG categories
 - Parses PNG chunks, CRC, structure and bounded inflation
 - Recomputes SHA-256 from downloaded bytes

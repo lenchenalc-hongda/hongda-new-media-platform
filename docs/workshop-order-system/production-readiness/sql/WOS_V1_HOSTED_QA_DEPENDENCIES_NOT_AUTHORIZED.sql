@@ -171,7 +171,16 @@ BEGIN
   FOR UPDATE;
   IF NOT FOUND
     OR v_order.order_number NOT LIKE 'QA-NONPROD-%'
-    OR v_order.version_label !~ '^V[1-9][0-9]{0,20}$'
+    OR NOT (
+      (
+        v_order.workflow_status = 'DRAFT'
+        AND v_order.version_label ~ '^V[1-9][0-9]{0,20}$'
+      )
+      OR (
+        v_order.workflow_status IN ('WAITING_MATERIAL', 'READINESS_CHECK')
+        AND v_order.version_label ~ '^QA-R[1-9][0-9]*$'
+      )
+    )
     OR (v_actor.role = 'sales' AND v_actor.id NOT IN (
       v_order.created_by_profile_id, v_order.sales_owner_profile_id
     ))
@@ -415,6 +424,9 @@ BEGIN
     AND profile.is_active = true
     AND profile.role IN ('admin', 'manager', 'sales')
   LIMIT 1;
+  PERFORM pg_advisory_xact_lock(
+    hashtextextended('wos-qa-m2:' || p_order_id::text, 0)
+  );
   SELECT * INTO v_order
   FROM public.wos_production_orders production_order
   WHERE production_order.id = p_order_id
@@ -423,10 +435,29 @@ BEGIN
   IF v_profile.id IS NULL
     OR NOT FOUND
     OR v_order.order_number NOT LIKE 'QA-NONPROD-%'
-    OR v_order.workflow_status <> 'DRAFT'
+    OR NOT (
+      (
+        v_order.workflow_status = 'DRAFT'
+        AND v_order.version_label ~ '^V[1-9][0-9]{0,20}$'
+      )
+      OR (
+        v_order.workflow_status IN ('WAITING_MATERIAL', 'READINESS_CHECK')
+        AND v_order.version_label ~ '^QA-R[1-9][0-9]*$'
+      )
+    )
     OR (v_profile.role = 'sales' AND v_profile.id NOT IN (
       v_order.created_by_profile_id, v_order.sales_owner_profile_id
     ))
+  THEN
+    RAISE EXCEPTION 'RENEWAL_ORDER_NOT_EDITABLE' USING ERRCODE = '42501';
+  END IF;
+  IF v_order.workflow_status <> 'DRAFT'
+    AND NOT (
+      v_order.workflow_status IN ('WAITING_MATERIAL', 'READINESS_CHECK')
+      AND public.wos_qa_revision_gate_allows(
+        v_order.id, v_order.organization_id, v_profile.id
+      )
+    )
   THEN
     RAISE EXCEPTION 'RENEWAL_ORDER_NOT_EDITABLE' USING ERRCODE = '42501';
   END IF;

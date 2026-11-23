@@ -230,6 +230,8 @@ Deno.serve(async request => {
       const access = evaluateWosV1ImageAccess({
         runtimeAuthorized: true,
         writesEnabled: true,
+        qaRevisionAuthorized:
+          Deno.env.get('WOS_V1_QA_REVISION_IMAGES_ENABLED') === 'true',
         profile,
         order,
       });

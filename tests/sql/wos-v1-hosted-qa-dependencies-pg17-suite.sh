@@ -40,12 +40,20 @@ psql_run -q -d "$DB" < \
 psql_run -q -d "$DB" < \
   "$ROOT/tests/sql/wos-v1-hosted-qa-dependencies-pg17-assertions.sql"
 
+before_proofs=$(psql_run -qAt -d "$DB" \
+  -c "select count(*) from public.wos_qa_verified_image_proofs")
+before_receipts=$(psql_run -qAt -d "$DB" \
+  -c "select count(*) from public.wos_qa_trusted_proof_receipts")
+before_enabled_gates=$(psql_run -qAt -d "$DB" \
+  -c "select count(*) from public.wos_qa_p2_m2_gate where enabled")
+[[ "$before_enabled_gates" = '0' ]]
+
 {
   printf "SET wos_v1.qa_hosted_rollback_authorized = 'yes';\n"
   cat "$ROOT/docs/workshop-order-system/production-readiness/sql/WOS_V1_HOSTED_QA_DEPENDENCIES_ROLLBACK_NOT_AUTHORIZED.sql"
 } | psql_run -q -d "$DB"
 
-psql_run -qAt -d "$DB" -c "
+after_state=$(psql_run -qAt -d "$DB" -c "
   SELECT CASE
     WHEN to_regprocedure('public.wos_p7_service_storage_snapshot(text)') IS NULL
       AND to_regprocedure(
@@ -54,14 +62,16 @@ psql_run -qAt -d "$DB" -c "
       AND to_regprocedure(
         'public.wos_v1_renew_expired_image_proof(uuid,uuid,uuid,text,uuid,text,timestamptz,text)'
       ) IS NULL
-      AND EXISTS (
-        SELECT 1 FROM public.wos_qa_verified_image_proofs
-        WHERE image_id='72000000-0000-4000-8000-000000000021'
+      AND (SELECT count(*) FROM public.wos_qa_verified_image_proofs)=$before_proofs
+      AND (SELECT count(*) FROM public.wos_qa_trusted_proof_receipts)=$before_receipts
+      AND NOT EXISTS (
+        SELECT 1 FROM public.wos_qa_p2_m2_gate WHERE enabled
       )
     THEN 'PASS'
     ELSE 'FAIL'
   END
-" | grep -qx 'PASS'
+")
+[[ "$after_state" = 'PASS' ]]
 
 echo 'WOS_V1_HOSTED_QA_DEPENDENCIES_PG17=PASS'
 echo 'WOS_V1_HOSTED_QA_ROLLBACK_PRESERVES_PROOF_HISTORY=PASS'
