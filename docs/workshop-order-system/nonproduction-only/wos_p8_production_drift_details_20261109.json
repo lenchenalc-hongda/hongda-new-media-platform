@@ -1,0 +1,392 @@
+{
+  "schema_version": 1,
+  "observed_utc": "2026-11-09",
+  "source": "Production pg_catalog read-only, no business rows",
+  "project_ref": "amqpvxrurenevniilhtl",
+  "contains_customer_rows": false,
+  "column_targets": [
+    {
+      "table_name": "knowledge_cards",
+      "columns": [
+        "id",
+        "org_id",
+        "title",
+        "category",
+        "applicable_accounts",
+        "applicable_content_types",
+        "customer_type",
+        "is_external_allowed",
+        "core_conclusion",
+        "plain_explanation",
+        "customer_questions",
+        "new_media_expression",
+        "dont_say",
+        "topic_ideas",
+        "script_angles",
+        "owner",
+        "version",
+        "created_at",
+        "updated_at"
+      ]
+    },
+    {
+      "table_name": "scripts",
+      "columns": [
+        "id",
+        "org_id",
+        "topic_id",
+        "account_id",
+        "title",
+        "hook",
+        "main_script",
+        "shot_list",
+        "subtitle_points",
+        "cover_text",
+        "comment_reply",
+        "private_message_cta",
+        "risk_notes",
+        "version",
+        "status",
+        "ai_meta",
+        "created_by",
+        "created_at",
+        "updated_at"
+      ]
+    },
+    {
+      "table_name": "topics",
+      "columns": [
+        "id",
+        "org_id",
+        "account_id",
+        "title",
+        "content_type",
+        "target_audience",
+        "customer_pain",
+        "product_or_process",
+        "source",
+        "priority",
+        "status",
+        "conversion_goal",
+        "notes",
+        "created_by",
+        "created_at",
+        "updated_at"
+      ]
+    }
+  ],
+  "policy_names": [
+    {
+      "tablename": "accounts",
+      "policies": [
+        "org_isolation"
+      ]
+    },
+    {
+      "tablename": "commercial_confirmed_quote_versions",
+      "policies": [
+        "quote_version_read"
+      ]
+    },
+    {
+      "tablename": "commercial_confirmed_quotes",
+      "policies": [
+        "quote_read"
+      ]
+    },
+    {
+      "tablename": "commercial_payment_methods",
+      "policies": [
+        "commercial_payment_methods_admin_insert",
+        "commercial_payment_methods_admin_update",
+        "commercial_payment_methods_read"
+      ]
+    },
+    {
+      "tablename": "commercial_quotation_draft_revisions",
+      "policies": [
+        "commercial_draft_revisions_read"
+      ]
+    },
+    {
+      "tablename": "commercial_quotation_drafts",
+      "policies": [
+        "quotation_drafts_insert",
+        "quotation_drafts_select",
+        "quotation_drafts_update"
+      ]
+    },
+    {
+      "tablename": "cpc_ai_drafts",
+      "policies": [
+        "cpc_ai_drafts_select"
+      ]
+    },
+    {
+      "tablename": "cpc_audit_log",
+      "policies": [
+        "cpc_audit_log_select_management"
+      ]
+    },
+    {
+      "tablename": "cpc_customer_potential_assessments",
+      "policies": [
+        "cpc_potential_rating_select_authorized"
+      ]
+    },
+    {
+      "tablename": "cpc_customer_references",
+      "policies": [
+        "cpc_customer_references_select"
+      ]
+    },
+    {
+      "tablename": "cpc_customer_workspaces",
+      "policies": [
+        "cpc_customer_workspace_select_authorized"
+      ]
+    },
+    {
+      "tablename": "cpc_external_profile_mappings",
+      "policies": [
+        "cpc_external_profile_mappings_select_management"
+      ]
+    },
+    {
+      "tablename": "cpc_project_events",
+      "policies": [
+        "cpc_project_events_select"
+      ]
+    },
+    {
+      "tablename": "cpc_project_members",
+      "policies": [
+        "cpc_project_members_select"
+      ]
+    },
+    {
+      "tablename": "cpc_projects",
+      "policies": [
+        "cpc_projects_select"
+      ]
+    },
+    {
+      "tablename": "cpc_reports",
+      "policies": [
+        "cpc_reports_select"
+      ]
+    },
+    {
+      "tablename": "cpc_work_items",
+      "policies": [
+        "cpc_work_items_select"
+      ]
+    },
+    {
+      "tablename": "glh_activity_events",
+      "policies": [
+        "glh_activity_events_select"
+      ]
+    },
+    {
+      "tablename": "glh_ad_campaigns",
+      "policies": [
+        "glh_ad_campaigns_select"
+      ]
+    },
+    {
+      "tablename": "glh_ad_creatives",
+      "policies": [
+        "glh_ad_creatives_select"
+      ]
+    },
+    {
+      "tablename": "glh_ai_actions",
+      "policies": [
+        "glh_ai_actions_select"
+      ]
+    },
+    {
+      "tablename": "glh_assignments",
+      "policies": [
+        "glh_assignments_select"
+      ]
+    },
+    {
+      "tablename": "glh_audit_events",
+      "policies": [
+        "glh_audit_events_select"
+      ]
+    },
+    {
+      "tablename": "glh_automation_runs",
+      "policies": [
+        "glh_automation_runs_select"
+      ]
+    },
+    {
+      "tablename": "glh_channel_accounts",
+      "policies": [
+        "glh_channel_accounts_select"
+      ]
+    },
+    {
+      "tablename": "glh_contacts",
+      "policies": [
+        "glh_contacts_select"
+      ]
+    },
+    {
+      "tablename": "glh_conversations",
+      "policies": [
+        "glh_conversations_select"
+      ]
+    },
+    {
+      "tablename": "glh_followups",
+      "policies": [
+        "glh_followups_select"
+      ]
+    },
+    {
+      "tablename": "glh_lead_profiles",
+      "policies": [
+        "glh_lead_profiles_select"
+      ]
+    },
+    {
+      "tablename": "glh_lead_scores",
+      "policies": [
+        "glh_lead_scores_select"
+      ]
+    },
+    {
+      "tablename": "glh_leads",
+      "policies": [
+        "glh_leads_select"
+      ]
+    },
+    {
+      "tablename": "glh_manual_work_updates",
+      "policies": [
+        "glh_manual_work_updates_read"
+      ]
+    },
+    {
+      "tablename": "glh_messages",
+      "policies": [
+        "glh_messages_select"
+      ]
+    },
+    {
+      "tablename": "glh_role_bindings",
+      "policies": [
+        "glh_role_bindings_select"
+      ]
+    },
+    {
+      "tablename": "glh_tasks",
+      "policies": [
+        "glh_tasks_select"
+      ]
+    },
+    {
+      "tablename": "glh_webhook_events",
+      "policies": [
+        "glh_webhook_events_select"
+      ]
+    },
+    {
+      "tablename": "leads",
+      "policies": [
+        "Read own leads: sales",
+        "Update own assigned leads: sales"
+      ]
+    },
+    {
+      "tablename": "organizations",
+      "policies": [
+        "organizations_select_own",
+        "organizations_update_admin_own"
+      ]
+    },
+    {
+      "tablename": "profiles",
+      "policies": [
+        "Admins can manage all profiles",
+        "Managers can read org profiles",
+        "Users can read own profile"
+      ]
+    },
+    {
+      "tablename": "review_actions",
+      "policies": [
+        "review_actions_select_org_active"
+      ]
+    },
+    {
+      "tablename": "review_audit_logs",
+      "policies": [
+        "review_audit_logs_select_admin_manager"
+      ]
+    },
+    {
+      "tablename": "review_cases",
+      "policies": [
+        "review_cases_insert",
+        "review_cases_select_org"
+      ]
+    },
+    {
+      "tablename": "review_dict_items",
+      "policies": [
+        "review_dict_items_insert_org_admin",
+        "review_dict_items_select"
+      ]
+    },
+    {
+      "tablename": "review_members",
+      "policies": [
+        "review_members_select_org"
+      ]
+    },
+    {
+      "tablename": "review_metadata",
+      "policies": [
+        "review_metadata_select_org"
+      ]
+    },
+    {
+      "tablename": "review_metadata_items",
+      "policies": [
+        "review_metadata_items_select_org"
+      ]
+    },
+    {
+      "tablename": "review_timeline_events",
+      "policies": [
+        "review_timeline_events_select_org"
+      ]
+    },
+    {
+      "tablename": "review_type_details",
+      "policies": [
+        "review_type_details_select_org"
+      ]
+    },
+    {
+      "tablename": "site_data",
+      "policies": [
+        "anon_insert",
+        "anon_select",
+        "anon_update"
+      ]
+    },
+    {
+      "tablename": "topics",
+      "policies": [
+        "Update topics: admin/manager/operator"
+      ]
+    }
+  ]
+}
