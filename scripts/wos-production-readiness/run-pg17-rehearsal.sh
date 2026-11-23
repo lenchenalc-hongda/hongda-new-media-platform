@@ -12,6 +12,8 @@ RUNTIME_SMOKE="docs/workshop-order-system/production-readiness/sql/WOS_V1_PRODUC
 RUNTIME_ACTIVATION="docs/workshop-order-system/production-readiness/sql/WOS_V1_PRODUCTION_RPC_ACTIVATION_TEMPLATE_NOT_AUTHORIZED.sql"
 RUNTIME_DEACTIVATE="docs/workshop-order-system/production-readiness/sql/WOS_V1_PRODUCTION_RPC_DEACTIVATE_NOT_AUTHORIZED.sql"
 FOUNDATION_CONTAINMENT="docs/workshop-order-system/production-readiness/sql/WOS_V1_PRODUCTION_FOUNDATION_CONTAINMENT_NOT_AUTHORIZED.sql"
+PROOF_RENEWAL="docs/workshop-order-system/production-readiness/sql/V1_APP_01_PROOF_RENEWAL_NOT_AUTHORIZED.sql"
+PROOF_RENEWAL_ROLLBACK="docs/workshop-order-system/production-readiness/sql/V1_APP_01_PROOF_RENEWAL_ROLLBACK_NOT_AUTHORIZED.sql"
 RUNTIME_SECURITY_SIGNATURES="docs/workshop-order-system/production-readiness/evidence/wos_v1_runtime_security_signatures_20261123.ndjson"
 RUNTIME_SECURITY_INACTIVE_MANIFEST="docs/workshop-order-system/production-readiness/wos_v1_runtime_security_inactive_manifest_20261123.json"
 RUNTIME_SECURITY_ACTIVE_MANIFEST="docs/workshop-order-system/production-readiness/wos_v1_runtime_security_active_manifest_20261123.json"
@@ -272,6 +274,7 @@ write_runtime_security_signatures \
   "$BOOTSTRAP_DB" /tmp/wos-v1-p7-security.ndjson
 
 apply_file "$BOOTSTRAP_DB" "$RUNTIME_FORWARD"
+apply_file "$BOOTSTRAP_DB" "$PROOF_RENEWAL"
 
 [[ "$(query_value "$BOOTSTRAP_DB" "SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_name LIKE 'wos_%'")" = '19' ]] \
   || fail 'WOS_RUNTIME_TABLE_COUNT'
@@ -332,6 +335,7 @@ apply_file "$BOOTSTRAP_DB" "$RUNTIME_SMOKE"
 WOS_PG_DOCKER_CONTAINER="$CONTAINER_ID" \
   bash "$ROOT/scripts/wos-production-readiness/run-runtime-concurrency.sh"
 apply_file "$BOOTSTRAP_DB" "$RUNTIME_ROLLBACK"
+apply_file "$BOOTSTRAP_DB" "$PROOF_RENEWAL_ROLLBACK"
 write_runtime_security_signatures \
   "$BOOTSTRAP_DB" /tmp/wos-v1-p7-security-after-runtime-rollback.ndjson
 if ! cmp -s \

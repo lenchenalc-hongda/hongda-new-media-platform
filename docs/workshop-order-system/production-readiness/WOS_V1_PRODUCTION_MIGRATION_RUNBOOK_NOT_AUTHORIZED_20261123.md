@@ -45,12 +45,16 @@ authorization:
 4. `docs/workshop-order-system/production-readiness/sql/WOS_V1_PRODUCTION_RUNTIME_FORWARD_NOT_AUTHORIZED.sql`
    - Adds production-neutral order lifecycle receipts and RPCs with browser
      EXECUTE still revoked.
-5. Deploy project-neutral image proof service with its own exact release gate.
-6. Apply
+5. `docs/workshop-order-system/production-readiness/sql/V1_APP_01_PROOF_RENEWAL_NOT_AUTHORIZED.sql`
+   - Adds the service-only expired-Proof renewal helper required by the new
+     project-neutral Edge source. Install after the runtime proof writer and
+     before Edge deployment or RPC activation.
+6. Deploy project-neutral image proof service with its own exact release gate.
+7. Apply
    `WOS_V1_PRODUCTION_RPC_ACTIVATION_TEMPLATE_NOT_AUTHORIZED.sql`
    - Only after migration and service verification; this exposes eight
      business RPCs to `authenticated`.
-7. Enable the application feature flag separately.
+8. Enable the application feature flag separately.
 
 Do not combine SQL installation, browser release and Production traffic in one
 unreviewed step.
@@ -138,15 +142,17 @@ Preferred order:
 1. Disable Production application feature/write flags.
 2. Apply RPC deactivation template.
 3. Stop any project-neutral proof service invocation.
-4. Apply V1 runtime rollback.
-5. Apply the reviewed P7 rollback.
-6. Apply the WOS Foundation rollback only when preserving no WOS Production
+4. Apply
+   `V1_APP_01_PROOF_RENEWAL_ROLLBACK_NOT_AUTHORIZED.sql`.
+5. Apply V1 runtime rollback.
+6. Apply the reviewed P7 rollback.
+7. Apply the WOS Foundation rollback only when preserving no WOS Production
    data is explicitly approved.
-7. Remove the empty `wos-private` bucket only through an approved Storage API
+8. Remove the empty `wos-private` bucket only through an approved Storage API
    step after independently proving that no object references remain. The
    PostgreSQL disposable rollback intentionally does not model a production
    Storage bucket deletion.
-8. Re-run the 383-row application signature and compare with the pre-window
+9. Re-run the 383-row application signature and compare with the pre-window
    manifest.
 
 Do not drop WOS business history, Proof or receipts as a generic rollback step

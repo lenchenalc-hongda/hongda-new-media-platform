@@ -3,9 +3,11 @@ import Link from 'next/link';
 import AppLayout from '@/components/layout/AppLayout';
 import PageHeader from '@/components/layout/PageHeader';
 import PersistedWorkshopInbox from '@/components/workshop-orders/PersistedWorkshopInbox';
+import ProductionWorkshopInbox from '@/components/workshop-orders/ProductionWorkshopInbox';
 import WorkshopInbox from '@/components/workshop-orders/WorkshopInbox';
 import { isWosQaInboxReadonlyEnabled } from '@/lib/workshop-orders/api-contract';
 import { EMPTY_WORKSHOP_QUEUE } from '@/lib/workshop-orders/readiness';
+import { canExposeWosV1App } from '@/lib/workshop-orders/production-app-contract';
 
 export const metadata: Metadata = {
   title: '车间收件箱与齐套检查 | 宏达车间',
@@ -18,6 +20,13 @@ export default function WorkshopInboxPage() {
     authMode: process.env.AUTH_MODE,
     enabled: process.env.WOS_QA_INBOX_READONLY_ENABLED,
     supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL,
+  });
+  const productionLive = canExposeWosV1App({
+    vercelEnv: process.env.VERCEL_ENV,
+    supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL,
+    authMode: process.env.AUTH_MODE,
+    appEnabled: process.env.WOS_V1_APP_ENABLED,
+    writesEnabled: process.env.WOS_V1_APP_WRITES_ENABLED,
   });
   return (
     <AppLayout>
@@ -34,7 +43,9 @@ export default function WorkshopInboxPage() {
         }
       />
 
-      {realReadEnabled
+      {productionLive
+        ? <ProductionWorkshopInbox />
+        : realReadEnabled
         ? <PersistedWorkshopInbox />
         : <WorkshopInbox queue={EMPTY_WORKSHOP_QUEUE} />}
     </AppLayout>

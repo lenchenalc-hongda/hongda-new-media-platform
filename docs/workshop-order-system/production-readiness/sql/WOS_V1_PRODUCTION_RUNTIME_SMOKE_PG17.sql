@@ -225,11 +225,33 @@ BEGIN
     WHEN SQLSTATE '42501' THEN NULL;
   END;
 
+  BEGIN
+    PERFORM public.wos_create_production_order(
+      '51000000-0000-4000-8000-000000000094',
+      jsonb_build_object(
+        'orderNumber','WOS-PROD-CI-UNSUPPORTED-SPLIT',
+        'customerNameSnapshot','Synthetic Customer',
+        'productName','Synthetic Product',
+        'splitDelivery',true,
+        'salesOwnerProfileId','11111111-1111-4111-8111-111111111111',
+        'projectOwnerProfileId','11111111-1111-4111-8111-111111111111',
+        'priority','MEDIUM',
+        'requestedQuantity',100,
+        'currentBatchQuantity',100,
+        'productMaterial','Synthetic Material'
+      )
+    );
+    RAISE EXCEPTION 'UNSUPPORTED_SPLIT_DELIVERY_ACCEPTED';
+  EXCEPTION
+    WHEN SQLSTATE '22023' THEN NULL;
+  END;
+
   IF (SELECT count(*) FROM public.wos_production_orders) <> 0 THEN
     RAISE EXCEPTION 'CROSS_ORG_ORDER_ROW_PERSISTED';
   END IF;
 END;
 $cross_org_rejections$;
+\echo WOS_V1_CROSS_ORG_AND_UNSUPPORTED_SPLIT_DELIVERY_REJECTED=PASS
 
 SELECT (
   public.wos_create_production_order(
@@ -370,6 +392,31 @@ SELECT public.wos_p7_record_trusted_image_proof(
   '2026-11-23T00:00:03.123456Z',
   repeat('4',64)
 );
+
+UPDATE public.wos_verified_image_proofs
+SET verified_at = clock_timestamp() - interval '11 minutes',
+    expires_at = clock_timestamp() - interval '1 minute'
+WHERE image_id = '71000000-0000-4000-8000-000000000001';
+
+DO $renew_expired_proof$
+BEGIN
+  IF public.wos_v1_renew_expired_image_proof(
+    '71000000-0000-4000-8000-000000000001',
+    current_setting('wos_v1.smoke_order_id')::uuid,
+    '10101010-1010-4010-8010-101010101010',
+    current_setting('wos_v1.smoke_order_prefix')
+      || 'product/versions/V1/71000000-0000-4000-8000-000000000001/proof.png',
+    '61000000-0000-4000-8000-000000000001',
+    'v-product-1',
+    '2026-11-23T00:00:00.123456Z',
+    repeat('1',64)
+  )->>'status' <> 'RENEWED'
+  THEN
+    RAISE EXCEPTION 'EXPIRED_PROOF_RENEWAL_FAILED';
+  END IF;
+END;
+$renew_expired_proof$;
+\echo WOS_V1_EXPIRED_PROOF_RENEWAL=PASS
 
 SET request.jwt.claim.role='authenticated';
 SET request.jwt.claim.sub='10101010-1010-4010-8010-101010101010';

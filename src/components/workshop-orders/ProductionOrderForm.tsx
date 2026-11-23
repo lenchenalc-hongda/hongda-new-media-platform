@@ -3,6 +3,7 @@
 import React, { useState, type ChangeEvent } from 'react';
 import LiveQaProductionSubmit from './LiveQaProductionSubmit';
 import LiveQaCpcDraft from './LiveQaCpcDraft';
+import ProductionOfficeWorkflow from './ProductionOfficeWorkflow';
 import {
   PRODUCTION_ORDER_ENTRY_SECTIONS,
   createEmptyProductionOrderDraft,
@@ -15,7 +16,15 @@ import {
 const inputClassName =
   'mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500';
 
-export default function ProductionOrderForm({ qaLive = false }: { qaLive?: boolean }) {
+export default function ProductionOrderForm({
+  qaLive = false,
+  productionLive = false,
+  productionWritesEnabled = false,
+}: {
+  qaLive?: boolean;
+  productionLive?: boolean;
+  productionWritesEnabled?: boolean;
+}) {
   const [draft, setDraft] = useState<ProductionOrderDraft>(
     createEmptyProductionOrderDraft,
   );
@@ -169,7 +178,11 @@ export default function ProductionOrderForm({ qaLive = false }: { qaLive?: boole
           <div>
             <p className="text-sm font-semibold text-blue-950">本地资料完整性</p>
             <p className="mt-1 text-xs text-blue-800">
-              {qaLive ? '先检查字段完整性，再使用下方受控 QA 区域上传图片并提交真实非生产测试单。' : '本页面仅作本地录入与校验，不会保存草稿，也不会向数据库提交生产单。'}
+              {qaLive
+                ? '先检查字段完整性，再使用下方受控 QA 区域上传图片并提交真实非生产测试单。'
+                : productionLive
+                  ? '先完成字段检查，再通过正式数据库事务创建订单、验证四类图片并原子提交。'
+                  : '本页面仅作本地录入与校验，不会保存草稿，也不会向数据库提交生产单。'}
             </p>
           </div>
           <div className="text-right">
@@ -200,7 +213,11 @@ export default function ProductionOrderForm({ qaLive = false }: { qaLive?: boole
             role="status"
             className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-800"
           >
-            {qaLive ? '本地字段完整性检查通过。若要提交非生产单，请继续选择图片并点击下方专用 QA 提交按钮。' : '本地完整性检查通过：资料已齐。当前页面未保存、未提交，请等待后续受控的正式提交功能。'}
+            {qaLive
+              ? '本地字段完整性检查通过。若要提交非生产单，请继续选择图片并点击下方专用 QA 提交按钮。'
+              : productionLive
+                ? '本地字段完整性检查通过。请在下方正式区域选择四类 PNG，完成图片验证后提交。'
+                : '本地完整性检查通过：资料已齐。当前页面未保存、未提交，请等待后续受控的正式提交功能。'}
           </div>
         )}
         {hasValidated && !validation.ok && (
@@ -235,6 +252,14 @@ export default function ProductionOrderForm({ qaLive = false }: { qaLive?: boole
 
       {qaLive && (
         <LiveQaCpcDraft draft={validation.normalized} valid={validation.ok} />
+      )}
+
+      {productionLive && (
+        <ProductionOfficeWorkflow
+          draft={validation.normalized}
+          valid={validation.ok}
+          writeEnabled={productionWritesEnabled}
+        />
       )}
 
       {qaLive && (
@@ -272,7 +297,11 @@ export default function ProductionOrderForm({ qaLive = false }: { qaLive?: boole
       )}
       <div className="sticky bottom-0 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-gray-200 bg-white/95 p-3 shadow-sm backdrop-blur">
         <p className="text-xs text-gray-500">
-          {qaLive ? 'QA 提交只写入隔离数据库；同标签页刷新可恢复合成订单编号与原幂等键，网络结果未知时先到车间 Inbox 对账。' : '校验结果只保留在当前页面，刷新后不会恢复，也不会写入浏览器存储。'}
+          {qaLive
+            ? 'QA 提交只写入隔离数据库；同标签页刷新可恢复合成订单编号与原幂等键，网络结果未知时先到车间 Inbox 对账。'
+            : productionLive
+              ? '正式提交以数据库事务回执为准；网络未知时保持当前页面并原样重试，客户端不会伪造成功。'
+              : '校验结果只保留在当前页面，刷新后不会恢复，也不会写入浏览器存储。'}
         </p>
         <button
           type="submit"

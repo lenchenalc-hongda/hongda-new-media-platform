@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
   "phase": "activated",
-  "row_count": 62,
-  "aggregate_sha256": "01aba735e8f9aebc78351ee3ef525b917de2b83c69e304db122a8d4461a34df4",
+  "row_count": 63,
+  "aggregate_sha256": "f142b6fd7847b7278d52ae0b7b18b41a0b0ec996a86a5765bc6c79381659ae55",
   "rows": [
     {
       "acl": [
@@ -41,7 +41,7 @@
       "config": [
         "search_path=\"\""
       ],
-      "definition_md5": "b8f50431655553c48b1875934b59d590",
+      "definition_md5": "1817e5e8da8fba04e6aac06e8f907162",
       "security_definer": true
     },
     {
@@ -350,6 +350,26 @@
         "search_path=\"\""
       ],
       "definition_md5": "8f3d3a47464ad90d03f4da27257c236e",
+      "security_definer": true
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "privilege": "EXECUTE"
+        }
+      ],
+      "kind": "function",
+      "name": "wos_v1_renew_expired_image_proof(uuid,uuid,uuid,text,uuid,text,timestamp with time zone,text)",
+      "owner": "postgres",
+      "config": [
+        "search_path=\"\""
+      ],
+      "definition_md5": "21e0b6f046ee564bf38cbffc994064ea",
       "security_definer": true
     },
     {

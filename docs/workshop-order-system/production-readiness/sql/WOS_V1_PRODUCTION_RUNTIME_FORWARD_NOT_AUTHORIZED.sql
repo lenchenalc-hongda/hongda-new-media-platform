@@ -858,6 +858,11 @@ BEGIN
   THEN
     RAISE EXCEPTION 'INVALID_INPUT' USING ERRCODE = '22023';
   END IF;
+  IF p_payload ? 'splitDelivery'
+    AND p_payload->'splitDelivery' IS DISTINCT FROM 'false'::jsonb
+  THEN
+    RAISE EXCEPTION 'SPLIT_DELIVERY_NOT_SUPPORTED' USING ERRCODE = '22023';
+  END IF;
 
   v_sales_owner := (p_payload->>'salesOwnerProfileId')::uuid;
   v_project_owner := (p_payload->>'projectOwnerProfileId')::uuid;
