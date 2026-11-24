@@ -1,0 +1,56 @@
+# QA Proof Service Guard PG17 Evidence
+
+Status: `OFFLINE_PASS / QA_REPLACEMENT_NOT_AUTHORIZED`
+
+Raw execution log:
+`evidence/pg17-proof-guard-20261124/run.log`.
+
+```ini
+POSTGRES_MAJOR=17
+POSTGREST=v12.2.12
+DISPOSABLE_CONTAINERS=YES
+CLOUD_CONNECTION=NONE
+```
+
+## Test Results
+
+```ini
+OLD_DEFINITION_PREFLIGHT=PASS
+PROOF_GUARD_REPLACEMENT=PASS
+PROOF_GUARD_RECOVERY=PASS
+PROOF_GUARD_REPLACEMENT_RESTORED=PASS
+PROOF_GUARD_DIRECT_CONTEXT=PASS
+POSTGREST_SERVICE_ROLE_GUARD=PASS
+POSTGREST_AUTHENTICATED_DENIED=PASS
+POSTGREST_ANON_DENIED=PASS
+POSTGREST_NO_AUTH_DENIED=PASS
+POSTGREST_FAKE_CLAIM_DENIED=PASS
+POSTGREST_FORGED_SIGNATURE_DENIED=PASS
+POSTGREST_SERVICE_APIKEY_WITH_USER_JWT_DENIED=PASS
+HOSTED_SMOKE_DEFAULT_DENY=PASS
+PROOF_WRITES=0
+RECEIPT_WRITES=0
+```
+
+The direct database tests prove that manually setting
+`request.jwt.claims.role=service_role` from `postgres` or an ordinary database
+role does not satisfy the guard. Only the validated PostgREST context with
+`session_user=authenticator`, transaction role `service_role`, and JWT claims
+role `service_role` passes.
+
+Raw local runner:
+
+```text
+tests/sql/run-wos-proof-service-guard-pg17.sh
+```
+
+## Safety
+
+```ini
+QA_FUNCTION_REPLACEMENT_INSTALLED=NO
+HOSTED_SMOKE_EXECUTED=NO
+PROOFS_CREATED=0
+M2_GATE_OPENED=NO
+EDGE_CHANGED=NO
+PRODUCTION_CHANGED=NO
+```

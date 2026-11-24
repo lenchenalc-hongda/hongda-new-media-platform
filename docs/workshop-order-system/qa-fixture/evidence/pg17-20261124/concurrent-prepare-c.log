@@ -1,0 +1,4 @@
+SET
+SET
+psql:/work/tests/sql/wos-v1-qa-canonical-fixture-pg17-concurrent-prepare.sql:8: ERROR:  FIXTURE_ACTIVE_LIMIT_REACHED
+CONTEXT:  PL/pgSQL function public.wos_qa_create_canonical_v1_fixture(jsonb) line 151 at RAISE

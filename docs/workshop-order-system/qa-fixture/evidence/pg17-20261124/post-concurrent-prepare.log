@@ -1,0 +1,9 @@
+SET
+SET
+DO
+RESET
+RESET
+               result
+------------------------------------
+ CONCURRENT_PREPARE_ASSERTIONS=PASS
+(1 row)

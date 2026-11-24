@@ -1,0 +1,70 @@
+{
+  "manifestVersion": 1,
+  "manifestSha256": "REPLACE_WITH_CANONICAL_JSON_SHA256",
+  "authorizationId": "WOS-V1-QA-SYNTHETIC-FIXTURE-20261124",
+  "status": "PREPARED",
+  "fixtureRequestId": "00000000-0000-4000-8000-000000000001",
+  "orderId": "00000000-0000-4000-8000-000000000002",
+  "organizationId": "0ff53d93-2b9e-48b9-8113-a4768c39cdd2",
+  "officeProfileId": "f8adf44a-f04e-44b4-9c82-8b96508097bb",
+  "officeUserId": "3c0d8866-498a-4e61-a602-28b7a83f75f5",
+  "orderNumber": "QA-NONPROD-00000000-0000-4000-8000-000000000001",
+  "orderVersion": 1,
+  "versionLabel": "QA-R1",
+  "orderStatus": "WAITING_MATERIAL",
+  "baselineId": "00000000-0000-4000-8000-000000000003",
+  "images": [
+    {
+      "category": "PRODUCT",
+      "imageId": "00000000-0000-4000-8000-000000000011",
+      "storagePath": "organizations/0ff53d93-2b9e-48b9-8113-a4768c39cdd2/wos/production-order/00000000-0000-4000-8000-000000000002/images/product/versions/QA-R1/00000000-0000-4000-8000-000000000011/source.png",
+      "storageObjectId": "00000000-0000-4000-8000-000000000021",
+      "storageObjectVersion": "REPLACE_WITH_REAL_VERSION",
+      "storageObjectUpdatedAt": "REPLACE_WITH_REAL_TIMESTAMPTZ",
+      "sha256": "REPLACE_WITH_64_LOWERCASE_HEX_CHARACTERS"
+    },
+    {
+      "category": "FILM_PATTERN",
+      "imageId": "00000000-0000-4000-8000-000000000012",
+      "storagePath": "organizations/0ff53d93-2b9e-48b9-8113-a4768c39cdd2/wos/production-order/00000000-0000-4000-8000-000000000002/images/film-pattern/versions/QA-R1/00000000-0000-4000-8000-000000000012/source.png",
+      "storageObjectId": "00000000-0000-4000-8000-000000000022",
+      "storageObjectVersion": "REPLACE_WITH_REAL_VERSION",
+      "storageObjectUpdatedAt": "REPLACE_WITH_REAL_TIMESTAMPTZ",
+      "sha256": "REPLACE_WITH_64_LOWERCASE_HEX_CHARACTERS"
+    },
+    {
+      "category": "CUSTOMER_APPROVED_SAMPLE",
+      "imageId": "00000000-0000-4000-8000-000000000013",
+      "storagePath": "organizations/0ff53d93-2b9e-48b9-8113-a4768c39cdd2/wos/production-order/00000000-0000-4000-8000-000000000002/images/customer-approved-sample/versions/QA-R1/00000000-0000-4000-8000-000000000013/source.png",
+      "storageObjectId": "00000000-0000-4000-8000-000000000023",
+      "storageObjectVersion": "REPLACE_WITH_REAL_VERSION",
+      "storageObjectUpdatedAt": "REPLACE_WITH_REAL_TIMESTAMPTZ",
+      "sha256": "REPLACE_WITH_64_LOWERCASE_HEX_CHARACTERS"
+    },
+    {
+      "category": "SIGNED_SAMPLE",
+      "imageId": "00000000-0000-4000-8000-000000000014",
+      "storagePath": "organizations/0ff53d93-2b9e-48b9-8113-a4768c39cdd2/wos/production-order/00000000-0000-4000-8000-000000000002/images/signed-sample/versions/QA-R1/00000000-0000-4000-8000-000000000014/source.png",
+      "storageObjectId": "00000000-0000-4000-8000-000000000024",
+      "storageObjectVersion": "REPLACE_WITH_REAL_VERSION",
+      "storageObjectUpdatedAt": "REPLACE_WITH_REAL_TIMESTAMPTZ",
+      "sha256": "REPLACE_WITH_64_LOWERCASE_HEX_CHARACTERS"
+    }
+  ],
+  "expectedCounts": {
+    "orders": 1,
+    "referenceImages": 4,
+    "privateBuckets": 4,
+    "currentBaselines": 1,
+    "baselineItems": 4,
+    "proofs": 0,
+    "receipts": 0
+  },
+  "signoff": {
+    "office": false,
+    "workshop": false,
+    "proofSetDigest": false
+  },
+  "canStart": false,
+  "byteVerification": "EXTERNAL_REQUIRED_NOT_PROVEN"
+}

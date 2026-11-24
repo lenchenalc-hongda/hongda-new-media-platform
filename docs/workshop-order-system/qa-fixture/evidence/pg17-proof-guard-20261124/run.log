@@ -1,0 +1,99 @@
+DO
+GRANT ROLE
+CREATE FUNCTION
+REVOKE
+GRANT
+INSERT 0 1
+INSERT 0 4
+SET
+                                                                                                                                                                                                                    wos_qa_create_canonical_v1_fixture
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ {"stage": "PREPARED", "status": "CREATED", "orderId": "ba38e41b-8cac-469c-aabd-00b6ada033e2", "canStart": false, "orderNumber": "QA-NONPROD-c3e8cf8d-656b-47cb-9242-21d23e53f4cc", "orderStatus": "WAITING_MATERIAL", "orderVersion": 1, "versionLabel": "QA-R1", "organizationId": "0ff53d93-2b9e-48b9-8113-a4768c39cdd2", "manifestVersion": 1, "officeProfileId": "f8adf44a-f04e-44b4-9c82-8b96508097bb", "fixtureRequestId": "c3e8cf8d-656b-47cb-9242-21d23e53f4cc"}
+(1 row)
+
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  wos_qa_create_canonical_v1_fixture
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ {"stage": "FINALIZED", "images": [{"sha256": "bd99f3f0729cdb94dfa4a6de3f272c6a1cf0e083b2b51e15449716412ea0621f", "imageId": "e1768f48-43c3-40e9-8104-e5c5007c7be7", "category": "PRODUCT", "storagePath": "organizations/0ff53d93-2b9e-48b9-8113-a4768c39cdd2/wos/production-order/ba38e41b-8cac-469c-aabd-00b6ada033e2/images/product/versions/QA-R1/e1768f48-43c3-40e9-8104-e5c5007c7be7/source.png", "storageObjectId": "5d0b0110-7f9d-4114-9f5c-866da8fbf838", "storageObjectVersion": "416eab87-52e5-458b-b05d-48aeb12d1e5e", "storageObjectUpdatedAt": "2026-11-24T13:29:16.065939+00:00"}, {"sha256": "08fa384f326ba08d1f0189c842ab30c8e57869a95524fb3ad1725ff6411af4fc", "imageId": "90cfc658-9297-430b-9ba7-382950e73997", "category": "FILM_PATTERN", "storagePath": "organizations/0ff53d93-2b9e-48b9-8113-a4768c39cdd2/wos/production-order/ba38e41b-8cac-469c-aabd-00b6ada033e2/images/film-pattern/versions/QA-R1/90cfc658-9297-430b-9ba7-382950e73997/source.png", "storageObjectId": "99d6d917-7bba-43f8-9728-07a962a8d500", "storageObjectVersion": "88b2e2d5-9c3e-46cd-9be3-835fe45dfb26", "storageObjectUpdatedAt": "2026-11-24T13:29:17.495855+00:00"}, {"sha256": "0e5ee99139dfbed30c4564107bb5f1c01f05a790443aef25a923857e60b37b68", "imageId": "e62c8540-4dbe-4bbb-b628-6ded3a4ef7a8", "category": "CUSTOMER_APPROVED_SAMPLE", "storagePath": "organizations/0ff53d93-2b9e-48b9-8113-a4768c39cdd2/wos/production-order/ba38e41b-8cac-469c-aabd-00b6ada033e2/images/customer-approved-sample/versions/QA-R1/e62c8540-4dbe-4bbb-b628-6ded3a4ef7a8/source.png", "storageObjectId": "561a222e-dcf0-45ff-9cd7-bdf7c184ba12", "storageObjectVersion": "8cfa5efb-2851-401a-83ca-0cd81e0fef9a", "storageObjectUpdatedAt": "2026-11-24T13:29:18.413607+00:00"}, {"sha256": "dd8cf7706ae264ae622220b74b29ac12d79cdb2fd49215f280fa762bce431302", "imageId": "3990b0b6-5220-4d68-b0f0-0ceb52fc1448", "category": "SIGNED_SAMPLE", "storagePath": "organizations/0ff53d93-2b9e-48b9-8113-a4768c39cdd2/wos/production-order/ba38e41b-8cac-469c-aabd-00b6ada033e2/images/signed-sample/versions/QA-R1/3990b0b6-5220-4d68-b0f0-0ceb52fc1448/source.png", "storageObjectId": "dbfb23d3-8b0f-47ca-8fa3-47ba649124ce", "storageObjectVersion": "f35ec83b-c8ef-498c-aaa9-8dec84da4f5b", "storageObjectUpdatedAt": "2026-11-24T13:29:19.350663+00:00"}], "status": "CREATED", "orderId": "ba38e41b-8cac-469c-aabd-00b6ada033e2", "canStart": false, "operation": "FINALIZE", "requestId": "c3e8cf8d-656b-47cb-9242-21d23e53f4cc", "baselineId": "db30fc83-92c9-4ff8-bf78-3f3ad556db99", "orderNumber": "QA-NONPROD-c3e8cf8d-656b-47cb-9242-21d23e53f4cc", "orderStatus": "WAITING_MATERIAL", "orderVersion": 1, "versionLabel": "QA-R1", "officeSignoff": false, "organizationId": "0ff53d93-2b9e-48b9-8113-a4768c39cdd2", "manifestVersion": 1, "officeProfileId": "f8adf44a-f04e-44b4-9c82-8b96508097bb", "workshopSignoff": false, "byteVerification": "EXTERNAL_REQUIRED_NOT_PROVEN", "baselineItemCount": 4, "trustedProofCount": 0, "referenceImageCount": 4}
+(1 row)
+
+RESET
+DO
+             result
+--------------------------------
+ PROOF_GUARD_FIXTURE_SETUP=PASS
+(1 row)
+
+BEGIN
+DO
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+REVOKE
+REVOKE
+REVOKE
+GRANT
+GRANT
+GRANT
+DO
+COMMIT
+PROOF_GUARD_REPLACEMENT=PASS
+SET
+DO
+RESET
+SET
+SET
+DO
+RESET
+RESET
+SET
+DO
+RESET
+SET
+DO
+RESET
+DO
+             result
+---------------------------------
+ PROOF_GUARD_DIRECT_CONTEXT=PASS
+(1 row)
+
+BEGIN
+DO
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+REVOKE
+REVOKE
+REVOKE
+GRANT
+GRANT
+GRANT
+DO
+COMMIT
+PROOF_GUARD_RECOVERY=PASS
+BEGIN
+DO
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+REVOKE
+REVOKE
+REVOKE
+GRANT
+GRANT
+GRANT
+DO
+COMMIT
+PROOF_GUARD_REPLACEMENT_RESTORED=PASS
+PROOF_GUARD_REPLACEMENT=PASS
+PROOF_GUARD_RECOVERY=PASS
+PROOF_GUARD_DIRECT_CONTEXT=PASS
+POSTGREST_SERVICE_ROLE_GUARD=PASS
+POSTGREST_AUTHENTICATED_DENIED=PASS
+POSTGREST_ANON_DENIED=PASS
+POSTGREST_NO_AUTH_DENIED=PASS
+POSTGREST_FAKE_CLAIM_DENIED=PASS
+POSTGREST_FORGED_SIGNATURE_DENIED=PASS
+POSTGREST_SERVICE_APIKEY_WITH_USER_JWT_DENIED=PASS
+PROOF_WRITES=0
+RECEIPT_WRITES=0

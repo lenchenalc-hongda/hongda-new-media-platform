@@ -1,0 +1,7 @@
+SET
+DO
+RESET
+          result
+--------------------------
+ FINALIZE_ASSERTIONS=PASS
+(1 row)
