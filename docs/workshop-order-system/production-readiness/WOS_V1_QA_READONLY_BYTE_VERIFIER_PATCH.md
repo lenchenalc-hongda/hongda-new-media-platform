@@ -49,6 +49,24 @@ values alone.
 The function never calls proof renewal, proof recording, receipt creation or a
 business RPC. It does not write the database.
 
+## Expired-Proof Pre-Download Gate
+
+The request flow now separates metadata preflight from byte verification:
+
+1. Resolve the active Profile, organization, order and exact version.
+2. Run canonical-path, Proof scope, SHA-256 declaration, Storage object ID,
+   object version and microsecond update-time checks for all four images.
+3. Reject `PROOF_EXPIRED`, missing Proof, invalid metadata or an order switch
+   while the download counter is still zero.
+4. Re-read the order snapshot.
+5. Only after all four images pass preflight, download the first PNG.
+6. Repeat Proof/Storage snapshots after each download and require stable
+   objects, valid expiry and order version before returning success.
+
+The request-level behavior test uses injected request dependencies and counts
+actual download and mutation invocations. It does not infer ordering from
+source strings.
+
 ## Security Boundary
 
 The trusted service client is used only for two narrow reads:
@@ -114,6 +132,12 @@ Storage path or read-only constraint was relaxed.
 - exact `expires_at` boundary rejection and one-microsecond-before acceptance
 - production-format millisecond `checked_at` cannot accept a Proof expiring
   later in that same millisecond
+- first and fourth expired Proofs reject with zero downloads
+- missing Proof and Storage identity mismatch reject with zero downloads
+- all four valid images are required before any download
+- Proof expiry after download begins rejects the request
+- order switch before download rejects with zero downloads
+- default-off runtime performs zero downloads
 - Storage update without a matching Proof update
 - order version switch and one stale image among the four categories
 - all four current-version images
@@ -138,9 +162,11 @@ added so default-off, Origin, runtime, content-type and JWT-presence decisions
 are directly testable. The reviewed current files are:
 
 ```text
-CURRENT_EDGE_INDEX_SHA256=fe97273931416403f6008156df7831a0a4abf8f151793f0258e9f523fa58bdd7
-CURRENT_CORE_SHA256=3d3487b6c5cf792bcb58bca5d2a30c4fdcc2f7ef943da5af7c09a74d3471918c
+CURRENT_EDGE_INDEX_SHA256=f05b57809719c8b88d2dd7720c70f309bd95705d8d829b168ce04c7ecd8a2db7
+CURRENT_EDGE_HANDLER_SHA256=2be70cbe1a9fddc9f29b0b207f33de3a39f8e9a04f090ac6654d70d8636a6056
+CURRENT_CORE_SHA256=da2838a5ee7b76a4bc9f7d33d67ce87cf2e981baf564c92898e6501b5a9fef58
 CURRENT_TEST_SHA256=4a640c1a0066eaccde7c2ce4a74ae77f4630ad51eed2ddcb782d35cb55d387b4
+CURRENT_REQUEST_TEST_SHA256=eef2a742563c3603fdc891eb81a3322d3b61b8d017ad95b32719d891e052aa72
 ```
 
 `deno check --sloppy-imports` and the Deno-run behavior test both pass. The
@@ -150,9 +176,11 @@ the extensionless core path used by the TypeScript test runner.
 Current Git blob IDs:
 
 ```text
-23203ddc55e9a6185f81d8a3a7e401f815445719  Edge Index
-a56c8a7ff512b3068fab170720ecaacdae14329a  Core
+12918607dd64d3ad5848a2b02cab93891171e686  Edge Index
+7b684e3017a2bc6c829ab9afb750b853abed2aaa  Handler
+3444d71066c3f50aaf547aff3c2346228d442330  Core
 e74e43a182f714cc22407dd081a9164759fc2319  Test
+e285b6a2f5697c9015bd7555ba2475428cc73dbf  Request-order test
 ```
 
 ## Remaining Authorization

@@ -347,6 +347,51 @@ function proofCurrentAt(
     && checkedAt.latestMicros < expiresAt;
 }
 
+export function preflightWosV1ReadOnlyImage(input: {
+  readonly image: WosV1ReadOnlyImage;
+  readonly order: WosV1ReadOnlyOrder;
+  readonly proof: WosV1ReadOnlyProof;
+  readonly snapshot: WosV1ObjectSnapshot;
+  readonly checkedAt: string;
+}): {
+  readonly ok: boolean;
+  readonly code: 'VALID' | WosV1ReadOnlyFailureCode;
+} {
+  const checkedAt = timestampInterval(input.checkedAt);
+  if (!checkedAt
+    || !proofScopeMatches({
+      proof: input.proof,
+      image: input.image,
+      order: input.order,
+    })) {
+    return { ok: false, code: 'PROOF_METADATA_MISMATCH' };
+  }
+  if (!proofObjectIdentityMatches(input.proof, input.snapshot)) {
+    return { ok: false, code: 'PROOF_METADATA_MISMATCH' };
+  }
+  if (!proofCurrentAt(input.proof, checkedAt)) {
+    return { ok: false, code: 'PROOF_EXPIRED' };
+  }
+  const declaredSize = Number(input.snapshot.byteSize);
+  if (!Number.isSafeInteger(declaredSize)
+    || declaredSize < WOS_V1_READONLY_MIN_BYTES
+    || declaredSize > WOS_V1_READONLY_MAX_BYTES
+    || input.snapshot.mimeType !== 'image/png') {
+    return { ok: false, code: 'PRIVATE_BINARY_SIZE_MISMATCH' };
+  }
+  const expectedPath = canonicalWosV1ImagePath({
+    organizationId: input.order.organization_id,
+    orderId: input.order.id,
+    versionLabel: input.order.version_label,
+    imageId: input.image.imageId,
+    category: input.image.category,
+  });
+  if (expectedPath !== input.image.storagePath) {
+    return { ok: false, code: 'PROOF_METADATA_MISMATCH' };
+  }
+  return { ok: true, code: 'VALID' };
+}
+
 export async function verifyWosV1ReadOnlyImage(input: {
   readonly image: WosV1ReadOnlyImage;
   readonly order: WosV1ReadOnlyOrder;

@@ -1,6 +1,6 @@
 # PR #279 QA Read-Only Edge Deployment Package
 
-Status: `PREPARED_NOT_AUTHORIZED`
+Status: `SOURCE_FIX_PREPARED_NOT_DEPLOYED`
 
 This package prepares one isolated QA deployment. It does not authorize or
 record a deployment.
@@ -34,13 +34,16 @@ wos-v1-verify-image
 
 ## Source Identity
 
-The authorization must bind the final PR #279 Git HEAD in addition to these
-byte fingerprints:
+The currently deployed version is still the previously authorized v1. The
+following source is the new, undeployed candidate and must not be represented
+as deployed:
 
 ```text
-3d3487b6c5cf792bcb58bca5d2a30c4fdcc2f7ef943da5af7c09a74d3471918c  core.ts
-fe97273931416403f6008156df7831a0a4abf8f151793f0258e9f523fa58bdd7  index.ts
+da2838a5ee7b76a4bc9f7d33d67ce87cf2e981baf564c92898e6501b5a9fef58  core.ts
+2be70cbe1a9fddc9f29b0b207f33de3a39f8e9a04f090ac6654d70d8636a6056  handler.ts
+f05b57809719c8b88d2dd7720c70f309bd95705d8d829b168ce04c7ecd8a2db7  index.ts
 4a640c1a0066eaccde7c2ce4a74ae77f4630ad51eed2ddcb782d35cb55d387b4  behavior test
+eef2a742563c3603fdc891eb81a3322d3b61b8d017ad95b32719d891e052aa72  request-order test
 ```
 
 ## Deployment Commands
@@ -92,12 +95,36 @@ update plan. Historical expiry must not be edited merely to manufacture PASS.
 
 ## Rollback
 
-The function is new, so rollback is deletion of this function only, under
-explicit authorization:
+The function already exists as v1. A failed replacement must restore the v1
+source, not delete the function. The immutable rollback source is commit
+`f964690965ee21a5c6b7c2b5cca8b15a5a83ed37`.
 
-```bash
-supabase functions delete wos-v1-verify-image-readonly \
-  --project-ref xulmpqaknlwqqculbsek
+Before replacement, preserve a checkout/archive of that commit and verify:
+
+```text
+fe97273931416403f6008156df7831a0a4abf8f151793f0258e9f523fa58bdd7  index.ts
+3d3487b6c5cf792bcb58bca5d2a30c4fdcc2f7ef943da5af7c09a74d3471918c  core.ts
+f17315be9c9841e020df093b2ae8f835733e21ff6703aa3ec986a4ac62e6a84d  wos-v1-verify-image/core.ts
+fa2690fdb01030f478552aff19893520d94615dd6f52a2b13672448eaa62ecdf  shared PNG integrity
+```
+
+If the new version does not pass closed-state acceptance:
+
+1. Keep `WOS_V1_EDGE_READONLY_VERIFY_ENABLED` unset or `false`.
+2. Stop all new requests.
+3. Deploy only `wos-v1-verify-image-readonly` from the verified
+   `f964690...` archive with `verify_jwt=true`.
+4. Confirm the resulting version serves the recorded v1 source hashes and
+   expected v1 bundle `14e962177d74ca4982059134da1a6d3383e3548fb0bd66f38e6df2fd72c3113f`.
+5. Verify the function returns the expected closed-state `503`.
+
+The rollback deploy creates a new immutable function version containing the v1
+source; it does not restore the numeric version label to 1.
+
+Deleting the function is prohibited:
+
+```text
+supabase functions delete wos-v1-verify-image-readonly
 ```
 
 Do not delete or redeploy `wos-v1-verify-image`. Do not change QA gates,
@@ -107,12 +134,19 @@ Storage policies, RLS, Proof rows, orders or Production.
 
 The next authorization must bind:
 
-1. final PR #279 HEAD;
-2. the two source SHA-256 values above;
+1. final PR #279 HEAD after the order fix commit;
+2. the core, handler and index SHA-256 values above;
 3. QA project `xulmpqaknlwqqculbsek`;
-4. function `wos-v1-verify-image-readonly` only;
+4. existing function `wos-v1-verify-image-readonly` only, replacing v1;
 5. `verify_jwt=true`;
 6. Feature Flag `false`;
 7. the exact verified QA Preview Origin.
 
-`PR279_EDGE_DEPLOYED=NO` remains the current state.
+```ini
+CURRENT_READONLY_EDGE_DEPLOYED=YES_VERSION_1
+ORDER_FIX_DEPLOYED=NO
+```
+
+After an authorized replacement, the executor must confirm the new function
+version, download and re-hash all deployed source files, and verify all four
+existing Edge functions retained their prior version and bundle.

@@ -1,19 +1,16 @@
 import { createClient, type SupabaseClient } from 'npm:@supabase/supabase-js@2.58.0';
 import {
   evaluateReadOnlyRequestGuard,
-  evaluateWosV1ReadOnlyAccess,
-  orderSnapshotStable,
   parseWosV1ReadOnlyVerificationBody,
   readOnlyOriginAllowed,
-  safeReadOnlyVerification,
-  verifyWosV1ReadOnlyImage,
   type WosV1ReadOnlyOrder,
   type WosV1ReadOnlyProfile,
   type WosV1ReadOnlyProof,
 } from './core.ts';
+// @ts-ignore Deno requires the explicit .ts extension for local imports.
+import { executeWosV1ReadOnlyRequest } from './handler.ts';
 import {
   approvedSupabaseRuntimeUrl,
-  canonicalWosV1ImagePath,
   parseAllowedOrigins,
   parseAllowedSupabaseRefs,
   type WosV1ObjectSnapshot,
@@ -153,6 +150,19 @@ async function snapshotFor(
   return row as unknown as WosV1ObjectSnapshot;
 }
 
+async function orderFor(
+  db: AdminClient,
+  orderId: string,
+  organizationId: string,
+): Promise<WosV1ReadOnlyOrder | null> {
+  const result = await db.from('wos_production_orders')
+    .select('id,organization_id,version,version_label,workflow_status')
+    .eq('id', orderId)
+    .eq('organization_id', organizationId)
+    .maybeSingle();
+  return result.error ? null : result.data as WosV1ReadOnlyOrder | null;
+}
+
 async function withTimeout<T>(promise: Promise<T>): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
@@ -242,12 +252,13 @@ Deno.serve(async request => {
   if (request.method !== 'POST') {
     return output('METHOD_NOT_ALLOWED', 405, null, origin);
   }
+  const qaBound = qaRuntimeBound();
   const requestGuard = evaluateReadOnlyRequestGuard({
     origin,
     allowedOrigins,
     readOnlyEnabled:
       Deno.env.get('WOS_V1_EDGE_READONLY_VERIFY_ENABLED') === 'true',
-    qaRuntimeBound: qaRuntimeBound(),
+    qaRuntimeBound: qaBound,
     contentType: request.headers.get('content-type'),
     authorization: request.headers.get('authorization'),
   });
@@ -278,106 +289,48 @@ Deno.serve(async request => {
         global: { headers: { Authorization: authorization } },
         auth: { autoRefreshToken: false, persistSession: false },
       });
-      const auth = await userDb.auth.getUser(token);
-      if (auth.error || !auth.data.user?.id) {
-        return output('UNAUTHENTICATED', 401, null, origin);
-      }
-      const profileResult = await userDb.from('profiles')
-        .select('id,user_id,org_id,role,is_active')
-        .eq('user_id', auth.data.user.id)
-        .eq('is_active', true)
-        .maybeSingle();
-      const profile = profileResult.error
-        ? null
-        : profileResult.data as WosV1ReadOnlyProfile | null;
-      const orderResult = await userDb.from('wos_production_orders')
-        .select('id,organization_id,version,version_label,workflow_status')
-        .eq('id', body.orderId)
-        .eq('organization_id', profile?.org_id ?? '')
-        .maybeSingle();
-      const order = orderResult.error
-        ? null
-        : orderResult.data as WosV1ReadOnlyOrder | null;
-      const access = evaluateWosV1ReadOnlyAccess({
-        readOnlyEnabled: true,
-        qaRuntimeBound: true,
-        profile,
-        order,
-        expectedVersion: body.expectedVersion,
-        expectedVersionLabel: body.expectedVersionLabel,
-      });
-      if (!access.allowed || !order) {
-        return output(access.code, access.code === 'ORDER_VERSION_MISMATCH' ? 409 : 403,
-          null, origin);
-      }
-
       const admin = createClient(runtimeUrl, service, {
         auth: { autoRefreshToken: false, persistSession: false },
       });
-      // This branch validates bytes and metadata only. It never writes a Proof,
-      // Receipt or history row and never changes M4 review/start readiness.
-      for (const image of body.images) {
-        const canonicalPath = canonicalWosV1ImagePath({
-          organizationId: order.organization_id,
-          orderId: order.id,
-          versionLabel: order.version_label,
-          imageId: image.imageId,
-          category: image.category,
-        });
-        if (canonicalPath !== image.storagePath) {
-          return output('INVALID_IMAGE_PATH', 400, null, origin);
-        }
-        const firstCheckedAt = new Date().toISOString();
-        const firstProof = await proofFor(admin, image.imageId, order);
-        const firstSnapshot = await snapshotFor(admin, canonicalPath);
-        if (!firstProof || !firstSnapshot) {
-          return output('PROOF_METADATA_MISMATCH', 409, null, origin);
-        }
-        const downloaded = await userDb.storage.from('wos-private')
-          .download(canonicalPath);
-        if (downloaded.error || !downloaded.data) {
-          return output('PRIVATE_BINARY_UNAVAILABLE', 409, null, origin);
-        }
-        const bytes = new Uint8Array(await downloaded.data.arrayBuffer());
-        const secondProof = await proofFor(admin, image.imageId, order);
-        const secondSnapshot = await snapshotFor(admin, canonicalPath);
-        const secondCheckedAt = new Date().toISOString();
-        if (!secondProof || !secondSnapshot) {
-          return output('PROOF_METADATA_MISMATCH', 409, null, origin);
-        }
-        const verified = await verifyWosV1ReadOnlyImage({
-          image,
-          order,
-          firstProof,
-          secondProof,
-          firstSnapshot,
-          secondSnapshot,
-          bytes,
-          firstCheckedAt,
-          secondCheckedAt,
-        });
-        if (!verified.ok) return output(verified.code, 409, null, origin);
-      }
-      const currentOrderResult = await userDb.from('wos_production_orders')
-        .select('id,organization_id,version,version_label,workflow_status')
-        .eq('id', order.id)
-        .eq('organization_id', order.organization_id)
-        .maybeSingle();
-      const currentOrder = currentOrderResult.error
-        ? null
-        : currentOrderResult.data as WosV1ReadOnlyOrder | null;
-      if (!currentOrder || !orderSnapshotStable(order, currentOrder)) {
-        return output('ORDER_CHANGED_DURING_VERIFICATION', 409, null, origin);
-      }
-      return output(
-        'WOS_V1_READONLY_IMAGE_PROOF_VERIFIED',
-        200,
-        safeReadOnlyVerification({
-          order,
-          categories: body.images.map(image => image.category),
-        }),
-        origin,
-      );
+      const result = await executeWosV1ReadOnlyRequest({
+        authorization,
+        body,
+        dependencies: {
+          readOnlyEnabled:
+            Deno.env.get('WOS_V1_EDGE_READONLY_VERIFY_ENABLED') === 'true',
+          qaRuntimeBound: qaBound,
+          authenticate: async value => {
+            const auth = await userDb.auth.getUser(value.substring(7));
+            return auth.error || !auth.data.user?.id
+              ? null
+              : { userId: auth.data.user.id };
+          },
+          profileFor: async userId => {
+            const profileResult = await userDb.from('profiles')
+              .select('id,user_id,org_id,role,is_active')
+              .eq('user_id', userId)
+              .eq('is_active', true)
+              .maybeSingle();
+            return profileResult.error
+              ? null
+              : profileResult.data as WosV1ReadOnlyProfile | null;
+          },
+          orderFor: (orderId, organizationId) =>
+            orderFor(userDb, orderId, organizationId),
+          proofFor: (imageId, order) => proofFor(admin, imageId, order),
+          snapshotFor: path => snapshotFor(admin, path),
+          download: async path => {
+            const downloaded = await userDb.storage.from('wos-private')
+              .download(path);
+            if (downloaded.error || !downloaded.data) return null;
+            return new Uint8Array(await downloaded.data.arrayBuffer());
+          },
+          currentOrder: (orderId, organizationId) =>
+            orderFor(userDb, orderId, organizationId),
+          now: () => new Date().toISOString(),
+        },
+      });
+      return output(result.code, result.status, result.data, origin);
     })());
   } catch (error) {
     if (error instanceof Error
