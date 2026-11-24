@@ -1,0 +1,65 @@
+{
+  "authorizationId": "WOS-V1-QA-CANONICAL-TRUSTED-PROOF-HOSTED-VERIFY",
+  "orderId": "ba38e41b-8cac-469c-aabd-00b6ada033e2",
+  "organizationId": "0ff53d93-2b9e-48b9-8113-a4768c39cdd2",
+  "actorUserId": "3c0d8866-498a-4e61-a602-28b7a83f75f5",
+  "baselineId": "db30fc83-92c9-4ff8-bf78-3f3ad556db99",
+  "calls": [
+    {
+      "category": "PRODUCT",
+      "imageId": "e1768f48-43c3-40e9-8104-e5c5007c7be7",
+      "arguments": {
+        "p_image_id": "e1768f48-43c3-40e9-8104-e5c5007c7be7",
+        "p_order_id": "ba38e41b-8cac-469c-aabd-00b6ada033e2",
+        "p_actor_user_id": "3c0d8866-498a-4e61-a602-28b7a83f75f5",
+        "p_storage_path": "organizations/0ff53d93-2b9e-48b9-8113-a4768c39cdd2/wos/production-order/ba38e41b-8cac-469c-aabd-00b6ada033e2/images/product/versions/QA-R1/e1768f48-43c3-40e9-8104-e5c5007c7be7/source.png",
+        "p_storage_object_id": "5d0b0110-7f9d-4114-9f5c-866da8fbf838",
+        "p_storage_object_version": "416eab87-52e5-458b-b05d-48aeb12d1e5e",
+        "p_storage_object_updated_at": "2026-11-24T13:29:16.065939+00:00",
+        "p_sha256": "bd99f3f0729cdb94dfa4a6de3f272c6a1cf0e083b2b51e15449716412ea0621f"
+      }
+    },
+    {
+      "category": "FILM_PATTERN",
+      "imageId": "90cfc658-9297-430b-9ba7-382950e73997",
+      "arguments": {
+        "p_image_id": "90cfc658-9297-430b-9ba7-382950e73997",
+        "p_order_id": "ba38e41b-8cac-469c-aabd-00b6ada033e2",
+        "p_actor_user_id": "3c0d8866-498a-4e61-a602-28b7a83f75f5",
+        "p_storage_path": "organizations/0ff53d93-2b9e-48b9-8113-a4768c39cdd2/wos/production-order/ba38e41b-8cac-469c-aabd-00b6ada033e2/images/film-pattern/versions/QA-R1/90cfc658-9297-430b-9ba7-382950e73997/source.png",
+        "p_storage_object_id": "99d6d917-7bba-43f8-9728-07a962a8d500",
+        "p_storage_object_version": "88b2e2d5-9c3e-46cd-9be3-835fe45dfb26",
+        "p_storage_object_updated_at": "2026-11-24T13:29:17.495855+00:00",
+        "p_sha256": "08fa384f326ba08d1f0189c842ab30c8e57869a95524fb3ad1725ff6411af4fc"
+      }
+    },
+    {
+      "category": "CUSTOMER_APPROVED_SAMPLE",
+      "imageId": "e62c8540-4dbe-4bbb-b628-6ded3a4ef7a8",
+      "arguments": {
+        "p_image_id": "e62c8540-4dbe-4bbb-b628-6ded3a4ef7a8",
+        "p_order_id": "ba38e41b-8cac-469c-aabd-00b6ada033e2",
+        "p_actor_user_id": "3c0d8866-498a-4e61-a602-28b7a83f75f5",
+        "p_storage_path": "organizations/0ff53d93-2b9e-48b9-8113-a4768c39cdd2/wos/production-order/ba38e41b-8cac-469c-aabd-00b6ada033e2/images/customer-approved-sample/versions/QA-R1/e62c8540-4dbe-4bbb-b628-6ded3a4ef7a8/source.png",
+        "p_storage_object_id": "561a222e-dcf0-45ff-9cd7-bdf7c184ba12",
+        "p_storage_object_version": "8cfa5efb-2851-401a-83ca-0cd81e0fef9a",
+        "p_storage_object_updated_at": "2026-11-24T13:29:18.413607+00:00",
+        "p_sha256": "0e5ee99139dfbed30c4564107bb5f1c01f05a790443aef25a923857e60b37b68"
+      }
+    },
+    {
+      "category": "SIGNED_SAMPLE",
+      "imageId": "3990b0b6-5220-4d68-b0f0-0ceb52fc1448",
+      "arguments": {
+        "p_image_id": "3990b0b6-5220-4d68-b0f0-0ceb52fc1448",
+        "p_order_id": "ba38e41b-8cac-469c-aabd-00b6ada033e2",
+        "p_actor_user_id": "3c0d8866-498a-4e61-a602-28b7a83f75f5",
+        "p_storage_path": "organizations/0ff53d93-2b9e-48b9-8113-a4768c39cdd2/wos/production-order/ba38e41b-8cac-469c-aabd-00b6ada033e2/images/signed-sample/versions/QA-R1/3990b0b6-5220-4d68-b0f0-0ceb52fc1448/source.png",
+        "p_storage_object_id": "dbfb23d3-8b0f-47ca-8fa3-47ba649124ce",
+        "p_storage_object_version": "f35ec83b-c8ef-498c-aaa9-8dec84da4f5b",
+        "p_storage_object_updated_at": "2026-11-24T13:29:19.350663+00:00",
+        "p_sha256": "dd8cf7706ae264ae622220b74b29ac12d79cdb2fd49215f280fa762bce431302"
+      }
+    }
+  ]
+}
