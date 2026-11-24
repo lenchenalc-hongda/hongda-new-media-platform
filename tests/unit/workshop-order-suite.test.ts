@@ -37,6 +37,7 @@ import './workshop-order-production-runtime-contract.test';
 import './workshop-order-production-app-contract.test';
 import './workshop-order-production-edge-core.test';
 import './workshop-order-production-app-http.test';
+import './workshop-order-qa-readonly-byte-verifier.test';
 
 // WOS project-owned test aggregator. Each new WOS test is imported here,
 // so the existing shared CI invokes it without modifying shared workflows.
