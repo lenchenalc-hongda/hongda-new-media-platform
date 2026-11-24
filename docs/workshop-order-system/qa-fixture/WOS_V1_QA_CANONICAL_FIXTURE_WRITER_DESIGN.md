@@ -44,10 +44,14 @@ and exact ACL changes occur in one transaction.
 The function body also requires:
 
 ```text
-request.jwt.claim.role = service_role
+CURRENT_USER = service_role
 ```
 
-The SQL ACL and the runtime claim are independent checks.
+PostgREST maps the validated JWT role into the database execution role. This
+effective-role check is used instead of the legacy per-claim GUC
+`request.jwt.claim.role`, which is not guaranteed to be populated by current
+hosted PostgREST versions. The SQL ACL and effective-role check remain
+independent controls.
 
 ## PREPARE Contract
 
@@ -237,3 +241,26 @@ post-install fingerprints
 ```
 
 The package must not be copied into `supabase/migrations/`.
+
+## Hosted Guard Replacement
+
+PR #280's first Gate A installation exposed the legacy per-claim GUC guard in
+hosted PostgREST. Gate B failed closed with 42501 before creating any order or
+manifest. The source package now uses `CURRENT_USER`, and the already installed
+QA functions require a separate replacement package:
+
+```text
+WOS_V1_QA_CANONICAL_FIXTURE_WRITER_GUARD_REPLACEMENT_NOT_AUTHORIZED.sql
+WOS_V1_QA_CANONICAL_FIXTURE_WRITER_GUARD_RECOVERY_NOT_AUTHORIZED.sql
+```
+
+The replacement package requires the exact old function definitions, owner,
+ACL, empty search path, empty manifest table, valid unique index, and all write
+Gates OFF. It replaces only the two functions. The recovery package requires
+the exact replacement definitions and restores the prior two functions without
+dropping the manifest table or touching Storage or business rows.
+
+Hosted read-only smoke is defined in
+`tests/live/wos-v1-qa-fixture-guard-smoke.mjs`. It requires explicit
+authorization environment values and sends only `p_input=null` and two NULL
+rollback UUIDs. It must never send a valid PREPARE payload.

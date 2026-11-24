@@ -132,7 +132,6 @@ $$;
 RESET ROLE;
 
 SET ROLE service_role;
-SET request.jwt.claim.role = 'service_role';
 
 DO $$
 DECLARE
@@ -184,7 +183,6 @@ SET enabled = true,
     activated_at = clock_timestamp()
 WHERE gate_name = 'M2_OFFICE_WRITES';
 SET ROLE service_role;
-SET request.jwt.claim.role = 'service_role';
 DO $$
 BEGIN
   BEGIN
@@ -209,7 +207,6 @@ SET enabled = false,
 WHERE gate_name = 'M2_OFFICE_WRITES';
 
 SET ROLE service_role;
-SET request.jwt.claim.role = 'service_role';
 DO $$
 DECLARE
   v_result jsonb;
@@ -281,7 +278,6 @@ SELECT
 FROM jsonb_array_elements(public.test_fixture_manifest()->'images') item;
 
 SET ROLE service_role;
-SET request.jwt.claim.role = 'service_role';
 DO $$
 DECLARE
   v_manifest jsonb;
@@ -368,7 +364,6 @@ UPDATE storage.objects
 SET owner_id = 'aaaaaaaa-1111-4111-8111-aaaaaaaaaaaa'
 WHERE id = '51111111-1111-4111-8111-111111111111';
 SET ROLE service_role;
-SET request.jwt.claim.role = 'service_role';
 DO $$
 BEGIN
   BEGIN
@@ -390,7 +385,6 @@ UPDATE storage.objects
 SET version = NULL
 WHERE id = '52222222-2222-4222-8222-222222222222';
 SET ROLE service_role;
-SET request.jwt.claim.role = 'service_role';
 DO $$
 BEGIN
   BEGIN
@@ -412,7 +406,6 @@ UPDATE storage.objects
 SET metadata = jsonb_build_object('size', 128)
 WHERE id = '53333333-3333-4333-8333-333333333333';
 SET ROLE service_role;
-SET request.jwt.claim.role = 'service_role';
 DO $$
 BEGIN
   BEGIN
@@ -425,7 +418,6 @@ BEGIN
   END;
 END;
 $$;
-RESET request.jwt.claim.role;
 RESET ROLE;
 UPDATE storage.objects
 SET metadata = jsonb_build_object('mimetype', 'image/png', 'size', 128)
@@ -443,7 +435,6 @@ INSERT INTO public.wos_visual_baselines(
 );
 
 SET ROLE service_role;
-SET request.jwt.claim.role = 'service_role';
 DO $$
 BEGIN
   BEGIN
@@ -463,7 +454,6 @@ BEGIN
   END IF;
 END;
 $$;
-RESET request.jwt.claim.role;
 RESET ROLE;
 
 DELETE FROM public.wos_visual_baselines
@@ -508,7 +498,6 @@ BEGIN
 END;
 $$;
 
-RESET request.jwt.claim.role;
 RESET ROLE;
 
 SELECT 'PREPARE_AND_NEGATIVE_ASSERTIONS=PASS' AS result;

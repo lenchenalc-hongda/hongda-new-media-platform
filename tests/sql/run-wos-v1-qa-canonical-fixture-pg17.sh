@@ -34,6 +34,46 @@ PSQL=(docker exec -i "$CONTAINER" psql -U postgres -d fixture -v ON_ERROR_STOP=1
   | tee "$LOG_DIR/schema.log"
 "${PSQL[@]}" -f /work/docs/workshop-order-system/qa-fixture/WOS_V1_QA_CANONICAL_FIXTURE_WRITER_NOT_AUTHORIZED.sql \
   | tee "$LOG_DIR/forward.log"
+
+set +e
+"${PSQL[@]}" \
+  -f /work/docs/workshop-order-system/qa-fixture/WOS_V1_QA_CANONICAL_FIXTURE_WRITER_GUARD_REPLACEMENT_NOT_AUTHORIZED.sql \
+  > "$LOG_DIR/guard-replacement-wrong-source.log" 2>&1
+REPLACEMENT_WRONG_SOURCE_STATUS=$?
+set -e
+if [[ "$REPLACEMENT_WRONG_SOURCE_STATUS" -eq 0 ]] \
+  || ! grep -q 'FIXTURE_FUNCTION_DEFINITION_PREFLIGHT_FAILED' \
+    "$LOG_DIR/guard-replacement-wrong-source.log"; then
+  echo "GUARD_REPLACEMENT_WRONG_SOURCE_REJECTION=FAIL"
+  cat "$LOG_DIR/guard-replacement-wrong-source.log"
+  exit 1
+fi
+
+"${PSQL[@]}" -f /work/tests/sql/wos-v1-qa-canonical-fixture-pg17-current-user-guard.sql \
+  | tee "$LOG_DIR/current-user-guard.log"
+"${PSQL[@]}" -f /work/docs/workshop-order-system/qa-fixture/WOS_V1_QA_CANONICAL_FIXTURE_WRITER_GUARD_RECOVERY_NOT_AUTHORIZED.sql \
+  | tee "$LOG_DIR/guard-recovery-from-fresh.log"
+
+set +e
+"${PSQL[@]}" \
+  -f /work/docs/workshop-order-system/qa-fixture/WOS_V1_QA_CANONICAL_FIXTURE_WRITER_GUARD_RECOVERY_NOT_AUTHORIZED.sql \
+  > "$LOG_DIR/guard-recovery-wrong-source.log" 2>&1
+RECOVERY_WRONG_SOURCE_STATUS=$?
+set -e
+if [[ "$RECOVERY_WRONG_SOURCE_STATUS" -eq 0 ]] \
+  || ! grep -q 'FIXTURE_FUNCTION_DEFINITION_PREFLIGHT_FAILED' \
+    "$LOG_DIR/guard-recovery-wrong-source.log"; then
+  echo "GUARD_RECOVERY_WRONG_SOURCE_REJECTION=FAIL"
+  cat "$LOG_DIR/guard-recovery-wrong-source.log"
+  exit 1
+fi
+
+"${PSQL[@]}" -f /work/docs/workshop-order-system/qa-fixture/WOS_V1_QA_CANONICAL_FIXTURE_WRITER_GUARD_REPLACEMENT_NOT_AUTHORIZED.sql \
+  | tee "$LOG_DIR/guard-replacement.log"
+"${PSQL[@]}" -f /work/docs/workshop-order-system/qa-fixture/WOS_V1_QA_CANONICAL_FIXTURE_WRITER_GUARD_RECOVERY_NOT_AUTHORIZED.sql \
+  | tee "$LOG_DIR/guard-recovery.log"
+"${PSQL[@]}" -f /work/docs/workshop-order-system/qa-fixture/WOS_V1_QA_CANONICAL_FIXTURE_WRITER_GUARD_REPLACEMENT_NOT_AUTHORIZED.sql \
+  | tee "$LOG_DIR/guard-replacement-restored.log"
 "${PSQL[@]}" -f /work/tests/sql/wos-v1-qa-canonical-fixture-pg17-prepare.sql \
   | tee "$LOG_DIR/prepare.log"
 
@@ -121,8 +161,16 @@ echo "CONCURRENT_PREPARE=PASS created=1 rejected=1" \
   -f /work/tests/sql/wos-v1-qa-canonical-fixture-pg17-post-concurrent-prepare.sql \
   | tee "$LOG_DIR/post-concurrent-prepare.log"
 
+bash "$ROOT/tests/sql/run-wos-v1-qa-canonical-fixture-postgrest.sh" \
+  | tee "$LOG_DIR/postgrest-role-context.log"
+
 cat <<'RESULT' | tee "$LOG_DIR/result.txt"
 PG17_SERVER=17
+POSTGREST_ROLE_CONTEXT=PASS
+CURRENT_USER_GUARD=PASS
+GUARD_REPLACEMENT=PASS
+GUARD_RECOVERY=PASS
+GUARD_WRONG_SOURCE_REJECTION=PASS
 PREPARE_POSITIVE=PASS
 PREPARE_IDEMPOTENCY=PASS
 PREPARED_ROLLBACK=PASS

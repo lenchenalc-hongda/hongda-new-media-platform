@@ -19,7 +19,6 @@ INSERT INTO public.wos_reference_images(
 );
 
 SET ROLE service_role;
-SET request.jwt.claim.role = 'service_role';
 DO $$
 BEGIN
   BEGIN
@@ -33,7 +32,6 @@ BEGIN
   END;
 END;
 $$;
-RESET request.jwt.claim.role;
 RESET ROLE;
 DELETE FROM public.wos_reference_images
 WHERE id = '45555555-5555-4555-8555-555555555555';
@@ -59,7 +57,6 @@ INSERT INTO public.wos_reference_images(
 );
 
 SET ROLE service_role;
-SET request.jwt.claim.role = 'service_role';
 DO $$
 BEGIN
   BEGIN
@@ -73,7 +70,6 @@ BEGIN
   END;
 END;
 $$;
-RESET request.jwt.claim.role;
 RESET ROLE;
 DELETE FROM public.wos_reference_images
 WHERE id = '46666666-6666-4666-8666-666666666666';
@@ -82,7 +78,6 @@ UPDATE public.wos_production_orders
 SET version = 2
 WHERE id = '22222222-2222-4222-8222-222222222222';
 SET ROLE service_role;
-SET request.jwt.claim.role = 'service_role';
 DO $$
 BEGIN
   BEGIN
@@ -96,7 +91,6 @@ BEGIN
   END;
 END;
 $$;
-RESET request.jwt.claim.role;
 RESET ROLE;
 UPDATE public.wos_production_orders
 SET version = 1
@@ -124,7 +118,6 @@ INSERT INTO public.wos_qa_p2_action_receipts(order_id)
 VALUES ('22222222-2222-4222-8222-222222222222');
 
 SET ROLE service_role;
-SET request.jwt.claim.role = 'service_role';
 
 DO $$
 BEGIN
@@ -140,7 +133,6 @@ BEGIN
 END;
 $$;
 
-RESET request.jwt.claim.role;
 RESET ROLE;
 DROP POLICY IF EXISTS test_proof_delete ON public.wos_qa_verified_image_proofs;
 DELETE FROM public.wos_qa_verified_image_proofs
@@ -149,7 +141,6 @@ DELETE FROM public.wos_qa_p2_action_receipts
 WHERE order_id = '22222222-2222-4222-8222-222222222222';
 
 SET ROLE service_role;
-SET request.jwt.claim.role = 'service_role';
 
 DO $$
 BEGIN
@@ -270,7 +261,6 @@ BEGIN
 END;
 $$;
 
-RESET request.jwt.claim.role;
 RESET ROLE;
 
 SELECT 'ROLLBACK_AND_SECURITY_ASSERTIONS=PASS' AS result;

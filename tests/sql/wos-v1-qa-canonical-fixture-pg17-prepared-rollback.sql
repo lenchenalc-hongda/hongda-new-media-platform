@@ -43,7 +43,6 @@ INSERT INTO public.profiles(id, user_id, org_id, role, is_active) VALUES (
 );
 
 SET ROLE service_role;
-SET request.jwt.claim.role = 'service_role';
 DO $$
 BEGIN
   PERFORM public.wos_qa_create_canonical_v1_fixture(
@@ -51,14 +50,12 @@ BEGIN
   );
 END;
 $$;
-RESET request.jwt.claim.role;
 RESET ROLE;
 
 UPDATE public.wos_production_orders
 SET created_by_profile_id = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
 WHERE id = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 SET ROLE service_role;
-SET request.jwt.claim.role = 'service_role';
 DO $$
 BEGIN
   BEGIN
@@ -81,7 +78,6 @@ BEGIN
   END IF;
 END;
 $$;
-RESET request.jwt.claim.role;
 RESET ROLE;
 UPDATE public.wos_production_orders
 SET created_by_profile_id = 'f8adf44a-f04e-44b4-9c82-8b96508097bb'
@@ -103,7 +99,6 @@ INSERT INTO storage.objects(
 );
 
 SET ROLE service_role;
-SET request.jwt.claim.role = 'service_role';
 DO $$
 BEGIN
   BEGIN
@@ -117,7 +112,6 @@ BEGIN
   END;
 END;
 $$;
-RESET request.jwt.claim.role;
 RESET ROLE;
 DELETE FROM storage.objects
 WHERE id = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeee1';
@@ -137,7 +131,6 @@ INSERT INTO public.wos_status_history(
 );
 
 SET ROLE service_role;
-SET request.jwt.claim.role = 'service_role';
 DO $$
 BEGIN
   BEGIN
@@ -151,13 +144,11 @@ BEGIN
   END;
 END;
 $$;
-RESET request.jwt.claim.role;
 RESET ROLE;
 DELETE FROM public.wos_status_history
 WHERE entity_id = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 
 SET ROLE service_role;
-SET request.jwt.claim.role = 'service_role';
 DO $$
 DECLARE
   v_result jsonb;
@@ -193,7 +184,6 @@ BEGIN
   END IF;
 END;
 $$;
-RESET request.jwt.claim.role;
 RESET ROLE;
 
 SELECT 'PREPARED_ROLLBACK_ASSERTIONS=PASS' AS result;

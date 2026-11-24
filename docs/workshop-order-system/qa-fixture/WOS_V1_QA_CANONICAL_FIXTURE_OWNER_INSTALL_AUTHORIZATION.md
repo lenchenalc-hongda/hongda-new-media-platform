@@ -1,6 +1,13 @@
 # Proposed QA Fixture Writer Installation Authorization
 
-Status: `NOT_AUTHORIZED`
+Status: `HISTORICAL_GATE_A_INSTALLED_OLD_GUARD`
+
+The original Gate A installation completed with the reviewed old function
+definitions. Gate B then failed closed because hosted PostgREST did not expose
+the legacy per-claim GUC expected by that version. Do not rerun this initial
+installer against QA. Use
+`WOS_V1_QA_CANONICAL_FIXTURE_GUARD_REPLACEMENT_AUTHORIZATION.md` for the
+function-only replacement.
 
 Proposed authorization ID:
 

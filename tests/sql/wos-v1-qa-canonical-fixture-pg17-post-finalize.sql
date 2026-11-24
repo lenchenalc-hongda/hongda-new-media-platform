@@ -1,5 +1,4 @@
 SET ROLE service_role;
-SET request.jwt.claim.role = 'service_role';
 
 DO $$
 DECLARE
@@ -100,7 +99,6 @@ BEGIN
 END;
 $$;
 
-RESET request.jwt.claim.role;
 RESET ROLE;
 
 SELECT 'FINALIZE_ASSERTIONS=PASS' AS result;

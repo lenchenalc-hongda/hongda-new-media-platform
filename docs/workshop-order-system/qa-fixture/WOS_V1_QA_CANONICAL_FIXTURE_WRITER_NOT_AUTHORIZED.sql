@@ -77,10 +77,7 @@ DECLARE
   v_result jsonb;
   v_manifest_sha256 text;
 BEGIN
-  IF coalesce(
-    pg_catalog.current_setting('request.jwt.claim.role', true),
-    ''
-  ) <> 'service_role' THEN
+  IF CURRENT_USER <> 'service_role' THEN
     RAISE EXCEPTION 'FIXTURE_SERVICE_ROLE_REQUIRED'
       USING ERRCODE = '42501';
   END IF;
@@ -885,10 +882,7 @@ DECLARE
   v_image_ids uuid[] := ARRAY[]::uuid[];
   v_storage_prefix text;
 BEGIN
-  IF coalesce(
-    pg_catalog.current_setting('request.jwt.claim.role', true),
-    ''
-  ) <> 'service_role' THEN
+  IF CURRENT_USER <> 'service_role' THEN
     RAISE EXCEPTION 'FIXTURE_SERVICE_ROLE_REQUIRED'
       USING ERRCODE = '42501';
   END IF;
