@@ -49,6 +49,10 @@ interface OperatorDetail {
     readonly version_label: string | null;
     readonly quantity_expected: number | null;
     readonly quantity_arrived: number | null;
+    readonly expected_at: string | null;
+    readonly arrived_at: string | null;
+    readonly confirmed_at: string | null;
+    readonly note: string | null;
   }[];
   readonly baselines: readonly {
     readonly id: string;
@@ -418,9 +422,26 @@ export default function ProductionWorkshopInbox() {
                       </p>
                       <ul className="mt-1 space-y-1 text-gray-700">
                         {detail.resources.map((resource, index) => (
-                          <li key={resource.resource_type + ':' + index}>
-                            {resource.resource_type} · {resource.status} ·
-                            {' '}{resource.quantity_arrived ?? '-'} / {resource.quantity_expected ?? '-'}
+                          <li key={resource.resource_type + ':' + index}
+                            className="rounded border border-gray-200 bg-white p-2">
+                            <p className="font-medium text-gray-900">
+                              {resource.resource_type} · {resource.status}
+                            </p>
+                            <p className="mt-1">
+                              已到 {resource.quantity_arrived ?? '-'} / 需求 {resource.quantity_expected ?? '-'}
+                              {resource.quantity_expected !== null
+                                && resource.quantity_arrived !== null
+                                && resource.quantity_arrived < resource.quantity_expected
+                                ? ` · 缺口 ${resource.quantity_expected - resource.quantity_arrived}`
+                                : ''}
+                            </p>
+                            <p className="mt-1 text-gray-600">
+                              版本 {resource.version_label ?? '-'} · 预计到料 {resource.expected_at ?? '-'}
+                              {' '}· 实际到料 {resource.arrived_at ?? '-'}
+                            </p>
+                            <p className="mt-1 text-gray-600">
+                              确认时间 {resource.confirmed_at ?? '-'} · 说明 {resource.note ?? '-'}
+                            </p>
                           </li>
                         ))}
                       </ul>

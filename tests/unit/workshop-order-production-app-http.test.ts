@@ -20,10 +20,14 @@ const viewerUserId = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
 const officeProfileId = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
 const operatorProfileId = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
 const viewerProfileId = 'ffffffff-ffff-4fff-8fff-ffffffffffff';
+const projectOwnerUserId = 'abababab-abab-4bab-8bab-abababababab';
+const projectOwnerProfileId = 'bcbcbcbc-bcbc-4cbc-8cbc-bcbcbcbcbcbc';
 const orderId = '12345678-1234-4234-8234-123456789012';
 const receiptId = '22345678-1234-4234-8234-123456789012';
 const inboxId = '32345678-1234-4234-8234-123456789012';
 const blockerId = '42345678-1234-4234-8234-123456789012';
+const cpcCustomerId = '81000000-0000-4000-8000-000000000001';
+const cpcProjectId = '82000000-0000-4000-8000-000000000001';
 
 class QueryBuilder {
   private readonly filters: Array<(row: Row) => boolean> = [];
@@ -134,6 +138,13 @@ class FakeClient implements WosV1DataClient {
       role: 'viewer',
       is_active: true,
     },
+    {
+      id: projectOwnerProfileId,
+      user_id: projectOwnerUserId,
+      org_id: organizationId,
+      role: 'admin',
+      is_active: true,
+    },
   ];
   readonly orders: Row[] = [{
     id: orderId,
@@ -162,6 +173,21 @@ class FakeClient implements WosV1DataClient {
   readonly baselines: Row[] = [];
   readonly history: Row[] = [];
   readonly confirmations: Row[] = [];
+  readonly cpcCustomers: Row[] = [{
+    id: cpcCustomerId,
+    org_id: organizationId,
+    display_name_snapshot: 'Synthetic CPC Customer',
+    status: 'pending_review',
+  }];
+  readonly cpcProjects: Row[] = [{
+    id: cpcProjectId,
+    org_id: organizationId,
+    customer_reference_id: cpcCustomerId,
+    title: 'Synthetic CPC Project',
+    owner_profile_id: projectOwnerProfileId,
+    status: 'active',
+    archived_at: null,
+  }];
   readonly proofs = new Set<string>();
   private readonly creates = new Map<string, Row>();
   private readonly actions = new Map<string, Row>();
@@ -180,6 +206,8 @@ class FakeClient implements WosV1DataClient {
       if (table === 'wos_visual_baselines') return this.baselines;
       if (table === 'wos_status_history') return this.history;
       if (table === 'wos_confirmations') return this.confirmations;
+      if (table === 'cpc_customer_references') return this.cpcCustomers;
+      if (table === 'cpc_projects') return this.cpcProjects;
       return [];
     };
     return new QueryBuilder(rows);
@@ -192,16 +220,28 @@ class FakeClient implements WosV1DataClient {
       if (prior) return { data: { ...prior, status: 'REPLAYED' }, error: null };
       const payload = args.p_payload as Row;
       assert(!('organizationId' in payload) && !('role' in payload));
+      if (payload.customerId !== cpcCustomerId
+        || payload.projectId !== cpcProjectId) {
+        return {
+          data: null,
+          error: { code: '42501', message: 'PROJECT_CUSTOMER_MISMATCH' },
+        };
+      }
+      assert.equal(payload.customerId, cpcCustomerId);
+      assert.equal(payload.customerNameSnapshot, 'Synthetic Customer');
+      assert.equal(payload.projectId, cpcProjectId);
+      assert.equal(payload.projectNameSnapshot, 'Synthetic Project');
+      assert.equal(payload.projectOwnerProfileId, officeProfileId);
       this.currentOrderId = '92345678-1234-4234-8234-123456789012';
       const order: Row = {
         id: this.currentOrderId,
         organization_id: organizationId,
         created_by_profile_id: officeProfileId,
-        sales_owner_profile_id: payload.salesOwnerProfileId,
-        project_owner_profile_id: payload.projectOwnerProfileId,
+        sales_owner_profile_id: officeProfileId,
+        project_owner_profile_id: projectOwnerProfileId,
         order_number: payload.orderNumber,
-        customer_name_snapshot: payload.customerNameSnapshot,
-        project_name_snapshot: payload.projectNameSnapshot ?? null,
+        customer_name_snapshot: 'Synthetic CPC Customer',
+        project_name_snapshot: 'Synthetic CPC Project',
         product_name: payload.productName,
         product_material: payload.productMaterial,
         requested_quantity: payload.requestedQuantity,
@@ -556,6 +596,30 @@ try {
   });
   assert.equal(foreign.status, 403);
 
+  const cpcDenied = await call({
+    userId: officeUserId,
+    path: '/api/workshop-orders/v1',
+    method: 'POST',
+    body: {
+      operation: 'CREATE_ORDER',
+      requestId: '51345678-1234-4234-8234-123456789012',
+      payload: {
+        orderNumber: 'WOS-E2E-CPC-DENIED',
+        customerId: cpcCustomerId,
+        customerNameSnapshot: 'Synthetic Customer',
+        projectId: '83000000-0000-4000-8000-000000000001',
+        projectNameSnapshot: 'Synthetic Project',
+        productName: 'Synthetic Cup',
+        priority: 'MEDIUM',
+        requestedQuantity: 100,
+        currentBatchQuantity: 80,
+        productMaterial: 'PP',
+      },
+    },
+  });
+  assert.equal(cpcDenied.status, 403);
+  assert.equal(cpcDenied.json.code, 'CPC_LINK_DENIED');
+
   const createRequestId = '52345678-1234-4234-8234-123456789012';
   const create = await call({
     userId: officeUserId,
@@ -566,7 +630,9 @@ try {
       requestId: createRequestId,
       payload: {
         orderNumber: 'WOS-E2E-001',
+        customerId: cpcCustomerId,
         customerNameSnapshot: 'Synthetic Customer',
+        projectId: cpcProjectId,
         projectNameSnapshot: 'Synthetic Project',
         productName: 'Synthetic Cup',
         priority: 'MEDIUM',
@@ -590,7 +656,9 @@ try {
       requestId: createRequestId,
       payload: {
         orderNumber: 'WOS-E2E-001',
+        customerId: cpcCustomerId,
         customerNameSnapshot: 'Synthetic Customer',
+        projectId: cpcProjectId,
         projectNameSnapshot: 'Synthetic Project',
         productName: 'Synthetic Cup',
         priority: 'MEDIUM',

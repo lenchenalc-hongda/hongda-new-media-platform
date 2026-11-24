@@ -278,7 +278,7 @@ async function readOrderDetail(
           .eq('entity_id', order.id)
           .order('uploaded_at', { ascending: false })),
       queryRows(client, 'wos_resource_readiness',
-        'organization_id,entity_type,entity_id,resource_type,status,version_label,quantity_expected,quantity_arrived,confirmed_at,note',
+        'organization_id,entity_type,entity_id,resource_type,status,version_label,quantity_expected,quantity_arrived,expected_at,arrived_at,confirmed_at,note',
         query => query.eq('organization_id', actor.organizationId)
           .eq('entity_type', 'PRODUCTION_ORDER')
           .eq('entity_id', order.id)),
@@ -450,6 +450,15 @@ async function handleGet(
 function rpcErrorResponse(error: unknown): Response {
   const value = object(error);
   const code = typeof value?.code === 'string' ? value.code : '';
+  const message = typeof value?.message === 'string' ? value.message : '';
+  if (code === '42501' && [
+    'CPC_LINK_REQUIRED',
+    'CUSTOMER_ORGANIZATION_MISMATCH',
+    'PROJECT_CUSTOMER_MISMATCH',
+    'INVALID_PROJECT_OWNER',
+  ].includes(message)) {
+    return json(403, 'CPC_LINK_DENIED');
+  }
   if (code === '42501') return json(403, 'FORBIDDEN');
   if (code === 'PT409' || code === '23505') {
     return json(409, 'VERSION_OR_IDEMPOTENCY_CONFLICT');

@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "observed_at": "2026-11-24T15:35:00Z",
+  "production_project": "amqpvxrurenevniilhtl",
+  "postgres_version": "17.6",
+  "public_tables": 67,
+  "public_functions": 100,
+  "application_signature_rows": 383,
+  "application_signature_aggregate_sha256": "745e7556931fd99abae835d7ab21a9e899eb8b624380ef1a95fb4f1773ae4f5b",
+  "application_signature_match": true,
+  "wos_tables": 0,
+  "wos_functions": 0,
+  "wos_private_bucket_count": 0,
+  "wos_storage_object_count": 0,
+  "auth_users": 10,
+  "profiles": 10,
+  "organizations": 1,
+  "rls_tables": 67,
+  "public_tables_without_rls": 0,
+  "public_tables_without_policies": 17,
+  "authenticated_grant_option_count": 0,
+  "latest_successful_github_production_deployment": {
+    "sha": "4dac501cf61a1469f76c643b71ceaab91fc4d39f",
+    "created_at": "2026-11-11T01:33:06Z"
+  },
+  "latest_production_deployment_attempt": {
+    "sha": "5d794a5f5be0821c37df0bbf99005137a1f8197e",
+    "created_at": "2026-11-17T11:37:51Z",
+    "state": "inactive",
+    "description": "Canceled from the Vercel Dashboard"
+  },
+  "current_master": "8694aa513b749a29042af34bbabb9a1b83643476",
+  "production_changed": false,
+  "production_install_authorized": false,
+  "production_deployed": false
+}

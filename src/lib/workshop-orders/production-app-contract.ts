@@ -41,10 +41,10 @@ const imageCategory = z.enum(WOS_V1_IMAGE_CATEGORIES);
 
 export const wosV1CreateOrderPayloadSchema = z.object({
   orderNumber: z.string().trim().min(1).max(80),
-  customerId: uuid.optional(),
+  customerId: uuid,
   customerNameSnapshot: z.string().trim().min(1).max(300),
-  projectId: uuid.optional(),
-  projectNameSnapshot: z.string().trim().min(1).max(300).optional(),
+  projectId: uuid,
+  projectNameSnapshot: z.string().trim().min(1).max(300),
   productName: z.string().trim().min(1).max(300),
   priority: z.enum(['LOW', 'MEDIUM', 'HIGH', 'CRITICAL']),
   isUrgent: z.boolean().optional(),

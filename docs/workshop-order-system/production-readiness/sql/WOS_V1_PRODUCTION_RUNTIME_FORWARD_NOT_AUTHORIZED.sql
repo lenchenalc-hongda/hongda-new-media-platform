@@ -809,11 +809,13 @@ DECLARE
   v_project_owner uuid;
   v_customer_id uuid;
   v_project_id uuid;
+  v_customer public.cpc_customer_references%ROWTYPE;
+  v_project public.cpc_projects%ROWTYPE;
+  v_project_owner_profile public.profiles%ROWTYPE;
   v_requested_quantity integer;
   v_batch_quantity integer;
   v_carton_quantity integer;
   v_planned_ship_date date;
-  v_owner_count integer;
 BEGIN
   IF auth.uid() IS NULL
     OR p_request_id IS NULL
@@ -846,14 +848,10 @@ BEGIN
   END LOOP;
 
   IF length(btrim(COALESCE(p_payload->>'orderNumber', ''))) NOT BETWEEN 1 AND 80
-    OR length(btrim(COALESCE(p_payload->>'customerNameSnapshot', '')))
-      NOT BETWEEN 1 AND 300
     OR length(btrim(COALESCE(p_payload->>'productName', '')))
       NOT BETWEEN 1 AND 300
     OR length(btrim(COALESCE(p_payload->>'productMaterial', '')))
       NOT BETWEEN 1 AND 200
-    OR (p_payload->>'salesOwnerProfileId') !~* '^[0-9a-f-]{36}$'
-    OR (p_payload->>'projectOwnerProfileId') !~* '^[0-9a-f-]{36}$'
     OR (p_payload->>'priority') NOT IN ('LOW', 'MEDIUM', 'HIGH', 'CRITICAL')
     OR (p_payload->>'requestedQuantity') !~ '^[1-9][0-9]{0,9}$'
     OR (p_payload->>'currentBatchQuantity') !~ '^[1-9][0-9]{0,9}$'
@@ -866,8 +864,6 @@ BEGIN
     RAISE EXCEPTION 'SPLIT_DELIVERY_NOT_SUPPORTED' USING ERRCODE = '22023';
   END IF;
 
-  v_sales_owner := (p_payload->>'salesOwnerProfileId')::uuid;
-  v_project_owner := (p_payload->>'projectOwnerProfileId')::uuid;
   v_customer_id := NULLIF(p_payload->>'customerId', '')::uuid;
   v_project_id := NULLIF(p_payload->>'projectId', '')::uuid;
   v_requested_quantity := (p_payload->>'requestedQuantity')::integer;
@@ -881,62 +877,25 @@ BEGIN
     ELSE (p_payload->>'plannedShipDate')::date
   END;
 
-  IF v_customer_id IS NOT NULL
-    AND NOT EXISTS (
-      SELECT 1
-      FROM public.cpc_customer_references customer
-      WHERE customer.id = v_customer_id
-        AND customer.org_id = v_actor.org_id
-    )
-  THEN
-    RAISE EXCEPTION 'CUSTOMER_ORGANIZATION_MISMATCH' USING ERRCODE = '42501';
+  IF v_customer_id IS NULL OR v_project_id IS NULL THEN
+    RAISE EXCEPTION 'CPC_LINK_REQUIRED' USING ERRCODE = '42501';
   END IF;
-  IF v_project_id IS NOT NULL
-    AND NOT EXISTS (
-      SELECT 1
-      FROM public.cpc_projects project
-      WHERE project.id = v_project_id
-        AND project.org_id = v_actor.org_id
-    )
-  THEN
-    RAISE EXCEPTION 'PROJECT_ORGANIZATION_MISMATCH' USING ERRCODE = '42501';
-  END IF;
-  IF v_customer_id IS NOT NULL
-    AND v_project_id IS NOT NULL
-    AND NOT EXISTS (
-      SELECT 1
-      FROM public.cpc_projects project
-      WHERE project.id = v_project_id
-        AND project.org_id = v_actor.org_id
-        AND project.customer_reference_id = v_customer_id
-    )
-  THEN
-    RAISE EXCEPTION 'PROJECT_CUSTOMER_MISMATCH' USING ERRCODE = '42501';
-  END IF;
-
   IF v_batch_quantity > v_requested_quantity
     OR (v_carton_quantity IS NOT NULL AND v_carton_quantity < 1)
   THEN
     RAISE EXCEPTION 'INVALID_QUANTITY' USING ERRCODE = '22023';
   END IF;
 
-  SELECT count(*)::integer INTO v_owner_count
-  FROM public.profiles owner_profile
-  WHERE owner_profile.org_id = v_actor.org_id
-    AND owner_profile.is_active = true
-    AND owner_profile.id IN (v_sales_owner, v_project_owner);
-  IF v_owner_count <> (CASE WHEN v_sales_owner = v_project_owner THEN 1 ELSE 2 END) THEN
-    RAISE EXCEPTION 'INVALID_OWNER' USING ERRCODE = '42501';
-  END IF;
-  IF v_actor.role = 'sales' AND v_actor.id NOT IN (v_sales_owner, v_project_owner) THEN
-    RAISE EXCEPTION 'NOT_AUTHORIZED' USING ERRCODE = '42501';
-  END IF;
-
   v_fingerprint := encode(sha256(convert_to(jsonb_build_object(
     'requestId', p_request_id,
     'actorUserId', auth.uid(),
     'organizationId', v_actor.org_id,
-    'payload', p_payload
+    'payload', p_payload - ARRAY[
+      'customerNameSnapshot',
+      'projectNameSnapshot',
+      'salesOwnerProfileId',
+      'projectOwnerProfileId'
+    ]
   )::text, 'UTF8')), 'hex');
 
   PERFORM pg_advisory_xact_lock(
@@ -956,6 +915,40 @@ BEGIN
       jsonb_build_object('status', 'REPLAYED');
   END IF;
 
+  SELECT * INTO v_customer
+  FROM public.cpc_customer_references customer
+  WHERE customer.id = v_customer_id
+    AND customer.org_id = v_actor.org_id
+    AND customer.status IN ('active', 'pending_review')
+    AND public.cpc_can_read_customer_reference(
+      customer.id, v_actor.org_id
+    );
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'CUSTOMER_ORGANIZATION_MISMATCH' USING ERRCODE = '42501';
+  END IF;
+  SELECT * INTO v_project
+  FROM public.cpc_projects project
+  WHERE project.id = v_project_id
+    AND project.org_id = v_actor.org_id
+    AND project.customer_reference_id = v_customer_id
+    AND project.status = 'active'
+    AND project.archived_at IS NULL
+    AND public.cpc_can_read_project(project.id, v_actor.org_id);
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'PROJECT_CUSTOMER_MISMATCH' USING ERRCODE = '42501';
+  END IF;
+  SELECT * INTO v_project_owner_profile
+  FROM public.profiles owner_profile
+  WHERE owner_profile.id = v_project.owner_profile_id
+    AND owner_profile.org_id = v_actor.org_id
+    AND owner_profile.is_active = true
+    AND owner_profile.role IN ('admin', 'manager', 'sales');
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'INVALID_PROJECT_OWNER' USING ERRCODE = '42501';
+  END IF;
+  v_sales_owner := v_actor.id;
+  v_project_owner := v_project.owner_profile_id;
+
   INSERT INTO public.wos_production_orders (
     organization_id, customer_id, customer_name_snapshot, project_id,
     project_name_snapshot, order_number, product_name, sales_owner_profile_id,
@@ -967,8 +960,8 @@ BEGIN
     label_marking_rule, created_by_profile_id, version
   ) VALUES (
     v_actor.org_id, v_customer_id,
-    btrim(p_payload->>'customerNameSnapshot'), v_project_id,
-    NULLIF(btrim(p_payload->>'projectNameSnapshot'), ''),
+    v_customer.display_name_snapshot, v_project_id,
+    v_project.title,
     btrim(p_payload->>'orderNumber'), btrim(p_payload->>'productName'),
     v_sales_owner, v_project_owner, p_payload->>'priority',
     COALESCE((p_payload->>'isUrgent')::boolean, false), 'V1', 'DRAFT',

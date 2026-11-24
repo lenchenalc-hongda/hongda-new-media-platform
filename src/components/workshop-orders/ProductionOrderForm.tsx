@@ -4,6 +4,7 @@ import React, { useState, type ChangeEvent } from 'react';
 import LiveQaProductionSubmit from './LiveQaProductionSubmit';
 import LiveQaCpcDraft from './LiveQaCpcDraft';
 import ProductionOfficeWorkflow from './ProductionOfficeWorkflow';
+import ProductionCpcSelector from './ProductionCpcSelector';
 import {
   PRODUCTION_ORDER_ENTRY_SECTIONS,
   createEmptyProductionOrderDraft,
@@ -12,6 +13,7 @@ import {
   type ProductionOrderDraft,
   type ProductionOrderEntryFieldKey,
 } from '../../lib/workshop-orders/office-entry';
+import type { WosV1CpcSelection } from '../../lib/workshop-orders/production-cpc-options';
 
 const inputClassName =
   'mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500';
@@ -29,6 +31,7 @@ export default function ProductionOrderForm({
     createEmptyProductionOrderDraft,
   );
   const [hasValidated, setHasValidated] = useState(false);
+  const [cpcSelection, setCpcSelection] = useState<WosV1CpcSelection | null>(null);
 
   const validation = validateProductionOrderDraft(draft);
   const errorCount = Object.keys(validation.fieldErrors).length;
@@ -255,11 +258,25 @@ export default function ProductionOrderForm({
       )}
 
       {productionLive && (
-        <ProductionOfficeWorkflow
-          draft={validation.normalized}
-          valid={validation.ok}
-          writeEnabled={productionWritesEnabled}
-        />
+        <>
+          <ProductionCpcSelector
+            disabled={!productionWritesEnabled}
+            onChange={selection => {
+              setCpcSelection(selection);
+              setDraft(current => ({
+                ...current,
+                customerName: selection?.customerName ?? '',
+                projectName: selection?.projectName ?? '',
+              }));
+            }}
+          />
+          <ProductionOfficeWorkflow
+            draft={validation.normalized}
+            valid={validation.ok}
+            writeEnabled={productionWritesEnabled}
+            cpcSelection={cpcSelection}
+          />
+        </>
       )}
 
       {qaLive && (

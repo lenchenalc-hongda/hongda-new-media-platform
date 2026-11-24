@@ -3,6 +3,13 @@ import { evaluateWosV1ReadOnlyAccess, orderSnapshotStable, preflightWosV1ReadOnl
 // @ts-ignore Deno requires the explicit .ts extension for local imports.
 import { canonicalWosV1ImagePath, type WosV1ObjectSnapshot } from '../wos-v1-verify-image/core.ts';
 
+export interface WosV1CurrentImageBinding {
+  readonly baselineId: string;
+  readonly imageId: string;
+  readonly storagePath: string;
+  readonly versionLabel: string;
+}
+
 export interface WosV1ReadOnlyRequestDependencies {
   readonly readOnlyEnabled: boolean;
   readonly qaRuntimeBound: boolean;
@@ -20,6 +27,10 @@ export interface WosV1ReadOnlyRequestDependencies {
     imageId: string,
     order: WosV1ReadOnlyOrder,
   ) => Promise<WosV1ReadOnlyProof | null>;
+  readonly currentImageFor: (
+    image: WosV1ReadOnlyVerificationBody['images'][number],
+    order: WosV1ReadOnlyOrder,
+  ) => Promise<WosV1CurrentImageBinding | null>;
   readonly snapshotFor: (
     path: string,
   ) => Promise<WosV1ObjectSnapshot | null>;
@@ -89,6 +100,7 @@ export async function executeWosV1ReadOnlyRequest(input: {
     readonly image: (typeof input.body.images)[number];
     readonly proof: WosV1ReadOnlyProof;
     readonly snapshot: WosV1ObjectSnapshot;
+    readonly currentImage: WosV1CurrentImageBinding;
     readonly checkedAt: string;
   }> = [];
 
@@ -103,6 +115,10 @@ export async function executeWosV1ReadOnlyRequest(input: {
     });
     if (expectedPath !== image.storagePath) {
       return { status: 400, code: 'INVALID_IMAGE_PATH', data: null };
+    }
+    const currentImage = await deps.currentImageFor(image, order);
+    if (!currentImage) {
+      return { status: 409, code: 'PROOF_METADATA_MISMATCH', data: null };
     }
     const proof = await deps.proofFor(image.imageId, order);
     const snapshot = await deps.snapshotFor(expectedPath);
@@ -124,7 +140,7 @@ export async function executeWosV1ReadOnlyRequest(input: {
     if (!preflight.ok) {
       return { status: 409, code: preflight.code, data: null };
     }
-    prepared.push({ image, proof, snapshot, checkedAt });
+    prepared.push({ image, proof, snapshot, currentImage, checkedAt });
   }
 
   const orderBeforeDownload = await deps.currentOrder(
@@ -150,11 +166,22 @@ export async function executeWosV1ReadOnlyRequest(input: {
     }
     const secondProof = await deps.proofFor(item.image.imageId, order);
     const secondSnapshot = await deps.snapshotFor(item.image.storagePath);
+    const secondCurrentImage = await deps.currentImageFor(item.image, order);
     const secondCheckedAt = deps.now();
-    if (!secondProof || !secondSnapshot) {
+    if (!secondProof || !secondSnapshot || !secondCurrentImage) {
       return {
         status: 409,
         code: 'PROOF_METADATA_MISMATCH',
+        data: null,
+      };
+    }
+    if (secondCurrentImage.baselineId !== item.currentImage.baselineId
+      || secondCurrentImage.imageId !== item.currentImage.imageId
+      || secondCurrentImage.storagePath !== item.currentImage.storagePath
+      || secondCurrentImage.versionLabel !== item.currentImage.versionLabel) {
+      return {
+        status: 409,
+        code: 'PROOF_CHANGED_DURING_VERIFICATION',
         data: null,
       };
     }

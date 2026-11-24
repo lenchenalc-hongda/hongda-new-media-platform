@@ -132,6 +132,101 @@ async function proofFor(
   return readProof(result.data[0]);
 }
 
+async function currentImageFor(
+  admin: AdminClient,
+  image: {
+    readonly category: string;
+    readonly imageId: string;
+    readonly sha256: string;
+    readonly storagePath: string;
+  },
+  order: WosV1ReadOnlyOrder,
+): Promise<{
+  readonly baselineId: string;
+  readonly imageId: string;
+  readonly storagePath: string;
+  readonly versionLabel: string;
+} | null> {
+  const imageResult = await admin.from('wos_reference_images')
+    .select([
+      'id',
+      'organization_id',
+      'entity_type',
+      'entity_id',
+      'category',
+      'storage_path',
+      'version_label',
+      'image_status',
+      'superseded_at',
+    ].join(','))
+    .eq('id', image.imageId)
+    .eq('organization_id', order.organization_id)
+    .eq('entity_type', 'PRODUCTION_ORDER')
+    .eq('entity_id', order.id)
+    .eq('category', image.category)
+    .eq('storage_path', image.storagePath)
+    .eq('version_label', order.version_label)
+    .eq('image_status', 'READY')
+    .maybeSingle();
+  const imageRow = object(imageResult.data);
+  if (imageResult.error || !imageRow
+    || imageRow.id !== image.imageId
+    || imageRow.organization_id !== order.organization_id
+    || imageRow.entity_type !== 'PRODUCTION_ORDER'
+    || imageRow.entity_id !== order.id
+    || imageRow.category !== image.category
+    || imageRow.storage_path !== image.storagePath
+    || imageRow.version_label !== order.version_label
+    || imageRow.image_status !== 'READY'
+    || imageRow.superseded_at !== null) {
+    return null;
+  }
+
+  const baselineResult = await admin.from('wos_visual_baselines')
+    .select('id,organization_id,entity_type,entity_id,version_label,status')
+    .eq('organization_id', order.organization_id)
+    .eq('entity_type', 'PRODUCTION_ORDER')
+    .eq('entity_id', order.id)
+    .eq('version_label', order.version_label)
+    .eq('status', 'CURRENT')
+    .limit(2);
+  if (baselineResult.error
+    || !Array.isArray(baselineResult.data)
+    || baselineResult.data.length !== 1) {
+    return null;
+  }
+  const baseline = object(baselineResult.data[0]);
+  if (!baseline
+    || typeof baseline.id !== 'string'
+    || baseline.organization_id !== order.organization_id
+    || baseline.entity_type !== 'PRODUCTION_ORDER'
+    || baseline.entity_id !== order.id
+    || baseline.version_label !== order.version_label
+    || baseline.status !== 'CURRENT') {
+    return null;
+  }
+
+  const itemResult = await admin.from('wos_visual_baseline_items')
+    .select('baseline_id,reference_image_id,is_required')
+    .eq('baseline_id', baseline.id)
+    .eq('reference_image_id', image.imageId)
+    .eq('is_required', true)
+    .maybeSingle();
+  const item = object(itemResult.data);
+  if (itemResult.error
+    || item?.baseline_id !== baseline.id
+    || item.reference_image_id !== image.imageId
+    || item.is_required !== true) {
+    return null;
+  }
+  return {
+    baselineId: baseline.id,
+    imageId: image.imageId,
+    storagePath: image.storagePath,
+    versionLabel: order.version_label,
+  };
+}
+
 async function snapshotFor(
   admin: AdminClient,
   path: string,
@@ -318,6 +413,8 @@ Deno.serve(async request => {
           orderFor: (orderId, organizationId) =>
             orderFor(userDb, orderId, organizationId),
           proofFor: (imageId, order) => proofFor(admin, imageId, order),
+          currentImageFor: (image, order) =>
+            currentImageFor(admin, image, order),
           snapshotFor: path => snapshotFor(admin, path),
           download: async path => {
             const downloaded = await userDb.storage.from('wos-private')

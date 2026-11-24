@@ -168,6 +168,8 @@ BEGIN
         'orderNumber','WOS-PROD-CI-FOREIGN-CUSTOMER',
         'customerId','81000000-0000-4000-8000-000000000002',
         'customerNameSnapshot','Synthetic Foreign Customer',
+        'projectId','82000000-0000-4000-8000-000000000003',
+        'projectNameSnapshot','Synthetic Other Same Org Project',
         'productName','Synthetic Product',
         'salesOwnerProfileId','11111111-1111-4111-8111-111111111111',
         'projectOwnerProfileId','11111111-1111-4111-8111-111111111111',
@@ -187,8 +189,10 @@ BEGIN
       '51000000-0000-4000-8000-000000000092',
       jsonb_build_object(
         'orderNumber','WOS-PROD-CI-FOREIGN-PROJECT',
+        'customerId','81000000-0000-4000-8000-000000000001',
+        'customerNameSnapshot','Synthetic Same Org Customer',
         'projectId','82000000-0000-4000-8000-000000000002',
-        'customerNameSnapshot','Synthetic Customer',
+        'projectNameSnapshot','Synthetic Foreign Project',
         'productName','Synthetic Product',
         'salesOwnerProfileId','11111111-1111-4111-8111-111111111111',
         'projectOwnerProfileId','11111111-1111-4111-8111-111111111111',
@@ -263,8 +267,8 @@ SELECT (
     'projectId','82000000-0000-4000-8000-000000000001',
     'projectNameSnapshot','Synthetic Same Org Project',
     'productName','Synthetic Product',
-    'salesOwnerProfileId','11111111-1111-4111-8111-111111111111',
-    'projectOwnerProfileId','11111111-1111-4111-8111-111111111111',
+    'salesOwnerProfileId','33333333-3333-4333-8333-333333333333',
+    'projectOwnerProfileId','33333333-3333-4333-8333-333333333333',
     'priority','MEDIUM',
     'requestedQuantity',100,
     'currentBatchQuantity',100,
@@ -279,6 +283,70 @@ SELECT 'organizations/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/wos/production-order/
   || :'order_id' || '/images/' AS order_prefix \gset
 SELECT set_config('wos_v1.smoke_order_id', :'order_id', false);
 SELECT set_config('wos_v1.smoke_order_prefix', :'order_prefix', false);
+
+RESET ROLE;
+UPDATE public.cpc_projects
+SET archived_at = clock_timestamp()
+WHERE id = '82000000-0000-4000-8000-000000000001';
+SET ROLE authenticated;
+
+DO $cpc_idempotent_replay$
+DECLARE
+  v_result jsonb;
+BEGIN
+  v_result := public.wos_create_production_order(
+    '51000000-0000-4000-8000-000000000099',
+    jsonb_build_object(
+      'orderNumber','WOS-PROD-CI-001',
+      'customerId','81000000-0000-4000-8000-000000000001',
+      'customerNameSnapshot','Ignored Retry Customer',
+      'projectId','82000000-0000-4000-8000-000000000001',
+      'projectNameSnapshot','Ignored Retry Project',
+      'productName','Synthetic Product',
+      'salesOwnerProfileId','33333333-3333-4333-8333-333333333333',
+      'projectOwnerProfileId','33333333-3333-4333-8333-333333333333',
+      'priority','MEDIUM',
+      'requestedQuantity',100,
+      'currentBatchQuantity',100,
+      'productMaterial','Synthetic Material',
+      'customerAcceptanceStandard','Synthetic acceptance standard',
+      'positionReference','Synthetic print position'
+    )
+  );
+  IF v_result->>'status' <> 'REPLAYED' THEN
+    RAISE EXCEPTION 'CPC_MUTABLE_RETRY_NOT_REPLAYED';
+  END IF;
+END;
+$cpc_idempotent_replay$;
+
+RESET ROLE;
+UPDATE public.cpc_projects
+SET archived_at = NULL
+WHERE id = '82000000-0000-4000-8000-000000000001';
+SET ROLE authenticated;
+
+DO $cpc_authoritative_binding$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM public.wos_production_orders production_order
+    JOIN public.cpc_customer_references customer
+      ON customer.id = production_order.customer_id
+    JOIN public.cpc_projects project
+      ON project.id = production_order.project_id
+    WHERE production_order.id = current_setting('wos_v1.smoke_order_id')::uuid
+      AND production_order.customer_name_snapshot =
+        customer.display_name_snapshot
+      AND production_order.project_name_snapshot = project.title
+      AND production_order.sales_owner_profile_id =
+        '11111111-1111-4111-8111-111111111111'
+      AND production_order.project_owner_profile_id =
+        project.owner_profile_id
+  ) THEN
+    RAISE EXCEPTION 'CPC_AUTHORITATIVE_BINDING_NOT_ENFORCED';
+  END IF;
+END;
+$cpc_authoritative_binding$;
 
 DO $storage_policy_negative$
 BEGIN

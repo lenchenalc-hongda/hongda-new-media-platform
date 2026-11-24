@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 // @ts-ignore Deno requires the explicit .ts extension for local imports.
 import { executeWosV1ReadOnlyRequest, type WosV1ReadOnlyRequestDependencies } from '../../supabase/functions/wos-v1-verify-image-readonly/handler';
 // @ts-ignore Deno requires the explicit .ts extension for local imports.
@@ -13,6 +14,17 @@ import {
 } from '../../supabase/functions/wos-v1-verify-image-readonly/core';
 // @ts-ignore Deno requires the explicit .ts extension for local imports.
 import type { WosV1ObjectSnapshot } from '../../supabase/functions/wos-v1-verify-image/core';
+
+const readonlyHandler = readFileSync(
+  'supabase/functions/wos-v1-verify-image-readonly/handler.ts',
+  'utf8',
+);
+assert(readonlyHandler.includes('deps.currentImageFor(image, order)'));
+assert(
+  readonlyHandler.indexOf('deps.currentImageFor(image, order)')
+    < readonlyHandler.indexOf('deps.download(item.image.storagePath)'),
+  'current image/baseline check must precede private byte downloads',
+);
 
 const organizationId = '11111111-1111-4111-8111-111111111111';
 const orderId = '33333333-3333-4333-8333-333333333333';
@@ -108,6 +120,7 @@ interface Counters {
   renewals: number;
   recordings: number;
   proofReads: number;
+  currentImageReads: number;
   snapshotReads: number;
   currentOrderReads: number;
 }
@@ -118,6 +131,8 @@ function dependencies(options: {
   readonly snapshotAt?: (index: number) => WosV1ObjectSnapshot | null;
   readonly now?: () => string;
   readonly currentOrderAt?: () => WosV1ReadOnlyOrder | null;
+  readonly currentImageAllowed?: (index: number) => boolean;
+  readonly currentImageBaselineAt?: (index: number, read: number) => string;
 } = {}): {
   readonly deps: WosV1ReadOnlyRequestDependencies;
   readonly counters: Counters;
@@ -128,9 +143,11 @@ function dependencies(options: {
     renewals: 0,
     recordings: 0,
     proofReads: 0,
+    currentImageReads: 0,
     snapshotReads: 0,
     currentOrderReads: 0,
   };
+  const currentImageCounts = new Map<string, number>();
   const deps: WosV1ReadOnlyRequestDependencies = {
     readOnlyEnabled: options.readOnlyEnabled ?? true,
     qaRuntimeBound: true,
@@ -142,6 +159,22 @@ function dependencies(options: {
     proofFor: async (_imageId, _order) => {
       const index = counters.proofReads++ % images.length;
       return options.proofAt ? options.proofAt(index) : proofs[index];
+    },
+    currentImageFor: async image => {
+      const index = images.findIndex(row => row.imageId === image.imageId);
+      const readsForImage = (currentImageCounts.get(image.imageId) ?? 0) + 1;
+      currentImageCounts.set(image.imageId, readsForImage);
+      counters.currentImageReads++;
+      return index >= 0
+        && (options.currentImageAllowed?.(index) ?? true)
+        ? {
+            baselineId: options.currentImageBaselineAt?.(index, readsForImage)
+              ?? '99999999-9999-4999-8999-999999999999',
+            imageId: image.imageId,
+            storagePath: image.storagePath,
+            versionLabel: order.version_label,
+          }
+        : null;
     },
     snapshotFor: async path => {
       const index = images.findIndex(image => image.storagePath === path);
@@ -189,6 +222,31 @@ async function request(deps: WosV1ReadOnlyRequestDependencies) {
     body,
     dependencies: deps,
   });
+}
+
+{
+  const { deps, counters } = dependencies({
+    currentImageAllowed: index => index !== 2,
+  });
+  const result = await request(deps);
+  assert.equal(result.code, 'PROOF_METADATA_MISMATCH');
+  assert.equal(counters.downloads, 0,
+    'orphaned or non-CURRENT image must be rejected before download');
+  assertNoWrites(counters);
+}
+
+{
+  const { deps, counters } = dependencies({
+    currentImageBaselineAt: (index, read) =>
+      index === 0 && read === 2
+        ? 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+        : '99999999-9999-4999-8999-999999999999',
+  });
+  const result = await request(deps);
+  assert.equal(result.code, 'PROOF_CHANGED_DURING_VERIFICATION');
+  assert.equal(counters.downloads, 1,
+    'baseline replacement must be detected immediately after download');
+  assertNoWrites(counters);
 }
 
 {

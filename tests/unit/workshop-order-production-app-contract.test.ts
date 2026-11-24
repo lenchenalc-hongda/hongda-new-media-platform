@@ -127,7 +127,9 @@ const create = parseWosV1AppRequest({
   requestId,
   payload: {
     orderNumber: 'WOS-PROD-001',
+    customerId: '81000000-0000-4000-8000-000000000001',
     customerNameSnapshot: 'Synthetic Customer',
+    projectId: '82000000-0000-4000-8000-000000000001',
     projectNameSnapshot: 'Synthetic Project',
     productName: 'Synthetic cup',
     priority: 'MEDIUM',
@@ -160,7 +162,10 @@ assert.equal(parseWosV1AppRequest({
   requestId,
   payload: {
     orderNumber: 'WOS-PROD-001',
+    customerId: '81000000-0000-4000-8000-000000000001',
     customerNameSnapshot: 'Synthetic Customer',
+    projectId: '82000000-0000-4000-8000-000000000001',
+    projectNameSnapshot: 'Synthetic Project',
     productName: 'Synthetic cup',
     salesOwnerProfileId: profileId,
     priority: 'MEDIUM',
@@ -173,8 +178,25 @@ assert.equal(parseWosV1AppRequest({
   operation: 'CREATE_ORDER',
   requestId,
   payload: {
-    orderNumber: 'WOS-PROD-SPLIT',
+    orderNumber: 'WOS-PROD-NO-CPC',
     customerNameSnapshot: 'Synthetic Customer',
+    projectNameSnapshot: 'Synthetic Project',
+    productName: 'Synthetic cup',
+    priority: 'MEDIUM',
+    requestedQuantity: 100,
+    currentBatchQuantity: 80,
+    productMaterial: 'PP',
+  },
+}), null, 'production create requires an actual CPC customer and project');
+assert.equal(parseWosV1AppRequest({
+  operation: 'CREATE_ORDER',
+  requestId,
+  payload: {
+    orderNumber: 'WOS-PROD-SPLIT',
+    customerId: '81000000-0000-4000-8000-000000000001',
+    customerNameSnapshot: 'Synthetic Customer',
+    projectId: '82000000-0000-4000-8000-000000000001',
+    projectNameSnapshot: 'Synthetic Project',
     productName: 'Synthetic cup',
     priority: 'MEDIUM',
     requestedQuantity: 100,
@@ -282,6 +304,10 @@ const officeWorkflow = readFileSync(
   'src/components/workshop-orders/ProductionOfficeWorkflow.tsx',
   'utf8',
 );
+const cpcSelector = readFileSync(
+  'src/components/workshop-orders/ProductionCpcSelector.tsx',
+  'utf8',
+);
 const workshopInbox = readFileSync(
   'src/components/workshop-orders/ProductionWorkshopInbox.tsx',
   'utf8',
@@ -311,11 +337,23 @@ for (const marker of [
   'WOS_V1_DETAIL_VERSION_CHANGED',
   "return ['DRAFT', ...ACTIVE_ORDER_STATUSES]",
   'salesOwnerProfileId: auth.actor.profileId',
-  'projectOwnerProfileId: auth.actor.profileId',
+  'CPC_LINK_DENIED',
+  'PROJECT_CUSTOMER_MISMATCH',
 ]) assert(server.includes(marker), 'production app server missing ' + marker);
 assert(!server.includes('service_role'));
 assert(!route.includes('service_role'));
 assert(!qaRoute.includes('service_role'));
+for (const marker of [
+  'customerId: cpcSelection.customerId',
+  'projectId: cpcSelection.projectId',
+  "persisted.workflow_status !== 'DRAFT'",
+]) assert(officeWorkflow.includes(marker),
+  'production office workflow missing ' + marker);
+for (const marker of [
+  'loadWosV1CpcOptions',
+  'CPC 客户',
+  'CPC 项目',
+]) assert(cpcSelector.includes(marker), 'CPC selector missing ' + marker);
 for (const marker of [
   'createWosV1QaHandlerDependencies',
   'handleWosV1Request',

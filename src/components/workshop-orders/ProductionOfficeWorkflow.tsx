@@ -12,6 +12,7 @@ import {
   isWosV1VerifiedOperation,
   uploadAndVerifyWosV1Image,
 } from '@/lib/workshop-orders/production-app-client';
+import type { WosV1CpcSelection } from '@/lib/workshop-orders/production-cpc-options';
 
 type WosV1ImageCategory = (typeof WOS_V1_IMAGE_CATEGORIES)[number];
 const categoryLabels: Record<WosV1ImageCategory, string> = {
@@ -53,10 +54,12 @@ export default function ProductionOfficeWorkflow({
   draft,
   valid,
   writeEnabled,
+  cpcSelection,
 }: {
   readonly draft: NormalizedProductionOrderDraft;
   readonly valid: boolean;
   readonly writeEnabled: boolean;
+  readonly cpcSelection: WosV1CpcSelection | null;
 }) {
   const [files, setFiles] = useState<
     Partial<Record<WosV1ImageCategory, File>>
@@ -101,6 +104,10 @@ export default function ProductionOfficeWorkflow({
       setMessage('请先完成生产订单必填资料检查。');
       return;
     }
+    if (!cpcSelection) {
+      setMessage('请先选择有效的 CPC 客户和项目。');
+      return;
+    }
     if (draft.versionLabel !== 'V1') {
       setMessage('第一期正式创建固定为 V1；版本号不能在此步骤静默改写。');
       return;
@@ -113,12 +120,6 @@ export default function ProductionOfficeWorkflow({
       setMessage('办公室齐套确认说明必须为 10 至 2000 字。');
       return;
     }
-    if (WOS_V1_IMAGE_CATEGORIES.some(category =>
-      files[category]?.type !== 'image/png')) {
-      setMessage('当前可信验证仅接受四类 PNG 图片。');
-      return;
-    }
-
     setBusy(true);
     try {
       const supabase = createClient();
@@ -151,20 +152,40 @@ export default function ProductionOfficeWorkflow({
           && typeof existing.data === 'object'
           ? existing.data as Record<string, unknown>
           : null;
-        const matching = Array.isArray(existingData?.items)
+        const payloadMatches = Array.isArray(existingData?.items)
           ? existingData.items.filter(value => {
               const row = value && typeof value === 'object'
                 ? value as Record<string, unknown>
                 : null;
-              return row?.workflow_status === 'DRAFT'
-                && row.version === 1
-                && row.version_label === 'V1'
-                && draftMatchesOrder(row, draft);
+              return row !== null && draftMatchesOrder(row, draft);
             }) as Record<string, unknown>[]
           : [];
         const existingItems = Array.isArray(existingData?.items)
           ? existingData.items as unknown[]
           : [];
+        if (payloadMatches.length > 1) {
+          throw new Error('DRAFT_PAYLOAD_AMBIGUOUS');
+        }
+        const persisted = payloadMatches[0];
+        if (persisted
+          && persisted.workflow_status !== 'DRAFT'
+          && ['SUBMITTED', 'WORKSHOP_REVIEW', 'NEEDS_INFORMATION', 'WAITING_MATERIAL']
+            .includes(String(persisted.workflow_status))) {
+          if (typeof persisted.id === 'string') {
+            requestRef.current.orderId = persisted.id;
+            setCreatedOrderId(persisted.id);
+          }
+          setMessage(
+            '数据库已存在与当前资料完全一致且已提交的订单，状态为 '
+            + String(persisted.workflow_status)
+            + '。本次不会重复创建或重复上传。',
+          );
+          return;
+        }
+        const matching = payloadMatches.filter(row =>
+          row.workflow_status === 'DRAFT'
+          && row.version === 1
+          && row.version_label === 'V1');
         if (existingItems.length > 0 && matching.length !== 1) {
           throw new Error('DRAFT_PAYLOAD_MISMATCH');
         }
@@ -217,8 +238,10 @@ export default function ProductionOfficeWorkflow({
             requestId: requestRef.current.createRequestId,
             payload: {
               orderNumber: draft.orderNumber,
-              customerNameSnapshot: draft.customerName,
-              projectNameSnapshot: draft.projectName || undefined,
+              customerId: cpcSelection.customerId,
+              customerNameSnapshot: cpcSelection.customerName,
+              projectId: cpcSelection.projectId,
+              projectNameSnapshot: cpcSelection.projectName,
               productName: draft.productName,
               priority,
               isUrgent: draft.isUrgent,
@@ -253,7 +276,19 @@ export default function ProductionOfficeWorkflow({
         setCreatedOrderId(orderId);
       }
 
+      const missingFiles = WOS_V1_IMAGE_CATEGORIES.filter(category =>
+        !existingImageIdsRef.current[category]
+        && files[category]?.type !== 'image/png');
+      if (missingFiles.length > 0) {
+        throw new Error('FOUR_CURRENT_IMAGES_REQUIRED');
+      }
+
       for (const category of WOS_V1_IMAGE_CATEGORIES) {
+        const recoveredImageId = existingImageIdsRef.current[category];
+        if (recoveredImageId) {
+          requestRef.current.imageIds[category] = recoveredImageId;
+          continue;
+        }
         const file = files[category];
         if (!file) throw new Error('FOUR_CURRENT_IMAGES_REQUIRED');
         const imageId = existingImageIdsRef.current[category]
