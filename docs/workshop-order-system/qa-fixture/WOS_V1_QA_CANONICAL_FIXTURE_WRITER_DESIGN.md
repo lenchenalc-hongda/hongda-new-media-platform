@@ -83,6 +83,12 @@ All QA Gates must be OFF. The order number is derived, not caller supplied.
 Repeating the same request returns `REPLAYED`; any conflict is rejected.
 PREPARE also creates exactly one private manifest row in stage `PREPARED`.
 
+A partial unique index over the private manifest table permits only one active
+fixture in the approved QA project. A global transaction advisory lock
+serializes PREPARE and rollback. Concurrent PREPARE calls with different
+request/order IDs produce one success and one
+`FIXTURE_ACTIVE_LIMIT_REACHED`; the rejected transaction leaves no order.
+
 ## Storage Middle Phase
 
 PREPARE does not upload or register images.
@@ -187,6 +193,13 @@ requires exact equality with:
 - zero extra READY or non-READY image rows;
 - zero extra required or optional baseline items.
 
+For a `PREPARED` fixture it instead requires no reference images, baseline,
+baseline items, Proof, Receipt, business reference, or canonical Storage
+object under the fixture order prefix. A PREPARED rollback deletes only its
+manifest and order. Any Storage object causes
+`FIXTURE_STORAGE_OBJECTS_REMAIN`; cleanup must occur separately through the
+Storage API.
+
 It refuses rollback if it finds:
 
 ```text
@@ -206,9 +219,10 @@ canonical paths are returned for a separately authorized Storage API cleanup.
 
 ## Concurrency
 
-Both operations use a transaction-scoped advisory lock keyed by the exact
-fixture order ID. PREPARE is idempotent; concurrent FINALIZE calls must produce
-one `CREATED` and one `REPLAYED`, or a single fail-closed conflict.
+All operations use a global transaction-scoped fixture advisory lock, followed
+by an exact-order lock where applicable. PREPARE is idempotent and limited to
+one active fixture by both the lock and unique index. Concurrent FINALIZE calls
+must produce one `CREATED` and one `REPLAYED`, or a single fail-closed conflict.
 
 ## Installation Boundary
 

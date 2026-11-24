@@ -21,6 +21,8 @@ CREATE TABLE public.wos_qa_canonical_fixture_manifests (
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   finalized_at timestamptz
 );
+CREATE UNIQUE INDEX wos_one_active_canonical_fixture
+  ON public.wos_qa_canonical_fixture_manifests ((true));
 
 ALTER TABLE public.wos_qa_canonical_fixture_manifests
   ENABLE ROW LEVEL SECURITY;
@@ -170,11 +172,26 @@ BEGIN
 
     v_order_number := 'QA-NONPROD-' || v_request_id::text;
     PERFORM pg_catalog.pg_advisory_xact_lock(
+      pg_catalog.hashtextextended('wos-qa-v1-fixture-global', 0)
+    );
+    PERFORM pg_catalog.pg_advisory_xact_lock(
       pg_catalog.hashtextextended(
         'wos-qa-v1-fixture:' || v_order_id::text,
         0
       )
     );
+
+    SELECT * INTO v_manifest_record
+    FROM public.wos_qa_canonical_fixture_manifests
+    LIMIT 1;
+    IF FOUND
+      AND (
+        v_manifest_record.request_id <> v_request_id
+        OR v_manifest_record.order_id <> v_order_id
+      ) THEN
+      RAISE EXCEPTION 'FIXTURE_ACTIVE_LIMIT_REACHED'
+        USING ERRCODE = '23505';
+    END IF;
 
     SELECT * INTO v_existing_order
     FROM public.wos_production_orders
@@ -286,23 +303,28 @@ BEGIN
       ),
       'hex'
     );
-    INSERT INTO public.wos_qa_canonical_fixture_manifests (
-      request_id,
-      order_id,
-      organization_id,
-      office_profile_id,
-      stage,
-      manifest,
-      manifest_sha256
-    ) VALUES (
-      v_request_id,
-      v_order_id,
-      c_organization,
-      v_actor.id,
-      'PREPARED',
-      v_result,
-      v_manifest_sha256
-    );
+    BEGIN
+      INSERT INTO public.wos_qa_canonical_fixture_manifests (
+        request_id,
+        order_id,
+        organization_id,
+        office_profile_id,
+        stage,
+        manifest,
+        manifest_sha256
+      ) VALUES (
+        v_request_id,
+        v_order_id,
+        c_organization,
+        v_actor.id,
+        'PREPARED',
+        v_result,
+        v_manifest_sha256
+      );
+    EXCEPTION WHEN unique_violation THEN
+      RAISE EXCEPTION 'FIXTURE_ACTIVE_LIMIT_REACHED'
+        USING ERRCODE = '23505';
+    END;
     RETURN v_result || pg_catalog.jsonb_build_object(
       'status', 'CREATED',
       'stage', 'PREPARED'
@@ -378,6 +400,9 @@ BEGIN
     END IF;
 
     v_order_number := 'QA-NONPROD-' || v_request_id::text;
+    PERFORM pg_catalog.pg_advisory_xact_lock(
+      pg_catalog.hashtextextended('wos-qa-v1-fixture-global', 0)
+    );
     PERFORM pg_catalog.pg_advisory_xact_lock(
       pg_catalog.hashtextextended(
         'wos-qa-v1-fixture:' || v_order_id::text,
@@ -858,6 +883,7 @@ DECLARE
   v_index integer;
   v_item jsonb;
   v_image_ids uuid[] := ARRAY[]::uuid[];
+  v_storage_prefix text;
 BEGIN
   IF coalesce(
     pg_catalog.current_setting('request.jwt.claim.role', true),
@@ -882,6 +908,9 @@ BEGIN
       USING ERRCODE = '42501';
   END IF;
 
+  PERFORM pg_catalog.pg_advisory_xact_lock(
+    pg_catalog.hashtextextended('wos-qa-v1-fixture-global', 0)
+  );
   PERFORM pg_catalog.pg_advisory_xact_lock(
     pg_catalog.hashtextextended(
       'wos-qa-v1-fixture:' || p_order_id::text,
@@ -910,8 +939,7 @@ BEGIN
     AND organization_id = c_organization
   FOR UPDATE;
   IF NOT FOUND
-    OR v_manifest_record.stage <> 'FINALIZED'
-    OR v_manifest_record.baseline_id IS NULL
+    OR v_manifest_record.stage NOT IN ('PREPARED', 'FINALIZED')
     OR v_manifest_record.manifest_sha256 <>
       pg_catalog.encode(
         pg_catalog.sha256(
@@ -927,6 +955,142 @@ BEGIN
     OR pg_catalog.jsonb_array_length(v_manifest_record.manifest->'images')
       <> 4 THEN
     RAISE EXCEPTION 'FIXTURE_MANIFEST_INVALID'
+      USING ERRCODE = '23514';
+  END IF;
+
+  IF v_order.created_by_profile_id <> v_manifest_record.office_profile_id
+    OR v_order.sales_owner_profile_id <> v_manifest_record.office_profile_id
+    OR v_order.project_owner_profile_id <> v_manifest_record.office_profile_id
+    OR v_manifest_record.manifest->>'officeProfileId'
+      <> v_manifest_record.office_profile_id::text THEN
+    RAISE EXCEPTION 'FIXTURE_ORDER_ACTOR_MISMATCH'
+      USING ERRCODE = '23514';
+  END IF;
+
+  IF v_manifest_record.stage = 'PREPARED' THEN
+    IF v_manifest_record.baseline_id IS NOT NULL
+      OR EXISTS (
+        SELECT 1 FROM public.wos_reference_images
+        WHERE organization_id = c_organization
+          AND entity_type = 'PRODUCTION_ORDER'
+          AND entity_id = p_order_id
+      )
+      OR EXISTS (
+        SELECT 1 FROM public.wos_visual_baselines
+        WHERE organization_id = c_organization
+          AND entity_type = 'PRODUCTION_ORDER'
+          AND entity_id = p_order_id
+      )
+      OR EXISTS (
+        SELECT 1
+        FROM public.wos_visual_baseline_items item
+        JOIN public.wos_visual_baselines baseline
+          ON baseline.id = item.baseline_id
+        WHERE baseline.entity_id = p_order_id
+      )
+      OR EXISTS (
+        SELECT 1 FROM public.wos_qa_verified_image_proofs
+        WHERE order_id = p_order_id
+      )
+      OR EXISTS (
+        SELECT 1 FROM public.wos_submission_receipts
+        WHERE order_id = p_order_id
+      )
+      OR EXISTS (
+        SELECT 1 FROM public.wos_qa_p2_m2_receipts
+        WHERE order_id = p_order_id
+      )
+      OR EXISTS (
+        SELECT 1 FROM public.wos_office_readiness_receipts
+        WHERE order_id = p_order_id
+      )
+      OR EXISTS (
+        SELECT 1 FROM public.wos_qa_orphan_cleanup_claims
+        WHERE order_id = p_order_id
+      )
+      OR EXISTS (
+        SELECT 1 FROM public.wos_qa_p2_action_receipts
+        WHERE order_id = p_order_id
+      )
+      OR EXISTS (
+        SELECT 1 FROM public.wos_qa_p2_office_revisions
+        WHERE order_id = p_order_id
+      )
+      OR EXISTS (
+        SELECT 1 FROM public.wos_qa_p2_review_receipts
+        WHERE order_id = p_order_id
+      )
+      OR EXISTS (
+        SELECT 1 FROM public.wos_qa_trusted_proof_receipts
+        WHERE order_id = p_order_id
+      )
+      OR EXISTS (
+        SELECT 1 FROM public.wos_workshop_inbox
+        WHERE order_id = p_order_id
+      )
+      OR EXISTS (
+        SELECT 1 FROM public.wos_confirmations
+        WHERE entity_id = p_order_id
+      )
+      OR EXISTS (
+        SELECT 1 FROM public.wos_blockers
+        WHERE entity_id = p_order_id
+      )
+      OR EXISTS (
+        SELECT 1 FROM public.wos_status_history
+        WHERE entity_id = p_order_id
+      )
+      OR EXISTS (
+        SELECT 1 FROM public.wos_resource_readiness
+        WHERE entity_id = p_order_id
+      ) THEN
+      RAISE EXCEPTION 'FIXTURE_HAS_EXTERNAL_REFERENCES'
+        USING ERRCODE = '23514';
+    END IF;
+
+    v_storage_prefix :=
+      'organizations/' || c_organization::text
+      || '/wos/production-order/' || p_order_id::text || '/';
+    IF EXISTS (
+      SELECT 1
+      FROM storage.objects
+      WHERE bucket_id = 'wos-private'
+        AND left(name, length(v_storage_prefix)) = v_storage_prefix
+    ) THEN
+      RAISE EXCEPTION 'FIXTURE_STORAGE_OBJECTS_REMAIN'
+        USING ERRCODE = '23514';
+    END IF;
+
+    DELETE FROM public.wos_qa_canonical_fixture_manifests
+    WHERE request_id = p_request_id
+      AND order_id = p_order_id
+      AND stage = 'PREPARED';
+    DELETE FROM public.wos_production_orders
+    WHERE id = p_order_id
+      AND organization_id = c_organization
+      AND order_number = v_order_number
+      AND workflow_status = 'WAITING_MATERIAL'
+      AND version = 1
+      AND version_label = 'QA-R1';
+    RETURN pg_catalog.jsonb_build_object(
+      'status', 'ROLLED_BACK',
+      'stage', 'PREPARED',
+      'fixtureRequestId', p_request_id,
+      'orderId', p_order_id,
+      'organizationId', c_organization,
+      'deletedBaselineItems', 0,
+      'deletedBaselines', 0,
+      'deletedReferenceImages', 0,
+      'deletedOrders', 1,
+      'storageObjectsDeletedBySql', 0,
+      'storageCleanupRequired', false,
+      'storagePaths', '[]'::jsonb
+    );
+  END IF;
+
+  IF v_manifest_record.stage <> 'FINALIZED'
+    OR v_manifest_record.baseline_id IS NULL THEN
+    RAISE EXCEPTION 'FIXTURE_MANIFEST_STAGE_INVALID'
       USING ERRCODE = '23514';
   END IF;
 

@@ -68,10 +68,67 @@ echo "CONCURRENT_FINALIZE=PASS created=1 replayed=1" | tee "$LOG_DIR/concurrency
 "${PSQL[@]}" -f /work/tests/sql/wos-v1-qa-canonical-fixture-pg17-install-rollback.sql \
   | tee "$LOG_DIR/install-rollback-assertions.log"
 
+docker exec "$CONTAINER" createdb -U postgres fixture_aux
+AUX_PSQL=(docker exec -i "$CONTAINER" psql -U postgres -d fixture_aux -v ON_ERROR_STOP=1)
+"${AUX_PSQL[@]}" -f /work/tests/sql/wos-v1-qa-canonical-fixture-pg17-schema.sql \
+  | tee "$LOG_DIR/aux-schema.log"
+"${AUX_PSQL[@]}" -f /work/docs/workshop-order-system/qa-fixture/WOS_V1_QA_CANONICAL_FIXTURE_WRITER_NOT_AUTHORIZED.sql \
+  | tee "$LOG_DIR/aux-forward.log"
+"${AUX_PSQL[@]}" -f /work/tests/sql/wos-v1-qa-canonical-fixture-pg17-prepared-rollback.sql \
+  | tee "$LOG_DIR/prepared-rollback.log"
+
+set +e
+(
+  docker exec "$CONTAINER" psql -U postgres -d fixture_aux \
+    -v ON_ERROR_STOP=1 -v fixture_name=B -At \
+    -f /work/tests/sql/wos-v1-qa-canonical-fixture-pg17-concurrent-prepare.sql
+) > "$LOG_DIR/concurrent-prepare-b.log" 2>&1 &
+PID_PB=$!
+(
+  docker exec "$CONTAINER" psql -U postgres -d fixture_aux \
+    -v ON_ERROR_STOP=1 -v fixture_name=C -At \
+    -f /work/tests/sql/wos-v1-qa-canonical-fixture-pg17-concurrent-prepare.sql
+) > "$LOG_DIR/concurrent-prepare-c.log" 2>&1 &
+PID_PC=$!
+wait "$PID_PB"
+STATUS_PB=$?
+wait "$PID_PC"
+STATUS_PC=$?
+set -e
+echo "$STATUS_PB" > "$LOG_DIR/concurrent-prepare-b.status"
+echo "$STATUS_PC" > "$LOG_DIR/concurrent-prepare-c.status"
+
+PREPARE_SUCCESS_COUNT=$(
+  cat "$LOG_DIR"/concurrent-prepare-{b,c}.log | grep -c '^CREATED$' || true
+)
+PREPARE_LIMIT_FAILURE_COUNT=$(
+  cat "$LOG_DIR"/concurrent-prepare-{b,c}.log \
+    | grep -c 'FIXTURE_ACTIVE_LIMIT_REACHED' || true
+)
+PREPARE_FAILED_PROCESS_COUNT=$(
+  cat "$LOG_DIR"/concurrent-prepare-{b,c}.status | grep -c -v '^0$' || true
+)
+if [[ "$PREPARE_SUCCESS_COUNT" -ne 1
+  || "$PREPARE_LIMIT_FAILURE_COUNT" -lt 1
+  || "$PREPARE_FAILED_PROCESS_COUNT" -ne 1 ]]; then
+  echo "CONCURRENT_PREPARE=FAIL success=$PREPARE_SUCCESS_COUNT limit_failure=$PREPARE_LIMIT_FAILURE_COUNT process_failure=$PREPARE_FAILED_PROCESS_COUNT"
+  cat "$LOG_DIR"/concurrent-prepare-{b,c}.log
+  exit 1
+fi
+echo "CONCURRENT_PREPARE=PASS created=1 rejected=1" \
+  | tee "$LOG_DIR/concurrent-prepare.log"
+"${AUX_PSQL[@]}" \
+  -f /work/tests/sql/wos-v1-qa-canonical-fixture-pg17-post-concurrent-prepare.sql \
+  | tee "$LOG_DIR/post-concurrent-prepare.log"
+
 cat <<'RESULT' | tee "$LOG_DIR/result.txt"
 PG17_SERVER=17
 PREPARE_POSITIVE=PASS
 PREPARE_IDEMPOTENCY=PASS
+PREPARED_ROLLBACK=PASS
+PREPARED_STORAGE_REMAINS_REJECTED=PASS
+PREPARED_EXTERNAL_REFERENCE_REJECTED=PASS
+CONCURRENT_PREPARE=PASS
 NEGATIVE_INPUTS=PASS
 NO_STORAGE_OBJECT_FINALIZE=PASS
 FOUR_OBJECT_IDENTITY=PASS
