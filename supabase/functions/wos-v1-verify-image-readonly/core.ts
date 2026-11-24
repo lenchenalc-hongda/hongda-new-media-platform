@@ -207,9 +207,74 @@ export function evaluateReadOnlyRequestGuard(input: {
   return { allowed: true, status: 200, code: 'ALLOWED' };
 }
 
-function timestampMs(value: string): number | null {
-  const parsed = Date.parse(value);
-  return Number.isFinite(parsed) ? parsed : null;
+const timestampPattern =
+  /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,6}))?(Z|([+-])(\d{2}):(\d{2}))$/;
+const microsPerMillisecond = BigInt(1000);
+
+function timestampMicros(value: string): bigint | null {
+  const match = timestampPattern.exec(value);
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const hour = Number(match[4]);
+  const minute = Number(match[5]);
+  const second = Number(match[6]);
+  const offsetHour = match[10] === undefined ? 0 : Number(match[10]);
+  const offsetMinute = match[11] === undefined ? 0 : Number(match[11]);
+  if (year < 1000
+    || month < 1 || month > 12
+    || day < 1 || day > 31
+    || hour > 23
+    || minute > 59
+    || second > 59
+    || offsetHour > 23
+    || offsetMinute > 59) return null;
+
+  const localMillis = Date.UTC(year, month - 1, day, hour, minute, second);
+  if (!Number.isFinite(localMillis)) return null;
+  const normalized = new Date(localMillis);
+  if (normalized.getUTCFullYear() !== year
+    || normalized.getUTCMonth() + 1 !== month
+    || normalized.getUTCDate() !== day
+    || normalized.getUTCHours() !== hour
+    || normalized.getUTCMinutes() !== minute
+    || normalized.getUTCSeconds() !== second) return null;
+
+  const fraction = BigInt((match[7] ?? '').padEnd(6, '0'));
+  const offsetDirection = match[9] === '-' ? -1 : 1;
+  const offsetMinutes = match[8] === 'Z'
+    ? 0
+    : offsetDirection * (offsetHour * 60 + offsetMinute);
+  return BigInt(localMillis - offsetMinutes * 60_000)
+      * microsPerMillisecond
+    + fraction;
+}
+
+function sameTimestamp(first: string, second: string): boolean {
+  const firstMicros = timestampMicros(first);
+  const secondMicros = timestampMicros(second);
+  return firstMicros !== null
+    && secondMicros !== null
+    && firstMicros === secondMicros;
+}
+
+function timestampInterval(value: string): {
+  readonly earliestMicros: bigint;
+  readonly latestMicros: bigint;
+} | null {
+  const earliestMicros = timestampMicros(value);
+  const match = timestampPattern.exec(value);
+  if (earliestMicros === null || !match) return null;
+  const precision = match[7]?.length ?? 0;
+  if (precision === 6) {
+    return { earliestMicros, latestMicros: earliestMicros };
+  }
+  const uncertaintyMicros = BigInt(10 ** (6 - precision));
+  return {
+    earliestMicros,
+    latestMicros: earliestMicros + uncertaintyMicros - BigInt(1),
+  };
 }
 
 function proofScopeMatches(input: {
@@ -228,9 +293,9 @@ function proofScopeMatches(input: {
     && uuid.test(proof.storage_object_id)
     && typeof proof.storage_object_version === 'string'
     && proof.storage_object_version.length > 0
-    && timestampMs(proof.storage_object_updated_at) !== null
-    && timestampMs(proof.verified_at) !== null
-    && timestampMs(proof.expires_at) !== null;
+    && timestampMicros(proof.storage_object_updated_at) !== null
+    && timestampMicros(proof.verified_at) !== null
+    && timestampMicros(proof.expires_at) !== null;
 }
 
 export function proofSnapshotStable(
@@ -245,18 +310,21 @@ export function proofSnapshotStable(
     && first.storage_path === second.storage_path
     && first.storage_object_id === second.storage_object_id
     && first.storage_object_version === second.storage_object_version
-    && first.storage_object_updated_at === second.storage_object_updated_at
+    && sameTimestamp(
+      first.storage_object_updated_at,
+      second.storage_object_updated_at,
+    )
     && first.verified_sha256 === second.verified_sha256
-    && first.verified_at === second.verified_at
-    && first.expires_at === second.expires_at;
+    && sameTimestamp(first.verified_at, second.verified_at)
+    && sameTimestamp(first.expires_at, second.expires_at);
 }
 
 function proofObjectIdentityMatches(
   proof: WosV1ReadOnlyProof,
   snapshot: WosV1ObjectSnapshot,
 ): boolean {
-  const updatedAt = timestampMs(proof.storage_object_updated_at);
-  const snapshotUpdatedAt = timestampMs(snapshot.updatedAt);
+  const updatedAt = timestampMicros(proof.storage_object_updated_at);
+  const snapshotUpdatedAt = timestampMicros(snapshot.updatedAt);
   return proof.storage_object_id === snapshot.id
     && proof.storage_object_version === snapshot.version
     && updatedAt !== null
@@ -266,14 +334,17 @@ function proofObjectIdentityMatches(
 
 function proofCurrentAt(
   proof: WosV1ReadOnlyProof,
-  checkedAtMs: number,
+  checkedAt: {
+    readonly earliestMicros: bigint;
+    readonly latestMicros: bigint;
+  },
 ): boolean {
-  const expiresAt = timestampMs(proof.expires_at);
-  const verifiedAt = timestampMs(proof.verified_at);
+  const expiresAt = timestampMicros(proof.expires_at);
+  const verifiedAt = timestampMicros(proof.verified_at);
   return verifiedAt !== null
-    && verifiedAt <= checkedAtMs
+    && verifiedAt <= checkedAt.earliestMicros
     && expiresAt !== null
-    && checkedAtMs < expiresAt;
+    && checkedAt.latestMicros < expiresAt;
 }
 
 export async function verifyWosV1ReadOnlyImage(input: {
@@ -290,8 +361,8 @@ export async function verifyWosV1ReadOnlyImage(input: {
   readonly ok: boolean;
   readonly code: 'VERIFIED' | WosV1ReadOnlyFailureCode;
 }> {
-  const firstCheckedAt = timestampMs(input.firstCheckedAt);
-  const secondCheckedAt = timestampMs(input.secondCheckedAt);
+  const firstCheckedAt = timestampInterval(input.firstCheckedAt);
+  const secondCheckedAt = timestampInterval(input.secondCheckedAt);
   if (firstCheckedAt === null || secondCheckedAt === null
     || !proofScopeMatches({
       proof: input.firstProof,

@@ -103,6 +103,36 @@ trusted client only for exact Proof/snapshot reads, compares real bytes with
 PNG/CRC/SHA-256, requires stable dual Proof and Storage snapshots, rechecks the
 order version, and never calls renewal, recording or business-write RPCs.
 
+## PR #279 Microsecond Hardening
+
+PR #279 replaces millisecond-only timestamp comparison with normalized UTC
+microsecond comparison. The current source is still undeployed.
+
+```text
+3d3487b6c5cf792bcb58bca5d2a30c4fdcc2f7ef943da5af7c09a74d3471918c  a56c8a7ff512b3068fab170720ecaacdae14329a  read-only core
+4a640c1a0066eaccde7c2ce4a74ae77f4630ad51eed2ddcb782d35cb55d387b4  e74e43a182f714cc22407dd081a9164759fc2319  behavior test
+```
+
+Coverage added for:
+
+```ini
+SAME_MILLISECOND_DIFFERENT_MICROSECOND=DENIED
+EQUIVALENT_TIMEZONE_NORMALIZATION=PASS
+EXACT_EXPIRY_BOUNDARY=DENIED
+ONE_MICROSECOND_BEFORE_EXPIRY=PASS
+MILLISECOND_CHECKED_AT_AND_SUB_MILLISECOND_EXPIRY=DENIED
+STORAGE_UPDATE_WITHOUT_PROOF_UPDATE=DENIED
+ORDER_VERSION_SWITCH=DENIED
+FOUR_CURRENT_VERSION_IMAGES=PASS
+DATABASE_TABLE_MUTATION_CALLS=0
+DATABASE_READ_RPC_CALLS=1
+DATABASE_WRITE_RPC_CALLS=0
+```
+
+Deployment remains blocked on a separate exact-HEAD Owner authorization. The
+closed-state package is
+`docs/workshop-order-system/production-readiness/PR279_QA_EDGE_DEPLOYMENT_PACKAGE.md`.
+
 ## Offline Verification
 
 ```ini

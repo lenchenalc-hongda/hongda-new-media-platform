@@ -65,6 +65,34 @@ not approve an M4 proof-set, does not provide Office/Workshop signoff and does
 not establish Production readiness. Both `reviewReady` and `canStart` remain
 false even after successful byte verification.
 
+## Microsecond Identity Hardening
+
+PR #279 adds exact PostgreSQL `timestamptz` microsecond handling. The verifier
+parses RFC 3339 timestamps with at most six fractional digits and normalizes
+`Z` and numeric UTC offsets to one UTC microsecond integer.
+
+The same normalized representation is used for:
+
+- Proof `storage_object_updated_at` versus Storage snapshot `updatedAt`
+- the first and second Proof snapshot
+- `verified_at` versus `checked_at`
+- `checked_at` versus `expires_at`
+
+Stored Proof and Storage timestamps are compared as exact microseconds. A
+runtime `checked_at` with fewer than six fractional digits is treated as an
+uncertainty interval spanning the represented precision. The Proof must have
+been verified no later than the interval start, and `expires_at` must be later
+than the interval end. This prevents a JavaScript millisecond timestamp such
+as `.123Z` from accepting a Proof that expires at `.123456Z`.
+
+The expiration boundary is strict: a six-digit check exactly at `expires_at`
+is expired, while one microsecond before it remains eligible if all other
+checks pass. Equivalent timezone spellings of the same instant compare equal.
+A different microsecond in the same millisecond fails closed.
+
+No SHA-256, object ID, object version, organization, order, version, role,
+Storage path or read-only constraint was relaxed.
+
 ## Offline Coverage
 
 `tests/unit/workshop-order-qa-readonly-byte-verifier.test.ts` covers:
@@ -81,7 +109,17 @@ false even after successful byte verification.
 - object version replacement during verification
 - Proof SHA change during verification
 - Proof expiry during verification
+- same millisecond with different microseconds
+- equivalent `Z` and `+08:00` timestamp normalization
+- exact `expires_at` boundary rejection and one-microsecond-before acceptance
+- production-format millisecond `checked_at` cannot accept a Proof expiring
+  later in that same millisecond
+- Storage update without a matching Proof update
+- order version switch and one stale image among the four categories
+- all four current-version images
 - private binary size mismatch
+- zero database table mutations
+- exactly one database RPC name, the read-only Storage snapshot
 - absence of proof-renewal and proof-recording calls
 
 ## Deno Type Hardening
@@ -101,13 +139,21 @@ are directly testable. The reviewed current files are:
 
 ```text
 CURRENT_EDGE_INDEX_SHA256=fe97273931416403f6008156df7831a0a4abf8f151793f0258e9f523fa58bdd7
-CURRENT_CORE_SHA256=6d64bb62cba4239dfccee95d85d7a1c4585efd3f8018aa616b18ccbf44b0625b
-CURRENT_TEST_SHA256=960314d3ee47eaf8938452c010eca611245ae479dc5fa701e8505da5262eb3d4
+CURRENT_CORE_SHA256=3d3487b6c5cf792bcb58bca5d2a30c4fdcc2f7ef943da5af7c09a74d3471918c
+CURRENT_TEST_SHA256=4a640c1a0066eaccde7c2ce4a74ae77f4630ad51eed2ddcb782d35cb55d387b4
 ```
 
 `deno check --sloppy-imports` and the Deno-run behavior test both pass. The
 sloppy-import flag is needed only because the existing repository test imports
 the extensionless core path used by the TypeScript test runner.
+
+Current Git blob IDs:
+
+```text
+23203ddc55e9a6185f81d8a3a7e401f815445719  Edge Index
+a56c8a7ff512b3068fab170720ecaacdae14329a  Core
+e74e43a182f714cc22407dd081a9164759fc2319  Test
+```
 
 ## Remaining Authorization
 
