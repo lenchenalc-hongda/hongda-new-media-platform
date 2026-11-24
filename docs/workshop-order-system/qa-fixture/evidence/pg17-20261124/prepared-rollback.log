@@ -34,8 +34,7 @@ SET
 DO
 RESET
 RESET
-              result               
+              result
 -----------------------------------
  PREPARED_ROLLBACK_ASSERTIONS=PASS
 (1 row)
-
