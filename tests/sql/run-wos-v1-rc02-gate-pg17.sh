@@ -49,7 +49,8 @@ cleanup() {
     "${RECOVERY_REFUSAL_LOG:-}" \
     "${RECOVERY_LEGACY_TAMPER_LOG:-}" \
     "${RECOVERY_HISTORY_TAMPER_LOG:-}" \
-    "${PRE_RUNTIME_FAILURE_LOG:-}"
+    "${PRE_RUNTIME_FAILURE_LOG:-}" \
+    "${RC05_FRESH_REFUSAL_LOG:-}"
   if [[ "$status" -ne 0
     && "${WOS_RC02_KEEP_ON_FAILURE:-0}" = '1' ]]; then
     printf 'WOS_V1_RC02_GATE_DB_RETAINED=%s\n' "$DB"
@@ -688,19 +689,20 @@ RC05_RETAINED_ROW_FINGERPRINT="$(query_value "$DB" "
 ")"
 
 # The old fresh-install compatibility SQL must remain fail-closed on retained Runtime.
+RC05_FRESH_REFUSAL_LOG="$(mktemp)"
 set +e
 {
   printf "SET wos_v1.rc03_compat_install_authorized='yes';\n"
   printf "SET wos_v1.rc03_expected_counts='%s';\n" "$RC05_RETAINED_PUBLIC_COUNTS"
   cat "$ROOT/docs/workshop-order-system/qa-fixture/WOS_V1_RC03_QA_RUNTIME_COMPAT_FORWARD_NOT_AUTHORIZED.sql"
-} | psql_db "$DB" -q > /tmp/wos_rc05_fresh_reactivation_refusal.$$ 2>&1
+} | psql_db "$DB" -q >"$RC05_FRESH_REFUSAL_LOG" 2>&1
 RC05_FRESH_REINSTALL_STATUS=$?
 set -e
 [[ "$RC05_FRESH_REINSTALL_STATUS" -ne 0 ]] ||
   fail 'RC05_FRESH_COMPAT_ACCEPTED_RETAINED_RUNTIME'
-grep -q 'RC03_COMPAT_ALREADY_PARTIALLY_INSTALLED' /tmp/wos_rc05_fresh_reactivation_refusal.$$ ||
+grep -q 'RC03_COMPAT_ALREADY_PARTIALLY_INSTALLED' "$RC05_FRESH_REFUSAL_LOG" ||
   fail 'RC05_FRESH_COMPAT_WRONG_REFUSAL'
-rm -f /tmp/wos_rc05_fresh_reactivation_refusal.$$
+rm -f "$RC05_FRESH_REFUSAL_LOG"
 
 # Branch A: Reactivation compatibility installed, Runtime NOT yet reactivated.
 {
