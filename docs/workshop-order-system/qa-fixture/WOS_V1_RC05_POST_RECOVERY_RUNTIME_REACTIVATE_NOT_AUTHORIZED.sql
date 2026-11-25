@@ -18,6 +18,13 @@ BEGIN
   THEN
     RAISE EXCEPTION 'RC05_POST_RECOVERY_RUNTIME_NOT_AUTHORIZED';
   END IF;
+  IF to_regclass('public.wos_qa_p2_m2_gate') IS NOT NULL THEN
+    IF EXISTS (
+      SELECT 1 FROM public.wos_qa_p2_m2_gate WHERE enabled
+    ) THEN
+      RAISE EXCEPTION 'RC05_RUNTIME_RETAINED_QA_STATE_MISMATCH';
+    END IF;
+  END IF;
   IF to_regnamespace('wos_qa_safety') IS NULL
     OR to_regnamespace('wos_v1_rc03_compat') IS NULL
     OR to_regnamespace('wos_v1_rc02_safety') IS NOT NULL
@@ -25,7 +32,6 @@ BEGIN
       SELECT 1 FROM public.organizations
       WHERE id='0ff53d93-2b9e-48b9-8113-a4768c39cdd2'::uuid
     )
-    OR EXISTS (SELECT 1 FROM public.wos_qa_p2_m2_gate WHERE enabled)
     OR to_regclass('public.wos_verified_image_proofs') IS NULL
     OR to_regclass('public.wos_orphan_cleanup_claims') IS NULL
     OR to_regclass('public.wos_order_create_receipts') IS NULL
@@ -807,10 +813,15 @@ BEGIN
       'public.wos_confirm_office_completeness(uuid,integer,text,text)',
       'EXECUTE'
     )
-    OR pg_catalog.has_function_privilege(
-      'authenticated',
-      'public.wos_qa_p2_m2_action(uuid,integer,uuid,text,jsonb)',
-      'EXECUTE'
+    OR COALESCE(
+      pg_catalog.has_function_privilege(
+        'authenticated',
+        to_regprocedure(
+          'public.wos_qa_p2_m2_action(uuid,integer,uuid,text,jsonb)'
+        ),
+        'EXECUTE'
+      ),
+      false
     )
   THEN
     RAISE EXCEPTION 'RC05_RUNTIME_REACTIVATION_POSTFLIGHT_DENIED';

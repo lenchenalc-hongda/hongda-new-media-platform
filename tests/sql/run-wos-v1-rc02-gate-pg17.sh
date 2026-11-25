@@ -757,7 +757,16 @@ echo 'WOS_V1_RC05_POST_RECOVERY_PRE_RUNTIME_ROLLBACK=PASS'
 } | psql_db "$DB" -q
 [[ "$(query_value "$DB" "
   SELECT has_function_privilege('authenticated','public.wos_create_production_order(uuid,jsonb)','EXECUTE')
-    AND NOT has_function_privilege('authenticated','public.wos_qa_p2_m2_action(uuid,integer,uuid,text,jsonb)','EXECUTE')
+    AND NOT COALESCE(
+      has_function_privilege(
+        'authenticated',
+        to_regprocedure(
+          'public.wos_qa_p2_m2_action(uuid,integer,uuid,text,jsonb)'
+        ),
+        'EXECUTE'
+      ),
+      false
+    )
     AND (SELECT count(*) FROM wos_v1_rc02_safety.rc02_business_grants)=0
 ")" = 't' ]] || fail 'RC05_REACTIVATION_SCOPE_ACL_DRIFT'
 {
