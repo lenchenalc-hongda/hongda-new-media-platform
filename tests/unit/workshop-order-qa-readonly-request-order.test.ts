@@ -59,9 +59,22 @@ const png = Buffer.from(
   'base64',
 );
 const pngSha = createHash('sha256').update(png).digest('hex');
+const versionCases = [
+  { expectedVersion: 11, label: 'QA-R6' },
+  { expectedVersion: 1, label: 'V1' },
+  { expectedVersion: 15, label: 'V2' },
+  { expectedVersion: 11, label: 'V11' },
+] as const;
 const pathFor = (index: number) =>
   `organizations/${organizationId}/wos/production-order/${orderId}/images/`
   + `${slugs[index]}/versions/QA-R6/${imageIds[index]}/source.png`;
+const imagesForVersion = (label: string) => categories.map((category, index) => ({
+  category,
+  imageId: imageIds[index],
+  sha256: pngSha,
+  storagePath: `organizations/${organizationId}/wos/production-order/${orderId}/images/`
+    + `${slugs[index]}/versions/${label}/${imageIds[index]}/source.png`,
+})) satisfies WosV1ReadOnlyImage[];
 const images = categories.map((category, index) => ({
   category,
   imageId: imageIds[index],
@@ -113,6 +126,15 @@ const snapshots = images.map((_image, index) => ({
   mimeType: 'image/png',
   byteSize: String(png.length),
 })) satisfies WosV1ObjectSnapshot[];
+const requestProofsFor = (requestImages: readonly WosV1ReadOnlyImage[]) =>
+  requestImages.map((image, index) => ({
+    ...proofs[index],
+    image_id: image.imageId,
+    storage_path: image.storagePath,
+  }));
+const requestSnapshotsFor = (
+  requestImages: readonly WosV1ReadOnlyImage[],
+) => requestImages.map((_image, index) => snapshots[index]);
 
 interface Counters {
   downloads: number;
@@ -127,6 +149,10 @@ interface Counters {
 
 function dependencies(options: {
   readonly readOnlyEnabled?: boolean;
+  readonly bodyImages?: readonly WosV1ReadOnlyImage[];
+  readonly requestOrder?: WosV1ReadOnlyOrder;
+  readonly requestProofs?: readonly WosV1ReadOnlyProof[];
+  readonly requestSnapshots?: readonly WosV1ObjectSnapshot[];
   readonly proofAt?: (index: number) => WosV1ReadOnlyProof | null;
   readonly snapshotAt?: (index: number) => WosV1ObjectSnapshot | null;
   readonly now?: () => string;
@@ -148,6 +174,10 @@ function dependencies(options: {
     currentOrderReads: 0,
   };
   const currentImageCounts = new Map<string, number>();
+  const requestImages = options.bodyImages ?? images;
+  const requestOrder = options.requestOrder ?? order;
+  const requestProofs = options.requestProofs ?? proofs;
+  const requestSnapshots = options.requestSnapshots ?? snapshots;
   const deps: WosV1ReadOnlyRequestDependencies = {
     readOnlyEnabled: options.readOnlyEnabled ?? true,
     qaRuntimeBound: true,
@@ -155,13 +185,15 @@ function dependencies(options: {
       value === 'Bearer valid-token' ? { userId } : null,
     profileFor: async value => value === userId ? profile : null,
     orderFor: async (id, orgId) =>
-      id === orderId && orgId === organizationId ? order : null,
+      id === orderId && orgId === organizationId ? requestOrder : null,
     proofFor: async (_imageId, _order) => {
-      const index = counters.proofReads++ % images.length;
-      return options.proofAt ? options.proofAt(index) : proofs[index];
+      const index = counters.proofReads++ % requestImages.length;
+      return options.proofAt ? options.proofAt(index) : requestProofs[index];
     },
     currentImageFor: async image => {
-      const index = images.findIndex(row => row.imageId === image.imageId);
+      const index = requestImages.findIndex(
+        row => row.imageId === image.imageId,
+      );
       const readsForImage = (currentImageCounts.get(image.imageId) ?? 0) + 1;
       currentImageCounts.set(image.imageId, readsForImage);
       counters.currentImageReads++;
@@ -172,28 +204,30 @@ function dependencies(options: {
               ?? '99999999-9999-4999-8999-999999999999',
             imageId: image.imageId,
             storagePath: image.storagePath,
-            versionLabel: order.version_label,
+            versionLabel: requestOrder.version_label,
           }
         : null;
     },
     snapshotFor: async path => {
-      const index = images.findIndex(image => image.storagePath === path);
+      const index = requestImages.findIndex(
+        image => image.storagePath === path,
+      );
       counters.snapshotReads++;
       return index < 0
         ? null
         : options.snapshotAt
           ? options.snapshotAt(index)
-          : snapshots[index];
+          : requestSnapshots[index];
     },
     download: async path => {
-      assert(images.some(image => image.storagePath === path));
+      assert(requestImages.some(image => image.storagePath === path));
       counters.downloads++;
       return new Uint8Array(png);
     },
     currentOrder: async (id, orgId) => {
       counters.currentOrderReads++;
       return id === orderId && orgId === organizationId
-        ? options.currentOrderAt?.() ?? order
+        ? options.currentOrderAt?.() ?? requestOrder
         : null;
     },
     now: options.now ?? (() => '2026-11-23T00:10:00.000Z'),
@@ -216,12 +250,46 @@ function assertNoWrites(counters: Counters): void {
   assert.equal(counters.writes, 0, 'database write calls must remain zero');
 }
 
-async function request(deps: WosV1ReadOnlyRequestDependencies) {
+async function request(
+  deps: WosV1ReadOnlyRequestDependencies,
+  requestBody: WosV1ReadOnlyVerificationBody = body,
+) {
   return executeWosV1ReadOnlyRequest({
     authorization: 'Bearer valid-token',
-    body,
+    body: requestBody,
     dependencies: deps,
   });
+}
+
+for (const versionCase of versionCases) {
+  const requestImages = imagesForVersion(versionCase.label);
+  const parsedVersionBody = parseWosV1ReadOnlyVerificationBody({
+    expectedVersion: versionCase.expectedVersion,
+    expectedVersionLabel: versionCase.label,
+    images: requestImages,
+    orderId,
+  });
+  assert(parsedVersionBody, `${versionCase.label} request body must parse`);
+  const { deps, counters } = dependencies({
+    bodyImages: requestImages,
+    requestOrder: {
+      ...order,
+      version: versionCase.expectedVersion,
+      version_label: versionCase.label,
+    },
+    requestProofs: requestProofsFor(requestImages),
+    requestSnapshots: requestSnapshotsFor(requestImages),
+  });
+  const result = await request(deps, parsedVersionBody);
+  assert.equal(
+    result.status,
+    200,
+    `${versionCase.label} must authorize through the full handler`,
+  );
+  assert.equal(result.code, 'WOS_V1_READONLY_IMAGE_PROOF_VERIFIED');
+  assert.equal(result.data?.versionLabel, versionCase.label);
+  assert.equal(counters.downloads, 4);
+  assertNoWrites(counters);
 }
 
 {

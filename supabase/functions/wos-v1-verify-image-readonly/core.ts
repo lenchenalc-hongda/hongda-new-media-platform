@@ -5,7 +5,7 @@ import { WOS_V1_IMAGE_CATEGORIES, canonicalWosV1ImagePath, objectSnapshotStable,
 
 const uuid = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
 const sha256 = /^[a-f0-9]{64}$/;
-const versionLabel = /^QA-R[1-9][0-9]*$/;
+const versionLabel = /^(?:QA-R[1-9][0-9]*|V[1-9][0-9]{0,20})$/;
 
 export const WOS_V1_READONLY_MAX_BYTES = 20 * 1024 * 1024;
 export const WOS_V1_READONLY_MIN_BYTES = 60;

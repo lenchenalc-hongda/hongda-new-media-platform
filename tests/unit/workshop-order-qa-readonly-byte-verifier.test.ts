@@ -51,6 +51,18 @@ const pathForVersion = (index: number, label: string) =>
   + `${slugs[index]}/versions/${label}/${imageIds[index]}/source.png`;
 const pathFor = (index: number) => pathForVersion(index, 'QA-R6');
 
+const versionCases = [
+  { expectedVersion: 11, label: 'QA-R6' },
+  { expectedVersion: 1, label: 'V1' },
+  { expectedVersion: 15, label: 'V2' },
+  { expectedVersion: 11, label: 'V11' },
+] as const;
+const imagesForVersion = (label: string) => categories.map((category, index) => ({
+  category,
+  imageId: imageIds[index],
+  sha256: pngSha,
+  storagePath: pathForVersion(index, label),
+})) satisfies WosV1ReadOnlyImage[];
 const images = categories.map((category, index) => ({
   category,
   imageId: imageIds[index],
@@ -77,12 +89,42 @@ assert.equal(parseWosV1ReadOnlyVerificationBody({
   images: [...images, { ...images[0], imageId: '75555555-5555-4555-8555-555555555555' }],
   orderId,
 }), null, 'a fifth image must fail closed');
-assert.equal(parseWosV1ReadOnlyVerificationBody({
+assert(parseWosV1ReadOnlyVerificationBody({
   expectedVersion: 11,
   expectedVersionLabel: 'V11',
   images,
   orderId,
-}), null, 'non-QA revision label must fail closed');
+}), 'numeric production revision labels must remain compatible');
+for (const versionCase of versionCases) {
+  assert(
+    parseWosV1ReadOnlyVerificationBody({
+      expectedVersion: versionCase.expectedVersion,
+      expectedVersionLabel: versionCase.label,
+      images: imagesForVersion(versionCase.label),
+      orderId,
+    }),
+    `${versionCase.label} must parse`,
+  );
+}
+for (const invalidLabel of [
+  'QA-R0',
+  'QA-R',
+  'V0',
+  'V01',
+  'V',
+  'V1x',
+  'V1/1',
+  ' V1',
+  'V1 ',
+  'V1234567890123456789012',
+]) {
+  assert.equal(parseWosV1ReadOnlyVerificationBody({
+    expectedVersion: 11,
+    expectedVersionLabel: invalidLabel,
+    images,
+    orderId,
+  }), null, `${JSON.stringify(invalidLabel)} must fail closed`);
+}
 assert.equal(parseWosV1ReadOnlyVerificationBody({
   expectedVersion: 11,
   expectedVersionLabel: 'QA-R6',
@@ -113,6 +155,18 @@ const accessBase = {
   expectedVersionLabel: 'QA-R6',
 };
 assert.equal(evaluateWosV1ReadOnlyAccess(accessBase).code, 'ALLOWED');
+for (const versionCase of versionCases) {
+  assert.equal(evaluateWosV1ReadOnlyAccess({
+    ...accessBase,
+    order: {
+      ...order,
+      version: versionCase.expectedVersion,
+      version_label: versionCase.label,
+    },
+    expectedVersion: versionCase.expectedVersion,
+    expectedVersionLabel: versionCase.label,
+  }).code, 'ALLOWED', `${versionCase.label} must pass order authorization`);
+}
 assert.equal(evaluateWosV1ReadOnlyAccess({
   ...accessBase,
   profile: { ...profile, role: 'operator' },
@@ -137,6 +191,22 @@ assert.equal(evaluateWosV1ReadOnlyAccess({
   ...accessBase,
   order: { ...order, version_label: 'QA-R7' },
 }).code, 'ORDER_VERSION_MISMATCH');
+assert.equal(evaluateWosV1ReadOnlyAccess({
+  ...accessBase,
+  order: { ...order, version_label: 'V0' },
+}).code, 'ORDER_VERSION_MISMATCH');
+assert.equal(evaluateWosV1ReadOnlyAccess({
+  ...accessBase,
+  order: { ...order, version: 15, version_label: 'V2' },
+  expectedVersion: 14,
+  expectedVersionLabel: 'V2',
+}).code, 'ORDER_VERSION_MISMATCH', 'V2 must still enforce the exact numeric version');
+assert.equal(evaluateWosV1ReadOnlyAccess({
+  ...accessBase,
+  order: { ...order, version: 15, version_label: 'V2' },
+  expectedVersion: 15,
+  expectedVersionLabel: 'V1',
+}).code, 'ORDER_VERSION_MISMATCH', 'V labels must match exactly');
 assert.equal(evaluateWosV1ReadOnlyAccess({
   ...accessBase,
   order: { ...order, workflow_status: 'SUBMITTED' },
@@ -257,6 +327,26 @@ assert.deepEqual(safeReadOnlyVerification({
   reviewReady: false,
   canStart: false,
 });
+for (const versionCase of versionCases) {
+  assert.deepEqual(safeReadOnlyVerification({
+    order: {
+      ...order,
+      version: versionCase.expectedVersion,
+      version_label: versionCase.label,
+    },
+    categories,
+  }), {
+    orderId,
+    orderVersion: versionCase.expectedVersion,
+    versionLabel: versionCase.label,
+    imageCategories: categories,
+    metadataSnapshotStable: true,
+    contentSha256Verified: true,
+    byteVerificationPassed: true,
+    reviewReady: false,
+    canStart: false,
+  });
+}
 
 const tampered = Buffer.from(png);
 tampered[tampered.length - 5] ^= 1;
