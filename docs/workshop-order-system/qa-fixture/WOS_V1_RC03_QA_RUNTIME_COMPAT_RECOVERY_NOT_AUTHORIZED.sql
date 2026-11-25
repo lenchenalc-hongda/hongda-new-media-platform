@@ -8,6 +8,9 @@
 BEGIN;
 
 DO $rc03_compat_recovery_preflight$
+DECLARE
+  v_runtime_backup_count integer;
+  v_runtime_table_count integer;
 BEGIN
   IF current_setting('wos_v1.rc03_compat_recovery_authorized', true)
       IS DISTINCT FROM 'yes' THEN
@@ -29,49 +32,83 @@ BEGIN
     RAISE EXCEPTION 'RC03_COMPAT_BACKUP_MISSING';
   END IF;
   IF to_regprocedure(
-      'wos_v1_rc03_compat.wos_qa_proof_write_guard_original()'
-    ) IS NULL
-    OR to_regprocedure(
-      'public.wos_v1_pre_runtime_confirm_office_completeness(uuid,integer,text,text)'
-    ) IS NULL
-    OR to_regprocedure(
-      'public.wos_v1_pre_runtime_submit_production_order(uuid,integer,text,uuid)'
-    ) IS NULL
-    OR to_regprocedure(
-      'public.wos_v1_pre_runtime_record_trusted_image_proof(uuid,uuid,uuid,text,uuid,text,timestamptz,text)'
-    ) IS NULL
-    OR to_regprocedure(
-      'public.wos_v1_pre_runtime_register_uploaded_reference_image(uuid,uuid,text,text)'
-    ) IS NULL
+    'wos_v1_rc03_compat.wos_qa_proof_write_guard_original()'
+  ) IS NULL THEN
+    RAISE EXCEPTION 'RC03_COMPAT_PROOF_GUARD_BACKUP_MISSING';
+  END IF;
+  IF (SELECT count(*) FROM wos_v1_rc03_compat.public_policy_backup) <> 3
   THEN
-    RAISE EXCEPTION 'RC03_COMPAT_P7_BACKUP_MISSING';
+    RAISE EXCEPTION 'RC03_COMPAT_FOUNDATION_POLICY_BACKUP_MISSING';
+  END IF;
+  IF EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_policies policy
+    JOIN wos_v1_rc03_compat.public_policy_backup backup
+      ON backup.table_name = policy.tablename
+     AND backup.policy_name = policy.policyname
+    WHERE policy.schemaname = 'public'
+  ) THEN
+    RAISE EXCEPTION 'RC03_COMPAT_FOUNDATION_POLICY_COLLISION';
+  END IF;
+  SELECT
+    (to_regprocedure('public.wos_v1_pre_runtime_confirm_office_completeness(uuid,integer,text,text)') IS NOT NULL)::integer
+    + (to_regprocedure('public.wos_v1_pre_runtime_submit_production_order(uuid,integer,text,uuid)') IS NOT NULL)::integer
+    + (to_regprocedure('public.wos_v1_pre_runtime_record_trusted_image_proof(uuid,uuid,uuid,text,uuid,text,timestamptz,text)') IS NOT NULL)::integer
+    + (to_regprocedure('public.wos_v1_pre_runtime_register_uploaded_reference_image(uuid,uuid,text,text)') IS NOT NULL)::integer,
+    (to_regclass('public.wos_order_create_receipts') IS NOT NULL)::integer
+    + (to_regclass('public.wos_operator_action_receipts') IS NOT NULL)::integer
+    + (to_regclass('public.wos_office_revisions') IS NOT NULL)::integer
+    + (to_regclass('public.wos_operator_review_receipts') IS NOT NULL)::integer
+  INTO v_runtime_backup_count, v_runtime_table_count;
+  IF v_runtime_backup_count = 4 AND v_runtime_table_count = 4 THEN
+    NULL; -- Runtime Forward committed; restore the four renamed P7 RPCs.
+  ELSIF v_runtime_backup_count = 0 AND v_runtime_table_count = 0 THEN
+    IF to_regprocedure('public.wos_create_production_order(uuid,jsonb)') IS NOT NULL
+      OR to_regprocedure('public.wos_v1_assert_service_role_request()') IS NOT NULL
+      OR to_regprocedure('public.wos_confirm_office_completeness(uuid,integer,text,text)') IS NULL
+      OR to_regprocedure('public.wos_submit_production_order(uuid,integer,text,uuid)') IS NULL
+      OR to_regprocedure('public.wos_p7_record_trusted_image_proof(uuid,uuid,uuid,text,uuid,text,timestamptz,text)') IS NULL
+      OR to_regprocedure('public.wos_register_uploaded_reference_image(uuid,uuid,text,text)') IS NULL
+    THEN
+      RAISE EXCEPTION 'RC03_COMPAT_PRE_RUNTIME_P7_MISMATCH';
+    END IF;
+  ELSE
+    RAISE EXCEPTION 'RC03_COMPAT_RUNTIME_PARTIAL_OR_UNKNOWN_STATE';
   END IF;
 END;
 $rc03_compat_recovery_preflight$;
 
-REVOKE EXECUTE ON FUNCTION public.wos_create_production_order(uuid,jsonb)
-FROM authenticated;
-REVOKE EXECUTE ON FUNCTION public.wos_register_uploaded_reference_image(
+DO $rc03_deactivate_runtime_rpcs_if_installed$
+BEGIN
+  IF to_regprocedure(
+    'public.wos_v1_pre_runtime_confirm_office_completeness(uuid,integer,text,text)'
+  ) IS NOT NULL THEN
+    EXECUTE $rc03_ddl$REVOKE EXECUTE ON FUNCTION public.wos_create_production_order(uuid,jsonb)
+FROM authenticated$rc03_ddl$;
+    EXECUTE $rc03_ddl$REVOKE EXECUTE ON FUNCTION public.wos_register_uploaded_reference_image(
   uuid,uuid,text,text
-) FROM authenticated;
-REVOKE EXECUTE ON FUNCTION public.wos_confirm_office_completeness(
+) FROM authenticated$rc03_ddl$;
+    EXECUTE $rc03_ddl$REVOKE EXECUTE ON FUNCTION public.wos_confirm_office_completeness(
   uuid,integer,text,text
-) FROM authenticated;
-REVOKE EXECUTE ON FUNCTION public.wos_submit_production_order(
+) FROM authenticated$rc03_ddl$;
+    EXECUTE $rc03_ddl$REVOKE EXECUTE ON FUNCTION public.wos_submit_production_order(
   uuid,integer,text,uuid
-) FROM authenticated;
-REVOKE EXECUTE ON FUNCTION public.wos_operator_order_action(
+) FROM authenticated$rc03_ddl$;
+    EXECUTE $rc03_ddl$REVOKE EXECUTE ON FUNCTION public.wos_operator_order_action(
   uuid,integer,uuid,text,text
-) FROM authenticated;
-REVOKE EXECUTE ON FUNCTION public.wos_office_save_correction(
+) FROM authenticated$rc03_ddl$;
+    EXECUTE $rc03_ddl$REVOKE EXECUTE ON FUNCTION public.wos_office_save_correction(
   uuid,integer,uuid,jsonb,text
-) FROM authenticated;
-REVOKE EXECUTE ON FUNCTION public.wos_office_resubmit_order(
+) FROM authenticated$rc03_ddl$;
+    EXECUTE $rc03_ddl$REVOKE EXECUTE ON FUNCTION public.wos_office_resubmit_order(
   uuid,integer,uuid,text
-) FROM authenticated;
-REVOKE EXECUTE ON FUNCTION public.wos_operator_review_correction(
+) FROM authenticated$rc03_ddl$;
+    EXECUTE $rc03_ddl$REVOKE EXECUTE ON FUNCTION public.wos_operator_review_correction(
   uuid,integer,uuid,text
-) FROM authenticated;
+) FROM authenticated;$rc03_ddl$;
+  END IF;
+END;
+$rc03_deactivate_runtime_rpcs_if_installed$;
 
 DROP TRIGGER IF EXISTS rc03_mirror_verified_proof
   ON public.wos_verified_image_proofs;
@@ -91,30 +128,48 @@ CREATE TRIGGER wos_qa_trusted_proof_guard
 BEFORE INSERT OR UPDATE ON public.wos_qa_verified_image_proofs
 FOR EACH ROW EXECUTE FUNCTION public.wos_qa_proof_write_guard();
 
-DROP FUNCTION public.wos_confirm_office_completeness(
+DO $rc03_restore_runtime_p7_if_installed$
+BEGIN
+  IF to_regprocedure(
+    'public.wos_v1_pre_runtime_confirm_office_completeness(uuid,integer,text,text)'
+  ) IS NOT NULL THEN
+    EXECUTE $rc03_ddl$DROP FUNCTION public.wos_confirm_office_completeness(
   uuid,integer,text,text
-);
-DROP FUNCTION public.wos_submit_production_order(
+)$rc03_ddl$;
+    EXECUTE $rc03_ddl$DROP FUNCTION public.wos_submit_production_order(
   uuid,integer,text,uuid
-);
-DROP FUNCTION public.wos_p7_record_trusted_image_proof(
+)$rc03_ddl$;
+    EXECUTE $rc03_ddl$DROP FUNCTION public.wos_p7_record_trusted_image_proof(
   uuid,uuid,uuid,text,uuid,text,timestamptz,text
-);
-DROP FUNCTION public.wos_register_uploaded_reference_image(
+)$rc03_ddl$;
+    EXECUTE $rc03_ddl$DROP FUNCTION public.wos_register_uploaded_reference_image(
   uuid,uuid,text,text
-);
-ALTER FUNCTION public.wos_v1_pre_runtime_confirm_office_completeness(
+)$rc03_ddl$;
+    EXECUTE $rc03_ddl$ALTER FUNCTION public.wos_v1_pre_runtime_confirm_office_completeness(
   uuid,integer,text,text
-) RENAME TO wos_confirm_office_completeness;
-ALTER FUNCTION public.wos_v1_pre_runtime_submit_production_order(
+) RENAME TO wos_confirm_office_completeness$rc03_ddl$;
+    EXECUTE $rc03_ddl$ALTER FUNCTION public.wos_v1_pre_runtime_submit_production_order(
   uuid,integer,text,uuid
-) RENAME TO wos_submit_production_order;
-ALTER FUNCTION public.wos_v1_pre_runtime_record_trusted_image_proof(
+) RENAME TO wos_submit_production_order$rc03_ddl$;
+    EXECUTE $rc03_ddl$ALTER FUNCTION public.wos_v1_pre_runtime_record_trusted_image_proof(
   uuid,uuid,uuid,text,uuid,text,timestamptz,text
-) RENAME TO wos_p7_record_trusted_image_proof;
-ALTER FUNCTION public.wos_v1_pre_runtime_register_uploaded_reference_image(
+) RENAME TO wos_p7_record_trusted_image_proof$rc03_ddl$;
+    EXECUTE $rc03_ddl$ALTER FUNCTION public.wos_v1_pre_runtime_register_uploaded_reference_image(
   uuid,uuid,text,text
-) RENAME TO wos_register_uploaded_reference_image;
+) RENAME TO wos_register_uploaded_reference_image;$rc03_ddl$;
+  ELSE
+    -- The Runtime Forward preflight failed before creating backup functions.
+    -- No V1 RPC exists to replace. Remove only empty RC03-owned tables.
+    IF EXISTS (SELECT 1 FROM public.wos_verified_image_proofs)
+      OR EXISTS (SELECT 1 FROM public.wos_orphan_cleanup_claims)
+    THEN
+      RAISE EXCEPTION 'RC03_COMPAT_PRE_RUNTIME_TABLES_NOT_EMPTY';
+    END IF;
+    DROP TABLE public.wos_verified_image_proofs;
+    DROP TABLE public.wos_orphan_cleanup_claims;
+  END IF;
+END;
+$rc03_restore_runtime_p7_if_installed$;
 
 DO $verify_historical_rows$
 DECLARE
@@ -256,6 +311,64 @@ FROM wos_v1_rc03_compat.bucket_backup backup_row
 WHERE bucket.id = 'wos-private'
   AND backup_row.singleton = true;
 
+-- Restore only the three exact original Foundation INSERT policies.
+-- Collision or definition drift must fail this entire recovery transaction.
+DO $rc03_restore_foundation_policies$
+DECLARE
+  v_policy record;
+  v_roles text;
+BEGIN
+  IF (SELECT count(*) FROM wos_v1_rc03_compat.public_policy_backup) <> 3
+  THEN
+    RAISE EXCEPTION 'RC03_COMPAT_FOUNDATION_POLICY_BACKUP_MISSING';
+  END IF;
+  FOR v_policy IN
+    SELECT *
+    FROM wos_v1_rc03_compat.public_policy_backup
+    ORDER BY table_name, policy_name
+  LOOP
+    IF EXISTS (
+      SELECT 1 FROM pg_catalog.pg_policies policy
+      WHERE policy.schemaname = 'public'
+        AND policy.tablename = v_policy.table_name
+        AND policy.policyname = v_policy.policy_name
+    ) THEN
+      RAISE EXCEPTION 'RC03_COMPAT_FOUNDATION_POLICY_COLLISION';
+    END IF;
+    SELECT string_agg(format('%I', role_name), ', ')
+      INTO v_roles FROM unnest(v_policy.role_names) role_name;
+    EXECUTE format(
+      'CREATE POLICY %I ON public.%I AS %s FOR %s TO %s%s%s',
+      v_policy.policy_name,
+      v_policy.table_name,
+      v_policy.permissive,
+      v_policy.command,
+      v_roles,
+      CASE WHEN v_policy.using_expression IS NOT NULL
+        THEN ' USING (' || v_policy.using_expression || ')' ELSE '' END,
+      CASE WHEN v_policy.check_expression IS NOT NULL
+        THEN ' WITH CHECK (' || v_policy.check_expression || ')' ELSE '' END
+    );
+  END LOOP;
+  IF EXISTS (
+    SELECT 1
+    FROM wos_v1_rc03_compat.public_policy_backup backup
+    LEFT JOIN pg_catalog.pg_policies policy
+      ON policy.schemaname = 'public'
+     AND policy.tablename = backup.table_name
+     AND policy.policyname = backup.policy_name
+    WHERE policy.policyname IS NULL
+      OR policy.permissive IS DISTINCT FROM backup.permissive
+      OR policy.roles IS DISTINCT FROM backup.role_names
+      OR policy.cmd IS DISTINCT FROM backup.command
+      OR policy.qual IS DISTINCT FROM backup.using_expression
+      OR policy.with_check IS DISTINCT FROM backup.check_expression
+  ) THEN
+    RAISE EXCEPTION 'RC03_COMPAT_FOUNDATION_POLICY_RESTORE_MISMATCH';
+  END IF;
+END;
+$rc03_restore_foundation_policies$;
+
 DO $restore_table_acl$
 DECLARE
   acl_row record;
@@ -282,6 +395,7 @@ $restore_table_acl$;
 
 DROP TABLE wos_v1_rc03_compat.historical_rows;
 DROP TABLE wos_v1_rc03_compat.function_definition_backup;
+DROP TABLE wos_v1_rc03_compat.public_policy_backup;
 DROP TABLE wos_v1_rc03_compat.table_acl_backup;
 DROP TABLE wos_v1_rc03_compat.bucket_backup;
 DROP TABLE wos_v1_rc03_compat.storage_policy_backup;
@@ -290,6 +404,18 @@ DROP SCHEMA wos_v1_rc03_compat;
 DO $rc03_compat_recovery_postflight$
 BEGIN
   IF to_regnamespace('wos_v1_rc03_compat') IS NOT NULL
+    OR (
+      SELECT count(*) FROM pg_catalog.pg_policies policy
+      WHERE policy.schemaname = 'public'
+        AND (
+          (policy.tablename = 'wos_production_orders'
+            AND policy.policyname = 'wos_production_orders_insert_draft_same_org')
+          OR (policy.tablename = 'wos_sampling_requests'
+            AND policy.policyname = 'wos_sampling_requests_insert_draft_same_org')
+          OR (policy.tablename = 'wos_reference_images'
+            AND policy.policyname = 'wos_reference_images_insert_same_org')
+        )
+    ) <> 3
     OR EXISTS (
       SELECT 1 FROM pg_policies
       WHERE schemaname = 'storage'

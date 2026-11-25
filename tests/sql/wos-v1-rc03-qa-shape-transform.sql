@@ -156,6 +156,46 @@ WHERE id = 'wos-private';
 
 GRANT INSERT ON public.wos_production_orders TO authenticated;
 
+-- Match all three Hosted QA Foundation INSERT policies (absent in the
+-- previous PG17 QA-shape fixture, causing the RC03/Runtime preflight gap).
+CREATE POLICY wos_production_orders_insert_draft_same_org
+ON public.wos_production_orders AS PERMISSIVE FOR INSERT TO authenticated
+WITH CHECK (
+  workflow_status='DRAFT'
+  AND created_by_profile_id IN (
+    SELECT p.id FROM public.profiles p
+    WHERE p.user_id=auth.uid()
+      AND p.is_active=true
+      AND p.org_id=wos_production_orders.organization_id
+      AND p.role IN ('admin','manager','sales')
+  )
+);
+
+CREATE POLICY wos_sampling_requests_insert_draft_same_org
+ON public.wos_sampling_requests AS PERMISSIVE FOR INSERT TO authenticated
+WITH CHECK (
+  workflow_status='DRAFT'
+  AND result_decision IS NULL
+  AND created_by_profile_id IN (
+    SELECT p.id FROM public.profiles p
+    WHERE p.user_id=auth.uid()
+      AND p.is_active=true
+      AND p.org_id=wos_sampling_requests.organization_id
+      AND p.role IN ('admin','manager','sales')
+  )
+);
+
+CREATE POLICY wos_reference_images_insert_same_org
+ON public.wos_reference_images AS PERMISSIVE FOR INSERT TO authenticated
+WITH CHECK (
+  uploaded_by_profile_id IN (
+    SELECT p.id FROM public.profiles p
+    WHERE p.user_id=auth.uid()
+      AND p.is_active=true
+      AND p.org_id=wos_reference_images.organization_id
+  )
+);
+
 INSERT INTO auth.users(id,email) VALUES (
   '10101010-1010-4010-8010-101010101010',
   'rc03-historical-office@example.test'

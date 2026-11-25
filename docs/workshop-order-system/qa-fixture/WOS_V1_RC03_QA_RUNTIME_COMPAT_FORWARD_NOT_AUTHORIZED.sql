@@ -151,6 +151,23 @@ CREATE TABLE wos_v1_rc03_compat.table_acl_backup (
   PRIMARY KEY(table_name, grantee, privilege_type)
 );
 
+CREATE TABLE wos_v1_rc03_compat.public_policy_backup (
+  table_name text NOT NULL
+    CHECK (table_name IN (
+      'wos_production_orders',
+      'wos_sampling_requests',
+      'wos_reference_images'
+    )),
+  policy_name text NOT NULL,
+  permissive text NOT NULL,
+  role_names name[] NOT NULL,
+  command text NOT NULL,
+  using_expression text,
+  check_expression text,
+  captured_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  PRIMARY KEY(table_name, policy_name)
+);
+
 CREATE TABLE wos_v1_rc03_compat.historical_rows (
   object_kind text NOT NULL,
   row_key text NOT NULL,
@@ -165,6 +182,7 @@ CREATE TABLE wos_v1_rc03_compat.function_definition_backup (
 REVOKE ALL ON wos_v1_rc03_compat.storage_policy_backup,
   wos_v1_rc03_compat.bucket_backup,
   wos_v1_rc03_compat.table_acl_backup,
+  wos_v1_rc03_compat.public_policy_backup,
   wos_v1_rc03_compat.historical_rows,
   wos_v1_rc03_compat.function_definition_backup
 FROM PUBLIC, anon, authenticated;
@@ -233,6 +251,44 @@ BEGIN
 END;
 $verify_function_backup$;
 
+-- The Hosted QA Foundation still contains these three INSERT policies.
+-- A revoked table GRANT alone does not satisfy the V1 Runtime preflight.
+-- Snapshot exact policy metadata, then drop only the three named policies.
+INSERT INTO wos_v1_rc03_compat.public_policy_backup (
+  table_name, policy_name, permissive, role_names, command,
+  using_expression, check_expression
+)
+SELECT
+  policy.tablename, policy.policyname, policy.permissive, policy.roles,
+  policy.cmd, policy.qual, policy.with_check
+FROM pg_catalog.pg_policies policy
+WHERE policy.schemaname = 'public'
+  AND (
+    (policy.tablename = 'wos_production_orders'
+      AND policy.policyname = 'wos_production_orders_insert_draft_same_org')
+    OR (policy.tablename = 'wos_sampling_requests'
+      AND policy.policyname = 'wos_sampling_requests_insert_draft_same_org')
+    OR (policy.tablename = 'wos_reference_images'
+      AND policy.policyname = 'wos_reference_images_insert_same_org')
+  );
+
+DO $rc03_verify_foundation_policy_backup$
+BEGIN
+  IF (SELECT count(*) FROM wos_v1_rc03_compat.public_policy_backup) <> 3
+    OR EXISTS (
+      SELECT 1 FROM wos_v1_rc03_compat.public_policy_backup policy
+      WHERE policy.command <> 'INSERT'
+        OR policy.permissive <> 'PERMISSIVE'
+        OR policy.role_names IS DISTINCT FROM ARRAY['authenticated']::name[]
+        OR policy.using_expression IS NOT NULL
+        OR policy.check_expression IS NULL
+    )
+  THEN
+    RAISE EXCEPTION 'RC03_COMPAT_FOUNDATION_POLICY_BACKUP_MISMATCH';
+  END IF;
+END;
+$rc03_verify_foundation_policy_backup$;
+
 INSERT INTO wos_v1_rc03_compat.historical_rows(
   object_kind, row_key, row_hash
 )
@@ -281,6 +337,34 @@ SELECT
   baseline_id::text || '/' || reference_image_id::text,
   md5(to_jsonb(source_row)::text)
 FROM public.wos_visual_baseline_items source_row;
+
+DO $rc03_drop_legacy_foundation_insert_policies$
+DECLARE
+  v_policy record;
+BEGIN
+  FOR v_policy IN
+    SELECT table_name, policy_name
+    FROM wos_v1_rc03_compat.public_policy_backup
+    ORDER BY table_name, policy_name
+  LOOP
+    EXECUTE format(
+      'DROP POLICY %I ON public.%I',
+      v_policy.policy_name,
+      v_policy.table_name
+    );
+  END LOOP;
+  IF EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_policies policy
+    JOIN wos_v1_rc03_compat.public_policy_backup backup
+      ON backup.table_name = policy.tablename
+     AND backup.policy_name = policy.policyname
+    WHERE policy.schemaname = 'public'
+  ) THEN
+    RAISE EXCEPTION 'RC03_COMPAT_FOUNDATION_POLICIES_STILL_PRESENT';
+  END IF;
+END;
+$rc03_drop_legacy_foundation_insert_policies$;
 
 DO $drop_legacy_wos_policies$
 DECLARE
@@ -752,6 +836,12 @@ BEGIN
     'authenticated',
     'public.wos_production_orders',
     'INSERT'
+  ) OR EXISTS (
+    SELECT 1 FROM pg_catalog.pg_policies policy
+    JOIN wos_v1_rc03_compat.public_policy_backup backup
+      ON backup.table_name = policy.tablename
+     AND backup.policy_name = policy.policyname
+    WHERE policy.schemaname = 'public'
   ) THEN
     RAISE EXCEPTION 'RC03_COMPAT_ORDER_INSERT_STILL_GRANTED';
   END IF;

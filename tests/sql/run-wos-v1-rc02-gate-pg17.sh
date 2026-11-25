@@ -4,6 +4,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 CONTAINER="${WOS_PG_DOCKER_CONTAINER:-}"
 DB="wos_v1_rollback_ci"
+PRE_RUNTIME_DB="wos_v1_rc03_pre_runtime_ci"
 
 fail() {
   printf 'WOS_V1_RC02_GATE_PG17_FAILED=%s\n' "$1" >&2
@@ -47,7 +48,8 @@ cleanup() {
     "${CREATE_TWO_LOG:-}" \
     "${RECOVERY_REFUSAL_LOG:-}" \
     "${RECOVERY_LEGACY_TAMPER_LOG:-}" \
-    "${RECOVERY_HISTORY_TAMPER_LOG:-}"
+    "${RECOVERY_HISTORY_TAMPER_LOG:-}" \
+    "${PRE_RUNTIME_FAILURE_LOG:-}"
   if [[ "$status" -ne 0
     && "${WOS_RC02_KEEP_ON_FAILURE:-0}" = '1' ]]; then
     printf 'WOS_V1_RC02_GATE_DB_RETAINED=%s\n' "$DB"
@@ -58,6 +60,8 @@ cleanup() {
     printf 'WOS_V1_RC02_GATE_DB_RETAINED_ON_SUCCESS=%s\n' "$DB"
     exit "$status"
   fi
+  psql_db postgres -q -c "DROP DATABASE IF EXISTS \"$PRE_RUNTIME_DB\" WITH (FORCE)" \
+    >/dev/null 2>&1 || true
   psql_db postgres -q -c "DROP DATABASE IF EXISTS \"$DB\" WITH (FORCE)" \
     >/dev/null 2>&1 || true
   exit "$status"
@@ -112,6 +116,102 @@ psql_db "$DB" -q \
 
 psql_db "$DB" -q \
   < "$ROOT/tests/sql/wos-v1-qa-legacy-safety-rc03-fixture.sql"
+# This cloned QA baseline must carry all three pre-existing public INSERT
+# policies. Test BOTH recovery states: RC03-only (Runtime preflight rejected)
+# and the full Runtime/RC02 installation exercised below.
+FOUNDATION_POLICY_SHA_BEFORE="$(query_value "$DB" "
+  SELECT md5(COALESCE(jsonb_agg(jsonb_build_object(
+    'table',tablename, 'name',policyname,
+    'permissive',permissive,'roles',roles::text[],
+    'cmd',cmd,'qual',qual,'check',with_check
+  ) ORDER BY tablename,policyname)::text, ''))
+  FROM pg_policies WHERE schemaname='public'
+    AND policyname IN (
+      'wos_production_orders_insert_draft_same_org',
+      'wos_sampling_requests_insert_draft_same_org',
+      'wos_reference_images_insert_same_org'
+    )
+")"
+[[ "$(query_value "$DB" "
+  SELECT count(*) FROM pg_policies WHERE schemaname='public'
+    AND policyname IN (
+      'wos_production_orders_insert_draft_same_org',
+      'wos_sampling_requests_insert_draft_same_org',
+      'wos_reference_images_insert_same_org'
+    )
+")" = '3' ]] || fail 'QA_SHAPE_MISSING_THREE_LEGACY_INSERT_POLICIES'
+
+psql_db postgres -q -c "DROP DATABASE IF EXISTS \"$PRE_RUNTIME_DB\" WITH (FORCE)"
+psql_db postgres -q -c "CREATE DATABASE \"$PRE_RUNTIME_DB\" TEMPLATE \"$DB\""
+{
+  printf "SET wos_v1.rc03_compat_install_authorized='yes';\n"
+  printf "SET wos_v1.rc03_expected_counts='{\"orders\":85,\"images\":90,\"proofs\":35,\"trusted_receipts\":8,\"storage_objects\":91,\"baselines\":2,\"baseline_items\":8}';\n"
+  cat "$ROOT/docs/workshop-order-system/qa-fixture/WOS_V1_RC03_QA_RUNTIME_COMPAT_FORWARD_NOT_AUTHORIZED.sql"
+} | psql_db "$PRE_RUNTIME_DB" -q
+[[ "$(query_value "$PRE_RUNTIME_DB" "
+  SELECT count(*) FROM pg_policies WHERE schemaname='public'
+    AND policyname IN (
+      'wos_production_orders_insert_draft_same_org',
+      'wos_sampling_requests_insert_draft_same_org',
+      'wos_reference_images_insert_same_org'
+    )
+")" = '0' ]] || fail 'COMPAT_FORWARD_LEFT_FOUNDATION_INSERT_POLICIES'
+
+# Reintroduce one disposable, synthetic legacy Policy to reproduce the
+# exact Runtime Forward containment failure seen on Hosted QA.
+psql_db "$PRE_RUNTIME_DB" -q -c "
+  CREATE POLICY wos_production_orders_insert_draft_same_org
+  ON public.wos_production_orders FOR INSERT TO authenticated
+  WITH CHECK (true)
+"
+PRE_RUNTIME_FAILURE_LOG="$(mktemp)"
+set +e
+{
+  printf "SET wos_v1.production_migration_authorized='yes';\n"
+  cat "$ROOT/docs/workshop-order-system/production-readiness/sql/WOS_V1_PRODUCTION_RUNTIME_FORWARD_NOT_AUTHORIZED.sql"
+} | psql_db "$PRE_RUNTIME_DB" >"$PRE_RUNTIME_FAILURE_LOG" 2>&1
+PRE_RUNTIME_FAILURE_STATUS=$?
+set -e
+[[ "$PRE_RUNTIME_FAILURE_STATUS" -ne 0 ]]   || fail 'RUNTIME_PREFLIGHT_ACCEPTED_INJECTED_LEGACY_POLICY'
+grep -q 'WOS_V1_FOUNDATION_CONTAINMENT_REQUIRED' "$PRE_RUNTIME_FAILURE_LOG"   || fail 'RUNTIME_PREFLIGHT_FAILED_WRONG_REASON'
+psql_db "$PRE_RUNTIME_DB" -q -c "
+  DROP POLICY wos_production_orders_insert_draft_same_org
+  ON public.wos_production_orders
+"
+[[ "$(query_value "$PRE_RUNTIME_DB" "
+  SELECT to_regclass('public.wos_order_create_receipts') IS NULL
+    AND to_regprocedure(
+      'public.wos_v1_pre_runtime_confirm_office_completeness(uuid,integer,text,text)'
+    ) IS NULL
+")" = 't' ]] || fail 'RUNTIME_FAILED_STAGE_CREATED_BACKUPS'
+{
+  printf "SET wos_v1.rc03_compat_recovery_authorized='yes';\n"
+  cat "$ROOT/docs/workshop-order-system/qa-fixture/WOS_V1_RC03_QA_RUNTIME_COMPAT_RECOVERY_NOT_AUTHORIZED.sql"
+} | psql_db "$PRE_RUNTIME_DB" -q
+[[ "$(query_value "$PRE_RUNTIME_DB" "
+  SELECT to_regnamespace('wos_v1_rc03_compat') IS NULL
+    AND to_regclass('public.wos_verified_image_proofs') IS NULL
+    AND to_regclass('public.wos_orphan_cleanup_claims') IS NULL
+    AND to_regprocedure(
+      'public.wos_confirm_office_completeness(uuid,integer,text,text)'
+    ) IS NOT NULL
+")" = 't' ]] || fail 'PRE_RUNTIME_COMPAT_RECOVERY_INCOMPLETE'
+[[ "$(query_value "$PRE_RUNTIME_DB" "
+  SELECT md5(COALESCE(jsonb_agg(jsonb_build_object(
+    'table',tablename,'name',policyname,
+    'permissive',permissive,'roles',roles::text[],
+    'cmd',cmd,'qual',qual,'check',with_check
+  ) ORDER BY tablename,policyname)::text, ''))
+  FROM pg_policies WHERE schemaname='public'
+    AND policyname IN (
+      'wos_production_orders_insert_draft_same_org',
+      'wos_sampling_requests_insert_draft_same_org',
+      'wos_reference_images_insert_same_org'
+    )
+")" = "$FOUNDATION_POLICY_SHA_BEFORE" ]]   || fail 'PRE_RUNTIME_FOUNDATION_POLICY_RESTORE_FINGERPRINT_MISMATCH'
+psql_db postgres -q -c "DROP DATABASE IF EXISTS \"$PRE_RUNTIME_DB\" WITH (FORCE)"
+echo 'WOS_V1_RC05_PRE_RUNTIME_FAIL_CLOSED_RECOVERY=PASS'
+
 LEGACY_SAFETY_BEFORE="$(psql_db "$DB" -qAt \
   < "$ROOT/tests/sql/wos-v1-qa-legacy-safety-fingerprint.sql")"
 LEGACY_STORAGE_POLICY_FINGERPRINT_BEFORE="$(query_value "$DB" "
@@ -557,6 +657,21 @@ echo 'WOS_V1_RC02_CONCURRENT_AUTHORIZE=PASS'
 echo 'WOS_V1_RC02_CONCURRENT_CREATE_REPLAY=PASS'
 echo 'WOS_V1_RC02_RECOVERY_ACTIVE_REFUSAL=PASS'
 echo 'WOS_V1_RC02_RECOVERY_RESTORES_POLICY=PASS'
+[[ "$(query_value "$DB" "
+  SELECT md5(COALESCE(jsonb_agg(jsonb_build_object(
+    'table',tablename,'name',policyname,
+    'permissive',permissive,'roles',roles::text[],
+    'cmd',cmd,'qual',qual,'check',with_check
+  ) ORDER BY tablename,policyname)::text, ''))
+  FROM pg_policies WHERE schemaname='public'
+    AND policyname IN (
+      'wos_production_orders_insert_draft_same_org',
+      'wos_sampling_requests_insert_draft_same_org',
+      'wos_reference_images_insert_same_org'
+    )
+")" = "$FOUNDATION_POLICY_SHA_BEFORE" ]] \
+  || fail 'FULL_RUNTIME_FOUNDATION_POLICY_RESTORE_FINGERPRINT_MISMATCH'
+echo 'WOS_V1_RC05_FOUNDATION_PUBLIC_POLICIES_RESTORED=PASS'
 echo 'WOS_V1_RC03_COMPAT_FORWARD_AND_RECOVERY=PASS'
 echo 'WOS_V1_RC03_LEGACY_SAFETY_FINGERPRINT=PASS'
 echo 'WOS_V1_RC03_COMPAT_RECOVERY_DEACTIVATED_RUNTIME=PASS'
