@@ -604,14 +604,26 @@ SELECT policy.policyname,
 FROM pg_catalog.pg_policies policy
 WHERE policy.schemaname = 'storage'
   AND policy.tablename = 'objects'
-  AND policy.policyname IN (
-    'wos_qa_revision_object_insert',
-    'wos_p8_private_insert'
-  )
+  AND policy.cmd = 'INSERT'
+  AND 'authenticated' = ANY (policy.roles)
+  AND policy.policyname LIKE 'wos\_%' ESCAPE '\'
 ON CONFLICT(policy_name) DO NOTHING;
 
-DROP POLICY IF EXISTS wos_qa_revision_object_insert ON storage.objects;
-DROP POLICY IF EXISTS wos_p8_private_insert ON storage.objects;
+DO $drop_wos_insert_policies$
+DECLARE
+  v_policy_name text;
+BEGIN
+  FOR v_policy_name IN
+    SELECT policy_name
+    FROM wos_qa_safety.rc02_policy_backup
+  LOOP
+    EXECUTE format(
+      'DROP POLICY %I ON storage.objects',
+      v_policy_name
+    );
+  END LOOP;
+END;
+$drop_wos_insert_policies$;
 
 CREATE POLICY wos_qa_rc02_private_insert ON storage.objects
 FOR INSERT TO authenticated
