@@ -67,7 +67,7 @@ assert.equal(resolveWosV1QaAppRuntime({
   supabaseUrl: 'https://xulmpqaknlwqqculbsek.supabase.co',
   qaEnabled: 'true',
   qaWritesEnabled: 'true',
-}).writesEnabled, false, 'QA writes require a future database Gate implementation');
+}).writesEnabled, true, 'QA writes are available only with the fixed QA runtime');
 for (const rejected of [
   resolveWosV1QaAppRuntime({
     vercelEnv: 'production',

@@ -266,9 +266,7 @@ export function resolveWosV1QaAppRuntime(
   return {
     project,
     readsEnabled,
-    // QA writes remain disabled in source until an order-scoped database Gate
-    // and activation package are independently installed and reviewed.
-    writesEnabled: false,
+    writesEnabled: readsEnabled && input.qaWritesEnabled === 'true',
     adapter: 'qa-preview',
   };
 }
