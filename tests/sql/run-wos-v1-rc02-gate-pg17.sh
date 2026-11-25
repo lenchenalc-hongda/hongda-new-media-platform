@@ -689,6 +689,36 @@ psql_db "$DB" -q -c "
     public.wos_qa_p2_m2_action(uuid,integer,uuid,text,jsonb)
   TO service_role;
 "
+psql_db "$DB" -q -c "
+  INSERT INTO public.wos_orphan_cleanup_claims (
+    storage_object_id, storage_path, order_id, organization_id,
+    object_version, object_updated_at, claim_token, state,
+    claimed_at, lease_expires_at, finished_at, last_result
+  )
+  SELECT
+    gen_random_uuid(),
+    'qa-retained/orphan-claim/source.png',
+    order_row.id,
+    order_row.organization_id,
+    NULL,
+    now() - interval '30 minutes',
+    gen_random_uuid(),
+    'RELEASED',
+    now() - interval '2 minutes',
+    now() - interval '1 minute',
+    now() - interval '30 seconds',
+    'PG17_RETAINED_ROW_FIXTURE'
+  FROM public.wos_production_orders order_row
+  WHERE order_row.organization_id =
+    '0ff53d93-2b9e-48b9-8113-a4768c39cdd2'
+  ORDER BY order_row.id
+  LIMIT 1
+  ON CONFLICT DO NOTHING;
+"
+[[ "$(query_value "$DB" "
+  SELECT count(*) FROM public.wos_orphan_cleanup_claims
+  WHERE last_result = 'PG17_RETAINED_ROW_FIXTURE'
+")" = '1' ]] || fail 'RC05_RETAINED_ORPHAN_CLAIM_FIXTURE_MISSING'
 [[ "$(query_value "$DB" "
   SELECT encode(
     sha256(convert_to(
@@ -890,6 +920,15 @@ psql_db "$RC05_M2_NEGATIVE_DB" -q -c "
   UPDATE public.wos_qa_p2_office_execution_gate
   SET enabled=true
   WHERE gate_name='OFFICE_WRITES';
+"
+expect_rc05_runtime_failure 'RC05_RUNTIME_RETAINED_QA_GATE_MISMATCH'
+
+# An extra disabled row still means the gate table is not the exact expected
+# retained shape.
+recreate_rc05_m2_negative_db
+psql_db "$RC05_M2_NEGATIVE_DB" -q -c "
+  INSERT INTO public.wos_qa_p2_execution_gate(gate_name)
+  VALUES ('EXTRA_DISABLED_GATE');
 "
 expect_rc05_runtime_failure 'RC05_RUNTIME_RETAINED_QA_GATE_MISMATCH'
 psql_db postgres -q \

@@ -47,18 +47,18 @@ BEGIN
   ) OR EXISTS (
     SELECT 1 FROM public.wos_qa_p2_execution_gate WHERE enabled
   ) OR (
-    SELECT count(*) FROM public.wos_qa_p2_m2_gate
-    WHERE gate_name IN ('M2_OFFICE_WRITES','M2_OPERATOR_WRITES')
-      AND NOT enabled
-  ) <> 2 OR (
-    SELECT count(*) FROM public.wos_qa_p2_office_execution_gate
-    WHERE gate_name = 'OFFICE_WRITES'
-      AND NOT enabled
-  ) <> 1 OR (
-    SELECT count(*) FROM public.wos_qa_p2_execution_gate
-    WHERE gate_name = 'OPERATOR_WRITES'
-      AND NOT enabled
-  ) <> 1 THEN
+    SELECT array_agg(gate_name ORDER BY gate_name)
+    FROM public.wos_qa_p2_m2_gate
+  ) IS DISTINCT FROM ARRAY[
+    'M2_OFFICE_WRITES',
+    'M2_OPERATOR_WRITES'
+  ]::text[] OR (
+    SELECT array_agg(gate_name ORDER BY gate_name)
+    FROM public.wos_qa_p2_office_execution_gate
+  ) IS DISTINCT FROM ARRAY['OFFICE_WRITES']::text[] OR (
+    SELECT array_agg(gate_name ORDER BY gate_name)
+    FROM public.wos_qa_p2_execution_gate
+  ) IS DISTINCT FROM ARRAY['OPERATOR_WRITES']::text[] THEN
     RAISE EXCEPTION 'RC05_RUNTIME_RETAINED_QA_GATE_MISMATCH';
   END IF;
   IF (

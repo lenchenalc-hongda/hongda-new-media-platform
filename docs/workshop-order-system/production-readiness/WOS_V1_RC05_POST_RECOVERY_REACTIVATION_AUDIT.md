@@ -66,8 +66,11 @@ database, then explicitly asserts the original fresh Compat rejects retained
 Runtime, all six retained Runtime table row fingerprints are unchanged before
 each PASS marker, original P2 safety fingerprint and three legacy Policy
 definitions unchanged, and the exact service-role-only M2 ACL remains
-unchanged. Run `bash tests/sql/run-wos-v1-rc02-gate-pg17.sh` on the already
-approved Docker PG17 Mac executor and require BOTH:
+unchanged. Negative clones cover a missing M2 RPC, widened authenticated ACL,
+enabled Office gate and an extra disabled gate row. The retained six-table
+fixture includes a non-empty orphan cleanup claim so deletion is covered as
+well as insertion. Run `bash tests/sql/run-wos-v1-rc02-gate-pg17.sh` on the
+already approved Docker PG17 Mac executor and require BOTH:
 - `WOS_V1_RC05_POST_RECOVERY_PRE_RUNTIME_ROLLBACK=PASS`
 - `WOS_V1_RC05_POST_RECOVERY_REACTIVATION_RECOVERY=PASS`
 
