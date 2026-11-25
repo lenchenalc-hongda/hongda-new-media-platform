@@ -281,13 +281,24 @@ try {
             || '/images/%/versions/V1/%/source.png'
         ORDER BY object.name
         LIMIT 1
+      ),
+      'nonWosPath', (
+        SELECT object.name
+        FROM storage.objects object
+        WHERE object.bucket_id = 'commercial-quotation-item-images'
+        ORDER BY object.name
+        LIMIT 1
       )
     )::text
     FROM public.wos_production_orders ord
     WHERE ord.order_number =
       'QA-NONPROD-PG17-71000000-0000-4000-8000-000000000001'
   `));
-  if (fixture.currentPaths?.length !== 4 || !fixture.oldPath) {
+  if (
+    fixture.currentPaths?.length !== 4
+    || !fixture.oldPath
+    || !fixture.nonWosPath
+  ) {
     throw new Error('RC04_STORAGE_FIXTURE_PATHS_INVALID');
   }
 
@@ -406,8 +417,36 @@ try {
     ALTER TABLE storage.objects ENABLE TRIGGER USER;
   `);
 
-  const download = (jwt, objectName) => storageFetchInContainer(
-    `/object/authenticated/wos-private/${encodedObjectPath(objectName)}`,
+  const nonWosBytes = Buffer.concat([seedPng, Buffer.from([0xff])]);
+  const nonWosUpload = storageFetchInContainer(
+    `/object/commercial-quotation-item-images/${encodedObjectPath(fixture.nonWosPath)}`,
+    {
+      method: 'POST',
+      headers: {
+        apikey: serviceKey,
+        Authorization: `Bearer ${serviceKey}`,
+        'Content-Type': 'image/png',
+        'x-upsert': 'true',
+      },
+      body: nonWosBytes,
+    },
+  );
+  if (![200, 201].includes(nonWosUpload.status)) {
+    throw new Error(
+      `RC04_NON_WOS_STORAGE_UPLOAD_FAILED:${nonWosUpload.status}:${nonWosUpload.bytes.toString()}`,
+    );
+  }
+  uploadedBytes.set(
+    fixture.nonWosPath,
+    crypto.createHash('sha256').update(nonWosBytes).digest('hex'),
+  );
+
+  const download = (
+    jwt,
+    objectName,
+    bucket = 'wos-private',
+  ) => storageFetchInContainer(
+    `/object/authenticated/${bucket}/${encodedObjectPath(objectName)}`,
     {
       headers: {
         apikey: anonKey,
@@ -462,6 +501,31 @@ try {
   expectDenied('VIEWER', download(viewerJwt, fixture.currentPaths[0]));
   expectDenied('CROSS_ORG', download(foreignJwt, fixture.currentPaths[0]));
   expectDenied('OLD_VERSION', download(operatorJwt, fixture.oldPath));
+  expectDenied(
+    'NON_WOS_OPERATOR',
+    download(
+      operatorJwt,
+      fixture.nonWosPath,
+      'commercial-quotation-item-images',
+    ),
+  );
+  expectDenied(
+    'NON_WOS_VIEWER',
+    download(
+      viewerJwt,
+      fixture.nonWosPath,
+      'commercial-quotation-item-images',
+    ),
+  );
+  expectRead(
+    'COMMERCIAL_POLICY_OFFICE_ADMIN',
+    download(
+      officeJwt,
+      fixture.nonWosPath,
+      'commercial-quotation-item-images',
+    ),
+    fixture.nonWosPath,
+  );
 
   const expiredPath = fixture.currentPaths[0];
   psqlExec(`
@@ -546,6 +610,7 @@ try {
   console.log('WOS_V1_RC04_STORAGE_BYTE_DOWNLOADS=PASS');
   console.log('WOS_V1_RC04_STORAGE_NEGATIVE_MATRIX=PASS');
   console.log('WOS_V1_RC04_OFFICE_PRIVATE_STORAGE_ACCESS=PASS');
+  console.log('WOS_V1_RC04_NON_WOS_STORAGE_SCOPE=PASS');
 } finally {
   if (started) {
     run('docker', ['rm', '-f', storageName]);

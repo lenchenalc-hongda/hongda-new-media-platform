@@ -116,7 +116,7 @@ BEGIN
         = 'd41d8cd98f00b204e9800998ecf8427e'
       AND md5(COALESCE(policy.qual, '')) IN (
         '365f79545fe118582bc24a32ccc15f57',
-        '9ccf59d67e1f1af8bf34ec2f47c3cb6d'
+        '5a84d8e45b2630833f805d2bae30485c'
       )
   ) THEN
     RAISE EXCEPTION 'WOS_V1_PRIVATE_STORAGE_RLS_MISMATCH';

@@ -75,7 +75,10 @@ REVOKE EXECUTE ON FUNCTION public.wos_operator_review_correction(
 
 DROP TRIGGER IF EXISTS rc03_mirror_verified_proof
   ON public.wos_verified_image_proofs;
+DROP TRIGGER IF EXISTS rc03_reject_verified_proof_update
+  ON public.wos_verified_image_proofs;
 DROP FUNCTION IF EXISTS wos_v1_rc03_compat.mirror_verified_proof();
+DROP FUNCTION IF EXISTS wos_v1_rc03_compat.reject_verified_proof_update();
 
 DROP TRIGGER IF EXISTS wos_qa_trusted_proof_guard
   ON public.wos_qa_verified_image_proofs;
@@ -317,6 +320,15 @@ BEGIN
     OR to_regprocedure(
       'public.wos_register_uploaded_reference_image(uuid,uuid,text,text)'
     ) IS NULL
+    OR EXISTS (
+      SELECT 1
+      FROM pg_trigger
+      WHERE NOT tgisinternal
+        AND tgname IN (
+          'rc03_mirror_verified_proof',
+          'rc03_reject_verified_proof_update'
+        )
+    )
   THEN
     RAISE EXCEPTION 'RC03_COMPAT_RECOVERY_INCOMPLETE';
   END IF;

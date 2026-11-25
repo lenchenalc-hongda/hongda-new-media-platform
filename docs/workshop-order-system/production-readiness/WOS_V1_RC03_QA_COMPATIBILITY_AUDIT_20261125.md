@@ -18,6 +18,8 @@ in the same Draft PR:
 | P0-3 permissive Policy bypass | The broad Operator branch was removed from `wos_p8_private_select`; Operator access comes only from the strict RC02 predicate. Non-WOS bucket access remains separately scoped. |
 | P1-4 P7 recovery | Data-retaining recovery restores the four original P7 public functions, exact definitions and ACLs, and the exact QA Proof guard while retaining V1 runtime tables and audit rows. |
 | PG17 parity | QA-shape regression installs the exact live Proof Guard, the M2 proof-set verifier, PostgREST v16 and Storage API v1.96.4. |
+| P1-A non-WOS scope | The compatibility branch for all non-`wos-private` buckets was removed. A seeded `commercial-quotation-item-images` bucket proves its existing commercial Policy remains authoritative while Operator and Viewer receive no WOS-derived access. |
+| P1-B renewal consistency | RC03 QA renewals are explicitly unsupported and fail atomically. The new Proof projection cannot move past its original ten-minute window while the legacy mirror remains expired; Edge v8 and M2 therefore observe the same validity result. |
 
 ## Safety Namespace
 
@@ -182,6 +184,10 @@ POSTGREST_SERVICE_ROLE_GUARD=PASS
 POSTGREST_NEGATIVE_ROLE_MATRIX=PASS
 STORAGE_API_OPERATOR_FOUR_STATE_BYTES=PASS
 STORAGE_API_NEGATIVE_MATRIX=PASS
+NON_WOS_STORAGE_SCOPE=PASS
+PROOF_RENEWAL_FAIL_CLOSED=PASS
+PROOF_VALIDITY_BOUNDARY=PASS
+EXPIRED_EDGE_M2_CONSISTENCY=PASS
 P7_RECOVERY_INTERFACES=PASS
 ```
 
@@ -189,6 +195,18 @@ Compatibility recovery intentionally uses data-retention mode: it does not
 delete new V1 runtime tables or business/audit rows. Full runtime-table removal
 requires a separate retention decision. The original P7 public interfaces and
 ACLs are restored in this mode.
+
+## RC03 Renewal Contract
+
+`wos_v1_renew_expired_image_proof` remains available in the production-neutral
+runtime, but RC03 QA compatibility deliberately rejects Proof UPDATE attempts
+with `RC03_PROOF_RENEWAL_UNSUPPORTED`. This prevents a renewed V1 row from
+coexisting with an expired legacy projection.
+
+Hosted M2 validation therefore must begin only after the current-version Proof
+set is created and complete both Office and Workshop signatures before the
+original ten-minute expiry. Expired Proofs require a newly recorded reviewed
+Proof set, not renewal of the prior set.
 
 ## Other Regression
 

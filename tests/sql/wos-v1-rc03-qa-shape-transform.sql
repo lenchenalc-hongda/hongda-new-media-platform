@@ -461,6 +461,44 @@ CROSS JOIN LATERAL generate_series(
   baseline_series.value * 4
 ) AS image_series(value);
 
+INSERT INTO storage.buckets(
+  id, name, public, file_size_limit, allowed_mime_types
+) VALUES (
+  'commercial-quotation-item-images',
+  'commercial-quotation-item-images',
+  false,
+  20971520,
+  ARRAY['image/png']
+);
+
+CREATE POLICY commercial_quotation_item_images_select
+ON storage.objects FOR SELECT TO authenticated
+USING (
+  bucket_id = 'commercial-quotation-item-images'
+  AND (storage.foldername(name))[1] = 'organizations'
+  AND EXISTS (
+    SELECT 1
+    FROM public.profiles profile
+    WHERE profile.user_id = auth.uid()
+      AND profile.is_active
+      AND profile.role IN ('admin','manager','sales')
+      AND profile.org_id::text = (storage.foldername(name))[2]
+  )
+);
+
+INSERT INTO storage.objects(
+  id, bucket_id, name, owner_id, metadata, version, updated_at
+) VALUES (
+  '70100000-0000-4000-8000-000000000001',
+  'commercial-quotation-item-images',
+  'organizations/0ff53d93-2b9e-48b9-8113-a4768c39cdd2'
+    || '/commercial-quotation/item-001/source.png',
+  '10101010-1010-4010-8010-101010101010',
+  '{"mimetype":"image/png","size":"100"}'::jsonb,
+  'rc03-commercial-policy-v1',
+  '2026-11-20T00:00:00.123456Z'
+);
+
 GRANT EXECUTE ON FUNCTION public.wos_register_uploaded_reference_image(
   uuid,uuid,text,text
 ) TO authenticated;

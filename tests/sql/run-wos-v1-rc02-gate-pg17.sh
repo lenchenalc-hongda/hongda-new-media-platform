@@ -134,6 +134,26 @@ LEGACY_STORAGE_POLICY_FINGERPRINT_BEFORE="$(query_value "$DB" "
     AND tablename='objects'
     AND policyname LIKE 'wos\\_%' ESCAPE '\\'
 ")"
+COMMERCIAL_QUOTATION_POLICY_BEFORE="$(query_value "$DB" "
+  SELECT md5(COALESCE(
+    jsonb_agg(
+      jsonb_build_object(
+        'name', policyname,
+        'cmd', cmd,
+        'permissive', permissive,
+        'roles', roles::text[],
+        'qual', qual,
+        'check', with_check
+      )
+      ORDER BY policyname
+    )::text,
+    ''
+  ))
+  FROM pg_policies
+  WHERE schemaname='storage'
+    AND tablename='objects'
+    AND policyname='commercial_quotation_item_images_select'
+")"
 
 {
   printf "SET wos_v1.rc03_compat_install_authorized='yes';\n"
@@ -445,6 +465,27 @@ psql_db "$DB" -q -c "
     AND policyname LIKE 'wos\\_%' ESCAPE '\\'
 ")" = "$LEGACY_STORAGE_POLICY_FINGERPRINT_BEFORE" ]] \
   || fail 'COMPAT_RECOVERY_POLICY_FINGERPRINT_CHANGED'
+[[ "$(query_value "$DB" "
+  SELECT md5(COALESCE(
+    jsonb_agg(
+      jsonb_build_object(
+        'name', policyname,
+        'cmd', cmd,
+        'permissive', permissive,
+        'roles', roles::text[],
+        'qual', qual,
+        'check', with_check
+      )
+      ORDER BY policyname
+    )::text,
+    ''
+  ))
+  FROM pg_policies
+  WHERE schemaname='storage'
+    AND tablename='objects'
+    AND policyname='commercial_quotation_item_images_select'
+")" = "$COMMERCIAL_QUOTATION_POLICY_BEFORE" ]] \
+  || fail 'COMPAT_RECOVERY_CHANGED_COMMERCIAL_QUOTATION_POLICY'
 [[ "$(query_value "$DB" "
   SELECT allowed_mime_types = ARRAY['image/jpeg','image/png','image/webp']
   FROM storage.buckets WHERE id='wos-private'

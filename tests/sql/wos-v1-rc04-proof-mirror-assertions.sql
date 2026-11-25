@@ -5,6 +5,10 @@ DECLARE
   v_historical_after text;
   v_digest text;
   v_last_verified_at timestamptz;
+  v_baseline_id uuid;
+  v_image_id uuid := '73200000-0000-4000-8000-000000000001';
+  v_verified_at timestamptz;
+  v_expires_at timestamptz;
 BEGIN
   SELECT id INTO v_order_id
   FROM public.wos_production_orders
@@ -41,8 +45,8 @@ BEGIN
       AND mirror.storage_object_version = proof.storage_object_version
       AND mirror.storage_object_updated_at = proof.storage_object_updated_at
       AND mirror.verified_sha256 = proof.verified_sha256
-      AND mirror.verified_at <= proof.verified_at
-      AND mirror.expires_at <= proof.expires_at
+      AND mirror.verified_at = proof.verified_at
+      AND mirror.expires_at = proof.expires_at
     WHERE proof.order_id = v_order_id
       AND mirror.image_id IS NULL
   ) THEN
@@ -60,6 +64,24 @@ BEGIN
       )
   ) THEN
     RAISE EXCEPTION 'RC04_HISTORICAL_PROOF_FINGERPRINT_CHANGED';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1
+    FROM public.wos_verified_image_proofs proof
+    JOIN public.wos_qa_verified_image_proofs mirror
+      ON mirror.image_id = proof.image_id
+    WHERE proof.order_id = v_order_id
+      AND (
+        proof.expires_at - proof.verified_at < interval '10 minutes'
+        OR proof.expires_at - proof.verified_at > interval '10 minutes 1 second'
+        OR mirror.expires_at - mirror.verified_at < interval '10 minutes'
+        OR mirror.expires_at - mirror.verified_at > interval '10 minutes 1 second'
+        OR proof.expires_at IS DISTINCT FROM mirror.expires_at
+        OR proof.verified_at IS DISTINCT FROM mirror.verified_at
+      )
+  ) THEN
+    RAISE EXCEPTION 'RC04_PROOF_VALIDITY_BOUNDARY_MISMATCH';
   END IF;
 
   SELECT md5(to_jsonb(proof)::text) INTO v_historical_before
@@ -92,19 +114,19 @@ BEGIN
     RAISE EXCEPTION 'RC04_HISTORICAL_PROOF_MUTATED_BY_REJECTED_UPDATE';
   END IF;
 
+  SELECT baseline.id INTO v_baseline_id
+  FROM public.wos_visual_baselines baseline
+  WHERE baseline.entity_id = v_order_id
+    AND baseline.version_label = 'V2'
+    AND baseline.status = 'CURRENT'
+    AND baseline.superseded_at IS NULL;
+
   SELECT checked.proof_digest, checked.last_verified_at
   INTO v_digest, v_last_verified_at
   FROM public.wos_qa_p2_m2_checked_proof_set(
     v_order_id,
     '0ff53d93-2b9e-48b9-8113-a4768c39cdd2',
-    (
-      SELECT baseline.id
-      FROM public.wos_visual_baselines baseline
-      WHERE baseline.entity_id = v_order_id
-        AND baseline.version_label = 'V2'
-        AND baseline.status = 'CURRENT'
-        AND baseline.superseded_at IS NULL
-    ),
+    v_baseline_id,
     'V2'
   ) checked;
   IF v_digest IS NULL
@@ -112,6 +134,72 @@ BEGIN
     OR v_last_verified_at IS NULL
   THEN
     RAISE EXCEPTION 'RC04_M2_PROOF_SET_DIGEST_FAILED';
+  END IF;
+
+  v_verified_at := clock_timestamp() - interval '20 minutes';
+  v_expires_at := clock_timestamp() - interval '10 minutes';
+  ALTER TABLE public.wos_verified_image_proofs DISABLE TRIGGER USER;
+  ALTER TABLE public.wos_qa_verified_image_proofs DISABLE TRIGGER USER;
+  UPDATE public.wos_verified_image_proofs
+  SET verified_at = v_verified_at,
+      expires_at = v_expires_at
+  WHERE image_id = v_image_id;
+  UPDATE public.wos_qa_verified_image_proofs
+  SET verified_at = v_verified_at,
+      expires_at = v_expires_at
+  WHERE image_id = v_image_id;
+  ALTER TABLE public.wos_qa_verified_image_proofs ENABLE TRIGGER USER;
+  ALTER TABLE public.wos_verified_image_proofs ENABLE TRIGGER USER;
+  BEGIN
+    PERFORM 1
+    FROM public.wos_qa_p2_m2_checked_proof_set(
+      v_order_id,
+      '0ff53d93-2b9e-48b9-8113-a4768c39cdd2',
+      v_baseline_id,
+      'V2'
+    );
+    RAISE EXCEPTION 'RC04_M2_ACCEPTED_EXPIRED_MIRROR';
+  EXCEPTION WHEN SQLSTATE 'PT409' THEN
+    IF SQLERRM <> 'UNVERIFIED_OR_INCOMPLETE_PROOF_SET' THEN
+      RAISE;
+    END IF;
+  END;
+  IF (
+    SELECT proof.expires_at > clock_timestamp()
+      OR mirror.expires_at > clock_timestamp()
+      OR proof.expires_at IS DISTINCT FROM mirror.expires_at
+    FROM public.wos_verified_image_proofs proof
+    JOIN public.wos_qa_verified_image_proofs mirror
+      ON mirror.image_id = proof.image_id
+    WHERE proof.image_id = v_image_id
+  ) THEN
+    RAISE EXCEPTION 'RC04_EXPIRED_EDGE_M2_PROJECTION_DIVERGED';
+  END IF;
+
+  v_verified_at := clock_timestamp();
+  v_expires_at := v_verified_at + interval '10 minutes';
+  ALTER TABLE public.wos_verified_image_proofs DISABLE TRIGGER USER;
+  ALTER TABLE public.wos_qa_verified_image_proofs DISABLE TRIGGER USER;
+  UPDATE public.wos_verified_image_proofs
+  SET verified_at = v_verified_at,
+      expires_at = v_expires_at
+  WHERE image_id = v_image_id;
+  UPDATE public.wos_qa_verified_image_proofs
+  SET verified_at = v_verified_at,
+      expires_at = v_expires_at
+  WHERE image_id = v_image_id;
+  ALTER TABLE public.wos_qa_verified_image_proofs ENABLE TRIGGER USER;
+  ALTER TABLE public.wos_verified_image_proofs ENABLE TRIGGER USER;
+  SELECT checked.proof_digest, checked.last_verified_at
+  INTO v_digest, v_last_verified_at
+  FROM public.wos_qa_p2_m2_checked_proof_set(
+    v_order_id,
+    '0ff53d93-2b9e-48b9-8113-a4768c39cdd2',
+    v_baseline_id,
+    'V2'
+  ) checked;
+  IF v_digest IS NULL OR v_last_verified_at IS NULL THEN
+    RAISE EXCEPTION 'RC04_M2_RESTORE_AFTER_EXPIRY_BOUNDARY_FAILED';
   END IF;
 END;
 $rc04_mirror_and_history$;
@@ -240,5 +328,7 @@ $rc04_no_gate_mirror$;
 SELECT 'WOS_V1_RC04_LEGACY_PROOF_MIRROR=PASS' AS evidence;
 SELECT 'WOS_V1_RC04_EDGE_V8_PROJECTION=PASS' AS evidence;
 SELECT 'WOS_V1_RC04_M2_PROOF_SET_DIGEST=PASS' AS evidence;
+SELECT 'WOS_V1_RC04_PROOF_VALIDITY_BOUNDARY=PASS' AS evidence;
+SELECT 'WOS_V1_RC04_EXPIRED_EDGE_M2_CONSISTENCY=PASS' AS evidence;
 SELECT 'WOS_V1_RC04_HISTORICAL_PROOF_FINGERPRINT=PASS' AS evidence;
 SELECT 'WOS_V1_RC04_MIRROR_NEGATIVE_GATE_AND_UPDATE=PASS' AS evidence;

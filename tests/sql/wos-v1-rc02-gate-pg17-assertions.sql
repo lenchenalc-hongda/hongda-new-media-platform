@@ -859,6 +859,126 @@ SELECT public.wos_p7_record_trusted_image_proof(
   repeat('8', 64)
 );
 
+SELECT
+  id::text AS renew_order_id,
+  'organizations/0ff53d93-2b9e-48b9-8113-a4768c39cdd2'
+    || '/wos/production-order/' || id::text
+    || '/images/product/versions/V2/'
+    || '73200000-0000-4000-8000-000000000001/source.png'
+    AS renew_path
+FROM public.wos_production_orders
+WHERE order_number =
+  'QA-NONPROD-PG17-71000000-0000-4000-8000-000000000001'
+\gset
+
+SELECT set_config(
+  'wos.v1.renew_test_order_id', :'renew_order_id', false
+);
+SELECT set_config(
+  'wos.v1.renew_test_path', :'renew_path', false
+);
+
+RESET ROLE;
+DO $expire_for_renewal_contract$
+DECLARE
+  v_verified_at timestamptz := clock_timestamp() - interval '20 minutes';
+  v_expires_at timestamptz := clock_timestamp() - interval '10 minutes';
+BEGIN
+  ALTER TABLE public.wos_verified_image_proofs DISABLE TRIGGER USER;
+  ALTER TABLE public.wos_qa_verified_image_proofs DISABLE TRIGGER USER;
+  UPDATE public.wos_verified_image_proofs
+  SET verified_at = v_verified_at,
+      expires_at = v_expires_at
+  WHERE image_id = '73200000-0000-4000-8000-000000000001';
+  UPDATE public.wos_qa_verified_image_proofs
+  SET verified_at = v_verified_at,
+      expires_at = v_expires_at
+  WHERE image_id = '73200000-0000-4000-8000-000000000001';
+  ALTER TABLE public.wos_qa_verified_image_proofs ENABLE TRIGGER USER;
+  ALTER TABLE public.wos_verified_image_proofs ENABLE TRIGGER USER;
+END;
+$expire_for_renewal_contract$;
+
+SET request.jwt.claims = '{"role":"service_role"}';
+SET request.jwt.claim.sub = '';
+SET ROLE service_role;
+DO $renewal_must_fail_closed$
+DECLARE
+  v_new_before text;
+  v_mirror_before text;
+  v_new_after text;
+  v_mirror_after text;
+BEGIN
+  SELECT md5(to_jsonb(proof)::text) INTO v_new_before
+  FROM public.wos_verified_image_proofs proof
+  WHERE proof.image_id = '73200000-0000-4000-8000-000000000001';
+  SELECT md5(to_jsonb(proof)::text) INTO v_mirror_before
+  FROM public.wos_qa_verified_image_proofs proof
+  WHERE proof.image_id = '73200000-0000-4000-8000-000000000001';
+  BEGIN
+    PERFORM public.wos_v1_renew_expired_image_proof(
+      '73200000-0000-4000-8000-000000000001',
+      current_setting('wos.v1.renew_test_order_id')::uuid,
+      '10101010-1010-4010-8010-101010101010',
+      current_setting('wos.v1.renew_test_path'),
+      '63200000-0000-4000-8000-000000000001',
+      'rc02-v2-product',
+      '2026-11-25T01:10:00.123456Z',
+      repeat('5', 64)
+    );
+    RAISE EXCEPTION 'RC03_PROOF_RENEWAL_WAS_ACCEPTED';
+  EXCEPTION WHEN SQLSTATE '0A000' THEN
+    IF SQLERRM <> 'RC03_PROOF_RENEWAL_UNSUPPORTED' THEN
+      RAISE;
+    END IF;
+  END;
+  SELECT md5(to_jsonb(proof)::text) INTO v_new_after
+  FROM public.wos_verified_image_proofs proof
+  WHERE proof.image_id = '73200000-0000-4000-8000-000000000001';
+  SELECT md5(to_jsonb(proof)::text) INTO v_mirror_after
+  FROM public.wos_qa_verified_image_proofs proof
+  WHERE proof.image_id = '73200000-0000-4000-8000-000000000001';
+  IF v_new_before IS DISTINCT FROM v_new_after
+    OR v_mirror_before IS DISTINCT FROM v_mirror_after
+  THEN
+    RAISE EXCEPTION 'RC03_PROOF_RENEWAL_MUTATED_PROOF_ROWS';
+  END IF;
+  IF (
+    SELECT expires_at > clock_timestamp()
+    FROM public.wos_verified_image_proofs
+    WHERE image_id = '73200000-0000-4000-8000-000000000001'
+  ) OR (
+    SELECT expires_at > clock_timestamp()
+    FROM public.wos_qa_verified_image_proofs
+    WHERE image_id = '73200000-0000-4000-8000-000000000001'
+  ) THEN
+    RAISE EXCEPTION 'RC03_PROOF_RENEWAL_EXTENDED_EXPIRY';
+  END IF;
+END;
+$renewal_must_fail_closed$;
+RESET ROLE;
+SELECT 'WOS_V1_RC04_PROOF_RENEWAL_FAIL_CLOSED=PASS' AS evidence;
+
+DO $restore_renewal_contract_proof$
+DECLARE
+  v_verified_at timestamptz := clock_timestamp();
+  v_expires_at timestamptz := clock_timestamp() + interval '10 minutes';
+BEGIN
+  ALTER TABLE public.wos_verified_image_proofs DISABLE TRIGGER USER;
+  ALTER TABLE public.wos_qa_verified_image_proofs DISABLE TRIGGER USER;
+  UPDATE public.wos_verified_image_proofs
+  SET verified_at = v_verified_at,
+      expires_at = v_expires_at
+  WHERE image_id = '73200000-0000-4000-8000-000000000001';
+  UPDATE public.wos_qa_verified_image_proofs
+  SET verified_at = v_verified_at,
+      expires_at = v_expires_at
+  WHERE image_id = '73200000-0000-4000-8000-000000000001';
+  ALTER TABLE public.wos_qa_verified_image_proofs ENABLE TRIGGER USER;
+  ALTER TABLE public.wos_verified_image_proofs ENABLE TRIGGER USER;
+END;
+$restore_renewal_contract_proof$;
+
 RESET ROLE;
 REVOKE SELECT ON public.wos_production_orders FROM service_role;
 
@@ -976,10 +1096,25 @@ END;
 $foreign_current_image_denied$;
 RESET ROLE;
 
-UPDATE public.wos_verified_image_proofs
-SET verified_at = clock_timestamp() - interval '20 minutes',
-    expires_at = clock_timestamp() - interval '10 minutes'
-WHERE image_id = '73200000-0000-4000-8000-000000000001';
+DO $expire_current_proof_projection_pair$
+DECLARE
+  v_verified_at timestamptz := clock_timestamp() - interval '20 minutes';
+  v_expires_at timestamptz := clock_timestamp() - interval '10 minutes';
+BEGIN
+  ALTER TABLE public.wos_verified_image_proofs DISABLE TRIGGER USER;
+  ALTER TABLE public.wos_qa_verified_image_proofs DISABLE TRIGGER USER;
+  UPDATE public.wos_verified_image_proofs
+  SET verified_at = v_verified_at,
+      expires_at = v_expires_at
+  WHERE image_id = '73200000-0000-4000-8000-000000000001';
+  UPDATE public.wos_qa_verified_image_proofs
+  SET verified_at = v_verified_at,
+      expires_at = v_expires_at
+  WHERE image_id = '73200000-0000-4000-8000-000000000001';
+  ALTER TABLE public.wos_qa_verified_image_proofs ENABLE TRIGGER USER;
+  ALTER TABLE public.wos_verified_image_proofs ENABLE TRIGGER USER;
+END;
+$expire_current_proof_projection_pair$;
 
 SET request.jwt.claim.sub = '20202020-2020-4020-8020-202020202020';
 SET request.jwt.claim.role = 'authenticated';
@@ -999,10 +1134,25 @@ END;
 $expired_current_image_denied$;
 RESET ROLE;
 
-UPDATE public.wos_verified_image_proofs
-SET verified_at = clock_timestamp(),
-    expires_at = clock_timestamp() + interval '10 minutes'
-WHERE image_id = '73200000-0000-4000-8000-000000000001';
+DO $restore_current_proof_projection_pair$
+DECLARE
+  v_verified_at timestamptz := clock_timestamp();
+  v_expires_at timestamptz := clock_timestamp() + interval '10 minutes';
+BEGIN
+  ALTER TABLE public.wos_verified_image_proofs DISABLE TRIGGER USER;
+  ALTER TABLE public.wos_qa_verified_image_proofs DISABLE TRIGGER USER;
+  UPDATE public.wos_verified_image_proofs
+  SET verified_at = v_verified_at,
+      expires_at = v_expires_at
+  WHERE image_id = '73200000-0000-4000-8000-000000000001';
+  UPDATE public.wos_qa_verified_image_proofs
+  SET verified_at = v_verified_at,
+      expires_at = v_expires_at
+  WHERE image_id = '73200000-0000-4000-8000-000000000001';
+  ALTER TABLE public.wos_qa_verified_image_proofs ENABLE TRIGGER USER;
+  ALTER TABLE public.wos_verified_image_proofs ENABLE TRIGGER USER;
+END;
+$restore_current_proof_projection_pair$;
 
 SET request.jwt.claim.sub = '10101010-1010-4010-8010-101010101010';
 SET request.jwt.claim.role = 'authenticated';

@@ -349,19 +349,6 @@ USING (
         )
     )
   )
-  OR (
-    bucket_id IS DISTINCT FROM 'wos-private'
-    AND EXISTS (
-      SELECT 1
-      FROM public.profiles p
-      WHERE p.user_id=auth.uid()
-        AND p.is_active
-        AND p.role IN (
-          'admin','manager','sales','operator','workshop','technician'
-        )
-        AND p.org_id::text=(storage.foldername(storage.objects.name))[2]
-    )
-  )
 );
 
 UPDATE storage.buckets
@@ -400,6 +387,43 @@ REVOKE ALL ON public.wos_verified_image_proofs
 FROM PUBLIC, anon, authenticated;
 GRANT SELECT, INSERT, UPDATE ON public.wos_verified_image_proofs
 TO service_role;
+
+CREATE FUNCTION wos_v1_rc03_compat.reject_verified_proof_update()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $reject_verified_proof_update$
+BEGIN
+  IF NEW.image_id IS DISTINCT FROM OLD.image_id
+    OR NEW.organization_id IS DISTINCT FROM OLD.organization_id
+    OR NEW.order_id IS DISTINCT FROM OLD.order_id
+    OR NEW.actor_user_id IS DISTINCT FROM OLD.actor_user_id
+    OR NEW.storage_bucket IS DISTINCT FROM OLD.storage_bucket
+    OR NEW.storage_path IS DISTINCT FROM OLD.storage_path
+    OR NEW.storage_object_id IS DISTINCT FROM OLD.storage_object_id
+    OR NEW.storage_object_version IS DISTINCT FROM OLD.storage_object_version
+    OR NEW.storage_object_updated_at IS DISTINCT FROM OLD.storage_object_updated_at
+    OR NEW.verified_sha256 IS DISTINCT FROM OLD.verified_sha256
+  THEN
+    RAISE EXCEPTION 'RC03_PROOF_IDENTITY_UPDATE_FORBIDDEN'
+      USING ERRCODE = '42501';
+  END IF;
+  IF NEW.verified_at IS DISTINCT FROM OLD.verified_at
+    OR NEW.expires_at IS DISTINCT FROM OLD.expires_at
+  THEN
+    RAISE EXCEPTION 'RC03_PROOF_RENEWAL_UNSUPPORTED'
+      USING ERRCODE = '0A000';
+  END IF;
+  RAISE EXCEPTION 'RC03_PROOF_UPDATE_FORBIDDEN'
+    USING ERRCODE = '42501';
+END;
+$reject_verified_proof_update$;
+REVOKE ALL ON FUNCTION wos_v1_rc03_compat.reject_verified_proof_update()
+FROM PUBLIC, anon, authenticated;
+CREATE TRIGGER rc03_reject_verified_proof_update
+BEFORE UPDATE ON public.wos_verified_image_proofs
+FOR EACH ROW EXECUTE FUNCTION wos_v1_rc03_compat.reject_verified_proof_update();
 
 CREATE TABLE public.wos_orphan_cleanup_claims (
   storage_object_id uuid PRIMARY KEY,
