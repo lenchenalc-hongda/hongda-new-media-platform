@@ -574,6 +574,120 @@ SELECT public.wos_office_save_correction(
   ),
   'Synthetic Office correction after Operator return'
 ) AS office_save;
+RESET ROLE;
+
+INSERT INTO storage.objects (
+  id, bucket_id, name, owner_id, metadata, version, updated_at
+) VALUES
+  (
+    '63000000-0000-4000-8000-000000000001',
+    'wos-private',
+    :'order_prefix' || 'product/versions/V2/73000000-0000-4000-8000-000000000001/proof.png',
+    '10101010-1010-4010-8010-101010101010',
+    '{"mimetype":"image/png","size":"100"}'::jsonb,
+    'v2-product-1',
+    '2026-11-23T00:01:00.123456Z'
+  ),
+  (
+    '63000000-0000-4000-8000-000000000002',
+    'wos-private',
+    :'order_prefix' || 'film-pattern/versions/V2/73000000-0000-4000-8000-000000000002/proof.png',
+    '10101010-1010-4010-8010-101010101010',
+    '{"mimetype":"image/png","size":"100"}'::jsonb,
+    'v2-film-1',
+    '2026-11-23T00:01:01.123456Z'
+  ),
+  (
+    '63000000-0000-4000-8000-000000000003',
+    'wos-private',
+    :'order_prefix' || 'customer-approved-sample/versions/V2/73000000-0000-4000-8000-000000000003/proof.png',
+    '10101010-1010-4010-8010-101010101010',
+    '{"mimetype":"image/png","size":"100"}'::jsonb,
+    'v2-customer-1',
+    '2026-11-23T00:01:02.123456Z'
+  ),
+  (
+    '63000000-0000-4000-8000-000000000004',
+    'wos-private',
+    :'order_prefix' || 'signed-sample/versions/V2/73000000-0000-4000-8000-000000000004/proof.png',
+    '10101010-1010-4010-8010-101010101010',
+    '{"mimetype":"image/png","size":"100"}'::jsonb,
+    'v2-signed-1',
+    '2026-11-23T00:01:03.123456Z'
+  );
+
+SET request.jwt.claim.role='service_role';
+SET request.jwt.claim.sub='';
+SET ROLE service_role;
+SELECT public.wos_p7_record_trusted_image_proof(
+  '73000000-0000-4000-8000-000000000001',
+  :'order_id',
+  '10101010-1010-4010-8010-101010101010',
+  :'order_prefix' || 'product/versions/V2/73000000-0000-4000-8000-000000000001/proof.png',
+  '63000000-0000-4000-8000-000000000001',
+  'v2-product-1',
+  '2026-11-23T00:01:00.123456Z',
+  repeat('5',64)
+);
+SELECT public.wos_p7_record_trusted_image_proof(
+  '73000000-0000-4000-8000-000000000002',
+  :'order_id',
+  '10101010-1010-4010-8010-101010101010',
+  :'order_prefix' || 'film-pattern/versions/V2/73000000-0000-4000-8000-000000000002/proof.png',
+  '63000000-0000-4000-8000-000000000002',
+  'v2-film-1',
+  '2026-11-23T00:01:01.123456Z',
+  repeat('6',64)
+);
+SELECT public.wos_p7_record_trusted_image_proof(
+  '73000000-0000-4000-8000-000000000003',
+  :'order_id',
+  '10101010-1010-4010-8010-101010101010',
+  :'order_prefix' || 'customer-approved-sample/versions/V2/73000000-0000-4000-8000-000000000003/proof.png',
+  '63000000-0000-4000-8000-000000000003',
+  'v2-customer-1',
+  '2026-11-23T00:01:02.123456Z',
+  repeat('7',64)
+);
+SELECT public.wos_p7_record_trusted_image_proof(
+  '73000000-0000-4000-8000-000000000004',
+  :'order_id',
+  '10101010-1010-4010-8010-101010101010',
+  :'order_prefix' || 'signed-sample/versions/V2/73000000-0000-4000-8000-000000000004/proof.png',
+  '63000000-0000-4000-8000-000000000004',
+  'v2-signed-1',
+  '2026-11-23T00:01:03.123456Z',
+  repeat('8',64)
+);
+RESET ROLE;
+
+SET request.jwt.claim.role='authenticated';
+SET request.jwt.claim.sub='10101010-1010-4010-8010-101010101010';
+SET ROLE authenticated;
+SELECT public.wos_register_uploaded_reference_image(
+  :'order_id',
+  '73000000-0000-4000-8000-000000000001',
+  'PRODUCT',
+  :'order_prefix' || 'product/versions/V2/73000000-0000-4000-8000-000000000001/proof.png'
+);
+SELECT public.wos_register_uploaded_reference_image(
+  :'order_id',
+  '73000000-0000-4000-8000-000000000002',
+  'FILM_PATTERN',
+  :'order_prefix' || 'film-pattern/versions/V2/73000000-0000-4000-8000-000000000002/proof.png'
+);
+SELECT public.wos_register_uploaded_reference_image(
+  :'order_id',
+  '73000000-0000-4000-8000-000000000003',
+  'CUSTOMER_APPROVED_SAMPLE',
+  :'order_prefix' || 'customer-approved-sample/versions/V2/73000000-0000-4000-8000-000000000003/proof.png'
+);
+SELECT public.wos_register_uploaded_reference_image(
+  :'order_id',
+  '73000000-0000-4000-8000-000000000004',
+  'SIGNED_SAMPLE',
+  :'order_prefix' || 'signed-sample/versions/V2/73000000-0000-4000-8000-000000000004/proof.png'
+);
 SELECT public.wos_office_resubmit_order(
   :'order_id',
   5,
@@ -607,7 +721,7 @@ BEGIN
 
   IF v_order.workflow_status <> 'WAITING_MATERIAL'
     OR v_order.version <> 7
-    OR v_order.version_label <> 'V3'
+    OR v_order.version_label <> 'V2'
     OR (SELECT count(*) FROM public.wos_submission_receipts
         WHERE order_id=v_order.id) <> 1
     OR (SELECT count(*) FROM public.wos_workshop_inbox
@@ -621,6 +735,15 @@ BEGIN
     OR (SELECT count(*) FROM public.wos_blockers
         WHERE entity_id=v_order.id AND status='RESOLVED'
           AND blocker_code='P2_DOCUMENTS_INCOMPLETE') <> 1
+    OR (SELECT count(*) FROM public.wos_visual_baselines
+        WHERE entity_id=v_order.id AND version_label='V2'
+          AND status='CURRENT' AND superseded_at IS NULL) <> 1
+    OR (SELECT count(*) FROM public.wos_visual_baseline_items item
+        JOIN public.wos_visual_baselines baseline
+          ON baseline.id=item.baseline_id
+        WHERE baseline.entity_id=v_order.id
+          AND baseline.version_label='V2'
+          AND baseline.status='CURRENT') <> 4
     OR v_history <> 7
   THEN
     RAISE EXCEPTION 'WOS_V1_LIFECYCLE_ASSERTION_FAILED';

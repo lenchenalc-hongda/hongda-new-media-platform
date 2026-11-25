@@ -115,7 +115,7 @@ assert.equal(evaluateWosV1ImageAccess({
   writesEnabled: true,
   profile,
   order: { ...order, workflow_status: 'NEEDS_INFORMATION' },
-}).code, 'STATUS_DENIED');
+}).code, 'ALLOWED');
 assert.equal(evaluateWosV1ImageAccess({
   runtimeAuthorized: true,
   writesEnabled: true,

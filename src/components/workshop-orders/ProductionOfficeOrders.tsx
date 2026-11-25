@@ -4,7 +4,17 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   fetchWosV1,
   isWosV1VerifiedOperation,
+  uploadAndVerifyWosV1Image,
 } from '@/lib/workshop-orders/production-app-client';
+import {
+  WOS_V1_IMAGE_CATEGORIES,
+} from '@/lib/workshop-orders/production-app-contract';
+import {
+  inspectWosOfficeCorrectionImages,
+} from '@/lib/workshop-orders/production-office-correction';
+import { createClient } from '@/lib/supabase/client';
+
+type WosV1ImageCategory = (typeof WOS_V1_IMAGE_CATEGORIES)[number];
 
 interface OfficeOrder {
   readonly id: string;
@@ -23,17 +33,20 @@ interface OfficeOrder {
   readonly updated_at: string;
 }
 
+interface OfficeImage {
+  readonly id: string;
+  readonly category: string;
+  readonly image_status: string;
+  readonly version_label: string;
+}
+
 interface OfficeDetail {
   readonly order: OfficeOrder;
   readonly returnReasons: readonly {
     readonly reason: string;
     readonly openedAt: string;
   }[];
-  readonly images: readonly {
-    readonly category: string;
-    readonly image_status: string;
-    readonly version_label: string;
-  }[];
+  readonly images: readonly OfficeImage[];
   readonly currentPrivateProofState: 'UNVERIFIED';
   readonly canStart: false;
 }
@@ -65,12 +78,112 @@ function valuesFor(order: OfficeOrder): Record<PatchField, string> {
   };
 }
 
+function CorrectionImageUploader({
+  order,
+  writeEnabled,
+  onUploaded,
+}: {
+  readonly order: OfficeOrder;
+  readonly writeEnabled: boolean;
+  readonly onUploaded: () => void;
+}) {
+  const [files, setFiles] = useState<
+    Partial<Record<WosV1ImageCategory, File>>
+  >({});
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState('');
+
+  async function upload(): Promise<void> {
+    if (busy || !writeEnabled) return;
+    if (WOS_V1_IMAGE_CATEGORIES.some(category =>
+      files[category]?.type !== 'image/png')) {
+      setMessage('新版图片必须四类 PNG 全部重新选择。');
+      return;
+    }
+    setBusy(true);
+    setMessage('正在验证新版四图的私有字节、对象身份和 Proof。');
+    try {
+      const client = createClient();
+      if (!client) throw new Error('DATABASE_UNAVAILABLE');
+      const auth = await client.auth.getUser();
+      if (auth.error || !auth.data.user?.id) throw new Error('UNAUTHENTICATED');
+      const profile = await client.from('profiles')
+        .select('id,org_id,role,is_active')
+        .eq('user_id', auth.data.user.id)
+        .eq('is_active', true)
+        .maybeSingle();
+      if (profile.error || !profile.data
+        || typeof profile.data.org_id !== 'string'
+        || !['admin', 'manager', 'sales'].includes(profile.data.role)) {
+        throw new Error('FORBIDDEN');
+      }
+      for (const category of WOS_V1_IMAGE_CATEGORIES) {
+        const verified = await uploadAndVerifyWosV1Image({
+          client,
+          organizationId: profile.data.org_id,
+          orderId: order.id,
+          versionLabel: order.version_label,
+          imageId: crypto.randomUUID(),
+          category,
+          file: files[category] as File,
+        });
+        if (!verified.ok) throw new Error(verified.code);
+      }
+      setFiles({});
+      setMessage('新版四图已逐张完成真实字节 Proof 与 Reference Image 登记。');
+      onUploaded();
+    } catch (caught) {
+      setMessage('新版四图未确认：'
+        + (caught instanceof Error ? caught.message : 'UNKNOWN'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section className="mt-3 rounded-md border border-blue-200 bg-blue-50 p-3">
+      <p className="font-semibold text-blue-950">
+        当前修订 {order.version_label} 的新版四图
+      </p>
+      <p className="mt-1 text-xs text-blue-900">
+        旧版图片和旧 Proof 不会进入当前修订。四类 PNG 必须重新验证并登记。
+      </p>
+      <div className="mt-3 grid gap-2 sm:grid-cols-2">
+        {WOS_V1_IMAGE_CATEGORIES.map(category => (
+          <label key={category} className="text-xs font-medium text-gray-800">
+            {category}
+            <input
+              type="file"
+              accept="image/png"
+              disabled={busy || !writeEnabled}
+              onChange={event => {
+                const file = event.target.files?.[0];
+                setFiles(current => ({ ...current, [category]: file }));
+                setMessage('');
+              }}
+              className="mt-1 block w-full"
+            />
+          </label>
+        ))}
+      </div>
+      <button type="button" disabled={busy || !writeEnabled}
+        onClick={() => { void upload(); }}
+        className="mt-3 min-h-11 rounded-md bg-blue-900 px-4 py-2 text-xs font-semibold text-white disabled:opacity-40">
+        {busy ? '验证新版四图中...' : '验证并登记新版四图'}
+      </button>
+      {message && <p role="status" className="mt-2 text-xs text-blue-950">{message}</p>}
+    </section>
+  );
+}
+
 function CorrectionEditor({
   order,
+  images,
   writeEnabled,
   onSaved,
 }: {
   readonly order: OfficeOrder;
+  readonly images: readonly OfficeImage[];
   readonly writeEnabled: boolean;
   readonly onSaved: () => void;
 }) {
@@ -79,6 +192,10 @@ function CorrectionEditor({
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
   const requests = useRef(new Map<string, string>());
+  const currentImagesReady = inspectWosOfficeCorrectionImages(
+    images,
+    order.version_label,
+  ).ready;
 
   async function submit(action: 'SAVE_CORRECTION' | 'RESUBMIT_ORDER'): Promise<void> {
     if (busy || !writeEnabled) return;
@@ -176,13 +293,26 @@ function CorrectionEditor({
           className="min-h-11 rounded-md bg-blue-900 px-4 py-2 text-xs font-semibold text-white disabled:opacity-40">
           保存六字段修订
         </button>
-        <button type="button" disabled={busy || !writeEnabled}
+        <button type="button"
+          disabled={busy || !writeEnabled || !currentImagesReady}
           onClick={() => { void submit('RESUBMIT_ORDER'); }}
           className="min-h-11 rounded-md bg-emerald-900 px-4 py-2 text-xs font-semibold text-white disabled:opacity-40">
           重新提交车间复核
         </button>
       </div>
       {message && <p role="status" className="text-xs text-amber-950">{message}</p>}
+      {!currentImagesReady && (
+        <p className="text-xs font-medium text-blue-900">
+          当前修订尚未完成四图验证，不能重新提交车间。
+        </p>
+      )}
+      {order.version_label !== 'V1' && order.workflow_status === 'NEEDS_INFORMATION' && (
+        <CorrectionImageUploader
+          order={order}
+          writeEnabled={writeEnabled}
+          onUploaded={onSaved}
+        />
+      )}
       <p className="text-xs text-amber-950">
         原始提交回执不会覆盖；重新提交不代表已解除退回原因，仍由车间核对当前新版本。
       </p>
@@ -394,6 +524,7 @@ export default function ProductionOfficeOrders() {
                   {order.workflow_status === 'NEEDS_INFORMATION' && (
                     <CorrectionEditor
                       order={order}
+                      images={detail.images}
                       writeEnabled={writeEnabled}
                       onSaved={() => { void refresh(); }}
                     />

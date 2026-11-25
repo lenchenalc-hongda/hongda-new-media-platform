@@ -133,7 +133,8 @@ export function evaluateWosV1ImageAccess(input: WosV1ImageAccessInput): {
     && profile.id !== order.sales_owner_profile_id) {
     return { allowed: false, code: 'OWNER_DENIED' };
   }
-  if (order.workflow_status === 'DRAFT') {
+  if (order.workflow_status === 'DRAFT'
+    || order.workflow_status === 'NEEDS_INFORMATION') {
     return versionLabel.test(order.version_label)
       ? { allowed: true, code: 'ALLOWED' }
       : { allowed: false, code: 'VERSION_INVALID' };

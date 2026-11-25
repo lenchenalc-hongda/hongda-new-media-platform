@@ -94,7 +94,7 @@ BEGIN
       AND policy.permissive = 'PERMISSIVE'
       AND policy.roles = ARRAY['authenticated']::name[]
       AND md5(COALESCE(policy.with_check, ''))
-        = '4178cd6c4759bd9d0ad33560415f6bc8'
+        = '1d7c6b603d04a29e848975adc0bc4dad'
       AND md5(COALESCE(policy.qual, ''))
         = 'd41d8cd98f00b204e9800998ecf8427e'
   ) OR NOT EXISTS (
@@ -347,6 +347,169 @@ $image_set$;
 
 REVOKE ALL ON FUNCTION public.wos_v1_assert_current_image_set(
   uuid,uuid,text
+) FROM PUBLIC, anon, authenticated, service_role;
+
+CREATE OR REPLACE FUNCTION public.wos_register_uploaded_reference_image(
+  p_order_id uuid,
+  p_image_id uuid,
+  p_category text,
+  p_storage_path text
+) RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $register_image$
+DECLARE
+  v_actor public.profiles%ROWTYPE;
+  v_order public.wos_production_orders%ROWTYPE;
+  v_object storage.objects%ROWTYPE;
+  v_row public.wos_reference_images%ROWTYPE;
+  v_category_slug text;
+  v_prefix text;
+  v_filename text;
+  v_mime text;
+  v_size bigint;
+BEGIN
+  SELECT * INTO v_actor
+  FROM public.profiles profile
+  WHERE profile.user_id = auth.uid()
+    AND profile.is_active = true
+    AND profile.role IN ('admin', 'manager', 'sales');
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'NOT_AUTHORIZED' USING ERRCODE = '42501';
+  END IF;
+  IF p_order_id IS NULL
+    OR p_image_id IS NULL
+    OR p_storage_path IS NULL
+    OR length(p_storage_path) > 1024
+    OR p_category NOT IN (
+      'PRODUCT',
+      'FILM_PATTERN',
+      'CUSTOMER_APPROVED_SAMPLE',
+      'SIGNED_SAMPLE'
+    )
+  THEN
+    RAISE EXCEPTION 'INVALID_INPUT' USING ERRCODE = '22023';
+  END IF;
+
+  v_category_slug := replace(lower(p_category), '_', '-');
+  SELECT * INTO v_order
+  FROM public.wos_production_orders production_order
+  WHERE production_order.id = p_order_id
+  FOR UPDATE;
+  IF NOT FOUND
+    OR v_order.organization_id <> v_actor.org_id
+    OR (v_actor.role = 'sales' AND v_actor.id NOT IN (
+      v_order.created_by_profile_id,
+      v_order.sales_owner_profile_id
+    ))
+  THEN
+    RAISE EXCEPTION 'NOT_AUTHORIZED' USING ERRCODE = '42501';
+  END IF;
+  IF v_order.workflow_status NOT IN ('DRAFT', 'NEEDS_INFORMATION')
+    OR v_order.version_label !~ '^V[1-9][0-9]{0,20}$'
+  THEN
+    RAISE EXCEPTION 'UNSUPPORTED_ORDER_VERSION' USING ERRCODE = '23514';
+  END IF;
+
+  v_prefix := 'organizations/' || v_order.organization_id::text
+    || '/wos/production-order/' || v_order.id::text
+    || '/images/' || v_category_slug
+    || '/versions/' || v_order.version_label || '/'
+    || p_image_id::text || '/';
+  IF left(p_storage_path, length(v_prefix)) <> v_prefix
+    OR length(p_storage_path) <= length(v_prefix)
+  THEN
+    RAISE EXCEPTION 'INVALID_STORAGE_PATH' USING ERRCODE = '23514';
+  END IF;
+  v_filename := substring(p_storage_path FROM length(v_prefix) + 1);
+  IF v_filename !~ '^[A-Za-z0-9][A-Za-z0-9._-]{0,199}[.]png$'
+    OR position('..' in v_filename) > 0
+  THEN
+    RAISE EXCEPTION 'INVALID_STORAGE_FILE' USING ERRCODE = '23514';
+  END IF;
+
+  SELECT * INTO v_object
+  FROM storage.objects object
+  WHERE object.bucket_id = 'wos-private'
+    AND object.name = p_storage_path
+    AND object.owner_id = auth.uid()::text
+    AND object.is_delete_marker = false
+    AND object.archived_at IS NULL;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'PRIVATE_STORAGE_OBJECT_NOT_VERIFIED'
+      USING ERRCODE = '23514';
+  END IF;
+  v_mime := v_object.metadata->>'mimetype';
+  IF v_mime <> 'image/png'
+    OR COALESCE(v_object.metadata->>'size', '') !~ '^[0-9]+$'
+  THEN
+    RAISE EXCEPTION 'TRUSTED_PNG_ONLY' USING ERRCODE = '23514';
+  END IF;
+  v_size := (v_object.metadata->>'size')::bigint;
+  IF v_size NOT BETWEEN 60 AND 20971520 THEN
+    RAISE EXCEPTION 'UNSUPPORTED_IMAGE_SIZE' USING ERRCODE = '23514';
+  END IF;
+
+  SELECT * INTO v_row
+  FROM public.wos_reference_images image
+  WHERE image.id = p_image_id;
+  IF FOUND THEN
+    IF v_row.organization_id <> v_actor.org_id
+      OR v_row.entity_id <> p_order_id
+      OR v_row.storage_bucket <> 'wos-private'
+      OR v_row.storage_path <> p_storage_path
+      OR v_row.category <> p_category
+      OR v_row.image_status <> 'READY'
+      OR v_row.version_label <> v_order.version_label
+    THEN
+      RAISE EXCEPTION 'IMAGE_ID_CONFLICT' USING ERRCODE = '23505';
+    END IF;
+    RETURN jsonb_build_object(
+      'status', 'REPLAYED',
+      'imageId', v_row.id,
+      'bucket', 'wos-private'
+    );
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM public.wos_verified_image_proofs proof
+    WHERE proof.image_id = p_image_id
+      AND proof.order_id = p_order_id
+      AND proof.organization_id = v_actor.org_id
+      AND proof.actor_user_id = auth.uid()
+      AND proof.storage_bucket = 'wos-private'
+      AND proof.storage_path = p_storage_path
+      AND proof.storage_object_id = v_object.id
+      AND proof.storage_object_version
+        IS NOT DISTINCT FROM v_object.version
+      AND proof.storage_object_updated_at
+        IS NOT DISTINCT FROM v_object.updated_at
+      AND proof.expires_at > clock_timestamp()
+  ) THEN
+    RAISE EXCEPTION 'TRUSTED_BINARY_PROOF_REQUIRED' USING ERRCODE = '42501';
+  END IF;
+
+  INSERT INTO public.wos_reference_images (
+    id, organization_id, entity_type, entity_id, category,
+    storage_bucket, storage_path, file_name, mime_type, file_size,
+    version_label, image_status, uploaded_by_profile_id
+  ) VALUES (
+    p_image_id, v_actor.org_id, 'PRODUCTION_ORDER', p_order_id, p_category,
+    'wos-private', p_storage_path, v_filename, v_mime, v_size,
+    v_order.version_label, 'READY', v_actor.id
+  );
+  RETURN jsonb_build_object(
+    'status', 'CREATED',
+    'imageId', p_image_id,
+    'bucket', 'wos-private'
+  );
+END;
+$register_image$;
+
+REVOKE ALL ON FUNCTION public.wos_register_uploaded_reference_image(
+  uuid,uuid,text,text
 ) FROM PUBLIC, anon, authenticated, service_role;
 
 CREATE FUNCTION public.wos_p7_record_trusted_image_proof(
@@ -949,6 +1112,17 @@ BEGIN
   v_sales_owner := v_actor.id;
   v_project_owner := v_project.owner_profile_id;
 
+  PERFORM set_config(
+    'wos.v1.create_request_id',
+    p_request_id::text,
+    true
+  );
+  PERFORM set_config(
+    'wos.v1.create_payload_fingerprint',
+    v_fingerprint,
+    true
+  );
+
   INSERT INTO public.wos_production_orders (
     organization_id, customer_id, customer_name_snapshot, project_id,
     project_name_snapshot, order_number, product_name, sales_owner_profile_id,
@@ -1377,6 +1551,16 @@ BEGIN
     RAISE EXCEPTION 'VERSION_CONFLICT' USING ERRCODE = 'PT409';
   END IF;
 
+  UPDATE public.wos_reference_images
+  SET image_status = 'SUPERSEDED',
+      superseded_at = clock_timestamp()
+  WHERE organization_id = v_actor.org_id
+    AND entity_type = 'PRODUCTION_ORDER'
+    AND entity_id = p_order_id
+    AND version_label = v_order.version_label
+    AND image_status = 'READY'
+    AND superseded_at IS NULL;
+
   v_response := jsonb_build_object(
     'status', 'SAVED',
     'orderId', p_order_id,
@@ -1453,10 +1637,9 @@ DECLARE
   v_prior public.wos_office_revisions%ROWTYPE;
   v_saved public.wos_office_revisions%ROWTYPE;
   v_fingerprint text;
-  v_revision_number integer;
-  v_next_label text;
   v_after public.wos_production_orders%ROWTYPE;
   v_response jsonb;
+  v_baseline_id uuid;
 BEGIN
   IF auth.uid() IS NULL
     OR p_order_id IS NULL
@@ -1552,15 +1735,14 @@ BEGIN
     RAISE EXCEPTION 'DOCUMENT_BLOCKER_MISSING' USING ERRCODE = 'PT409';
   END IF;
 
-  SELECT count(*)::integer + 2 INTO v_revision_number
-  FROM public.wos_office_revisions revision
-  WHERE revision.order_id = p_order_id
-    AND revision.organization_id = v_actor.org_id;
-  v_next_label := 'V' || v_revision_number::text;
+  PERFORM public.wos_v1_assert_current_image_set(
+    p_order_id,
+    v_actor.org_id,
+    v_order.version_label
+  );
 
   UPDATE public.wos_production_orders
   SET workflow_status = 'WORKSHOP_REVIEW',
-      version_label = v_next_label,
       version = version + 1,
       updated_at = clock_timestamp()
   WHERE id = p_order_id
@@ -1571,6 +1753,39 @@ BEGIN
   IF NOT FOUND THEN
     RAISE EXCEPTION 'VERSION_CONFLICT' USING ERRCODE = 'PT409';
   END IF;
+
+  UPDATE public.wos_visual_baselines
+  SET status = 'SUPERSEDED',
+      superseded_at = clock_timestamp()
+  WHERE organization_id = v_actor.org_id
+    AND entity_type = 'PRODUCTION_ORDER'
+    AND entity_id = p_order_id
+    AND status = 'CURRENT'
+    AND superseded_at IS NULL;
+
+  v_baseline_id := gen_random_uuid();
+  INSERT INTO public.wos_visual_baselines (
+    id, organization_id, entity_type, entity_id,
+    version_label, status
+  ) VALUES (
+    v_baseline_id, v_actor.org_id, 'PRODUCTION_ORDER', p_order_id,
+    v_after.version_label, 'CURRENT'
+  );
+  INSERT INTO public.wos_visual_baseline_items (
+    baseline_id, reference_image_id, display_order, is_required
+  )
+  SELECT
+    v_baseline_id,
+    image.id,
+    row_number() OVER (ORDER BY image.category)::integer,
+    true
+  FROM public.wos_reference_images image
+  WHERE image.organization_id = v_actor.org_id
+    AND image.entity_type = 'PRODUCTION_ORDER'
+    AND image.entity_id = p_order_id
+    AND image.version_label = v_after.version_label
+    AND image.image_status = 'READY'
+    AND image.superseded_at IS NULL;
 
   v_response := jsonb_build_object(
     'status', 'RESUBMITTED',
@@ -1705,6 +1920,31 @@ BEGIN
     OR v_order.version <> p_expected_version
   THEN
     RAISE EXCEPTION 'REVISION_OR_VERSION_CONFLICT' USING ERRCODE = 'PT409';
+  END IF;
+
+  PERFORM public.wos_v1_assert_current_image_set(
+    p_order_id,
+    v_actor.org_id,
+    v_order.version_label
+  );
+  IF NOT EXISTS (
+    SELECT 1
+    FROM public.wos_visual_baselines baseline
+    WHERE baseline.organization_id = v_actor.org_id
+      AND baseline.entity_type = 'PRODUCTION_ORDER'
+      AND baseline.entity_id = p_order_id
+      AND baseline.version_label = v_order.version_label
+      AND baseline.status = 'CURRENT'
+      AND baseline.superseded_at IS NULL
+      AND (
+        SELECT count(*)
+        FROM public.wos_visual_baseline_items item
+        WHERE item.baseline_id = baseline.id
+          AND item.is_required = true
+      ) = 4
+  ) THEN
+    RAISE EXCEPTION 'CURRENT_VERSION_BASELINE_REQUIRED'
+      USING ERRCODE = 'PT409';
   END IF;
 
   SELECT * INTO v_revision
