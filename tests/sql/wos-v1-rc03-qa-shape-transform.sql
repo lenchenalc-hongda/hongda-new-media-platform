@@ -461,4 +461,17 @@ CROSS JOIN LATERAL generate_series(
   baseline_series.value * 4
 ) AS image_series(value);
 
+GRANT EXECUTE ON FUNCTION public.wos_register_uploaded_reference_image(
+  uuid,uuid,text,text
+) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.wos_confirm_office_completeness(
+  uuid,integer,text,text
+) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.wos_submit_production_order(
+  uuid,integer,text,uuid
+) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.wos_p7_record_trusted_image_proof(
+  uuid,uuid,uuid,text,uuid,text,timestamptz,text
+) TO service_role;
+
 COMMIT;

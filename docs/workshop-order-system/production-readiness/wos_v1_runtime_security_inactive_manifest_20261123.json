@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
   "phase": "installed-inactive",
-  "row_count": 63,
-  "aggregate_sha256": "327938e6263af41b51bf657d147eb60cbeba8714586c94259a608db6f5f8cb35",
+  "row_count": 65,
+  "aggregate_sha256": "71f2f47f3e234a0e697001a3b9502aa224d899d44d3848c85b6a2a6cc5575342",
   "rows": [
     {
       "acl": [
@@ -205,7 +205,7 @@
       "config": [
         "search_path=\"\""
       ],
-      "definition_md5": "4f891564a755ee64cc8c63733f8c0487",
+      "definition_md5": "0d1f43c7fa30384a2f8b130f32248934",
       "security_definer": true
     },
     {
@@ -320,6 +320,24 @@
         }
       ],
       "kind": "function",
+      "name": "wos_v1_assert_service_role_request()",
+      "owner": "postgres",
+      "config": [
+        "search_path=\"\""
+      ],
+      "definition_md5": "28006956f28c6f87b710e5e7fcc1e214",
+      "security_definer": true
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantor": "postgres",
+          "privilege": "EXECUTE",
+          "is_grantable": false
+        }
+      ],
+      "kind": "function",
       "name": "wos_v1_pre_runtime_confirm_office_completeness(uuid,integer,text,text)",
       "owner": "postgres",
       "config": [
@@ -362,6 +380,24 @@
         }
       ],
       "kind": "function",
+      "name": "wos_v1_pre_runtime_register_uploaded_reference_image(uuid,uuid,text,text)",
+      "owner": "postgres",
+      "config": [
+        "search_path=\"\""
+      ],
+      "definition_md5": "c79cd19d321d27f9eee045433a8893f0",
+      "security_definer": true
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantor": "postgres",
+          "privilege": "EXECUTE",
+          "is_grantable": false
+        }
+      ],
+      "kind": "function",
       "name": "wos_v1_pre_runtime_submit_production_order(uuid,integer,text,uuid)",
       "owner": "postgres",
       "config": [
@@ -391,7 +427,7 @@
       "config": [
         "search_path=\"\""
       ],
-      "definition_md5": "21e0b6f046ee564bf38cbffc994064ea",
+      "definition_md5": "6aa9b9443b454e8d6ed69925066cd460",
       "security_definer": true
     },
     {

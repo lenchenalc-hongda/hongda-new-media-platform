@@ -75,10 +75,12 @@ CREATE SCHEMA storage;
 CREATE TABLE storage.buckets (
   id text PRIMARY KEY,
   name text NOT NULL,
+  owner uuid,
   public boolean NOT NULL DEFAULT false,
   file_size_limit bigint,
   allowed_mime_types text[],
-  created_at timestamptz NOT NULL DEFAULT now()
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
 );
 CREATE TABLE storage.objects (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -94,24 +96,24 @@ CREATE TABLE storage.objects (
   is_delete_marker boolean NOT NULL DEFAULT false,
   UNIQUE (bucket_id, name)
 );
-CREATE FUNCTION storage.foldername(object_name text) RETURNS text[]
+CREATE FUNCTION storage.foldername(name text) RETURNS text[]
 LANGUAGE sql
 IMMUTABLE
 AS $$
   SELECT CASE
-    WHEN array_length(string_to_array(object_name, '/'), 1) > 1
-      THEN (string_to_array(object_name, '/'))[
-        1:array_length(string_to_array(object_name, '/'), 1) - 1
+    WHEN array_length(string_to_array(name, '/'), 1) > 1
+      THEN (string_to_array(name, '/'))[
+        1:array_length(string_to_array(name, '/'), 1) - 1
       ]
     ELSE ARRAY[]::text[]
   END
 $$;
-CREATE FUNCTION storage.filename(object_name text) RETURNS text
+CREATE FUNCTION storage.filename(name text) RETURNS text
 LANGUAGE sql
 IMMUTABLE
 AS $$
-  SELECT (string_to_array(object_name, '/'))[
-    array_length(string_to_array(object_name, '/'), 1)
+  SELECT (string_to_array(name, '/'))[
+    array_length(string_to_array(name, '/'), 1)
   ]
 $$;
 ALTER TABLE storage.buckets ENABLE ROW LEVEL SECURITY;

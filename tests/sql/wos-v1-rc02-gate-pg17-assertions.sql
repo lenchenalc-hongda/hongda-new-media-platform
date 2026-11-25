@@ -568,7 +568,7 @@ RESET ROLE;
 -- the generated order UUID inside test arguments; it is revoked below.
 GRANT SELECT ON public.wos_production_orders TO service_role;
 
-SET request.jwt.claim.role = 'service_role';
+SET request.jwt.claims = '{"role":"service_role"}';
 SET request.jwt.claim.sub = '';
 SET ROLE service_role;
 
@@ -798,7 +798,7 @@ INSERT INTO storage.objects(
 
 RESET ROLE;
 
-SET request.jwt.claim.role = 'service_role';
+SET request.jwt.claims = '{"role":"service_role"}';
 SET request.jwt.claim.sub = '';
 SET ROLE service_role;
 

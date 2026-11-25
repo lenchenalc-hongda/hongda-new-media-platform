@@ -61,12 +61,13 @@ function base64url(value) {
   return Buffer.from(value).toString('base64url');
 }
 
-function token(role, sub) {
+function token(role, sub, extraClaims = {}) {
   const header = base64url(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
   const payload = base64url(JSON.stringify({
     role,
     sub,
     exp: Math.floor(Date.now() / 1000) + 600,
+    ...extraClaims,
   }));
   const signature = crypto
     .createHmac('sha256', secret)
@@ -76,26 +77,37 @@ function token(role, sub) {
 }
 
 function postgrestRequest(path, body, jwt, apiKey = jwt) {
+  const payload = JSON.stringify(body);
+  const headers = [
+    `POST /${path} HTTP/1.0`,
+    'Host: 127.0.0.1:3000',
+    `apikey: ${apiKey}`,
+    ...(jwt ? [`Authorization: Bearer ${jwt}`] : []),
+    'Content-Type: application/json',
+    'Accept: application/json',
+    'Prefer: return=representation',
+    `Content-Length: ${Buffer.byteLength(payload)}`,
+    'Connection: close',
+    '',
+    payload,
+  ].join('\r\n');
   const result = run('docker', [
     'exec',
     '-i',
     container,
-    'wget',
-    '-S',
-    '-O',
-    '-',
-    `--header=apikey: ${apiKey}`,
-    `--header=Authorization: Bearer ${jwt}`,
-    '--header=Content-Type: application/json',
-    '--header=Accept: application/json',
-    '--header=Prefer: return=representation',
-    `--post-data=${JSON.stringify(body)}`,
-    `http://127.0.0.1:3000/${path}`,
-  ]);
-  const statusMatch = /HTTP\/1\.[01]\s+([0-9]{3})/.exec(result.stderr);
+    'nc',
+    '127.0.0.1',
+    '3000',
+  ], {
+    input: headers,
+  });
+  const statusMatch = /HTTP\/1\.[01]\s+([0-9]{3})/.exec(result.stdout);
+  const headerEnd = result.stdout.indexOf('\r\n\r\n');
   return {
     status: statusMatch ? Number(statusMatch[1]) : null,
-    stdout: result.stdout.trim(),
+    stdout: headerEnd === -1
+      ? result.stdout.trim()
+      : result.stdout.slice(headerEnd + 4).trim(),
     stderr: result.stderr.trim(),
   };
 }
@@ -121,6 +133,12 @@ const before = {
   )),
   images: Number(psqlScalar(
     'SELECT count(*) FROM public.wos_reference_images',
+  )),
+  proofs: Number(psqlScalar(
+    'SELECT count(*) FROM public.wos_qa_verified_image_proofs',
+  )),
+  storageObjects: Number(psqlScalar(
+    "SELECT count(*) FROM storage.objects WHERE bucket_id = 'wos-private'",
   )),
 };
 
@@ -212,9 +230,94 @@ try {
     officeJwt,
     serviceJwt,
   );
+  const nullProofBody = {
+    p_image_id: null,
+    p_order_id: null,
+    p_actor_user_id: null,
+    p_storage_path: null,
+    p_storage_object_id: null,
+    p_storage_object_version: null,
+    p_storage_object_updated_at: null,
+    p_sha256: null,
+  };
+  const authenticatedProof = postgrestRequest(
+    'rpc/wos_p7_record_trusted_image_proof',
+    nullProofBody,
+    officeJwt,
+  );
+  const anonToken = token('anon');
+  const anonProof = postgrestRequest(
+    'rpc/wos_p7_record_trusted_image_proof',
+    nullProofBody,
+    anonToken,
+  );
+  const noAuthorizationProof = postgrestRequest(
+    'rpc/wos_p7_record_trusted_image_proof',
+    nullProofBody,
+    null,
+    anonToken,
+  );
+  const fakeClaimJwt = token(
+    'authenticated',
+    '10101010-1010-4010-8010-101010101010',
+    {
+      'request.jwt.claim.role': 'service_role',
+      request: { jwt: { claim: { role: 'service_role' } } },
+    },
+  );
+  const fakeClaimProof = postgrestRequest(
+    'rpc/wos_p7_record_trusted_image_proof',
+    nullProofBody,
+    fakeClaimJwt,
+  );
+  const forgedJwt = (() => {
+    const wrongSecret = 'rc02-local-postgrest-wrong-secret-32-bytes';
+    const header = base64url(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
+    const payload = base64url(JSON.stringify({
+      role: 'service_role',
+      exp: Math.floor(Date.now() / 1000) + 600,
+    }));
+    const signature = crypto
+      .createHmac('sha256', wrongSecret)
+      .update(`${header}.${payload}`)
+      .digest('base64url');
+    return `${header}.${payload}.${signature}`;
+  })();
+  const forgedProof = postgrestRequest(
+    'rpc/wos_p7_record_trusted_image_proof',
+    nullProofBody,
+    forgedJwt,
+  );
+  const serviceProofNulls = postgrestRequest(
+    'rpc/wos_p7_record_trusted_image_proof',
+    nullProofBody,
+    serviceJwt,
+  );
+  const serviceRenewNulls = postgrestRequest(
+    'rpc/wos_v1_renew_expired_image_proof',
+    {
+      p_image_id: null,
+      p_order_id: null,
+      p_actor_user_id: null,
+      p_storage_path: null,
+      p_storage_object_id: null,
+      p_storage_object_version: null,
+      p_storage_object_updated_at: null,
+      p_sha256: null,
+    },
+    serviceJwt,
+  );
+  const serviceApiWithUserProof = postgrestRequest(
+    'rpc/wos_p7_record_trusted_image_proof',
+    nullProofBody,
+    officeJwt,
+    serviceJwt,
+  );
 
   if (![401, 403].includes(directOrder.status)) {
-    throw new Error(`POSTGREST_DIRECT_ORDER_NOT_DENIED:${directOrder.status}`);
+    throw new Error(
+      `POSTGREST_DIRECT_ORDER_NOT_DENIED:${directOrder.status}:${directOrder.stdout}`,
+    );
   }
   if (![401, 403].includes(closedGateRpc.status)) {
     throw new Error(`POSTGREST_CLOSED_RPC_NOT_DENIED:${closedGateRpc.status}`);
@@ -224,6 +327,28 @@ try {
       `POSTGREST_SERVICE_JWT_TABLE_BYPASS:${serviceApiWithUserJwt.status}`,
     );
   }
+  for (const [label, response] of [
+    ['AUTHENTICATED_PROOF', authenticatedProof],
+    ['ANON_PROOF', anonProof],
+    ['NO_AUTHORIZATION_PROOF', noAuthorizationProof],
+    ['FAKE_CLAIM_PROOF', fakeClaimProof],
+    ['FORGED_SIGNATURE_PROOF', forgedProof],
+    ['SERVICE_API_WITH_USER_PROOF', serviceApiWithUserProof],
+  ]) {
+    if (![401, 403].includes(response.status)) {
+      throw new Error(`POSTGREST_${label}_NOT_DENIED:${response.status}`);
+    }
+  }
+  for (const [label, response, code] of [
+    ['PROOF_NULLS', serviceProofNulls, 'INVALID_PROOF_INPUT'],
+    ['RENEW_NULLS', serviceRenewNulls, 'INVALID_RENEWAL_INPUT'],
+  ]) {
+    if (response.status !== 400 || !response.stdout.includes(code)) {
+      throw new Error(
+        `POSTGREST_SERVICE_${label}_WRONG:${response.status}:${response.stdout}:${response.stderr}`,
+      );
+    }
+  }
 
   const after = {
     orders: Number(psqlScalar(
@@ -232,14 +357,27 @@ try {
     images: Number(psqlScalar(
       'SELECT count(*) FROM public.wos_reference_images',
     )),
+    proofs: Number(psqlScalar(
+      'SELECT count(*) FROM public.wos_qa_verified_image_proofs',
+    )),
+    storageObjects: Number(psqlScalar(
+      "SELECT count(*) FROM storage.objects WHERE bucket_id = 'wos-private'",
+    )),
   };
-  if (before.orders !== after.orders || before.images !== after.images) {
+  if (
+    before.orders !== after.orders
+    || before.images !== after.images
+    || before.proofs !== after.proofs
+    || before.storageObjects !== after.storageObjects
+  ) {
     throw new Error('POSTGREST_DENIAL_CHANGED_BUSINESS_DATA');
   }
 
   console.log('WOS_V1_RC02_POSTGREST_DIRECT_ORDER_DENIED=PASS');
   console.log('WOS_V1_RC02_POSTGREST_CLOSED_RPC_DENIED=PASS');
   console.log('WOS_V1_RC02_POSTGREST_SERVICE_JWT_TABLE_DENIED=PASS');
+  console.log('WOS_V1_RC04_POSTGREST_SERVICE_ROLE_GUARD=PASS');
+  console.log('WOS_V1_RC04_POSTGREST_NEGATIVE_ROLE_MATRIX=PASS');
   console.log('WOS_V1_RC02_POSTGREST_BUSINESS_WRITES=0');
 } finally {
   if (started) {

@@ -53,6 +53,11 @@ cleanup() {
     printf 'WOS_V1_RC02_GATE_DB_RETAINED=%s\n' "$DB"
     exit "$status"
   fi
+  if [[ "$status" -eq 0
+    && "${WOS_RC02_KEEP_ON_SUCCESS:-0}" = '1' ]]; then
+    printf 'WOS_V1_RC02_GATE_DB_RETAINED_ON_SUCCESS=%s\n' "$DB"
+    exit "$status"
+  fi
   psql_db postgres -q -c "DROP DATABASE IF EXISTS \"$DB\" WITH (FORCE)" \
     >/dev/null 2>&1 || true
   exit "$status"
@@ -89,6 +94,21 @@ psql_db "$DB" -q \
   < "$ROOT/tests/sql/wos_p8_p7_service_proof_and_cleanup.sql"
 psql_db "$DB" -q \
   < "$ROOT/tests/sql/wos-v1-rc03-qa-shape-transform.sql"
+psql_db "$DB" -q \
+  < "$ROOT/tests/sql/wos-qa-existing-proof-guard-fixture.sql"
+psql_db "$DB" -q \
+  < "$ROOT/tests/sql/wos-v1-rc04-m2-proof-set-fixture.sql"
+
+[[ "$(query_value "$DB" "
+  SELECT encode(
+    sha256(convert_to(
+      pg_get_functiondef('public.wos_qa_proof_write_guard()'::regprocedure),
+      'UTF8'
+    )),
+    'hex'
+  )
+")" = '9a91e8e6441e0beee2c4fa3d4d410582784d3d310939c99007ac65f06d7a63fd' ]] \
+  || fail 'LIVE_PROOF_GUARD_DEFINITION_MISMATCH'
 
 psql_db "$DB" -q \
   < "$ROOT/tests/sql/wos-v1-qa-legacy-safety-rc03-fixture.sql"
@@ -143,6 +163,20 @@ LEGACY_STORAGE_POLICY_FINGERPRINT_BEFORE="$(query_value "$DB" "
 
 psql_db "$DB" -q \
   < "$ROOT/tests/sql/wos-v1-rc02-gate-pg17-assertions.sql"
+psql_db "$DB" -q \
+  < "$ROOT/tests/sql/wos-v1-rc04-proof-mirror-assertions.sql"
+
+STORAGE_DB='wos_v1_rc04_storage_ci'
+psql_db postgres -q -c "DROP DATABASE IF EXISTS \"$STORAGE_DB\" WITH (FORCE)"
+psql_db postgres -q -c \
+  "CREATE DATABASE \"$STORAGE_DB\" TEMPLATE \"$DB\""
+WOS_PG_DOCKER_CONTAINER="$CONTAINER_ID" \
+  WOS_RC04_STORAGE_DB="$STORAGE_DB" \
+  node "$ROOT/tests/sql/wos-v1-rc04-storage-api-smoke.mjs"
+if [[ "${WOS_RC04_KEEP_STORAGE_DB:-0}" != '1' ]]; then
+  psql_db postgres -q -c \
+    "DROP DATABASE IF EXISTS \"$STORAGE_DB\" WITH (FORCE)"
+fi
 
 AUTH_ONE_LOG="$(mktemp)"
 AUTH_TWO_LOG="$(mktemp)"
@@ -346,9 +380,13 @@ psql_db "$DB" -q -c "
 ")" = 't' ]] || fail 'RECOVERY_LEFT_RC02_POLICY'
 
 psql_db "$DB" -q -c "
+  ALTER TABLE public.wos_qa_verified_image_proofs
+  DISABLE TRIGGER wos_qa_trusted_proof_guard;
   UPDATE public.wos_qa_verified_image_proofs
   SET verified_sha256=repeat('9',64)
-  WHERE image_id='70000000-0000-4000-8000-000000000012'
+  WHERE image_id='70000000-0000-4000-8000-000000000012';
+  ALTER TABLE public.wos_qa_verified_image_proofs
+  ENABLE TRIGGER wos_qa_trusted_proof_guard
 "
 RECOVERY_HISTORY_TAMPER_LOG="$(mktemp)"
 set +e
@@ -363,9 +401,13 @@ set -e
 grep -q 'RC03_COMPAT_HISTORICAL_ROW_CHANGED' "$RECOVERY_HISTORY_TAMPER_LOG" \
   || fail 'COMPAT_RECOVERY_TAMPER_WRONG_ERROR'
 psql_db "$DB" -q -c "
+  ALTER TABLE public.wos_qa_verified_image_proofs
+  DISABLE TRIGGER wos_qa_trusted_proof_guard;
   UPDATE public.wos_qa_verified_image_proofs
   SET verified_sha256=repeat('7',64)
-  WHERE image_id='70000000-0000-4000-8000-000000000012'
+  WHERE image_id='70000000-0000-4000-8000-000000000012';
+  ALTER TABLE public.wos_qa_verified_image_proofs
+  ENABLE TRIGGER wos_qa_trusted_proof_guard
 "
 
 {
@@ -434,6 +476,41 @@ psql_db "$DB" -q -c "
   SELECT count(*) FROM public.wos_production_orders
 ")" = "$ORDER_COUNT_BEFORE_RECOVERY" ]] || fail 'RECOVERY_CHANGED_ORDERS'
 
+psql_db "$DB" -q -c "
+  SET request.jwt.claim.sub = '10101010-1010-4010-8010-101010101010';
+  SET request.jwt.claim.role = 'authenticated';
+  SET ROLE authenticated;
+  DO \$restored_register\$
+  BEGIN
+    BEGIN
+      PERFORM public.wos_register_uploaded_reference_image(
+        NULL, NULL, NULL, NULL
+      );
+      RAISE EXCEPTION 'RESTORED_REGISTER_ACCEPTED_INVALID_INPUT';
+    EXCEPTION WHEN SQLSTATE '22023' THEN
+      IF SQLERRM <> 'INVALID_INPUT' THEN RAISE; END IF;
+    END;
+  END;
+  \$restored_register\$;
+  RESET ROLE;
+  SET request.jwt.claim.role = 'service_role';
+  SET ROLE service_role;
+  DO \$restored_proof\$
+  BEGIN
+    BEGIN
+      PERFORM public.wos_p7_record_trusted_image_proof(
+        NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL
+      );
+      RAISE EXCEPTION 'RESTORED_PROOF_ACCEPTED_INVALID_INPUT';
+    EXCEPTION WHEN SQLSTATE '22023' THEN
+      IF SQLERRM <> 'INVALID_PROOF_INPUT' THEN RAISE; END IF;
+    END;
+  END;
+  \$restored_proof\$;
+  RESET ROLE;
+"
+
+echo 'WOS_V1_RC04_P7_RECOVERY_INTERFACES=PASS'
 echo 'WOS_V1_RC02_GATE_PG17=PASS'
 echo 'WOS_V1_RC02_CONCURRENT_AUTHORIZE=PASS'
 echo 'WOS_V1_RC02_CONCURRENT_CREATE_REPLAY=PASS'

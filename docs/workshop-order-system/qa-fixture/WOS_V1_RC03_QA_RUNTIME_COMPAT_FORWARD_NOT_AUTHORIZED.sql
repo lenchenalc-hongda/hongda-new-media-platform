@@ -20,8 +20,30 @@ BEGIN
     OR to_regclass('wos_qa_safety.p2_gate_close_receipts') IS NULL
     OR to_regclass('public.wos_qa_verified_image_proofs') IS NULL
     OR to_regclass('public.wos_qa_orphan_cleanup_claims') IS NULL
+    OR to_regprocedure('public.wos_qa_proof_write_guard()') IS NULL
+    OR to_regprocedure(
+      'public.wos_confirm_office_completeness(uuid,integer,text,text)'
+    ) IS NULL
+    OR to_regprocedure(
+      'public.wos_submit_production_order(uuid,integer,text,uuid)'
+    ) IS NULL
+    OR to_regprocedure(
+      'public.wos_p7_record_trusted_image_proof(uuid,uuid,uuid,text,uuid,text,timestamptz,text)'
+    ) IS NULL
+    OR to_regprocedure(
+      'public.wos_register_uploaded_reference_image(uuid,uuid,text,text)'
+    ) IS NULL
   THEN
     RAISE EXCEPTION 'RC03_COMPAT_PREREQUISITE_MISSING';
+  END IF;
+  IF encode(
+    sha256(convert_to(
+      pg_get_functiondef('public.wos_qa_proof_write_guard()'::regprocedure),
+      'UTF8'
+    )),
+    'hex'
+  ) <> '9a91e8e6441e0beee2c4fa3d4d410582784d3d310939c99007ac65f06d7a63fd' THEN
+    RAISE EXCEPTION 'RC03_LEGACY_PROOF_GUARD_DEFINITION_MISMATCH';
   END IF;
   IF to_regclass('public.wos_verified_image_proofs') IS NOT NULL
     OR to_regclass('public.wos_orphan_cleanup_claims') IS NOT NULL
@@ -135,10 +157,16 @@ CREATE TABLE wos_v1_rc03_compat.historical_rows (
   row_hash text NOT NULL CHECK (row_hash ~ '^[a-f0-9]{32}$'),
   PRIMARY KEY(object_kind, row_key)
 );
+CREATE TABLE wos_v1_rc03_compat.function_definition_backup (
+  function_name text PRIMARY KEY,
+  definition_sha256 text NOT NULL CHECK(definition_sha256 ~ '^[a-f0-9]{64}$'),
+  acl text NOT NULL
+);
 REVOKE ALL ON wos_v1_rc03_compat.storage_policy_backup,
   wos_v1_rc03_compat.bucket_backup,
   wos_v1_rc03_compat.table_acl_backup,
-  wos_v1_rc03_compat.historical_rows
+  wos_v1_rc03_compat.historical_rows,
+  wos_v1_rc03_compat.function_definition_backup
 FROM PUBLIC, anon, authenticated;
 
 INSERT INTO wos_v1_rc03_compat.storage_policy_backup(
@@ -175,6 +203,35 @@ FROM information_schema.role_table_grants
 WHERE table_schema = 'public'
   AND table_name IN ('wos_production_orders', 'wos_reference_images')
   AND grantee IN ('authenticated', 'anon');
+
+INSERT INTO wos_v1_rc03_compat.function_definition_backup(
+  function_name, definition_sha256, acl
+)
+SELECT
+  procedure_row.oid::regprocedure::text,
+  encode(
+    sha256(convert_to(pg_get_functiondef(procedure_row.oid), 'UTF8')),
+    'hex'
+  ),
+  COALESCE(procedure_row.proacl::text, '')
+FROM pg_proc procedure_row
+WHERE procedure_row.oid IN (
+  'public.wos_qa_proof_write_guard()'::regprocedure,
+  'public.wos_confirm_office_completeness(uuid,integer,text,text)'::regprocedure,
+  'public.wos_submit_production_order(uuid,integer,text,uuid)'::regprocedure,
+  'public.wos_p7_record_trusted_image_proof(uuid,uuid,uuid,text,uuid,text,timestamptz,text)'::regprocedure,
+  'public.wos_register_uploaded_reference_image(uuid,uuid,text,text)'::regprocedure
+);
+DO $verify_function_backup$
+BEGIN
+  IF (
+    SELECT count(*)
+    FROM wos_v1_rc03_compat.function_definition_backup
+  ) <> 5 THEN
+    RAISE EXCEPTION 'RC03_COMPAT_FUNCTION_BACKUP_INCOMPLETE';
+  END IF;
+END;
+$verify_function_backup$;
 
 INSERT INTO wos_v1_rc03_compat.historical_rows(
   object_kind, row_key, row_hash
@@ -272,21 +329,38 @@ WITH CHECK (
 CREATE POLICY wos_p8_private_select
 ON storage.objects FOR SELECT TO authenticated
 USING (
-  bucket_id='wos-private'
-  AND (storage.foldername(name))[1]='organizations'
-  AND (storage.foldername(name))[3]='wos'
-  AND (storage.foldername(name))[4]='production-order'
-  AND EXISTS (
-    SELECT 1 FROM public.profiles p
-    JOIN public.wos_production_orders o ON o.organization_id=p.org_id
-    WHERE p.user_id=auth.uid() AND p.is_active
-      AND p.org_id::text=(storage.foldername(storage.objects.name))[2]
-      AND o.id::text=(storage.foldername(storage.objects.name))[5]
-      AND (p.role IN ('admin','manager')
-        OR (p.role='sales' AND (p.id=o.created_by_profile_id OR p.id=o.sales_owner_profile_id))
-        OR (p.role='operator' AND o.workflow_status IN (
-          'SUBMITTED','WORKSHOP_REVIEW','WAITING_MATERIAL'
-        )))
+  (
+    bucket_id='wos-private'
+    AND (storage.foldername(name))[1]='organizations'
+    AND (storage.foldername(name))[3]='wos'
+    AND (storage.foldername(name))[4]='production-order'
+    AND EXISTS (
+      SELECT 1 FROM public.profiles p
+      JOIN public.wos_production_orders o ON o.organization_id=p.org_id
+      WHERE p.user_id=auth.uid() AND p.is_active
+        AND p.org_id::text=(storage.foldername(storage.objects.name))[2]
+        AND o.id::text=(storage.foldername(storage.objects.name))[5]
+        AND (
+          p.role IN ('admin','manager')
+          OR (
+            p.role='sales'
+            AND p.id IN (o.created_by_profile_id,o.sales_owner_profile_id)
+          )
+        )
+    )
+  )
+  OR (
+    bucket_id IS DISTINCT FROM 'wos-private'
+    AND EXISTS (
+      SELECT 1
+      FROM public.profiles p
+      WHERE p.user_id=auth.uid()
+        AND p.is_active
+        AND p.role IN (
+          'admin','manager','sales','operator','workshop','technician'
+        )
+        AND p.org_id::text=(storage.foldername(storage.objects.name))[2]
+    )
   )
 );
 
@@ -353,36 +427,276 @@ FROM PUBLIC, anon, authenticated;
 GRANT SELECT, INSERT, UPDATE ON public.wos_orphan_cleanup_claims
 TO service_role;
 
+ALTER FUNCTION public.wos_qa_proof_write_guard()
+  SET SCHEMA wos_v1_rc03_compat;
+ALTER FUNCTION wos_v1_rc03_compat.wos_qa_proof_write_guard()
+  RENAME TO wos_qa_proof_write_guard_original;
+
+CREATE FUNCTION public.wos_qa_proof_write_guard()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $rc04_proof_guard$
+DECLARE
+  v_obj storage.objects%ROWTYPE;
+  v_order public.wos_production_orders%ROWTYPE;
+  v_profile public.profiles%ROWTYPE;
+  v_expected_path text;
+BEGIN
+  IF pg_catalog.current_setting('wos.v1.rc03_proof_mirror', true) = '1' THEN
+    IF TG_OP IS DISTINCT FROM 'INSERT' THEN
+      RAISE EXCEPTION 'RC03_PROOF_MIRROR_UPDATE_FORBIDDEN'
+        USING ERRCODE = '42501';
+    END IF;
+    IF EXISTS (
+      SELECT 1
+      FROM public.wos_qa_verified_image_proofs proof
+      WHERE proof.image_id = NEW.image_id
+    ) THEN
+      RAISE EXCEPTION 'RC03_PROOF_MIRROR_WOULD_REPLACE_HISTORY'
+        USING ERRCODE = '23505';
+    END IF;
+    SELECT * INTO v_order
+    FROM public.wos_production_orders production_order
+    WHERE production_order.id = NEW.order_id
+      AND production_order.organization_id = NEW.organization_id;
+    IF NOT FOUND
+      OR v_order.order_number NOT LIKE 'QA-NONPROD-%'
+      OR v_order.workflow_status NOT IN ('DRAFT', 'NEEDS_INFORMATION')
+      OR v_order.version_label !~ '^V[1-9][0-9]{0,20}$'
+    THEN
+      RAISE EXCEPTION 'RC03_PROOF_MIRROR_ORDER_NOT_ELIGIBLE'
+        USING ERRCODE = '23514';
+    END IF;
+    SELECT * INTO v_profile
+    FROM public.profiles profile
+    WHERE profile.user_id = NEW.actor_user_id
+      AND profile.is_active = true
+      AND profile.role IN ('admin', 'manager', 'sales')
+      AND profile.org_id = v_order.organization_id
+    LIMIT 1;
+    IF NOT FOUND
+      OR (
+        v_profile.role = 'sales'
+        AND v_profile.id NOT IN (
+          v_order.created_by_profile_id,
+          v_order.sales_owner_profile_id
+        )
+      )
+    THEN
+      RAISE EXCEPTION 'RC03_PROOF_MIRROR_ACTOR_NOT_AUTHORIZED'
+        USING ERRCODE = '42501';
+    END IF;
+    IF NOT EXISTS (
+      SELECT 1
+      FROM wos_v1_rc02_safety.rc02_business_grants grant_row
+      WHERE grant_row.created_order_id = v_order.id
+        AND grant_row.organization_id = v_order.organization_id
+        AND grant_row.office_user_id = NEW.actor_user_id
+        AND grant_row.state = 'ORDER_BOUND'
+        AND grant_row.enabled_until > clock_timestamp()
+        AND grant_row.closed_at IS NULL
+    ) THEN
+      RAISE EXCEPTION 'RC03_PROOF_MIRROR_GATE_REQUIRED'
+        USING ERRCODE = '42501';
+    END IF;
+    v_expected_path := pg_catalog.format(
+      'organizations/%s/wos/production-order/%s/images/__CATEGORY__/versions/%s/%s/source.png',
+      v_order.organization_id,
+      v_order.id,
+      v_order.version_label,
+      NEW.image_id
+    );
+    IF NEW.storage_bucket <> 'wos-private'
+      OR NEW.storage_path NOT IN (
+        pg_catalog.replace(v_expected_path, '__CATEGORY__', 'product'),
+        pg_catalog.replace(v_expected_path, '__CATEGORY__', 'film-pattern'),
+        pg_catalog.replace(v_expected_path, '__CATEGORY__', 'customer-approved-sample'),
+        pg_catalog.replace(v_expected_path, '__CATEGORY__', 'signed-sample')
+      )
+    THEN
+      RAISE EXCEPTION 'RC03_PROOF_MIRROR_PATH_MISMATCH'
+        USING ERRCODE = '23514';
+    END IF;
+    SELECT * INTO v_obj
+    FROM storage.objects object
+    WHERE object.id = NEW.storage_object_id
+      AND object.bucket_id = NEW.storage_bucket
+      AND object.name = NEW.storage_path
+      AND object.owner_id = NEW.actor_user_id::text
+      AND object.version = NEW.storage_object_version
+      AND object.updated_at = NEW.storage_object_updated_at
+      AND object.is_delete_marker = false
+      AND object.archived_at IS NULL;
+    IF NOT FOUND OR v_obj.metadata->>'mimetype' <> 'image/png' THEN
+      RAISE EXCEPTION 'RC03_PROOF_MIRROR_OBJECT_CHANGED'
+        USING ERRCODE = '23514';
+    END IF;
+    IF EXISTS (
+      SELECT 1
+      FROM public.wos_qa_orphan_cleanup_claims claim
+      WHERE claim.storage_object_id = v_obj.id
+        AND claim.state = 'CLAIMED'
+        AND claim.lease_expires_at > clock_timestamp()
+    ) THEN
+      RAISE EXCEPTION 'QA_CLEANUP_CLAIM_IN_PROGRESS'
+        USING ERRCODE = 'PT409';
+    END IF;
+    RETURN NEW;
+  END IF;
+
+  -- Normal legacy-QA writes retain the exact pre-RC03 behavior.
+  IF pg_catalog.current_setting('wos.qa.trusted_proof_rpc', true)
+      IS DISTINCT FROM '1'
+    OR pg_catalog.current_setting('wos.qa.actor_user_id', true)
+      IS DISTINCT FROM NEW.actor_user_id::text
+  THEN
+    RAISE EXCEPTION 'TRUSTED_PROOF_RPC_REQUIRED' USING ERRCODE = '42501';
+  END IF;
+  SELECT * INTO v_order
+  FROM public.wos_production_orders
+  WHERE id = NEW.order_id AND organization_id = NEW.organization_id;
+  IF NOT FOUND OR v_order.order_number NOT LIKE 'QA-NONPROD-%' THEN
+    RAISE EXCEPTION 'QA_PROOF_ORDER_NOT_AUTHORIZED' USING ERRCODE = '23514';
+  END IF;
+  IF v_order.workflow_status = 'DRAFT' THEN
+    NULL;
+  ELSIF v_order.workflow_status IN ('WAITING_MATERIAL', 'READINESS_CHECK')
+    AND v_order.version_label ~ '^QA-R[1-9][0-9]*$'
+  THEN
+    SELECT * INTO v_profile
+    FROM public.profiles
+    WHERE user_id = NEW.actor_user_id
+      AND is_active = true
+      AND role IN ('admin', 'manager', 'sales')
+      AND (auth.uid() IS NULL OR user_id = auth.uid())
+    LIMIT 1;
+    IF v_profile.id IS NULL
+      OR v_profile.org_id <> v_order.organization_id
+      OR (
+        v_profile.role = 'sales'
+        AND v_profile.id NOT IN (
+          v_order.created_by_profile_id,
+          v_order.sales_owner_profile_id
+        )
+      )
+      OR NOT public.wos_qa_revision_gate_allows(
+        v_order.id, v_order.organization_id, v_profile.id
+      )
+    THEN
+      RAISE EXCEPTION 'QA_REVISION_PROOF_FORBIDDEN' USING ERRCODE = '42501';
+    END IF;
+  ELSE
+    RAISE EXCEPTION 'QA_PROOF_ORDER_NOT_EDITABLE' USING ERRCODE = '23514';
+  END IF;
+  SELECT * INTO v_obj
+  FROM storage.objects
+  WHERE id = NEW.storage_object_id
+    AND name = NEW.storage_path
+    AND bucket_id = 'wos-private'
+    AND is_delete_marker = false
+    AND archived_at IS NULL;
+  IF NOT FOUND
+    OR v_obj.version IS DISTINCT FROM NEW.storage_object_version
+    OR v_obj.updated_at IS DISTINCT FROM NEW.storage_object_updated_at
+    OR v_obj.owner_id IS DISTINCT FROM NEW.actor_user_id::text
+  THEN
+    RAISE EXCEPTION 'QA_PROOF_OBJECT_CHANGED' USING ERRCODE = '23514';
+  END IF;
+  IF EXISTS (
+    SELECT 1
+    FROM public.wos_qa_orphan_cleanup_claims claim
+    WHERE claim.storage_object_id = v_obj.id
+      AND claim.state = 'CLAIMED'
+      AND claim.lease_expires_at > clock_timestamp()
+  ) THEN
+    RAISE EXCEPTION 'QA_CLEANUP_CLAIM_IN_PROGRESS' USING ERRCODE = 'PT409';
+  END IF;
+  RETURN NEW;
+END;
+$rc04_proof_guard$;
+REVOKE ALL ON FUNCTION public.wos_qa_proof_write_guard()
+FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.wos_qa_proof_write_guard()
+TO service_role;
+
+DROP TRIGGER IF EXISTS wos_qa_trusted_proof_guard
+  ON public.wos_qa_verified_image_proofs;
+CREATE TRIGGER wos_qa_trusted_proof_guard
+BEFORE INSERT OR UPDATE ON public.wos_qa_verified_image_proofs
+FOR EACH ROW EXECUTE FUNCTION public.wos_qa_proof_write_guard();
+
 CREATE FUNCTION wos_v1_rc03_compat.mirror_verified_proof()
 RETURNS trigger
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = ''
 AS $mirror_verified_proof$
+DECLARE
+  v_previous_mirror text;
+  v_previous_rpc text;
+  v_previous_actor text;
 BEGIN
-  INSERT INTO public.wos_qa_verified_image_proofs(
-    image_id, organization_id, order_id, actor_user_id,
-    storage_bucket, storage_path, storage_object_id,
-    storage_object_version, storage_object_updated_at,
-    verified_sha256, verified_at, expires_at
-  ) VALUES (
-    NEW.image_id, NEW.organization_id, NEW.order_id, NEW.actor_user_id,
-    NEW.storage_bucket, NEW.storage_path, NEW.storage_object_id,
-    NEW.storage_object_version, NEW.storage_object_updated_at,
-    NEW.verified_sha256, NEW.verified_at, NEW.expires_at
-  )
-  ON CONFLICT(image_id) DO UPDATE
-  SET organization_id = EXCLUDED.organization_id,
-      order_id = EXCLUDED.order_id,
-      actor_user_id = EXCLUDED.actor_user_id,
-      storage_bucket = EXCLUDED.storage_bucket,
-      storage_path = EXCLUDED.storage_path,
-      storage_object_id = EXCLUDED.storage_object_id,
-      storage_object_version = EXCLUDED.storage_object_version,
-      storage_object_updated_at = EXCLUDED.storage_object_updated_at,
-      verified_sha256 = EXCLUDED.verified_sha256,
-      verified_at = EXCLUDED.verified_at,
-      expires_at = EXCLUDED.expires_at;
+  IF TG_OP <> 'INSERT' THEN
+    RAISE EXCEPTION 'RC03_PROOF_MIRROR_UPDATE_FORBIDDEN' USING ERRCODE = '42501';
+  END IF;
+  IF EXISTS (
+    SELECT 1
+    FROM public.wos_qa_verified_image_proofs proof
+    WHERE proof.image_id = NEW.image_id
+  ) THEN
+    RAISE EXCEPTION 'RC03_PROOF_MIRROR_WOULD_REPLACE_HISTORY'
+      USING ERRCODE = '23505';
+  END IF;
+
+  v_previous_mirror := COALESCE(
+    pg_catalog.current_setting('wos.v1.rc03_proof_mirror', true), ''
+  );
+  v_previous_rpc := COALESCE(
+    pg_catalog.current_setting('wos.qa.trusted_proof_rpc', true), ''
+  );
+  v_previous_actor := COALESCE(
+    pg_catalog.current_setting('wos.qa.actor_user_id', true), ''
+  );
+  PERFORM pg_catalog.set_config('wos.v1.rc03_proof_mirror', '1', true);
+  PERFORM pg_catalog.set_config('wos.qa.trusted_proof_rpc', '1', true);
+  PERFORM pg_catalog.set_config(
+    'wos.qa.actor_user_id', NEW.actor_user_id::text, true
+  );
+  BEGIN
+    INSERT INTO public.wos_qa_verified_image_proofs(
+      image_id, organization_id, order_id, actor_user_id,
+      storage_bucket, storage_path, storage_object_id,
+      storage_object_version, storage_object_updated_at,
+      verified_sha256, verified_at, expires_at
+    ) VALUES (
+      NEW.image_id, NEW.organization_id, NEW.order_id, NEW.actor_user_id,
+      NEW.storage_bucket, NEW.storage_path, NEW.storage_object_id,
+      NEW.storage_object_version, NEW.storage_object_updated_at,
+      NEW.verified_sha256, NEW.verified_at, NEW.expires_at
+    );
+  EXCEPTION WHEN OTHERS THEN
+    PERFORM pg_catalog.set_config(
+      'wos.v1.rc03_proof_mirror', v_previous_mirror, true
+    );
+    PERFORM pg_catalog.set_config(
+      'wos.qa.trusted_proof_rpc', v_previous_rpc, true
+    );
+    PERFORM pg_catalog.set_config(
+      'wos.qa.actor_user_id', v_previous_actor, true
+    );
+    RAISE;
+  END;
+  PERFORM pg_catalog.set_config(
+    'wos.v1.rc03_proof_mirror', v_previous_mirror, true
+  );
+  PERFORM pg_catalog.set_config(
+    'wos.qa.trusted_proof_rpc', v_previous_rpc, true
+  );
+  PERFORM pg_catalog.set_config(
+    'wos.qa.actor_user_id', v_previous_actor, true
+  );
   RETURN NEW;
 END;
 $mirror_verified_proof$;
@@ -390,7 +704,7 @@ REVOKE ALL ON FUNCTION wos_v1_rc03_compat.mirror_verified_proof()
 FROM PUBLIC, anon, authenticated;
 
 CREATE TRIGGER rc03_mirror_verified_proof
-AFTER INSERT OR UPDATE ON public.wos_verified_image_proofs
+AFTER INSERT ON public.wos_verified_image_proofs
 FOR EACH ROW EXECUTE FUNCTION wos_v1_rc03_compat.mirror_verified_proof();
 
 DO $rc03_compat_postflight$

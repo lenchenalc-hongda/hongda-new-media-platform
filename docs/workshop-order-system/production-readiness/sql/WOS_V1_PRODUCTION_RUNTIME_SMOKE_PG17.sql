@@ -419,7 +419,8 @@ END;
 $office_storage_read$;
 
 RESET ROLE;
-SET request.jwt.claim.role='service_role';
+SET request.jwt.claims='{"role":"service_role"}';
+SET ROLE service_role;
 SELECT public.wos_p7_record_trusted_image_proof(
   '71000000-0000-4000-8000-000000000001',
   :'order_id',
@@ -616,7 +617,7 @@ INSERT INTO storage.objects (
     '2026-11-23T00:01:03.123456Z'
   );
 
-SET request.jwt.claim.role='service_role';
+SET request.jwt.claims='{"role":"service_role"}';
 SET request.jwt.claim.sub='';
 SET ROLE service_role;
 SELECT public.wos_p7_record_trusted_image_proof(

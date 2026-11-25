@@ -1,10 +1,23 @@
-# WOS V1 RC03 QA Compatibility And Security Audit
+# WOS V1 RC04 QA Compatibility And Security Audit
 
-Status: `CODE_AND_OFFLINE_PASS / HOSTED_QA_NOT_AUTHORIZED`
+Status: `RC04_CODE_AND_OFFLINE_PASS / HOSTED_QA_NOT_AUTHORIZED`
 
 No remote QA SQL installation, Gate activation, Storage upload, Proof creation,
 Preview deployment, Edge deployment, PR merge, Ready transition or Production
 write was performed.
+
+## RC04 Review Remediation
+
+The independent RC03 review identified five release blockers. RC04 closes them
+in the same Draft PR:
+
+| Review item | RC04 result |
+| --- | --- |
+| P0-1 legacy role GUC | Runtime Proof and Renewal share a guard that validates JWT claims, the PostgreSQL transaction role, and a valid PostgREST or CI session origin. |
+| P0-2 live QA Proof Guard | Compatibility preserves the exact live guard and adds only a transaction-bound, active-Gate, current-version mirror branch for INSERT. Existing Proof replacement and mirror UPDATE are denied. |
+| P0-3 permissive Policy bypass | The broad Operator branch was removed from `wos_p8_private_select`; Operator access comes only from the strict RC02 predicate. Non-WOS bucket access remains separately scoped. |
+| P1-4 P7 recovery | Data-retaining recovery restores the four original P7 public functions, exact definitions and ACLs, and the exact QA Proof guard while retaining V1 runtime tables and audit rows. |
+| PG17 parity | QA-shape regression installs the exact live Proof Guard, the M2 proof-set verifier, PostgREST v16 and Storage API v1.96.4. |
 
 ## Safety Namespace
 
@@ -161,11 +174,21 @@ LEGACY_STORAGE_POLICY_FINGERPRINT=PASS
 LEGACY_BUCKET_AND_ACL_RESTORE=PASS
 HISTORICAL_ROW_HASHES=PASS
 RUNTIME_DATA_RETAINED_AND_RPC_DEACTIVATED=PASS
+LEGACY_PROOF_GUARD_FINGERPRINT=PASS
+PROOF_V1_V2_MIRROR=PASS
+EDGE_V8_PROOF_PROJECTION=PASS
+M2_PROOF_SET_DIGEST=PASS
+POSTGREST_SERVICE_ROLE_GUARD=PASS
+POSTGREST_NEGATIVE_ROLE_MATRIX=PASS
+STORAGE_API_OPERATOR_FOUR_STATE_BYTES=PASS
+STORAGE_API_NEGATIVE_MATRIX=PASS
+P7_RECOVERY_INTERFACES=PASS
 ```
 
 Compatibility recovery intentionally uses data-retention mode: it does not
 delete new V1 runtime tables or business/audit rows. Full runtime-table removal
-requires a separate retention decision.
+requires a separate retention decision. The original P7 public interfaces and
+ACLs are restored in this mode.
 
 ## Other Regression
 

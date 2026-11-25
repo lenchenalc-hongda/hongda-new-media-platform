@@ -31,6 +31,9 @@ BEGIN
     OR to_regprocedure(
       'public.wos_v1_pre_runtime_record_trusted_image_proof(uuid,uuid,uuid,text,uuid,text,timestamptz,text)'
     ) IS NOT NULL
+    OR to_regprocedure(
+      'public.wos_v1_pre_runtime_register_uploaded_reference_image(uuid,uuid,text,text)'
+    ) IS NOT NULL
   THEN
     RAISE EXCEPTION 'WOS_V1_RUNTIME_ALREADY_PARTIALLY_INSTALLED';
   END IF;
@@ -62,6 +65,9 @@ BEGIN
       IS NULL
     OR to_regprocedure(
       'public.wos_p7_record_trusted_image_proof(uuid,uuid,uuid,text,uuid,text,timestamptz,text)'
+    ) IS NULL
+    OR to_regprocedure(
+      'public.wos_register_uploaded_reference_image(uuid,uuid,text,text)'
     ) IS NULL
   THEN
     RAISE EXCEPTION 'WOS_V1_P7_PREREQUISITE_MISSING';
@@ -108,8 +114,10 @@ BEGIN
       AND policy.roles = ARRAY['authenticated']::name[]
       AND md5(COALESCE(policy.with_check, ''))
         = 'd41d8cd98f00b204e9800998ecf8427e'
-      AND md5(COALESCE(policy.qual, ''))
-        = '365f79545fe118582bc24a32ccc15f57'
+      AND md5(COALESCE(policy.qual, '')) IN (
+        '365f79545fe118582bc24a32ccc15f57',
+        '9ccf59d67e1f1af8bf34ec2f47c3cb6d'
+      )
   ) THEN
     RAISE EXCEPTION 'WOS_V1_PRIVATE_STORAGE_RLS_MISMATCH';
   END IF;
@@ -175,6 +183,9 @@ ALTER FUNCTION public.wos_submit_production_order(
 ALTER FUNCTION public.wos_p7_record_trusted_image_proof(
   uuid,uuid,uuid,text,uuid,text,timestamptz,text
 ) RENAME TO wos_v1_pre_runtime_record_trusted_image_proof;
+ALTER FUNCTION public.wos_register_uploaded_reference_image(
+  uuid,uuid,text,text
+) RENAME TO wos_v1_pre_runtime_register_uploaded_reference_image;
 
 CREATE TABLE public.wos_order_create_receipts (
   request_id uuid PRIMARY KEY,
@@ -512,6 +523,52 @@ REVOKE ALL ON FUNCTION public.wos_register_uploaded_reference_image(
   uuid,uuid,text,text
 ) FROM PUBLIC, anon, authenticated, service_role;
 
+CREATE FUNCTION public.wos_v1_assert_service_role_request()
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+STABLE
+AS $service_role_request$
+DECLARE
+  v_claims text;
+  v_claims_json jsonb;
+  v_transaction_role text;
+BEGIN
+  v_claims := NULLIF(current_setting('request.jwt.claims', true), '');
+  v_transaction_role := NULLIF(current_setting('role', true), '');
+  BEGIN
+    v_claims_json := v_claims::jsonb;
+  EXCEPTION WHEN OTHERS THEN
+    RAISE EXCEPTION 'SERVICE_ROLE_REQUIRED' USING ERRCODE = '42501';
+  END;
+  IF v_claims_json IS NULL
+    OR length(v_claims) > 16384
+    OR jsonb_typeof(v_claims_json) <> 'object'
+    OR v_claims_json->>'role' IS DISTINCT FROM 'service_role'
+    OR v_transaction_role IS DISTINCT FROM 'service_role'
+    OR (
+      session_user = 'authenticator'
+      AND (
+        NULLIF(current_setting('request.method', true), '') IS NULL
+        OR NULLIF(current_setting('request.path', true), '') NOT LIKE '/rpc/%'
+      )
+    )
+    OR (
+      session_user NOT IN ('authenticator', 'postgres', 'supabase_admin')
+    )
+    OR (
+      session_user IN ('postgres', 'supabase_admin')
+      AND current_database() NOT LIKE '%\_ci' ESCAPE '\'
+    )
+  THEN
+    RAISE EXCEPTION 'SERVICE_ROLE_REQUIRED' USING ERRCODE = '42501';
+  END IF;
+END;
+$service_role_request$;
+REVOKE ALL ON FUNCTION public.wos_v1_assert_service_role_request()
+FROM PUBLIC, anon, authenticated, service_role;
+
 CREATE FUNCTION public.wos_p7_record_trusted_image_proof(
   p_image_id uuid,
   p_order_id uuid,
@@ -536,11 +593,7 @@ DECLARE
   v_size bigint;
   v_proof_id uuid;
 BEGIN
-  IF current_setting('request.jwt.claim.role', true)
-      IS DISTINCT FROM 'service_role'
-  THEN
-    RAISE EXCEPTION 'SERVICE_ROLE_REQUIRED' USING ERRCODE = '42501';
-  END IF;
+  PERFORM public.wos_v1_assert_service_role_request();
   IF p_image_id IS NULL
     OR p_order_id IS NULL
     OR p_actor_user_id IS NULL

@@ -23,8 +23,28 @@ BEGIN
     SELECT 1 FROM wos_v1_rc03_compat.bucket_backup
   ) OR NOT EXISTS (
     SELECT 1 FROM wos_v1_rc03_compat.storage_policy_backup
+  ) OR NOT EXISTS (
+    SELECT 1 FROM wos_v1_rc03_compat.function_definition_backup
   ) THEN
     RAISE EXCEPTION 'RC03_COMPAT_BACKUP_MISSING';
+  END IF;
+  IF to_regprocedure(
+      'wos_v1_rc03_compat.wos_qa_proof_write_guard_original()'
+    ) IS NULL
+    OR to_regprocedure(
+      'public.wos_v1_pre_runtime_confirm_office_completeness(uuid,integer,text,text)'
+    ) IS NULL
+    OR to_regprocedure(
+      'public.wos_v1_pre_runtime_submit_production_order(uuid,integer,text,uuid)'
+    ) IS NULL
+    OR to_regprocedure(
+      'public.wos_v1_pre_runtime_record_trusted_image_proof(uuid,uuid,uuid,text,uuid,text,timestamptz,text)'
+    ) IS NULL
+    OR to_regprocedure(
+      'public.wos_v1_pre_runtime_register_uploaded_reference_image(uuid,uuid,text,text)'
+    ) IS NULL
+  THEN
+    RAISE EXCEPTION 'RC03_COMPAT_P7_BACKUP_MISSING';
   END IF;
 END;
 $rc03_compat_recovery_preflight$;
@@ -56,6 +76,42 @@ REVOKE EXECUTE ON FUNCTION public.wos_operator_review_correction(
 DROP TRIGGER IF EXISTS rc03_mirror_verified_proof
   ON public.wos_verified_image_proofs;
 DROP FUNCTION IF EXISTS wos_v1_rc03_compat.mirror_verified_proof();
+
+DROP TRIGGER IF EXISTS wos_qa_trusted_proof_guard
+  ON public.wos_qa_verified_image_proofs;
+DROP FUNCTION public.wos_qa_proof_write_guard();
+ALTER FUNCTION wos_v1_rc03_compat.wos_qa_proof_write_guard_original()
+  SET SCHEMA public;
+ALTER FUNCTION public.wos_qa_proof_write_guard_original()
+  RENAME TO wos_qa_proof_write_guard;
+CREATE TRIGGER wos_qa_trusted_proof_guard
+BEFORE INSERT OR UPDATE ON public.wos_qa_verified_image_proofs
+FOR EACH ROW EXECUTE FUNCTION public.wos_qa_proof_write_guard();
+
+DROP FUNCTION public.wos_confirm_office_completeness(
+  uuid,integer,text,text
+);
+DROP FUNCTION public.wos_submit_production_order(
+  uuid,integer,text,uuid
+);
+DROP FUNCTION public.wos_p7_record_trusted_image_proof(
+  uuid,uuid,uuid,text,uuid,text,timestamptz,text
+);
+DROP FUNCTION public.wos_register_uploaded_reference_image(
+  uuid,uuid,text,text
+);
+ALTER FUNCTION public.wos_v1_pre_runtime_confirm_office_completeness(
+  uuid,integer,text,text
+) RENAME TO wos_confirm_office_completeness;
+ALTER FUNCTION public.wos_v1_pre_runtime_submit_production_order(
+  uuid,integer,text,uuid
+) RENAME TO wos_submit_production_order;
+ALTER FUNCTION public.wos_v1_pre_runtime_record_trusted_image_proof(
+  uuid,uuid,uuid,text,uuid,text,timestamptz,text
+) RENAME TO wos_p7_record_trusted_image_proof;
+ALTER FUNCTION public.wos_v1_pre_runtime_register_uploaded_reference_image(
+  uuid,uuid,text,text
+) RENAME TO wos_register_uploaded_reference_image;
 
 DO $verify_historical_rows$
 DECLARE
@@ -117,6 +173,36 @@ BEGIN
   END LOOP;
 END;
 $verify_historical_rows$;
+
+DO $verify_restored_p7_interfaces$
+DECLARE
+  backup_row record;
+  current_sha256 text;
+  current_acl text;
+BEGIN
+  FOR backup_row IN
+    SELECT *
+    FROM wos_v1_rc03_compat.function_definition_backup
+    ORDER BY function_name
+  LOOP
+    SELECT
+      encode(
+        sha256(convert_to(pg_get_functiondef(procedure_row.oid), 'UTF8')),
+        'hex'
+      ),
+      COALESCE(procedure_row.proacl::text, '')
+    INTO current_sha256, current_acl
+    FROM pg_proc procedure_row
+    WHERE procedure_row.oid = backup_row.function_name::regprocedure;
+    IF current_sha256 IS DISTINCT FROM backup_row.definition_sha256
+      OR current_acl IS DISTINCT FROM backup_row.acl
+    THEN
+      RAISE EXCEPTION 'RC03_COMPAT_P7_INTERFACE_RESTORE_MISMATCH: %',
+        backup_row.function_name;
+    END IF;
+  END LOOP;
+END;
+$verify_restored_p7_interfaces$;
 
 DO $restore_storage_policies$
 DECLARE
@@ -192,6 +278,7 @@ END;
 $restore_table_acl$;
 
 DROP TABLE wos_v1_rc03_compat.historical_rows;
+DROP TABLE wos_v1_rc03_compat.function_definition_backup;
 DROP TABLE wos_v1_rc03_compat.table_acl_backup;
 DROP TABLE wos_v1_rc03_compat.bucket_backup;
 DROP TABLE wos_v1_rc03_compat.storage_policy_backup;
@@ -206,6 +293,30 @@ BEGIN
         AND tablename = 'objects'
         AND policyname = 'wos_v1_rc02_operator_private_select'
     )
+    OR to_regprocedure(
+      'public.wos_v1_pre_runtime_confirm_office_completeness(uuid,integer,text,text)'
+    ) IS NOT NULL
+    OR to_regprocedure(
+      'public.wos_v1_pre_runtime_submit_production_order(uuid,integer,text,uuid)'
+    ) IS NOT NULL
+    OR to_regprocedure(
+      'public.wos_v1_pre_runtime_record_trusted_image_proof(uuid,uuid,uuid,text,uuid,text,timestamptz,text)'
+    ) IS NOT NULL
+    OR to_regprocedure(
+      'public.wos_v1_pre_runtime_register_uploaded_reference_image(uuid,uuid,text,text)'
+    ) IS NOT NULL
+    OR to_regprocedure(
+      'public.wos_confirm_office_completeness(uuid,integer,text,text)'
+    ) IS NULL
+    OR to_regprocedure(
+      'public.wos_submit_production_order(uuid,integer,text,uuid)'
+    ) IS NULL
+    OR to_regprocedure(
+      'public.wos_p7_record_trusted_image_proof(uuid,uuid,uuid,text,uuid,text,timestamptz,text)'
+    ) IS NULL
+    OR to_regprocedure(
+      'public.wos_register_uploaded_reference_image(uuid,uuid,text,text)'
+    ) IS NULL
   THEN
     RAISE EXCEPTION 'RC03_COMPAT_RECOVERY_INCOMPLETE';
   END IF;

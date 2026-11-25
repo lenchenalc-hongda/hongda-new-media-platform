@@ -45,11 +45,7 @@ DECLARE
   v_order public.wos_production_orders%ROWTYPE;
   v_proof public.wos_verified_image_proofs%ROWTYPE;
 BEGIN
-  IF current_setting('request.jwt.claim.role', true)
-      IS DISTINCT FROM 'service_role'
-  THEN
-    RAISE EXCEPTION 'SERVICE_ROLE_REQUIRED' USING ERRCODE = '42501';
-  END IF;
+  PERFORM public.wos_v1_assert_service_role_request();
   IF p_image_id IS NULL
     OR p_order_id IS NULL
     OR p_actor_user_id IS NULL
