@@ -651,6 +651,160 @@ psql_db "$DB" -q -c "
   RESET ROLE;
 "
 
+
+# RC05: true post-recovery state on the SAME disposable PG17 database.
+# All V1 runtime tables already contain retained QA data, while the original
+# P7 interfaces/Foundation/Storage policies were restored by RC03 recovery.
+RC05_RETAINED_PUBLIC_COUNTS="$(query_value "$DB" "
+  SELECT jsonb_build_object(
+    'orders',(SELECT count(*) FROM public.wos_production_orders),
+    'images',(SELECT count(*) FROM public.wos_reference_images),
+    'proofs',(SELECT count(*) FROM public.wos_qa_verified_image_proofs),
+    'trusted_receipts',(SELECT count(*) FROM public.wos_qa_trusted_proof_receipts),
+    'storage_objects',(SELECT count(*) FROM storage.objects WHERE bucket_id='wos-private'),
+    'baselines',(SELECT count(*) FROM public.wos_visual_baselines),
+    'baseline_items',(SELECT count(*) FROM public.wos_visual_baseline_items)
+  )::text
+")"
+RC05_RETAINED_RUNTIME_COUNTS="$(query_value "$DB" "
+  SELECT pg_catalog.jsonb_build_object(
+    'runtime_proofs',(SELECT count(*) FROM public.wos_verified_image_proofs),
+    'orphan_claims',(SELECT count(*) FROM public.wos_orphan_cleanup_claims),
+    'create_receipts',(SELECT count(*) FROM public.wos_order_create_receipts),
+    'operator_action_receipts',(SELECT count(*) FROM public.wos_operator_action_receipts),
+    'operator_review_receipts',(SELECT count(*) FROM public.wos_operator_review_receipts),
+    'office_revisions',(SELECT count(*) FROM public.wos_office_revisions)
+  )::text
+")"
+RC05_RETAINED_ROW_FINGERPRINT="$(query_value "$DB" "
+  SELECT md5(
+    (SELECT COALESCE(string_agg(to_jsonb(x)::text,',' ORDER BY to_jsonb(x)::text),'') FROM public.wos_verified_image_proofs x)
+    ||'|'||(SELECT COALESCE(string_agg(to_jsonb(x)::text,',' ORDER BY to_jsonb(x)::text),'') FROM public.wos_orphan_cleanup_claims x)
+    ||'|'||(SELECT COALESCE(string_agg(to_jsonb(x)::text,',' ORDER BY to_jsonb(x)::text),'') FROM public.wos_order_create_receipts x)
+    ||'|'||(SELECT COALESCE(string_agg(to_jsonb(x)::text,',' ORDER BY to_jsonb(x)::text),'') FROM public.wos_operator_action_receipts x)
+    ||'|'||(SELECT COALESCE(string_agg(to_jsonb(x)::text,',' ORDER BY to_jsonb(x)::text),'') FROM public.wos_operator_review_receipts x)
+    ||'|'||(SELECT COALESCE(string_agg(to_jsonb(x)::text,',' ORDER BY to_jsonb(x)::text),'') FROM public.wos_office_revisions x)
+  )
+")"
+
+# The old fresh-install compatibility SQL must remain fail-closed on retained Runtime.
+set +e
+{
+  printf "SET wos_v1.rc03_compat_install_authorized='yes';\n"
+  printf "SET wos_v1.rc03_expected_counts='%s';\n" "$RC05_RETAINED_PUBLIC_COUNTS"
+  cat "$ROOT/docs/workshop-order-system/qa-fixture/WOS_V1_RC03_QA_RUNTIME_COMPAT_FORWARD_NOT_AUTHORIZED.sql"
+} | psql_db "$DB" -q > /tmp/wos_rc05_fresh_reactivation_refusal.$$ 2>&1
+RC05_FRESH_REINSTALL_STATUS=$?
+set -e
+[[ "$RC05_FRESH_REINSTALL_STATUS" -ne 0 ]] ||
+  fail 'RC05_FRESH_COMPAT_ACCEPTED_RETAINED_RUNTIME'
+grep -q 'RC03_COMPAT_ALREADY_PARTIALLY_INSTALLED' /tmp/wos_rc05_fresh_reactivation_refusal.$$ ||
+  fail 'RC05_FRESH_COMPAT_WRONG_REFUSAL'
+rm -f /tmp/wos_rc05_fresh_reactivation_refusal.$$
+
+# Branch A: Reactivation compatibility installed, Runtime NOT yet reactivated.
+{
+  printf "SET wos_v1.rc05_post_recovery_compat_authorized='yes';\n"
+  printf "SET wos_v1.rc03_expected_counts='%s';\n" "$RC05_RETAINED_PUBLIC_COUNTS"
+  cat "$ROOT/docs/workshop-order-system/qa-fixture/WOS_V1_RC05_POST_RECOVERY_COMPAT_FORWARD_NOT_AUTHORIZED.sql"
+} | psql_db "$DB" -q
+
+[[ "$(query_value "$DB" "
+  SELECT to_regnamespace('wos_v1_rc03_compat') IS NOT NULL
+    AND to_regclass('public.wos_verified_image_proofs') IS NOT NULL
+    AND to_regprocedure(
+      'public.wos_v1_pre_runtime_confirm_office_completeness(uuid,integer,text,text)'
+    ) IS NULL
+")" = 't' ]] || fail 'RC05_COMPAT_ONLY_STATE_INVALID'
+{
+  printf "SET wos_v1.rc05_post_recovery_compat_recovery_authorized='yes';\n"
+  cat "$ROOT/docs/workshop-order-system/qa-fixture/WOS_V1_RC05_POST_RECOVERY_COMPAT_RECOVERY_NOT_AUTHORIZED.sql"
+} | psql_db "$DB" -q
+
+[[ "$(query_value "$DB" "
+  SELECT to_regnamespace('wos_v1_rc03_compat') IS NULL
+    AND to_regclass('public.wos_verified_image_proofs') IS NOT NULL
+    AND to_regclass('public.wos_order_create_receipts') IS NOT NULL
+")" = 't' ]] || fail 'RC05_PRE_RUNTIME_RECOVERY_DELETED_DATA'
+echo 'WOS_V1_RC05_POST_RECOVERY_PRE_RUNTIME_ROLLBACK=PASS'
+
+# Branch B: Reactivation compatibility + exactly four retained-data P7 RPCs.
+{
+  printf "SET wos_v1.rc05_post_recovery_compat_authorized='yes';\n"
+  printf "SET wos_v1.rc03_expected_counts='%s';\n" "$RC05_RETAINED_PUBLIC_COUNTS"
+  cat "$ROOT/docs/workshop-order-system/qa-fixture/WOS_V1_RC05_POST_RECOVERY_COMPAT_FORWARD_NOT_AUTHORIZED.sql"
+} | psql_db "$DB" -q
+
+{
+  printf "SET wos_v1.rc05_post_recovery_runtime_authorized='yes';\n"
+  printf "SET wos_v1.rc05_qa_project='xulmpqaknlwqqculbsek';\n"
+  printf "SET wos_v1.rc05_expected_runtime_counts='%s';\n" "$RC05_RETAINED_RUNTIME_COUNTS"
+  cat "$ROOT/docs/workshop-order-system/qa-fixture/WOS_V1_RC05_POST_RECOVERY_RUNTIME_REACTIVATE_NOT_AUTHORIZED.sql"
+} | psql_db "$DB" -q
+[[ "$(query_value "$DB" "
+  SELECT to_regprocedure('public.wos_v1_pre_runtime_confirm_office_completeness(uuid,integer,text,text)') IS NOT NULL
+    AND to_regclass('public.wos_order_create_receipts') IS NOT NULL
+")" = 't' ]] || fail 'RC05_RUNTIME_REACTIVATION_BACKUPS_MISSING'
+{
+  printf "SET wos_v1.rc02_install_authorized='yes';\n"
+  cat "$ROOT/docs/workshop-order-system/qa-fixture/WOS_V1_RC02_QA_BUSINESS_GATE_NOT_AUTHORIZED.sql"
+} | psql_db "$DB" -q
+{
+  printf "SET wos_v1.rc03_activation_authorized='yes';\n"
+  cat "$ROOT/docs/workshop-order-system/qa-fixture/WOS_V1_RC03_QA_RUNTIME_ACTIVATION_NOT_AUTHORIZED.sql"
+} | psql_db "$DB" -q
+[[ "$(query_value "$DB" "
+  SELECT has_function_privilege('authenticated','public.wos_create_production_order(uuid,jsonb)','EXECUTE')
+    AND NOT has_function_privilege('authenticated','public.wos_qa_p2_m2_action(uuid,integer,uuid,text,jsonb)','EXECUTE')
+    AND (SELECT count(*) FROM wos_v1_rc02_safety.rc02_business_grants)=0
+")" = 't' ]] || fail 'RC05_REACTIVATION_SCOPE_ACL_DRIFT'
+{
+  printf "SET wos_v1.rc02_recovery_authorized='yes';\n"
+  cat "$ROOT/docs/workshop-order-system/qa-fixture/WOS_V1_RC02_QA_BUSINESS_GATE_RECOVERY_NOT_AUTHORIZED.sql"
+} | psql_db "$DB" -q
+{
+  printf "SET wos_v1.rc05_post_recovery_compat_recovery_authorized='yes';\n"
+  cat "$ROOT/docs/workshop-order-system/qa-fixture/WOS_V1_RC05_POST_RECOVERY_COMPAT_RECOVERY_NOT_AUTHORIZED.sql"
+} | psql_db "$DB" -q
+
+[[ "$(query_value "$DB" "
+  SELECT to_regnamespace('wos_v1_rc03_compat') IS NULL
+    AND to_regnamespace('wos_v1_rc02_safety') IS NULL
+    AND to_regclass('public.wos_verified_image_proofs') IS NOT NULL
+    AND to_regprocedure('public.wos_confirm_office_completeness(uuid,integer,text,text)') IS NOT NULL
+    AND NOT has_function_privilege('authenticated','public.wos_create_production_order(uuid,jsonb)','EXECUTE')
+")" = 't' ]] || fail 'RC05_POST_RECOVERY_FULL_ROLLBACK_INCOMPLETE'
+[[ "$(query_value "$DB" "
+  SELECT md5(
+    (SELECT COALESCE(string_agg(to_jsonb(x)::text,',' ORDER BY to_jsonb(x)::text),'') FROM public.wos_verified_image_proofs x)
+    ||'|'||(SELECT COALESCE(string_agg(to_jsonb(x)::text,',' ORDER BY to_jsonb(x)::text),'') FROM public.wos_orphan_cleanup_claims x)
+    ||'|'||(SELECT COALESCE(string_agg(to_jsonb(x)::text,',' ORDER BY to_jsonb(x)::text),'') FROM public.wos_order_create_receipts x)
+    ||'|'||(SELECT COALESCE(string_agg(to_jsonb(x)::text,',' ORDER BY to_jsonb(x)::text),'') FROM public.wos_operator_action_receipts x)
+    ||'|'||(SELECT COALESCE(string_agg(to_jsonb(x)::text,',' ORDER BY to_jsonb(x)::text),'') FROM public.wos_operator_review_receipts x)
+    ||'|'||(SELECT COALESCE(string_agg(to_jsonb(x)::text,',' ORDER BY to_jsonb(x)::text),'') FROM public.wos_office_revisions x)
+  )
+")" = "$RC05_RETAINED_ROW_FINGERPRINT" ]] ||
+  fail 'RC05_POST_RECOVERY_REACTIVATION_CHANGED_RETAINED_ROWS'
+[[ "$(query_value "$DB" "
+  SELECT md5(COALESCE(jsonb_agg(jsonb_build_object(
+    'table',tablename,'name',policyname,
+    'permissive',permissive,'roles',roles::text[],
+    'cmd',cmd,'qual',qual,'check',with_check
+  ) ORDER BY tablename,policyname)::text, ''))
+  FROM pg_policies WHERE schemaname='public'
+    AND policyname IN (
+      'wos_production_orders_insert_draft_same_org',
+      'wos_sampling_requests_insert_draft_same_org',
+      'wos_reference_images_insert_same_org'
+    )
+")" = "$FOUNDATION_POLICY_SHA_BEFORE" ]] ||
+  fail 'RC05_POST_RECOVERY_FOUNDATION_POLICY_RESTORE_MISMATCH'
+[[ "$(psql_db "$DB" -qAt <
+    "$ROOT/tests/sql/wos-v1-qa-legacy-safety-fingerprint.sql")" =
+    "$LEGACY_SAFETY_BEFORE" ]] ||
+  fail 'RC05_POST_RECOVERY_OLD_P2_SCHEMA_CHANGED'
+echo 'WOS_V1_RC05_POST_RECOVERY_REACTIVATION_RECOVERY=PASS'
+
 echo 'WOS_V1_RC04_P7_RECOVERY_INTERFACES=PASS'
 echo 'WOS_V1_RC02_GATE_PG17=PASS'
 echo 'WOS_V1_RC02_CONCURRENT_AUTHORIZE=PASS'
