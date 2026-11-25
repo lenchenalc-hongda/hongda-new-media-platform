@@ -799,9 +799,8 @@ echo 'WOS_V1_RC05_POST_RECOVERY_PRE_RUNTIME_ROLLBACK=PASS'
     )
 ")" = "$FOUNDATION_POLICY_SHA_BEFORE" ]] ||
   fail 'RC05_POST_RECOVERY_FOUNDATION_POLICY_RESTORE_MISMATCH'
-[[ "$(psql_db "$DB" -qAt <
-    "$ROOT/tests/sql/wos-v1-qa-legacy-safety-fingerprint.sql")" =
-    "$LEGACY_SAFETY_BEFORE" ]] ||
+RC05_LEGACY_SAFETY_AFTER="$(psql_db "$DB" -qAt < "$ROOT/tests/sql/wos-v1-qa-legacy-safety-fingerprint.sql")"
+[[ "$RC05_LEGACY_SAFETY_AFTER" = "$LEGACY_SAFETY_BEFORE" ]] ||
   fail 'RC05_POST_RECOVERY_OLD_P2_SCHEMA_CHANGED'
 echo 'WOS_V1_RC05_POST_RECOVERY_REACTIVATION_RECOVERY=PASS'
 

@@ -62,7 +62,7 @@ BEGIN
         ('public.wos_register_uploaded_reference_image(uuid,uuid,text,text)')
     ) v(signature)
     LEFT JOIN wos_v1_rc03_compat.function_definition_backup backup
-      ON backup.function_name=v.signature
+      ON backup.function_name::regprocedure = to_regprocedure(v.signature)
     LEFT JOIN pg_catalog.pg_proc p
       ON p.oid=to_regprocedure(v.signature)
     WHERE p.oid IS NULL
