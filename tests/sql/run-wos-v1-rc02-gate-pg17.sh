@@ -127,6 +127,11 @@ LEGACY_STORAGE_POLICY_FINGERPRINT_BEFORE="$(query_value "$DB" "
 } | psql_db "$DB" -q
 
 {
+  printf "SET wos_v1.production_migration_authorized='yes';\n"
+  cat "$ROOT/docs/workshop-order-system/production-readiness/sql/V1_APP_01_PROOF_RENEWAL_NOT_AUTHORIZED.sql"
+} | psql_db "$DB" -q
+
+{
   printf "SET wos_v1.rc02_install_authorized='yes';\n"
   cat "$ROOT/docs/workshop-order-system/qa-fixture/WOS_V1_RC02_QA_BUSINESS_GATE_NOT_AUTHORIZED.sql"
 } | psql_db "$DB" -q
