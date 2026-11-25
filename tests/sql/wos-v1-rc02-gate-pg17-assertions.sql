@@ -9,7 +9,7 @@ BEGIN
   IF current_database() <> 'wos_v1_rollback_ci' THEN
     RAISE EXCEPTION 'WOS_V1_RC02_GATE_REQUIRES_DISPOSABLE_DB';
   END IF;
-  IF to_regclass('wos_qa_safety.rc02_business_grants') IS NULL
+  IF to_regclass('wos_v1_rc02_safety.rc02_business_grants') IS NULL
     OR to_regprocedure(
       'public.wos_create_production_order(uuid,jsonb)'
     ) IS NULL
@@ -21,23 +21,18 @@ BEGIN
     RAISE EXCEPTION 'WOS_V1_RC02_GATE_PREREQUISITE_MISSING';
   END IF;
   IF EXISTS (
-    SELECT 1 FROM wos_qa_safety.rc02_business_grants
+    SELECT 1 FROM wos_v1_rc02_safety.rc02_business_grants
   ) THEN
     RAISE EXCEPTION 'WOS_V1_RC02_GATE_REQUIRES_EMPTY_INSTALL';
   END IF;
-  IF pg_catalog.has_function_privilege(
-      'authenticated',
-      'public.wos_create_production_order(uuid,jsonb)',
-      'EXECUTE'
-    )
-    OR pg_catalog.has_table_privilege(
+  IF pg_catalog.has_table_privilege(
       'authenticated',
       'public.wos_production_orders',
       'INSERT,UPDATE,DELETE'
     )
     OR pg_catalog.has_table_privilege(
       'authenticated',
-      'wos_qa_safety.rc02_business_grants',
+      'wos_v1_rc02_safety.rc02_business_grants',
       'SELECT,INSERT,UPDATE,DELETE'
     )
   THEN
@@ -214,7 +209,7 @@ BEGIN
     ]
   )::text, 'UTF8')), 'hex');
 
-  INSERT INTO wos_qa_safety.rc02_business_grants(
+  INSERT INTO wos_v1_rc02_safety.rc02_business_grants(
     authorization_id, request_id, organization_id,
     office_user_id, office_profile_id,
     operator_user_id, operator_profile_id,
@@ -343,7 +338,7 @@ DO $create_binding$
 BEGIN
   IF NOT EXISTS (
     SELECT 1
-    FROM wos_qa_safety.rc02_business_grants grant_row
+    FROM wos_v1_rc02_safety.rc02_business_grants grant_row
     JOIN public.wos_production_orders production_order
       ON production_order.id = grant_row.created_order_id
     WHERE grant_row.request_id = '71000000-0000-4000-8000-000000000001'
@@ -634,47 +629,6 @@ SELECT public.wos_p7_record_trusted_image_proof(
   repeat('4', 64)
 );
 
-RESET ROLE;
-
--- Close the Gate before the first REGISTER call, then reopen only to perform
--- the reviewed operation after the negative assertion.
-UPDATE wos_qa_safety.rc02_business_grants
-SET state = 'CLOSED',
-    enabled_until = NULL,
-    closed_at = clock_timestamp()
-WHERE request_id = '71000000-0000-4000-8000-000000000001';
-
-SET request.jwt.claim.sub = '10101010-1010-4010-8010-101010101010';
-SET request.jwt.claim.role = 'authenticated';
-SET ROLE authenticated;
-
-DO $register_closed$
-BEGIN
-  BEGIN
-    PERFORM public.wos_register_uploaded_reference_image(
-      (SELECT id FROM public.wos_production_orders WHERE order_number =
-        'QA-NONPROD-PG17-71000000-0000-4000-8000-000000000001'),
-      '73100000-0000-4000-8000-000000000001',
-      'PRODUCT',
-      'organizations/0ff53d93-2b9e-48b9-8113-a4768c39cdd2/wos/production-order/'
-        || (SELECT id::text FROM public.wos_production_orders WHERE order_number =
-          'QA-NONPROD-PG17-71000000-0000-4000-8000-000000000001')
-        || '/images/product/versions/V1/73100000-0000-4000-8000-000000000001/source.png'
-    );
-    RAISE EXCEPTION 'RC02_CLOSED_REGISTER_ACCEPTED';
-  EXCEPTION WHEN SQLSTATE '42501' THEN NULL;
-  END;
-END;
-$register_closed$;
-
-RESET ROLE;
-
-UPDATE wos_qa_safety.rc02_business_grants
-SET state = 'ORDER_BOUND',
-    enabled_until = clock_timestamp() + interval '10 minutes',
-    closed_at = NULL
-WHERE request_id = '71000000-0000-4000-8000-000000000001';
-
 SET request.jwt.claim.sub = '10101010-1010-4010-8010-101010101010';
 SET request.jwt.claim.role = 'authenticated';
 SET ROLE authenticated;
@@ -720,70 +674,6 @@ SELECT public.wos_register_uploaded_reference_image(
     || '/images/signed-sample/versions/V1/73100000-0000-4000-8000-000000000004/source.png'
 );
 
-RESET ROLE;
-
-UPDATE wos_qa_safety.rc02_business_grants
-SET state = 'CLOSED',
-    enabled_until = NULL,
-    closed_at = clock_timestamp()
-WHERE request_id = '71000000-0000-4000-8000-000000000001';
-
-SET request.jwt.claim.sub = '10101010-1010-4010-8010-101010101010';
-SET request.jwt.claim.role = 'authenticated';
-SET ROLE authenticated;
-
-DO $closed_storage_denied$
-DECLARE
-  v_order_id uuid;
-BEGIN
-  SELECT id INTO v_order_id
-  FROM public.wos_production_orders
-  WHERE order_number =
-    'QA-NONPROD-PG17-71000000-0000-4000-8000-000000000001';
-  BEGIN
-    INSERT INTO storage.objects(
-      id,bucket_id,name,owner_id,metadata,version,updated_at
-    ) VALUES (
-      '63500000-0000-4000-8000-000000000001',
-      'wos-private',
-      'organizations/0ff53d93-2b9e-48b9-8113-a4768c39cdd2'
-        || '/wos/production-order/' || v_order_id::text
-        || '/images/product/versions/V1/73500000-0000-4000-8000-000000000001/source.png',
-      '10101010-1010-4010-8010-101010101010',
-      '{"mimetype":"image/png","size":"100"}'::jsonb,
-      'rc02-closed-upload',
-      clock_timestamp()
-    );
-    RAISE EXCEPTION 'RC02_CLOSED_STORAGE_UPLOAD_ACCEPTED';
-  EXCEPTION WHEN insufficient_privilege THEN NULL;
-  END;
-END;
-$closed_storage_denied$;
-
-DO $confirm_closed$
-BEGIN
-  BEGIN
-    PERFORM public.wos_confirm_office_completeness(
-      (SELECT id FROM public.wos_production_orders WHERE order_number =
-        'QA-NONPROD-PG17-71000000-0000-4000-8000-000000000001'),
-      1,
-      'V1',
-      'RC02 closed Gate confirmation must be rejected.'
-    );
-    RAISE EXCEPTION 'RC02_CLOSED_CONFIRM_ACCEPTED';
-  EXCEPTION WHEN SQLSTATE '42501' THEN NULL;
-  END;
-END;
-$confirm_closed$;
-
-RESET ROLE;
-
-UPDATE wos_qa_safety.rc02_business_grants
-SET state = 'ORDER_BOUND',
-    enabled_until = clock_timestamp() + interval '10 minutes',
-    closed_at = NULL
-WHERE request_id = '71000000-0000-4000-8000-000000000001';
-
 SET request.jwt.claim.sub = '10101010-1010-4010-8010-101010101010';
 SET request.jwt.claim.role = 'authenticated';
 SET ROLE authenticated;
@@ -795,40 +685,6 @@ SELECT public.wos_confirm_office_completeness(
   'RC02 synthetic Office completeness confirmation.'
 );
 RESET ROLE;
-
-UPDATE wos_qa_safety.rc02_business_grants
-SET state = 'CLOSED',
-    enabled_until = NULL,
-    closed_at = clock_timestamp()
-WHERE request_id = '71000000-0000-4000-8000-000000000001';
-
-SET request.jwt.claim.sub = '10101010-1010-4010-8010-101010101010';
-SET request.jwt.claim.role = 'authenticated';
-SET ROLE authenticated;
-
-DO $submit_closed$
-BEGIN
-  BEGIN
-    PERFORM public.wos_submit_production_order(
-      (SELECT id FROM public.wos_production_orders WHERE order_number =
-        'QA-NONPROD-PG17-71000000-0000-4000-8000-000000000001'),
-      1,
-      'V1',
-      '71000000-0000-4000-8000-000000000003'
-    );
-    RAISE EXCEPTION 'RC02_CLOSED_SUBMIT_ACCEPTED';
-  EXCEPTION WHEN SQLSTATE '42501' THEN NULL;
-  END;
-END;
-$submit_closed$;
-
-RESET ROLE;
-
-UPDATE wos_qa_safety.rc02_business_grants
-SET state = 'ORDER_BOUND',
-    enabled_until = clock_timestamp() + interval '10 minutes',
-    closed_at = NULL
-WHERE request_id = '71000000-0000-4000-8000-000000000001';
 
 SET request.jwt.claim.sub = '10101010-1010-4010-8010-101010101010';
 SET request.jwt.claim.role = 'authenticated';
@@ -842,40 +698,21 @@ SELECT public.wos_submit_production_order(
 );
 RESET ROLE;
 
-UPDATE wos_qa_safety.rc02_business_grants
-SET state = 'CLOSED',
-    enabled_until = NULL,
-    closed_at = clock_timestamp()
-WHERE request_id = '71000000-0000-4000-8000-000000000001';
-
 SET request.jwt.claim.sub = '20202020-2020-4020-8020-202020202020';
 SET request.jwt.claim.role = 'authenticated';
 SET ROLE authenticated;
-
-DO $operator_closed$
+DO $operator_submitted_read$
 BEGIN
-  BEGIN
-    PERFORM public.wos_operator_order_action(
-      (SELECT id FROM public.wos_production_orders WHERE order_number =
-        'QA-NONPROD-PG17-71000000-0000-4000-8000-000000000001'),
-      2,
-      '71000000-0000-4000-8000-000000000004',
-      'RETURN_FOR_INFORMATION',
-      'RC02 closed Gate return must be rejected.'
-    );
-    RAISE EXCEPTION 'RC02_CLOSED_OPERATOR_ACTION_ACCEPTED';
-  EXCEPTION WHEN SQLSTATE '42501' THEN NULL;
-  END;
+  IF (
+    SELECT count(*) FROM storage.objects
+    WHERE bucket_id = 'wos-private'
+      AND name LIKE '%/versions/V1/%/source.png'
+  ) <> 4 THEN
+    RAISE EXCEPTION 'RC02_OPERATOR_SUBMITTED_READ_FAILED';
+  END IF;
 END;
-$operator_closed$;
-
+$operator_submitted_read$;
 RESET ROLE;
-
-UPDATE wos_qa_safety.rc02_business_grants
-SET state = 'ORDER_BOUND',
-    enabled_until = clock_timestamp() + interval '10 minutes',
-    closed_at = NULL
-WHERE request_id = '71000000-0000-4000-8000-000000000001';
 
 SET request.jwt.claim.sub = '20202020-2020-4020-8020-202020202020';
 SET request.jwt.claim.role = 'authenticated';
@@ -889,41 +726,6 @@ SELECT public.wos_operator_order_action(
   'RC02 synthetic operator return for correction.'
 );
 RESET ROLE;
-
-UPDATE wos_qa_safety.rc02_business_grants
-SET state = 'CLOSED',
-    enabled_until = NULL,
-    closed_at = clock_timestamp()
-WHERE request_id = '71000000-0000-4000-8000-000000000001';
-
-SET request.jwt.claim.sub = '10101010-1010-4010-8010-101010101010';
-SET request.jwt.claim.role = 'authenticated';
-SET ROLE authenticated;
-
-DO $correction_closed$
-BEGIN
-  BEGIN
-    PERFORM public.wos_office_save_correction(
-      (SELECT id FROM public.wos_production_orders WHERE order_number =
-        'QA-NONPROD-PG17-71000000-0000-4000-8000-000000000001'),
-      3,
-      '71000000-0000-4000-8000-000000000005',
-      '{"productName":"RC02 Corrected Product"}'::jsonb,
-      'RC02 closed Gate correction must be rejected.'
-    );
-    RAISE EXCEPTION 'RC02_CLOSED_SAVE_CORRECTION_ACCEPTED';
-  EXCEPTION WHEN SQLSTATE '42501' THEN NULL;
-  END;
-END;
-$correction_closed$;
-
-RESET ROLE;
-
-UPDATE wos_qa_safety.rc02_business_grants
-SET state = 'ORDER_BOUND',
-    enabled_until = clock_timestamp() + interval '10 minutes',
-    closed_at = NULL
-WHERE request_id = '71000000-0000-4000-8000-000000000001';
 
 SET request.jwt.claim.sub = '10101010-1010-4010-8010-101010101010';
 SET request.jwt.claim.role = 'authenticated';
@@ -1107,39 +909,100 @@ SELECT public.wos_register_uploaded_reference_image(
 
 RESET ROLE;
 
-UPDATE wos_qa_safety.rc02_business_grants
-SET state = 'CLOSED',
-    enabled_until = NULL,
-    closed_at = clock_timestamp()
-WHERE request_id = '71000000-0000-4000-8000-000000000001';
-
-SET request.jwt.claim.sub = '10101010-1010-4010-8010-101010101010';
+SET request.jwt.claim.sub = '20202020-2020-4020-8020-202020202020';
 SET request.jwt.claim.role = 'authenticated';
 SET ROLE authenticated;
 
-DO $resubmit_closed$
+DO $operator_current_image_read$
+DECLARE
+  v_order_id uuid;
+  v_current integer;
+  v_old integer;
 BEGIN
-  BEGIN
-    PERFORM public.wos_office_resubmit_order(
-      (SELECT id FROM public.wos_production_orders WHERE order_number =
-        'QA-NONPROD-PG17-71000000-0000-4000-8000-000000000001'),
-      4,
-      '71000000-0000-4000-8000-000000000006',
-      'RC02 closed Gate resubmit must be rejected.'
-    );
-    RAISE EXCEPTION 'RC02_CLOSED_RESUBMIT_ACCEPTED';
-  EXCEPTION WHEN SQLSTATE '42501' THEN NULL;
-  END;
+  SELECT id INTO v_order_id
+  FROM public.wos_production_orders
+  WHERE order_number =
+    'QA-NONPROD-PG17-71000000-0000-4000-8000-000000000001';
+  SELECT count(*) INTO v_current
+  FROM storage.objects
+  WHERE bucket_id = 'wos-private'
+    AND name LIKE
+      'organizations/0ff53d93-2b9e-48b9-8113-a4768c39cdd2/'
+      || 'wos/production-order/' || v_order_id::text
+      || '/images/%/versions/V2/%/source.png';
+  SELECT count(*) INTO v_old
+  FROM storage.objects
+  WHERE bucket_id = 'wos-private'
+    AND name LIKE
+      'organizations/0ff53d93-2b9e-48b9-8113-a4768c39cdd2/'
+      || 'wos/production-order/' || v_order_id::text
+      || '/images/%/versions/V1/%/source.png';
+  IF v_current <> 4 OR v_old <> 0 THEN
+    RAISE EXCEPTION 'RC02_OPERATOR_CURRENT_IMAGE_READ_INVALID: %/%',
+      v_current, v_old;
+  END IF;
 END;
-$resubmit_closed$;
+$operator_current_image_read$;
 
 RESET ROLE;
 
-UPDATE wos_qa_safety.rc02_business_grants
-SET state = 'ORDER_BOUND',
-    enabled_until = clock_timestamp() + interval '10 minutes',
-    closed_at = NULL
-WHERE request_id = '71000000-0000-4000-8000-000000000001';
+SET request.jwt.claim.sub = '30303030-3030-4030-8030-303030303030';
+SET request.jwt.claim.role = 'authenticated';
+SET ROLE authenticated;
+DO $viewer_current_image_denied$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM storage.objects
+    WHERE bucket_id = 'wos-private'
+  ) THEN
+    RAISE EXCEPTION 'RC02_VIEWER_PRIVATE_IMAGE_ACCEPTED';
+  END IF;
+END;
+$viewer_current_image_denied$;
+RESET ROLE;
+
+SET request.jwt.claim.sub = '40404040-4040-4040-8040-404040404040';
+SET request.jwt.claim.role = 'authenticated';
+SET ROLE authenticated;
+DO $foreign_current_image_denied$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM storage.objects
+    WHERE bucket_id = 'wos-private'
+  ) THEN
+    RAISE EXCEPTION 'RC02_FOREIGN_PRIVATE_IMAGE_ACCEPTED';
+  END IF;
+END;
+$foreign_current_image_denied$;
+RESET ROLE;
+
+UPDATE public.wos_verified_image_proofs
+SET verified_at = clock_timestamp() - interval '20 minutes',
+    expires_at = clock_timestamp() - interval '10 minutes'
+WHERE image_id = '73200000-0000-4000-8000-000000000001';
+
+SET request.jwt.claim.sub = '20202020-2020-4020-8020-202020202020';
+SET request.jwt.claim.role = 'authenticated';
+SET ROLE authenticated;
+DO $expired_current_image_denied$
+DECLARE
+  v_visible integer;
+BEGIN
+  SELECT count(*) INTO v_visible
+  FROM storage.objects
+  WHERE bucket_id = 'wos-private'
+    AND name LIKE '%/versions/V2/%/source.png';
+  IF v_visible <> 3 THEN
+    RAISE EXCEPTION 'RC02_EXPIRED_PROOF_IMAGE_VISIBLE: %', v_visible;
+  END IF;
+END;
+$expired_current_image_denied$;
+RESET ROLE;
+
+UPDATE public.wos_verified_image_proofs
+SET verified_at = clock_timestamp(),
+    expires_at = clock_timestamp() + interval '10 minutes'
+WHERE image_id = '73200000-0000-4000-8000-000000000001';
 
 SET request.jwt.claim.sub = '10101010-1010-4010-8010-101010101010';
 SET request.jwt.claim.role = 'authenticated';
@@ -1153,39 +1016,21 @@ SELECT public.wos_office_resubmit_order(
 );
 RESET ROLE;
 
-UPDATE wos_qa_safety.rc02_business_grants
-SET state = 'CLOSED',
-    enabled_until = NULL,
-    closed_at = clock_timestamp()
-WHERE request_id = '71000000-0000-4000-8000-000000000001';
-
 SET request.jwt.claim.sub = '20202020-2020-4020-8020-202020202020';
 SET request.jwt.claim.role = 'authenticated';
 SET ROLE authenticated;
-
-DO $review_closed$
+DO $operator_workshop_review_read$
 BEGIN
-  BEGIN
-    PERFORM public.wos_operator_review_correction(
-      (SELECT id FROM public.wos_production_orders WHERE order_number =
-        'QA-NONPROD-PG17-71000000-0000-4000-8000-000000000001'),
-      5,
-      '71000000-0000-4000-8000-000000000007',
-      'RC02 closed Gate review must be rejected.'
-    );
-    RAISE EXCEPTION 'RC02_CLOSED_REVIEW_ACCEPTED';
-  EXCEPTION WHEN SQLSTATE '42501' THEN NULL;
-  END;
+  IF (
+    SELECT count(*) FROM storage.objects
+    WHERE bucket_id = 'wos-private'
+      AND name LIKE '%/versions/V2/%/source.png'
+  ) <> 4 THEN
+    RAISE EXCEPTION 'RC02_OPERATOR_WORKSHOP_REVIEW_READ_FAILED';
+  END IF;
 END;
-$review_closed$;
-
+$operator_workshop_review_read$;
 RESET ROLE;
-
-UPDATE wos_qa_safety.rc02_business_grants
-SET state = 'ORDER_BOUND',
-    enabled_until = clock_timestamp() + interval '10 minutes',
-    closed_at = NULL
-WHERE request_id = '71000000-0000-4000-8000-000000000001';
 
 SET request.jwt.claim.sub = '20202020-2020-4020-8020-202020202020';
 SET request.jwt.claim.role = 'authenticated';
@@ -1199,7 +1044,23 @@ SELECT public.wos_operator_review_correction(
 );
 RESET ROLE;
 
-UPDATE wos_qa_safety.rc02_business_grants
+SET request.jwt.claim.sub = '20202020-2020-4020-8020-202020202020';
+SET request.jwt.claim.role = 'authenticated';
+SET ROLE authenticated;
+DO $operator_waiting_material_read$
+BEGIN
+  IF (
+    SELECT count(*) FROM storage.objects
+    WHERE bucket_id = 'wos-private'
+      AND name LIKE '%/versions/V2/%/source.png'
+  ) <> 4 THEN
+    RAISE EXCEPTION 'RC02_OPERATOR_WAITING_MATERIAL_READ_FAILED';
+  END IF;
+END;
+$operator_waiting_material_read$;
+RESET ROLE;
+
+UPDATE wos_v1_rc02_safety.rc02_business_grants
 SET state = 'CLOSED',
     enabled_until = NULL,
     closed_at = clock_timestamp()
@@ -1242,7 +1103,7 @@ BEGIN
   END IF;
   IF (
     SELECT count(*)
-    FROM wos_qa_safety.rc02_business_grants
+    FROM wos_v1_rc02_safety.rc02_business_grants
     WHERE state IN ('AUTHORIZED', 'ORDER_BOUND')
   ) <> 0 THEN
     RAISE EXCEPTION 'RC02_GATE_DID_NOT_CLOSE';
@@ -1282,7 +1143,7 @@ BEGIN
       'projectOwnerProfileId'
     ]
   )::text, 'UTF8')), 'hex');
-  INSERT INTO wos_qa_safety.rc02_business_grants(
+  INSERT INTO wos_v1_rc02_safety.rc02_business_grants(
     authorization_id, request_id, organization_id,
     office_user_id, office_profile_id,
     operator_user_id, operator_profile_id,
@@ -1340,7 +1201,7 @@ END;
 $expired_create_denied$;
 
 RESET ROLE;
-UPDATE wos_qa_safety.rc02_business_grants
+UPDATE wos_v1_rc02_safety.rc02_business_grants
 SET state = 'CLOSED',
     enabled_until = NULL,
     closed_at = clock_timestamp()
@@ -1375,7 +1236,7 @@ BEGIN
       'projectOwnerProfileId'
     ]
   )::text, 'UTF8')), 'hex');
-  INSERT INTO wos_qa_safety.rc02_business_grants(
+  INSERT INTO wos_v1_rc02_safety.rc02_business_grants(
     authorization_id, request_id, organization_id,
     office_user_id, office_profile_id,
     operator_user_id, operator_profile_id,
@@ -1431,7 +1292,7 @@ END;
 $wrong_user_create_denied$;
 
 RESET ROLE;
-UPDATE wos_qa_safety.rc02_business_grants
+UPDATE wos_v1_rc02_safety.rc02_business_grants
 SET state = 'CLOSED',
     enabled_until = NULL,
     closed_at = clock_timestamp()
@@ -1466,7 +1327,7 @@ BEGIN
       'projectOwnerProfileId'
     ]
   )::text, 'UTF8')), 'hex');
-  INSERT INTO wos_qa_safety.rc02_business_grants(
+  INSERT INTO wos_v1_rc02_safety.rc02_business_grants(
     authorization_id, request_id, organization_id,
     office_user_id, office_profile_id,
     operator_user_id, operator_profile_id,
@@ -1522,11 +1383,265 @@ END;
 $wrong_payload_create_denied$;
 
 RESET ROLE;
-UPDATE wos_qa_safety.rc02_business_grants
+UPDATE wos_v1_rc02_safety.rc02_business_grants
 SET state = 'CLOSED',
     enabled_until = NULL,
     closed_at = clock_timestamp()
 WHERE request_id = '72000000-0000-4000-8000-000000000003';
+
+SELECT wos_v1_rc02_safety.rc02_legacy_safety_fingerprint()
+  AS rc03_legacy_safety_fingerprint
+\gset
+
+SET wos.v1.rc02_maintenance = 'yes';
+
+INSERT INTO public.wos_production_orders(
+  id, organization_id, customer_id, customer_name_snapshot,
+  project_id, project_name_snapshot, order_number, product_name,
+  sales_owner_profile_id, project_owner_profile_id, priority,
+  version_label, workflow_status, requested_quantity,
+  current_batch_quantity, split_delivery, product_material,
+  created_by_profile_id, version
+) VALUES
+  (
+    '74000000-0000-4000-8000-000000000001',
+    '0ff53d93-2b9e-48b9-8113-a4768c39cdd2',
+    '81000000-0000-4000-8000-000000000001',
+    'RC03 Historical Customer',
+    '82000000-0000-4000-8000-000000000001',
+    'RC03 Historical Project',
+    'WOS-PROD-RC02-NEGATIVE-HISTORICAL-001',
+    'RC03 Historical Product 1',
+    '11111111-1111-4111-8111-111111111111',
+    '11111111-1111-4111-8111-111111111111',
+    'MEDIUM',
+    'V1',
+    'DRAFT',
+    10,
+    10,
+    false,
+    'RC03 Historical Material',
+    '11111111-1111-4111-8111-111111111111',
+    1
+  ),
+  (
+    '74000000-0000-4000-8000-000000000002',
+    '0ff53d93-2b9e-48b9-8113-a4768c39cdd2',
+    '81000000-0000-4000-8000-000000000001',
+    'RC03 Historical Customer',
+    '82000000-0000-4000-8000-000000000001',
+    'RC03 Historical Project',
+    'WOS-PROD-RC02-NEGATIVE-HISTORICAL-002',
+    'RC03 Historical Product 2',
+    '11111111-1111-4111-8111-111111111111',
+    '11111111-1111-4111-8111-111111111111',
+    'MEDIUM',
+    'V1',
+    'DRAFT',
+    10,
+    10,
+    false,
+    'RC03 Historical Material',
+    '11111111-1111-4111-8111-111111111111',
+    1
+  );
+
+RESET wos.v1.rc02_maintenance;
+
+SET request.jwt.claim.sub = '10101010-1010-4010-8010-101010101010';
+SET request.jwt.claim.role = 'authenticated';
+SET ROLE authenticated;
+
+DO $direct_non_qa_insert_denied$
+BEGIN
+  BEGIN
+    INSERT INTO public.wos_production_orders(
+      organization_id, customer_id, customer_name_snapshot,
+      project_id, project_name_snapshot, order_number, product_name,
+      sales_owner_profile_id, project_owner_profile_id, priority,
+      version_label, workflow_status, requested_quantity,
+      current_batch_quantity, split_delivery, product_material,
+      created_by_profile_id, version
+    ) VALUES (
+      '0ff53d93-2b9e-48b9-8113-a4768c39cdd2',
+      '81000000-0000-4000-8000-000000000001',
+      'RC03 Direct Customer',
+      '82000000-0000-4000-8000-000000000001',
+      'RC03 Direct Project',
+      'WOS-PROD-RC03-DIRECT-DENIED',
+      'RC03 Direct Product',
+      '11111111-1111-4111-8111-111111111111',
+      '11111111-1111-4111-8111-111111111111',
+      'MEDIUM',
+      'V1',
+      'DRAFT',
+      10,
+      10,
+      false,
+      'RC03 Direct Material',
+      '11111111-1111-4111-8111-111111111111',
+      1
+    );
+    RAISE EXCEPTION 'RC02_NON_QA_DIRECT_INSERT_ACCEPTED';
+  EXCEPTION WHEN SQLSTATE '42501' THEN NULL;
+  END;
+
+  BEGIN
+    UPDATE public.wos_production_orders
+    SET product_name = 'RC03 Unauthorized Historical Update'
+    WHERE id = '74000000-0000-4000-8000-000000000001';
+    RAISE EXCEPTION 'RC02_HISTORICAL_UPDATE_ACCEPTED';
+  EXCEPTION WHEN SQLSTATE '42501' THEN NULL;
+  END;
+END;
+$direct_non_qa_insert_denied$;
+
+RESET ROLE;
+
+DO $ttl_and_immutability_denials$
+DECLARE
+  v_payload jsonb := jsonb_build_object(
+    'orderNumber', 'QA-NONPROD-PG17-74000000-0000-4000-8000-000000000010',
+    'customerId', '81000000-0000-4000-8000-000000000001',
+    'projectId', '82000000-0000-4000-8000-000000000001',
+    'productName', 'RC03 Negative Product',
+    'priority', 'MEDIUM',
+    'requestedQuantity', 10,
+    'currentBatchQuantity', 10,
+    'splitDelivery', false,
+    'productMaterial', 'RC03 Synthetic PET',
+    'salesOwnerProfileId', '11111111-1111-4111-8111-111111111111',
+    'projectOwnerProfileId', '11111111-1111-4111-8111-111111111111'
+  );
+BEGIN
+  BEGIN
+    INSERT INTO wos_v1_rc02_safety.rc02_business_grants(
+      authorization_id, request_id, organization_id,
+      office_user_id, office_profile_id,
+      operator_user_id, operator_profile_id,
+      order_number, customer_id, project_id,
+      create_payload_fingerprint, state, created_order_id,
+      enabled_until, approval_reference, created_at, bound_at
+    ) VALUES (
+      'WOS-V1-RC02-NEGATIVE-OVERTTL-74000000',
+      '74000000-0000-4000-8000-000000000010',
+      '0ff53d93-2b9e-48b9-8113-a4768c39cdd2',
+      '10101010-1010-4010-8010-101010101010',
+      '11111111-1111-4111-8111-111111111111',
+      '20202020-2020-4020-8020-202020202020',
+      '22222222-2222-4222-8222-222222222222',
+      'QA-NONPROD-PG17-74000000-0000-4000-8000-000000000010',
+      '81000000-0000-4000-8000-000000000001',
+      '82000000-0000-4000-8000-000000000001',
+      repeat('a', 64),
+      'ORDER_BOUND',
+      '74000000-0000-4000-8000-000000000001',
+      clock_timestamp() + interval '20 minutes',
+      'RC02-NEGATIVE-OVERTTL',
+      clock_timestamp(),
+      clock_timestamp()
+    );
+    RAISE EXCEPTION 'RC02_ORDER_BOUND_OVERTTL_ACCEPTED';
+  EXCEPTION WHEN check_violation THEN NULL;
+  END;
+
+  INSERT INTO wos_v1_rc02_safety.rc02_business_grants(
+    authorization_id, request_id, organization_id,
+    office_user_id, office_profile_id,
+    operator_user_id, operator_profile_id,
+    order_number, customer_id, project_id,
+    create_payload_fingerprint, state, enabled_until, approval_reference
+  ) VALUES (
+    'WOS-V1-RC02-NEGATIVE-TTL-EXTEND-74000000',
+    '74000000-0000-4000-8000-000000000011',
+    '0ff53d93-2b9e-48b9-8113-a4768c39cdd2',
+    '10101010-1010-4010-8010-101010101010',
+    '11111111-1111-4111-8111-111111111111',
+    '20202020-2020-4020-8020-202020202020',
+    '22222222-2222-4222-8222-222222222222',
+    'QA-NONPROD-PG17-74000000-0000-4000-8000-000000000011',
+    '81000000-0000-4000-8000-000000000001',
+    '82000000-0000-4000-8000-000000000001',
+    repeat('b', 64),
+    'AUTHORIZED',
+    clock_timestamp() + interval '10 minutes',
+    'RC02-NEGATIVE-TTL-EXTEND'
+  );
+
+  BEGIN
+    UPDATE wos_v1_rc02_safety.rc02_business_grants
+    SET enabled_until = clock_timestamp() + interval '20 minutes'
+    WHERE request_id = '74000000-0000-4000-8000-000000000011';
+    RAISE EXCEPTION 'RC02_TTL_EXTENSION_ACCEPTED';
+  EXCEPTION WHEN SQLSTATE '42501' THEN NULL;
+  END;
+
+  BEGIN
+    UPDATE wos_v1_rc02_safety.rc02_business_grants
+    SET office_user_id = '10101010-1010-4010-8010-101010101011'
+    WHERE request_id = '74000000-0000-4000-8000-000000000011';
+    RAISE EXCEPTION 'RC02_SCOPE_MUTATION_ACCEPTED';
+  EXCEPTION WHEN SQLSTATE '42501' THEN NULL;
+  END;
+
+  UPDATE wos_v1_rc02_safety.rc02_business_grants
+  SET state = 'CLOSED',
+      enabled_until = NULL,
+      closed_at = clock_timestamp()
+  WHERE request_id = '74000000-0000-4000-8000-000000000011';
+
+  BEGIN
+    UPDATE wos_v1_rc02_safety.rc02_business_grants
+    SET state = 'AUTHORIZED',
+        enabled_until = clock_timestamp() + interval '5 minutes',
+        closed_at = NULL
+    WHERE request_id = '74000000-0000-4000-8000-000000000011';
+    RAISE EXCEPTION 'RC02_CLOSED_REOPEN_ACCEPTED';
+  EXCEPTION WHEN SQLSTATE '42501' THEN NULL;
+  END;
+
+  INSERT INTO wos_v1_rc02_safety.rc02_business_grants(
+    authorization_id, request_id, organization_id,
+    office_user_id, office_profile_id,
+    operator_user_id, operator_profile_id,
+    order_number, customer_id, project_id,
+    create_payload_fingerprint, state, created_order_id,
+    enabled_until, approval_reference, created_at, bound_at
+  ) VALUES (
+    'WOS-V1-RC02-NEGATIVE-REBIND-74000000',
+    '74000000-0000-4000-8000-000000000012',
+    '0ff53d93-2b9e-48b9-8113-a4768c39cdd2',
+    '10101010-1010-4010-8010-101010101010',
+    '11111111-1111-4111-8111-111111111111',
+    '20202020-2020-4020-8020-202020202020',
+    '22222222-2222-4222-8222-222222222222',
+    'QA-NONPROD-PG17-74000000-0000-4000-8000-000000000012',
+    '81000000-0000-4000-8000-000000000001',
+    '82000000-0000-4000-8000-000000000001',
+    repeat('c', 64),
+    'ORDER_BOUND',
+    '74000000-0000-4000-8000-000000000001',
+    clock_timestamp() + interval '10 minutes',
+    'RC02-NEGATIVE-REBIND',
+    clock_timestamp(),
+    clock_timestamp()
+  );
+
+  BEGIN
+    UPDATE wos_v1_rc02_safety.rc02_business_grants
+    SET created_order_id = '74000000-0000-4000-8000-000000000002'
+    WHERE request_id = '74000000-0000-4000-8000-000000000012';
+    RAISE EXCEPTION 'RC02_ORDER_REBIND_ACCEPTED';
+  EXCEPTION WHEN SQLSTATE '42501' THEN NULL;
+  END;
+
+  UPDATE wos_v1_rc02_safety.rc02_business_grants
+  SET state = 'CLOSED',
+      enabled_until = NULL,
+      closed_at = clock_timestamp()
+  WHERE request_id = '74000000-0000-4000-8000-000000000012';
+END;
+$ttl_and_immutability_denials$;
 
 SET request.jwt.claim.sub = '40404040-4040-4040-8040-404040404040';
 SET request.jwt.claim.role = 'authenticated';
@@ -1660,7 +1775,7 @@ DO $final_contract$
 BEGIN
   IF pg_catalog.has_table_privilege(
       'authenticated',
-      'wos_qa_safety.rc02_business_grants',
+      'wos_v1_rc02_safety.rc02_business_grants',
       'INSERT,UPDATE,DELETE'
     )
     OR pg_catalog.has_table_privilege(
@@ -1679,7 +1794,7 @@ BEGIN
   IF NOT EXISTS (
     SELECT 1
     FROM pg_catalog.pg_indexes
-    WHERE schemaname = 'wos_qa_safety'
+    WHERE schemaname = 'wos_v1_rc02_safety'
       AND tablename = 'rc02_business_grants'
       AND indexname = 'rc02_one_active_authorization'
   ) THEN

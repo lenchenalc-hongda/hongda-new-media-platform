@@ -45,7 +45,9 @@ cleanup() {
     "${AUTH_TWO_LOG:-}" \
     "${CREATE_ONE_LOG:-}" \
     "${CREATE_TWO_LOG:-}" \
-    "${RECOVERY_REFUSAL_LOG:-}"
+    "${RECOVERY_REFUSAL_LOG:-}" \
+    "${RECOVERY_LEGACY_TAMPER_LOG:-}" \
+    "${RECOVERY_HISTORY_TAMPER_LOG:-}"
   if [[ "$status" -ne 0
     && "${WOS_RC02_KEEP_ON_FAILURE:-0}" = '1' ]]; then
     printf 'WOS_V1_RC02_GATE_DB_RETAINED=%s\n' "$DB"
@@ -73,26 +75,65 @@ psql_db "$DB" -q -1 < "$ROOT/supabase/production-bootstrap/20261123_app_schema.s
   cat "$ROOT/docs/workshop-order-system/production-readiness/sql/WOS_V1_PRODUCTION_FOUNDATION_CONTAINMENT_NOT_AUTHORIZED.sql"
 } | psql_db "$DB" -q -1
 
+psql_db "$DB" -q -c "
+  INSERT INTO public.organizations(id,name)
+  VALUES (
+    '0ff53d93-2b9e-48b9-8113-a4768c39cdd2',
+    'RC03 QA Organization'
+  )
+"
+
 psql_db "$DB" -q \
   < "$ROOT/tests/sql/wos_p8_p7_production_compatible_candidate.sql"
 psql_db "$DB" -q \
   < "$ROOT/tests/sql/wos_p8_p7_service_proof_and_cleanup.sql"
+psql_db "$DB" -q \
+  < "$ROOT/tests/sql/wos-v1-rc03-qa-shape-transform.sql"
+
+psql_db "$DB" -q \
+  < "$ROOT/tests/sql/wos-v1-qa-legacy-safety-rc03-fixture.sql"
+LEGACY_SAFETY_BEFORE="$(psql_db "$DB" -qAt \
+  < "$ROOT/tests/sql/wos-v1-qa-legacy-safety-fingerprint.sql")"
+LEGACY_STORAGE_POLICY_FINGERPRINT_BEFORE="$(query_value "$DB" "
+  SELECT md5(COALESCE(
+    jsonb_agg(
+      jsonb_build_object(
+        'name', policyname,
+        'cmd', cmd,
+        'permissive', permissive,
+        'roles', roles::text[],
+        'qual', qual,
+        'check', with_check
+      )
+      ORDER BY policyname
+    )::text,
+    ''
+  ))
+  FROM pg_policies
+  WHERE schemaname='storage'
+    AND tablename='objects'
+    AND policyname LIKE 'wos\\_%' ESCAPE '\\'
+")"
+
+{
+  printf "SET wos_v1.rc03_compat_install_authorized='yes';\n"
+  printf "SET wos_v1.rc03_expected_counts='{\"orders\":85,\"images\":90,\"proofs\":35,\"trusted_receipts\":8,\"storage_objects\":91,\"baselines\":2,\"baseline_items\":8}';\n"
+  cat "$ROOT/docs/workshop-order-system/qa-fixture/WOS_V1_RC03_QA_RUNTIME_COMPAT_FORWARD_NOT_AUTHORIZED.sql"
+} | psql_db "$DB" -q
+
 {
   printf "SET wos_v1.production_migration_authorized='yes';\n"
   cat "$ROOT/docs/workshop-order-system/production-readiness/sql/WOS_V1_PRODUCTION_RUNTIME_FORWARD_NOT_AUTHORIZED.sql"
 } | psql_db "$DB" -q
 
-psql_db "$DB" -q -c "
-  INSERT INTO public.organizations(id,name)
-  VALUES (
-    '0ff53d93-2b9e-48b9-8113-a4768c39cdd2',
-    'RC02 QA Organization'
-  )
-"
-
 {
   printf "SET wos_v1.rc02_install_authorized='yes';\n"
   cat "$ROOT/docs/workshop-order-system/qa-fixture/WOS_V1_RC02_QA_BUSINESS_GATE_NOT_AUTHORIZED.sql"
+} | psql_db "$DB" -q
+
+{
+  printf "SET wos_v1.rc03_activation_authorized='yes';\n"
+  cat "$ROOT/docs/workshop-order-system/qa-fixture/WOS_V1_RC03_QA_RUNTIME_ACTIVATION_NOT_AUTHORIZED.sql"
 } | psql_db "$DB" -q
 
 psql_db "$DB" -q \
@@ -130,7 +171,7 @@ set -e
 [[ $((AUTH_ONE_STATUS + AUTH_TWO_STATUS)) -ne 0 ]] \
   || fail 'CONCURRENT_AUTHORIZATIONS_BOTH_SUCCEEDED'
 [[ "$(query_value "$DB" "
-  SELECT count(*) FROM wos_qa_safety.rc02_business_grants
+  SELECT count(*) FROM wos_v1_rc02_safety.rc02_business_grants
   WHERE state IN ('AUTHORIZED', 'ORDER_BOUND')
 ")" = '1' ]] || fail 'CONCURRENT_ACTIVE_AUTHORIZATION_COUNT'
 if ! grep -Eq \
@@ -140,7 +181,7 @@ if ! grep -Eq \
 fi
 
 psql_db "$DB" -q -c "
-  UPDATE wos_qa_safety.rc02_business_grants
+  UPDATE wos_v1_rc02_safety.rc02_business_grants
   SET state='CLOSED', enabled_until=NULL, closed_at=clock_timestamp()
   WHERE state IN ('AUTHORIZED', 'ORDER_BOUND')
 "
@@ -182,18 +223,18 @@ grep -q '"status": "REPLAYED"' "$CREATE_ONE_LOG" "$CREATE_TWO_LOG" \
   WHERE request_id='73000000-0000-4000-8000-000000000001'
 ")" = '1' ]] || fail 'CONCURRENT_CREATE_RECEIPT_COUNT'
 [[ "$(query_value "$DB" "
-  SELECT count(*) FROM wos_qa_safety.rc02_business_grants
+  SELECT count(*) FROM wos_v1_rc02_safety.rc02_business_grants
   WHERE request_id='73000000-0000-4000-8000-000000000001'
     AND state='ORDER_BOUND'
 ")" = '1' ]] || fail 'CONCURRENT_CREATE_NOT_BOUND'
 
 psql_db "$DB" -q -c "
-  UPDATE wos_qa_safety.rc02_business_grants
+  UPDATE wos_v1_rc02_safety.rc02_business_grants
   SET state='CLOSED', enabled_until=NULL, closed_at=clock_timestamp()
   WHERE state IN ('AUTHORIZED', 'ORDER_BOUND')
 "
 [[ "$(query_value "$DB" "
-  SELECT count(*) FROM wos_qa_safety.rc02_business_grants
+  SELECT count(*) FROM wos_v1_rc02_safety.rc02_business_grants
   WHERE state IN ('AUTHORIZED', 'ORDER_BOUND')
 ")" = '0' ]] || fail 'RC02_FINAL_ACTIVE_GRANTS'
 
@@ -225,29 +266,58 @@ OBJECT_COUNT_BEFORE_RECOVERY="$(query_value "$DB" "
 ORDER_COUNT_BEFORE_RECOVERY="$(query_value "$DB" "
   SELECT count(*) FROM public.wos_production_orders
 ")"
+LEGACY_PROOF_COUNT_BEFORE_RECOVERY="$(query_value "$DB" "
+  SELECT count(*) FROM public.wos_qa_verified_image_proofs
+")"
 
 psql_db "$DB" -q -c "
-  UPDATE wos_qa_safety.rc02_business_grants
+  UPDATE wos_v1_rc02_safety.rc02_business_grants
   SET state='CLOSED', enabled_until=NULL, closed_at=clock_timestamp()
   WHERE state IN ('AUTHORIZED', 'ORDER_BOUND')
 "
+
+psql_db "$DB" -q -c "
+  UPDATE wos_qa_safety.p2_gate_close_receipts
+  SET reason='TAMPERED_RC03_TEST'
+  WHERE gate_name='OPERATOR_WRITES'
+    AND order_id='71000000-0000-4000-8000-000000000101'
+"
+RECOVERY_LEGACY_TAMPER_LOG="$(mktemp)"
+set +e
+{
+  printf "SET wos_v1.rc02_recovery_authorized='yes';\n"
+  cat "$ROOT/docs/workshop-order-system/qa-fixture/WOS_V1_RC02_QA_BUSINESS_GATE_RECOVERY_NOT_AUTHORIZED.sql"
+} | psql_db "$DB" >"$RECOVERY_LEGACY_TAMPER_LOG" 2>&1
+RECOVERY_LEGACY_TAMPER_STATUS=$?
+set -e
+[[ "$RECOVERY_LEGACY_TAMPER_STATUS" -ne 0 ]] \
+  || fail 'RECOVERY_ACCEPTED_TAMPERED_LEGACY_SAFETY'
+grep -q 'RC02_LEGACY_SAFETY_SCHEMA_CHANGED' "$RECOVERY_LEGACY_TAMPER_LOG" \
+  || fail 'RECOVERY_LEGACY_TAMPER_WRONG_ERROR'
+psql_db "$DB" -q -c "
+  UPDATE wos_qa_safety.p2_gate_close_receipts
+  SET reason='NORMAL_CLOSE'
+  WHERE gate_name='OPERATOR_WRITES'
+    AND order_id='71000000-0000-4000-8000-000000000101'
+"
+
 {
   printf "SET wos_v1.rc02_recovery_authorized='yes';\n"
   cat "$ROOT/docs/workshop-order-system/qa-fixture/WOS_V1_RC02_QA_BUSINESS_GATE_RECOVERY_NOT_AUTHORIZED.sql"
 } | psql_db "$DB" -q
 
 [[ "$(query_value "$DB" "
-  SELECT to_regclass('wos_qa_safety.rc02_business_grants') IS NULL
+  SELECT to_regclass('wos_v1_rc02_safety.rc02_business_grants') IS NULL
 ")" = 't' ]] || fail 'RECOVERY_LEFT_GATE_TABLE'
 [[ "$(query_value "$DB" "
-  SELECT to_regnamespace('wos_qa_safety') IS NULL
+  SELECT to_regnamespace('wos_v1_rc02_safety') IS NULL
 ")" = 't' ]] || fail 'RECOVERY_LEFT_SCHEMA'
 [[ "$(query_value "$DB" "
   SELECT count(*)
   FROM pg_proc function_row
   JOIN pg_namespace namespace_row
     ON namespace_row.oid=function_row.pronamespace
-  WHERE namespace_row.nspname='wos_qa_safety'
+  WHERE namespace_row.nspname='wos_v1_rc02_safety'
 ")" = '0' ]] || fail 'RECOVERY_LEFT_FUNCTIONS'
 [[ "$(query_value "$DB" "
   SELECT count(*) FROM pg_trigger
@@ -269,6 +339,89 @@ psql_db "$DB" -q -c "
       AND policyname='wos_qa_rc02_private_insert'
   )
 ")" = 't' ]] || fail 'RECOVERY_LEFT_RC02_POLICY'
+
+psql_db "$DB" -q -c "
+  UPDATE public.wos_qa_verified_image_proofs
+  SET verified_sha256=repeat('9',64)
+  WHERE image_id='70000000-0000-4000-8000-000000000012'
+"
+RECOVERY_HISTORY_TAMPER_LOG="$(mktemp)"
+set +e
+{
+  printf "SET wos_v1.rc03_compat_recovery_authorized='yes';\n"
+  cat "$ROOT/docs/workshop-order-system/qa-fixture/WOS_V1_RC03_QA_RUNTIME_COMPAT_RECOVERY_NOT_AUTHORIZED.sql"
+} | psql_db "$DB" >"$RECOVERY_HISTORY_TAMPER_LOG" 2>&1
+RECOVERY_HISTORY_TAMPER_STATUS=$?
+set -e
+[[ "$RECOVERY_HISTORY_TAMPER_STATUS" -ne 0 ]] \
+  || fail 'COMPAT_RECOVERY_ACCEPTED_TAMPERED_HISTORY'
+grep -q 'RC03_COMPAT_HISTORICAL_ROW_CHANGED' "$RECOVERY_HISTORY_TAMPER_LOG" \
+  || fail 'COMPAT_RECOVERY_TAMPER_WRONG_ERROR'
+psql_db "$DB" -q -c "
+  UPDATE public.wos_qa_verified_image_proofs
+  SET verified_sha256=repeat('7',64)
+  WHERE image_id='70000000-0000-4000-8000-000000000012'
+"
+
+{
+  printf "SET wos_v1.rc03_compat_recovery_authorized='yes';\n"
+  cat "$ROOT/docs/workshop-order-system/qa-fixture/WOS_V1_RC03_QA_RUNTIME_COMPAT_RECOVERY_NOT_AUTHORIZED.sql"
+} | psql_db "$DB" -q
+
+[[ "$(query_value "$DB" "
+  SELECT to_regnamespace('wos_v1_rc03_compat') IS NULL
+")" = 't' ]] || fail 'COMPAT_RECOVERY_LEFT_SCHEMA'
+[[ "$(query_value "$DB" "
+  SELECT to_regnamespace('wos_qa_safety') IS NOT NULL
+")" = 't' ]] || fail 'RECOVERY_DELETED_LEGACY_SCHEMA'
+[[ "$(psql_db "$DB" -qAt \
+  < "$ROOT/tests/sql/wos-v1-qa-legacy-safety-fingerprint.sql")" \
+  = "$LEGACY_SAFETY_BEFORE" ]] || fail 'LEGACY_SAFETY_FINGERPRINT_CHANGED'
+[[ "$(query_value "$DB" "
+  SELECT md5(COALESCE(
+    jsonb_agg(
+      jsonb_build_object(
+        'name', policyname,
+        'cmd', cmd,
+        'permissive', permissive,
+        'roles', roles::text[],
+        'qual', qual,
+        'check', with_check
+      )
+      ORDER BY policyname
+    )::text,
+    ''
+  ))
+  FROM pg_policies
+  WHERE schemaname='storage'
+    AND tablename='objects'
+    AND policyname LIKE 'wos\\_%' ESCAPE '\\'
+")" = "$LEGACY_STORAGE_POLICY_FINGERPRINT_BEFORE" ]] \
+  || fail 'COMPAT_RECOVERY_POLICY_FINGERPRINT_CHANGED'
+[[ "$(query_value "$DB" "
+  SELECT allowed_mime_types = ARRAY['image/jpeg','image/png','image/webp']
+  FROM storage.buckets WHERE id='wos-private'
+")" = 't' ]] || fail 'COMPAT_RECOVERY_BUCKET_NOT_RESTORED'
+[[ "$(query_value "$DB" "
+  SELECT has_table_privilege(
+    'authenticated','public.wos_production_orders','INSERT'
+  )
+")" = 't' ]] || fail 'COMPAT_RECOVERY_ACL_NOT_RESTORED'
+[[ "$(query_value "$DB" "
+  SELECT to_regclass('public.wos_verified_image_proofs') IS NOT NULL
+    AND to_regclass('public.wos_orphan_cleanup_claims') IS NOT NULL
+")" = 't' ]] || fail 'COMPAT_RECOVERY_DELETED_RUNTIME_DATA'
+[[ "$(query_value "$DB" "
+  SELECT NOT has_function_privilege(
+    'authenticated',
+    'public.wos_create_production_order(uuid,jsonb)',
+    'EXECUTE'
+  )
+")" = 't' ]] || fail 'COMPAT_RECOVERY_RPC_STILL_ACTIVE'
+[[ "$(query_value "$DB" "
+  SELECT count(*) FROM public.wos_qa_verified_image_proofs
+")" = "$LEGACY_PROOF_COUNT_BEFORE_RECOVERY" ]] \
+  || fail 'COMPAT_RECOVERY_CHANGED_PROOF_HISTORY'
 [[ "$(query_value "$DB" "
   SELECT count(*) FROM storage.objects
 ")" = "$OBJECT_COUNT_BEFORE_RECOVERY" ]] || fail 'RECOVERY_CHANGED_STORAGE'
@@ -281,4 +434,7 @@ echo 'WOS_V1_RC02_CONCURRENT_AUTHORIZE=PASS'
 echo 'WOS_V1_RC02_CONCURRENT_CREATE_REPLAY=PASS'
 echo 'WOS_V1_RC02_RECOVERY_ACTIVE_REFUSAL=PASS'
 echo 'WOS_V1_RC02_RECOVERY_RESTORES_POLICY=PASS'
+echo 'WOS_V1_RC03_COMPAT_FORWARD_AND_RECOVERY=PASS'
+echo 'WOS_V1_RC03_LEGACY_SAFETY_FINGERPRINT=PASS'
+echo 'WOS_V1_RC03_COMPAT_RECOVERY_DEACTIVATED_RUNTIME=PASS'
 echo 'WOS_V1_RC02_NO_CLOUD_QA_CONNECTION=PASS'

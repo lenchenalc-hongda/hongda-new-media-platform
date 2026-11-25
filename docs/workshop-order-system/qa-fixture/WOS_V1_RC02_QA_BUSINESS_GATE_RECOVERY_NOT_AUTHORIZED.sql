@@ -9,22 +9,29 @@ BEGIN
       IS DISTINCT FROM 'yes' THEN
     RAISE EXCEPTION 'RC02_RECOVERY_NOT_AUTHORIZED';
   END IF;
-  IF to_regclass('wos_qa_safety.rc02_business_grants') IS NULL THEN
+  IF to_regclass('wos_v1_rc02_safety.rc02_business_grants') IS NULL THEN
     RAISE EXCEPTION 'RC02_INSTALL_NOT_PRESENT';
   END IF;
   IF NOT EXISTS (
-    SELECT 1 FROM wos_qa_safety.rc02_policy_backup
+    SELECT 1 FROM wos_v1_rc02_safety.rc02_policy_backup
   ) THEN
     RAISE EXCEPTION 'RC02_POLICY_BACKUP_MISSING';
   END IF;
   IF NOT EXISTS (
     SELECT 1
-    FROM wos_qa_safety.rc02_business_grants
+    FROM wos_v1_rc02_safety.rc02_business_grants
     WHERE state IN ('AUTHORIZED', 'ORDER_BOUND')
   ) THEN
     NULL;
   ELSE
     RAISE EXCEPTION 'RC02_ACTIVE_GRANT_MUST_BE_CLOSED';
+  END IF;
+  IF wos_v1_rc02_safety.rc02_legacy_safety_fingerprint() <> (
+    SELECT legacy_safety_fingerprint
+    FROM wos_v1_rc02_safety.rc02_install_fingerprint
+    WHERE singleton = true
+  ) THEN
+    RAISE EXCEPTION 'RC02_LEGACY_SAFETY_SCHEMA_CHANGED';
   END IF;
 END;
 $rc02_recovery_preflight$;
@@ -36,6 +43,8 @@ DROP TRIGGER IF EXISTS rc02_order_bind_grant
 DROP TRIGGER IF EXISTS rc02_order_update_guard
   ON public.wos_production_orders;
 DROP TRIGGER IF EXISTS rc02_reference_image_guard
+  ON public.wos_reference_images;
+DROP TRIGGER IF EXISTS rc02_current_image_baseline_guard
   ON public.wos_reference_images;
 DROP TRIGGER IF EXISTS rc02_readiness_receipt_guard
   ON public.wos_office_readiness_receipts;
@@ -80,6 +89,8 @@ DROP TRIGGER IF EXISTS rc02_storage_gate_guard
 
 DROP POLICY IF EXISTS wos_qa_rc02_private_insert
   ON storage.objects;
+DROP POLICY IF EXISTS wos_v1_rc02_operator_private_select
+  ON storage.objects;
 
 DO $restore_policies$
 DECLARE
@@ -88,7 +99,7 @@ DECLARE
 BEGIN
   FOR policy_row IN
     SELECT *
-    FROM wos_qa_safety.rc02_policy_backup
+    FROM wos_v1_rc02_safety.rc02_policy_backup
     ORDER BY policy_name
   LOOP
     SELECT string_agg(format('%I', role_name), ', ')
@@ -109,30 +120,47 @@ BEGIN
 END;
 $restore_policies$;
 
-DROP FUNCTION IF EXISTS wos_qa_safety.rc02_storage_no_upsert();
-DROP FUNCTION IF EXISTS wos_qa_safety.rc02_storage_gate_guard();
-DROP FUNCTION IF EXISTS wos_qa_safety.rc02_child_order_guard();
-DROP FUNCTION IF EXISTS wos_qa_safety.rc02_order_update_guard();
-DROP FUNCTION IF EXISTS wos_qa_safety.rc02_order_bind_grant();
-DROP FUNCTION IF EXISTS wos_qa_safety.rc02_order_insert_guard();
-DROP FUNCTION IF EXISTS wos_qa_safety.rc02_storage_insert_allows(text,text);
-DROP FUNCTION IF EXISTS wos_qa_safety.rc02_lock_order_grant(uuid,uuid,uuid);
-DROP FUNCTION IF EXISTS wos_qa_safety.rc02_order_allows(uuid,uuid,uuid);
-DROP FUNCTION IF EXISTS wos_qa_safety.rc02_create_allows(
+DO $verify_legacy_safety_before_drop$
+BEGIN
+  IF wos_v1_rc02_safety.rc02_legacy_safety_fingerprint() <> (
+    SELECT legacy_safety_fingerprint
+    FROM wos_v1_rc02_safety.rc02_install_fingerprint
+    WHERE singleton = true
+  ) THEN
+    RAISE EXCEPTION 'RC02_LEGACY_SAFETY_SCHEMA_CHANGED';
+  END IF;
+END;
+$verify_legacy_safety_before_drop$;
+
+DROP FUNCTION IF EXISTS wos_v1_rc02_safety.rc02_storage_no_upsert();
+DROP FUNCTION IF EXISTS wos_v1_rc02_safety.rc02_storage_gate_guard();
+DROP FUNCTION IF EXISTS wos_v1_rc02_safety.rc02_child_order_guard();
+DROP FUNCTION IF EXISTS wos_v1_rc02_safety.rc02_current_image_baseline_guard();
+DROP FUNCTION IF EXISTS wos_v1_rc02_safety.rc02_order_update_guard();
+DROP FUNCTION IF EXISTS wos_v1_rc02_safety.rc02_order_bind_grant();
+DROP FUNCTION IF EXISTS wos_v1_rc02_safety.rc02_order_insert_guard();
+DROP FUNCTION IF EXISTS wos_v1_rc02_safety.rc02_storage_insert_allows(text,text);
+DROP FUNCTION IF EXISTS wos_v1_rc02_safety.rc02_operator_can_read(text,text);
+DROP FUNCTION IF EXISTS wos_v1_rc02_safety.rc02_lock_order_grant(uuid,uuid,uuid);
+DROP FUNCTION IF EXISTS wos_v1_rc02_safety.rc02_order_allows(uuid,uuid,uuid);
+DROP FUNCTION IF EXISTS wos_v1_rc02_safety.rc02_create_allows(
   uuid,text,uuid,uuid,uuid,uuid,text
 );
 
-DROP TABLE IF EXISTS wos_qa_safety.rc02_policy_backup;
-DROP TABLE IF EXISTS wos_qa_safety.rc02_business_grants;
-DROP FUNCTION IF EXISTS wos_qa_safety.rc02_validate_grant();
-DROP SCHEMA wos_qa_safety;
+DROP TABLE IF EXISTS wos_v1_rc02_safety.rc02_policy_backup;
+DROP TABLE IF EXISTS wos_v1_rc02_safety.rc02_business_grants;
+DROP FUNCTION IF EXISTS wos_v1_rc02_safety.rc02_validate_grant();
+DROP TABLE wos_v1_rc02_safety.rc02_install_fingerprint;
+DROP FUNCTION
+  wos_v1_rc02_safety.rc02_legacy_safety_fingerprint();
+DROP SCHEMA wos_v1_rc02_safety;
 
 DO $rc02_recovery_postflight$
 BEGIN
-  IF to_regclass('wos_qa_safety.rc02_business_grants') IS NOT NULL
-    OR to_regnamespace('wos_qa_safety') IS NOT NULL
+  IF to_regclass('wos_v1_rc02_safety.rc02_business_grants') IS NOT NULL
+    OR to_regnamespace('wos_v1_rc02_safety') IS NOT NULL
     OR to_regprocedure(
-      'wos_qa_safety.rc02_order_allows(uuid,uuid,uuid)'
+      'wos_v1_rc02_safety.rc02_order_allows(uuid,uuid,uuid)'
     ) IS NOT NULL
     OR EXISTS (
       SELECT 1 FROM pg_policies

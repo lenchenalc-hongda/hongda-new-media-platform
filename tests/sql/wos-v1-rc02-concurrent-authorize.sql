@@ -2,7 +2,7 @@
 
 BEGIN;
 
-INSERT INTO wos_qa_safety.rc02_business_grants(
+INSERT INTO wos_v1_rc02_safety.rc02_business_grants(
   authorization_id, request_id, organization_id,
   office_user_id, office_profile_id,
   operator_user_id, operator_profile_id,
