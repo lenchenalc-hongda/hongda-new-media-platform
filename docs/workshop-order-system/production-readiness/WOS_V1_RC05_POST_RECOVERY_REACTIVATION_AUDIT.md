@@ -18,6 +18,15 @@ or re-run that fresh-install Forward.**
   policies and non-PNG MIME configuration are restored.
 - `wos_v1_rc02_safety` and `wos_v1_rc03_compat` are absent and all write
   gates are OFF. Previous CLOSED grants must never be revived.
+- The three existing gate tables must contain exactly the expected rows:
+  `M2_OFFICE_WRITES`, `M2_OPERATOR_WRITES`, `OFFICE_WRITES` and
+  `OPERATOR_WRITES`, all disabled. A missing table or row is not interpreted
+  as OFF.
+- `public.wos_qa_p2_m2_action(uuid,integer,uuid,text,jsonb)` must have the
+  exact audited definition SHA-256, owner `postgres`, `SECURITY DEFINER`, empty
+  `search_path`, and ACL
+  `{postgres=X/postgres,service_role=X/postgres}`. Service-role EXECUTE is
+  required; authenticated and anon EXECUTE are forbidden.
 - Before any **new authorization**, pin all current QA counts, retained
   Runtime table fingerprints, SQL SHA-256, original P7 interface definitions,
   the four Auth identities and the permitted new Request/PNG fixtures.
@@ -52,10 +61,12 @@ or re-run that fresh-install Forward.**
 
 The local PG17 runner now executes both Reactivation rollback branches after
 its original successful fresh-install/full-runtime/Recovery scenario. It
-explicitly asserts the original fresh Compat rejects retained Runtime, all
-six retained Runtime table row fingerprints unchanged, original P2 safety
-fingerprint and three legacy Policy definitions unchanged, and M2 ACL not
-widened. Run `bash tests/sql/run-wos-v1-rc02-gate-pg17.sh` on the already
+recreates the retained Hosted QA M2 gate/RPC shape only in the disposable
+database, then explicitly asserts the original fresh Compat rejects retained
+Runtime, all six retained Runtime table row fingerprints are unchanged before
+each PASS marker, original P2 safety fingerprint and three legacy Policy
+definitions unchanged, and the exact service-role-only M2 ACL remains
+unchanged. Run `bash tests/sql/run-wos-v1-rc02-gate-pg17.sh` on the already
 approved Docker PG17 Mac executor and require BOTH:
 - `WOS_V1_RC05_POST_RECOVERY_PRE_RUNTIME_ROLLBACK=PASS`
 - `WOS_V1_RC05_POST_RECOVERY_REACTIVATION_RECOVERY=PASS`

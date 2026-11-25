@@ -5,6 +5,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 CONTAINER="${WOS_PG_DOCKER_CONTAINER:-}"
 DB="wos_v1_rollback_ci"
 PRE_RUNTIME_DB="wos_v1_rc03_pre_runtime_ci"
+RC05_M2_NEGATIVE_DB="wos_v1_rc05_m2_negative_ci"
 
 fail() {
   printf 'WOS_V1_RC02_GATE_PG17_FAILED=%s\n' "$1" >&2
@@ -62,6 +63,8 @@ cleanup() {
     exit "$status"
   fi
   psql_db postgres -q -c "DROP DATABASE IF EXISTS \"$PRE_RUNTIME_DB\" WITH (FORCE)" \
+    >/dev/null 2>&1 || true
+  psql_db postgres -q -c "DROP DATABASE IF EXISTS \"$RC05_M2_NEGATIVE_DB\" WITH (FORCE)" \
     >/dev/null 2>&1 || true
   psql_db postgres -q -c "DROP DATABASE IF EXISTS \"$DB\" WITH (FORCE)" \
     >/dev/null 2>&1 || true
@@ -652,10 +655,82 @@ psql_db "$DB" -q -c "
   RESET ROLE;
 "
 
+# Hosted QA retains the P2/M2 gate objects and the exact M2 action RPC after
+# data-retention recovery. Recreate that shape only in this disposable DB.
+psql_db "$DB" -q -c "
+  CREATE TABLE IF NOT EXISTS public.wos_qa_p2_execution_gate (
+    gate_name text PRIMARY KEY,
+    enabled boolean NOT NULL DEFAULT false,
+    enabled_until timestamptz,
+    approval_reference text NOT NULL DEFAULT 'NOT_AUTHORIZED',
+    updated_at timestamptz NOT NULL DEFAULT now(),
+    allowed_order_id uuid,
+    allowed_organization_id uuid,
+    allowed_profile_id uuid,
+    activated_at timestamptz
+  );
+  CREATE TABLE IF NOT EXISTS public.wos_qa_p2_office_execution_gate (
+    LIKE public.wos_qa_p2_execution_gate INCLUDING ALL
+  );
+  INSERT INTO public.wos_qa_p2_execution_gate(gate_name)
+  VALUES ('OPERATOR_WRITES') ON CONFLICT (gate_name) DO NOTHING;
+  INSERT INTO public.wos_qa_p2_office_execution_gate(gate_name)
+  VALUES ('OFFICE_WRITES') ON CONFLICT (gate_name) DO NOTHING;
+  ALTER TABLE public.wos_qa_p2_execution_gate ENABLE ROW LEVEL SECURITY;
+  ALTER TABLE public.wos_qa_p2_office_execution_gate ENABLE ROW LEVEL SECURITY;
+  REVOKE ALL ON public.wos_qa_p2_execution_gate FROM PUBLIC,anon,authenticated;
+  REVOKE ALL ON public.wos_qa_p2_office_execution_gate
+    FROM PUBLIC,anon,authenticated;
+"
+psql_db "$DB" -q \
+  < "$ROOT/docs/workshop-order-system/nonproduction-only/WOS_P2_M2_NONPROD_SQL_NOT_INSTALLED.sql"
+psql_db "$DB" -q -c "
+  GRANT EXECUTE ON FUNCTION
+    public.wos_qa_p2_m2_action(uuid,integer,uuid,text,jsonb)
+  TO service_role;
+"
+[[ "$(query_value "$DB" "
+  SELECT encode(
+    sha256(convert_to(
+      pg_get_functiondef(
+        to_regprocedure(
+          'public.wos_qa_p2_m2_action(uuid,integer,uuid,text,jsonb)'
+        )
+      ),
+      'UTF8'
+    )),
+    'hex'
+  ) = 'be003e28743691c216784030dcd163612185d10eae3481ab67087e566e326830'
+    AND (
+      SELECT proacl::text
+      FROM pg_proc
+      WHERE oid = to_regprocedure(
+        'public.wos_qa_p2_m2_action(uuid,integer,uuid,text,jsonb)'
+      )
+    ) = '{postgres=X/postgres,service_role=X/postgres}'
+    AND has_function_privilege(
+      'service_role',
+      'public.wos_qa_p2_m2_action(uuid,integer,uuid,text,jsonb)',
+      'EXECUTE'
+    )
+    AND NOT has_function_privilege(
+      'authenticated',
+      'public.wos_qa_p2_m2_action(uuid,integer,uuid,text,jsonb)',
+      'EXECUTE'
+    )
+    AND NOT has_function_privilege(
+      'anon',
+      'public.wos_qa_p2_m2_action(uuid,integer,uuid,text,jsonb)',
+      'EXECUTE'
+    )
+")" = 't' ]] || fail 'RC05_M2_HOSTED_SHAPE_FIXTURE_MISMATCH'
+
 
 # RC05: true post-recovery state on the SAME disposable PG17 database.
 # All V1 runtime tables already contain retained QA data, while the original
 # P7 interfaces/Foundation/Storage policies were restored by RC03 recovery.
+RC05_LEGACY_SAFETY_BEFORE="$(psql_db "$DB" -qAt \
+  < "$ROOT/tests/sql/wos-v1-qa-legacy-safety-fingerprint.sql")"
 RC05_RETAINED_PUBLIC_COUNTS="$(query_value "$DB" "
   SELECT jsonb_build_object(
     'orders',(SELECT count(*) FROM public.wos_production_orders),
@@ -728,6 +803,29 @@ rm -f "$RC05_FRESH_REFUSAL_LOG"
     AND to_regclass('public.wos_verified_image_proofs') IS NOT NULL
     AND to_regclass('public.wos_order_create_receipts') IS NOT NULL
 ")" = 't' ]] || fail 'RC05_PRE_RUNTIME_RECOVERY_DELETED_DATA'
+[[ "$(query_value "$DB" "
+  SELECT md5(
+    (SELECT COALESCE(string_agg(to_jsonb(x)::text,',' ORDER BY to_jsonb(x)::text),'') FROM public.wos_verified_image_proofs x)
+    ||'|'||(SELECT COALESCE(string_agg(to_jsonb(x)::text,',' ORDER BY to_jsonb(x)::text),'') FROM public.wos_orphan_cleanup_claims x)
+    ||'|'||(SELECT COALESCE(string_agg(to_jsonb(x)::text,',' ORDER BY to_jsonb(x)::text),'') FROM public.wos_order_create_receipts x)
+    ||'|'||(SELECT COALESCE(string_agg(to_jsonb(x)::text,',' ORDER BY to_jsonb(x)::text),'') FROM public.wos_operator_action_receipts x)
+    ||'|'||(SELECT COALESCE(string_agg(to_jsonb(x)::text,',' ORDER BY to_jsonb(x)::text),'') FROM public.wos_operator_review_receipts x)
+    ||'|'||(SELECT COALESCE(string_agg(to_jsonb(x)::text,',' ORDER BY to_jsonb(x)::text),'') FROM public.wos_office_revisions x)
+  )
+")" = "$RC05_RETAINED_ROW_FINGERPRINT" ]] ||
+  fail 'RC05_PRE_RUNTIME_RECOVERY_CHANGED_RETAINED_ROWS'
+[[ "$(query_value "$DB" "
+  SELECT (
+    SELECT jsonb_build_object(
+      'runtime_proofs',(SELECT count(*) FROM public.wos_verified_image_proofs),
+      'orphan_claims',(SELECT count(*) FROM public.wos_orphan_cleanup_claims),
+      'create_receipts',(SELECT count(*) FROM public.wos_order_create_receipts),
+      'operator_action_receipts',(SELECT count(*) FROM public.wos_operator_action_receipts),
+      'operator_review_receipts',(SELECT count(*) FROM public.wos_operator_review_receipts),
+      'office_revisions',(SELECT count(*) FROM public.wos_office_revisions)
+    )
+  ) = '$RC05_RETAINED_RUNTIME_COUNTS'::jsonb
+")" = 't' ]] || fail 'RC05_PRE_RUNTIME_RECOVERY_CHANGED_RUNTIME_COUNTS'
 echo 'WOS_V1_RC05_POST_RECOVERY_PRE_RUNTIME_ROLLBACK=PASS'
 
 # Branch B: Reactivation compatibility + exactly four retained-data P7 RPCs.
@@ -736,6 +834,66 @@ echo 'WOS_V1_RC05_POST_RECOVERY_PRE_RUNTIME_ROLLBACK=PASS'
   printf "SET wos_v1.rc03_expected_counts='%s';\n" "$RC05_RETAINED_PUBLIC_COUNTS"
   cat "$ROOT/docs/workshop-order-system/qa-fixture/WOS_V1_RC05_POST_RECOVERY_COMPAT_FORWARD_NOT_AUTHORIZED.sql"
 } | psql_db "$DB" -q
+
+recreate_rc05_m2_negative_db() {
+  psql_db postgres -q \
+    -c "DROP DATABASE IF EXISTS \"$RC05_M2_NEGATIVE_DB\" WITH (FORCE)"
+  psql_db postgres -q \
+    -c "CREATE DATABASE \"$RC05_M2_NEGATIVE_DB\" TEMPLATE \"$DB\""
+}
+
+expect_rc05_runtime_failure() {
+  local expected_message="$1"
+  local failure_log
+  failure_log="$(mktemp)"
+  set +e
+  {
+    printf "SET wos_v1.rc05_post_recovery_runtime_authorized='yes';\n"
+    printf "SET wos_v1.rc05_qa_project='xulmpqaknlwqqculbsek';\n"
+    printf "SET wos_v1.rc05_expected_runtime_counts='%s';\n" "$RC05_RETAINED_RUNTIME_COUNTS"
+    cat "$ROOT/docs/workshop-order-system/qa-fixture/WOS_V1_RC05_POST_RECOVERY_RUNTIME_REACTIVATE_NOT_AUTHORIZED.sql"
+  } | psql_db "$RC05_M2_NEGATIVE_DB" -q >"$failure_log" 2>&1
+  local failure_status=$?
+  set -e
+  if [[ "$failure_status" -eq 0 ]]; then
+    rm -f "$failure_log"
+    fail 'RC05_RUNTIME_NEGATIVE_CASE_ACCEPTED'
+  fi
+  if ! grep -q "$expected_message" "$failure_log"; then
+    cat "$failure_log" >&2
+    rm -f "$failure_log"
+    fail 'RC05_RUNTIME_NEGATIVE_CASE_WRONG_FAILURE'
+  fi
+  rm -f "$failure_log"
+}
+
+# Missing M2 RPC and an accidentally widened authenticated ACL must both stop
+# before the compatibility bridge can be committed.
+recreate_rc05_m2_negative_db
+psql_db "$RC05_M2_NEGATIVE_DB" -q -c "
+  DROP FUNCTION
+    public.wos_qa_p2_m2_action(uuid,integer,uuid,text,jsonb);
+"
+expect_rc05_runtime_failure 'RC05_RUNTIME_RETAINED_QA_STATE_MISMATCH'
+
+recreate_rc05_m2_negative_db
+psql_db "$RC05_M2_NEGATIVE_DB" -q -c "
+  GRANT EXECUTE ON FUNCTION
+    public.wos_qa_p2_m2_action(uuid,integer,uuid,text,jsonb)
+  TO authenticated;
+"
+expect_rc05_runtime_failure 'RC05_RUNTIME_M2_IDENTITY_MISMATCH'
+
+# An enabled Office gate must not be mistaken for an all-OFF retained state.
+recreate_rc05_m2_negative_db
+psql_db "$RC05_M2_NEGATIVE_DB" -q -c "
+  UPDATE public.wos_qa_p2_office_execution_gate
+  SET enabled=true
+  WHERE gate_name='OFFICE_WRITES';
+"
+expect_rc05_runtime_failure 'RC05_RUNTIME_RETAINED_QA_GATE_MISMATCH'
+psql_db postgres -q \
+  -c "DROP DATABASE IF EXISTS \"$RC05_M2_NEGATIVE_DB\" WITH (FORCE)"
 
 {
   printf "SET wos_v1.rc05_post_recovery_runtime_authorized='yes';\n"
@@ -757,15 +915,41 @@ echo 'WOS_V1_RC05_POST_RECOVERY_PRE_RUNTIME_ROLLBACK=PASS'
 } | psql_db "$DB" -q
 [[ "$(query_value "$DB" "
   SELECT has_function_privilege('authenticated','public.wos_create_production_order(uuid,jsonb)','EXECUTE')
-    AND NOT COALESCE(
-      has_function_privilege(
-        'authenticated',
-        to_regprocedure(
-          'public.wos_qa_p2_m2_action(uuid,integer,uuid,text,jsonb)'
+    AND to_regprocedure(
+      'public.wos_qa_p2_m2_action(uuid,integer,uuid,text,jsonb)'
+    ) IS NOT NULL
+    AND encode(
+      sha256(convert_to(
+        pg_get_functiondef(
+          to_regprocedure(
+            'public.wos_qa_p2_m2_action(uuid,integer,uuid,text,jsonb)'
+          )
         ),
-        'EXECUTE'
-      ),
-      false
+        'UTF8'
+      )),
+      'hex'
+    ) = 'be003e28743691c216784030dcd163612185d10eae3481ab67087e566e326830'
+    AND (
+      SELECT proacl::text
+      FROM pg_proc
+      WHERE oid = to_regprocedure(
+        'public.wos_qa_p2_m2_action(uuid,integer,uuid,text,jsonb)'
+      )
+    ) = '{postgres=X/postgres,service_role=X/postgres}'
+    AND has_function_privilege(
+      'service_role',
+      'public.wos_qa_p2_m2_action(uuid,integer,uuid,text,jsonb)',
+      'EXECUTE'
+    )
+    AND NOT has_function_privilege(
+      'authenticated',
+      'public.wos_qa_p2_m2_action(uuid,integer,uuid,text,jsonb)',
+      'EXECUTE'
+    )
+    AND NOT has_function_privilege(
+      'anon',
+      'public.wos_qa_p2_m2_action(uuid,integer,uuid,text,jsonb)',
+      'EXECUTE'
     )
     AND (SELECT count(*) FROM wos_v1_rc02_safety.rc02_business_grants)=0
 ")" = 't' ]] || fail 'RC05_REACTIVATION_SCOPE_ACL_DRIFT'
@@ -811,7 +995,7 @@ echo 'WOS_V1_RC05_POST_RECOVERY_PRE_RUNTIME_ROLLBACK=PASS'
 ")" = "$FOUNDATION_POLICY_SHA_BEFORE" ]] ||
   fail 'RC05_POST_RECOVERY_FOUNDATION_POLICY_RESTORE_MISMATCH'
 RC05_LEGACY_SAFETY_AFTER="$(psql_db "$DB" -qAt < "$ROOT/tests/sql/wos-v1-qa-legacy-safety-fingerprint.sql")"
-[[ "$RC05_LEGACY_SAFETY_AFTER" = "$LEGACY_SAFETY_BEFORE" ]] ||
+[[ "$RC05_LEGACY_SAFETY_AFTER" = "$RC05_LEGACY_SAFETY_BEFORE" ]] ||
   fail 'RC05_POST_RECOVERY_OLD_P2_SCHEMA_CHANGED'
 echo 'WOS_V1_RC05_POST_RECOVERY_REACTIVATION_RECOVERY=PASS'
 

@@ -18,13 +18,6 @@ BEGIN
   THEN
     RAISE EXCEPTION 'RC05_POST_RECOVERY_RUNTIME_NOT_AUTHORIZED';
   END IF;
-  IF to_regclass('public.wos_qa_p2_m2_gate') IS NOT NULL THEN
-    IF EXISTS (
-      SELECT 1 FROM public.wos_qa_p2_m2_gate WHERE enabled
-    ) THEN
-      RAISE EXCEPTION 'RC05_RUNTIME_RETAINED_QA_STATE_MISMATCH';
-    END IF;
-  END IF;
   IF to_regnamespace('wos_qa_safety') IS NULL
     OR to_regnamespace('wos_v1_rc03_compat') IS NULL
     OR to_regnamespace('wos_v1_rc02_safety') IS NOT NULL
@@ -38,8 +31,95 @@ BEGIN
     OR to_regclass('public.wos_operator_action_receipts') IS NULL
     OR to_regclass('public.wos_operator_review_receipts') IS NULL
     OR to_regclass('public.wos_office_revisions') IS NULL
+    OR to_regclass('public.wos_qa_p2_execution_gate') IS NULL
+    OR to_regclass('public.wos_qa_p2_office_execution_gate') IS NULL
+    OR to_regclass('public.wos_qa_p2_m2_gate') IS NULL
+    OR to_regprocedure(
+      'public.wos_qa_p2_m2_action(uuid,integer,uuid,text,jsonb)'
+    ) IS NULL
   THEN
     RAISE EXCEPTION 'RC05_RUNTIME_RETAINED_QA_STATE_MISMATCH';
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM public.wos_qa_p2_m2_gate WHERE enabled
+  ) OR EXISTS (
+    SELECT 1 FROM public.wos_qa_p2_office_execution_gate WHERE enabled
+  ) OR EXISTS (
+    SELECT 1 FROM public.wos_qa_p2_execution_gate WHERE enabled
+  ) OR (
+    SELECT count(*) FROM public.wos_qa_p2_m2_gate
+    WHERE gate_name IN ('M2_OFFICE_WRITES','M2_OPERATOR_WRITES')
+      AND NOT enabled
+  ) <> 2 OR (
+    SELECT count(*) FROM public.wos_qa_p2_office_execution_gate
+    WHERE gate_name = 'OFFICE_WRITES'
+      AND NOT enabled
+  ) <> 1 OR (
+    SELECT count(*) FROM public.wos_qa_p2_execution_gate
+    WHERE gate_name = 'OPERATOR_WRITES'
+      AND NOT enabled
+  ) <> 1 THEN
+    RAISE EXCEPTION 'RC05_RUNTIME_RETAINED_QA_GATE_MISMATCH';
+  END IF;
+  IF (
+    SELECT pg_catalog.pg_get_userbyid(p.proowner)
+    FROM pg_catalog.pg_proc p
+    WHERE p.oid = to_regprocedure(
+      'public.wos_qa_p2_m2_action(uuid,integer,uuid,text,jsonb)'
+    )
+  ) IS DISTINCT FROM 'postgres'
+    OR NOT COALESCE((
+      SELECT p.prosecdef
+      FROM pg_catalog.pg_proc p
+      WHERE p.oid = to_regprocedure(
+        'public.wos_qa_p2_m2_action(uuid,integer,uuid,text,jsonb)'
+      )
+    ), false)
+    OR (
+      SELECT p.proconfig
+      FROM pg_catalog.pg_proc p
+      WHERE p.oid = to_regprocedure(
+        'public.wos_qa_p2_m2_action(uuid,integer,uuid,text,jsonb)'
+      )
+    ) IS DISTINCT FROM ARRAY['search_path=""']::text[]
+    OR (
+      SELECT pg_catalog.encode(
+        pg_catalog.sha256(
+          pg_catalog.convert_to(pg_catalog.pg_get_functiondef(p.oid),'UTF8')
+        ),
+        'hex'
+      )
+      FROM pg_catalog.pg_proc p
+      WHERE p.oid = to_regprocedure(
+        'public.wos_qa_p2_m2_action(uuid,integer,uuid,text,jsonb)'
+      )
+    ) IS DISTINCT FROM
+      'be003e28743691c216784030dcd163612185d10eae3481ab67087e566e326830'
+    OR COALESCE((
+      SELECT p.proacl::text
+      FROM pg_catalog.pg_proc p
+      WHERE p.oid = to_regprocedure(
+        'public.wos_qa_p2_m2_action(uuid,integer,uuid,text,jsonb)'
+      )
+    ), '') IS DISTINCT FROM
+      '{postgres=X/postgres,service_role=X/postgres}'
+    OR NOT pg_catalog.has_function_privilege(
+      'service_role',
+      'public.wos_qa_p2_m2_action(uuid,integer,uuid,text,jsonb)',
+      'EXECUTE'
+    )
+    OR pg_catalog.has_function_privilege(
+      'authenticated',
+      'public.wos_qa_p2_m2_action(uuid,integer,uuid,text,jsonb)',
+      'EXECUTE'
+    )
+    OR pg_catalog.has_function_privilege(
+      'anon',
+      'public.wos_qa_p2_m2_action(uuid,integer,uuid,text,jsonb)',
+      'EXECUTE'
+    )
+  THEN
+    RAISE EXCEPTION 'RC05_RUNTIME_M2_IDENTITY_MISMATCH';
   END IF;
   IF EXISTS (
     SELECT 1 FROM (VALUES
@@ -786,7 +866,10 @@ DECLARE
   v_expected jsonb;
   v_actual jsonb;
 BEGIN
-  IF (SELECT count(*) FROM pg_catalog.pg_proc p
+  IF to_regprocedure(
+    'public.wos_qa_p2_m2_action(uuid,integer,uuid,text,jsonb)'
+  ) IS NULL
+    OR (SELECT count(*) FROM pg_catalog.pg_proc p
      WHERE p.oid IN (
        'public.wos_v1_pre_runtime_confirm_office_completeness(uuid,integer,text,text)'::regprocedure,
        'public.wos_v1_pre_runtime_submit_production_order(uuid,integer,text,uuid)'::regprocedure,
@@ -813,16 +896,42 @@ BEGIN
       'public.wos_confirm_office_completeness(uuid,integer,text,text)',
       'EXECUTE'
     )
-    OR COALESCE(
-      pg_catalog.has_function_privilege(
-        'authenticated',
-        to_regprocedure(
-          'public.wos_qa_p2_m2_action(uuid,integer,uuid,text,jsonb)'
-        ),
-        'EXECUTE'
-      ),
-      false
+    OR NOT pg_catalog.has_function_privilege(
+      'service_role',
+      'public.wos_qa_p2_m2_action(uuid,integer,uuid,text,jsonb)',
+      'EXECUTE'
     )
+    OR pg_catalog.has_function_privilege(
+      'authenticated',
+      'public.wos_qa_p2_m2_action(uuid,integer,uuid,text,jsonb)',
+      'EXECUTE'
+    )
+    OR pg_catalog.has_function_privilege(
+      'anon',
+      'public.wos_qa_p2_m2_action(uuid,integer,uuid,text,jsonb)',
+      'EXECUTE'
+    )
+    OR (
+      SELECT pg_catalog.encode(
+        pg_catalog.sha256(
+          pg_catalog.convert_to(pg_catalog.pg_get_functiondef(p.oid),'UTF8')
+        ),
+        'hex'
+      )
+      FROM pg_catalog.pg_proc p
+      WHERE p.oid = to_regprocedure(
+        'public.wos_qa_p2_m2_action(uuid,integer,uuid,text,jsonb)'
+      )
+    ) IS DISTINCT FROM
+      'be003e28743691c216784030dcd163612185d10eae3481ab67087e566e326830'
+    OR (
+      SELECT p.proacl::text
+      FROM pg_catalog.pg_proc p
+      WHERE p.oid = to_regprocedure(
+        'public.wos_qa_p2_m2_action(uuid,integer,uuid,text,jsonb)'
+      )
+    ) IS DISTINCT FROM
+      '{postgres=X/postgres,service_role=X/postgres}'
   THEN
     RAISE EXCEPTION 'RC05_RUNTIME_REACTIVATION_POSTFLIGHT_DENIED';
   END IF;
