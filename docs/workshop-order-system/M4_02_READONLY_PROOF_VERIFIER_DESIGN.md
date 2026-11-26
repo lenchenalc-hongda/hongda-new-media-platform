@@ -1,282 +1,198 @@
-# M4-02 Minimal Read-Only Proof Verifier
+# M4-02 Office-Only Read-Only Proof Verifier
 
-Status: DESIGN ONLY
+Status:
 
-This document does not authorize SQL creation, installation, role changes,
-Storage changes, Gate activation, QA writes or Production deployment.
+`OFFICE_ONLY_INFEASIBLE_FAIL_CLOSED / SOURCE_REVIEW_FIX_REQUIRED_P1 / QA_SQL_NOT_INSTALLED`
 
-## Current Evidence Gap
+Issue: `#274`
 
-Ordinary authenticated sessions can read materials, baselines, baseline items,
-reference-image metadata, status history and permitted same-organization
-profiles. They cannot select:
+This is a bounded fallback on PR #275. It replaces the previous attempt to add
+an M4 Storage policy with reuse of the existing QA P7 Storage RLS. It does not
+authorize SQL installation, hosted Storage changes, Gate activation, QA writes
+or Production deployment.
 
-- `public.wos_qa_verified_image_proofs`
-- `public.wos_qa_p2_m2_receipts`
+## Decision
 
-The authenticated role also cannot execute `public.wos_qa_p2_m2_action` or
-`public.wos_qa_p2_m2_checked_proof_set`. Ordinary Inbox therefore recognizes
-historical signed baseline/status evidence but intentionally keeps
-`currentPrivateProofState=UNVERIFIED...`, `reviewReady=false` and
-`canStart=false`.
+The existing QA policies already allow an active same-organization
+`admin`/`manager` to read `wos-private` objects for a same-organization
+production order at `READINESS_CHECK`. No order-status `SUBMITTED` restriction
+applies to those two roles.
 
-## Design Goal
+The fallback cannot preserve the required exact object timestamp standard:
 
-Provide one GET-only, order-scoped verifier for a bounded QA order. It must
-distinguish:
+- Pinned Storage server source commit
+  `c0d596a798f8b21a9a5808875e6bfcdc02ca54a7` returns
+  `last_modified: obj.updated_at` from `InfoRenderer`.
+- That service pins `pg@8.23.1` with `pg-types@2.2.0`. It overrides only INT8,
+  so `timestamptz` uses the default JavaScript `Date` parser.
+- `Date`/JSON serialization retains milliseconds only. A database value with
+  microseconds such as `.123456Z` is exposed as `.123Z`.
+- The reviewed design requires an exact six-digit microsecond commitment, not
+  a rounded or fuzzy comparison. Therefore a true object with a non-zero
+  sub-millisecond component is deterministically rejected.
 
-1. Database proof/object metadata valid and unexpired at two stable snapshots.
-2. Actual private object bytes downloaded under the caller's RLS permissions.
-3. Recomputed SHA-256 matching the registered proof.
-4. Strict four-image baseline and exact one-image-per-category cardinality.
-5. Matching Office/Workshop signatures and a continuous M2 receipt chain.
+This is fail-closed, not a security bypass, but it cannot support a usable
+positive verification without changing the approved identity/version evidence
+standard. No such downgrade is authorized in this task.
 
-The verifier never grants start authority. `canStart=false` is invariant.
+Final decision:
 
-## Future Object Allowlist
+`OFFICE_ONLY_INFEASIBLE_FAIL_CLOSED`
 
-No object in this list exists under this authorization.
+Keep the historical Proof state `UNVERIFIED`, `reviewReady=false` and
+`canStart=false`. Stop this Storage-owner/metadata loop.
 
-### Read-only database function
+The pinned Storage SDK still correctly maps `last_modified` to `lastModified`,
+and raw `download(path)` remains a GET without image transforms. The blocker is
+the trusted service's timestamp precision, not the browser request path.
+
+Independent review corrections retained in the source:
+
+- Activation pins the approved snapshot and private bridge function
+  definitions by SHA-256.
+- Storage metadata parsing now requires `archivedAt === null` and
+  `isDeleteMarker === false`; missing safety fields fail closed.
+
+## Role Boundary
+
+First-stage verifier roles:
+
+- `admin`: allowed for the same active organization and QA order.
+- `manager`: allowed for the same active organization and QA order.
+- `operator`: denied and remains `UNVERIFIED` until separately supported.
+- `sales`: denied in this phase.
+- `viewer`: denied.
+- anonymous: denied in both the route, RPC and Storage RLS.
+- cross-organization Admin/Manager: denied by the RPC and Storage path/org RLS.
+
+The route verifies the active Profile and derives organization/profile identity
+from `auth.uid()`. Client-supplied organization, role or actor IDs are not
+accepted.
+
+## Database Snapshot
+
+The uninstalled RPC is:
 
 `public.wos_qa_m4_readonly_proof_snapshot(p_order_id uuid, p_expected_version integer, p_version_label text)`
 
-Recommended properties:
+It is `SECURITY DEFINER`, owned by the NOLOGIN
+`wos_m4_proof_verifier_owner`, has `search_path=''`, and is not executable by
+`authenticated` until the separate activation phase. A private installer-owned
+bridge returns the real `auth.uid()` only to the dedicated owner.
 
-- `LANGUAGE plpgsql`
-- `SECURITY DEFINER`
-- `SET search_path=''`
-- `VOLATILE` because it checks `clock_timestamp()`
-- `REVOKE ALL FROM PUBLIC, anon`
-- `GRANT EXECUTE TO authenticated`
-- no dynamic SQL
-- no writes
-- only explicitly qualified objects
+The function verifies:
 
-The function must derive the actor from `auth.uid()`. It must load exactly one
-active `profiles` row for that user and reject missing, inactive or ambiguous
-profiles. Caller-supplied actor, organization, role or profile IDs are not
-accepted.
+1. One active same-organization Admin/Manager Profile.
+2. A `QA-NONPROD-` order at the requested numeric version and version label.
+3. `READINESS_CHECK`.
+4. Exactly one CURRENT, non-superseded baseline.
+5. Exactly four baseline items and four distinct reference-image IDs.
+6. Exactly one image for each category:
+   `PRODUCT`, `FILM_PATTERN`, `CUSTOMER_APPROVED_SAMPLE`, `SIGNED_SAMPLE`.
+7. Every image belongs to the order, organization, current production version,
+   is READY, non-superseded, in `wos-private`, and has the canonical path.
+8. Exactly one unexpired Proof per image with matching organization, order,
+   bucket and path.
+9. Distinct active Office and Workshop signers, matching proof-set digests and
+   expected post-order versions.
+10. Four continuous M2 receipts with recomputed receipt digests.
+11. `canStart=false`.
 
-The RPC return type is itself the safe DTO. It must never contain a Storage
-path, object ID, signed URL, access token or raw proof row. Because
-`authenticated` can invoke the RPC directly through PostgREST, the route-level
-read switch is defense in depth, not the authorization boundary.
+The safe response contains only order/version/baseline identifiers, expiry and
+fingerprint fields, the four image IDs/categories/SHA-256 values, irreversible
+object commitments and invariant booleans. It contains no Storage path,
+Storage object ID, signed URL, token, raw Proof/Receipt row or organization ID.
 
-Allowed read roles for this verifier:
+## Object Commitment
 
-- `admin`
-- `manager`
-- `sales` when same organization and normal WOS order visibility applies
-- `operator`
-- `workshop` / `technician` only if the server role policy explicitly includes
-  them
+The SQL function and trusted server use one canonical byte sequence:
 
-Viewer and anonymous callers fail closed.
-
-### Optional server-side helper functions
-
-Only if independently reviewed:
-
-- `public.wos_qa_m4_assert_exact_four_image_baseline(...)`
-- `public.wos_qa_m4_assert_proof_receipt_chain(...)`
-
-Both must remain private (`REVOKE ALL FROM PUBLIC, anon, authenticated`) and be
-callable only by the snapshot function. They must not return Storage paths to
-the browser.
-
-No new table, trigger, column, RLS policy, direct table grant or dynamic SQL is
-required by this design.
-
-## Function Checks
-
-The snapshot function must:
-
-1. Require non-null `auth.uid()` and one active authoritative Profile.
-2. Lock/read one production order by exact `p_order_id`, Profile organization,
-   `p_expected_version`, `version_label=p_version_label`, active workflow and
-   `QA-NONPROD-` order-number scope.
-3. Require exactly one CURRENT, non-superseded, same-version baseline.
-4. Require exactly four baseline items, four distinct reference-image IDs and
-   exactly one required image for each category:
-   `PRODUCT`, `FILM_PATTERN`, `SIGNED_SAMPLE`,
-   `CUSTOMER_APPROVED_SAMPLE`.
-5. Require every image to match order, organization, production version,
-   `READY`, non-superseded, private bucket and a canonical order path.
-6. Require exactly one current proof per selected image with matching bucket,
-   path, Storage object ID/version/update time, valid SHA-256 format,
-   `verified_at <= now < expires_at`, non-archived object and no delete marker.
-7. Reuse the reviewed canonical proof-set logic where possible, but enforce the
-   stricter M4 rule of exactly four images rather than four-to-twelve.
-8. Require both Office and Workshop signer Profiles to resolve exactly once as
-   active, same-organization, permitted-role records. Missing, ambiguous,
-   inactive or cross-organization signer Profiles abort the verifier.
-   Confirmation order and post-order versions must agree with the baseline.
-9. Require exactly one `BASELINE_SELECT`, `BASELINE_OFFICE_CONFIRM`,
-   `BASELINE_WORKSHOP_CONFIRM` and `FINAL_READINESS_CONFIRM` receipt for the
-   current baseline, with unique request IDs, permitted roles, continuous
-   numeric versions and matching proof-set digests.
-10. Return a stable object snapshot fingerprint derived from proof/object IDs,
-    object versions, updated times, proof SHA-256 and expiry.
-
-Any missing, duplicate, malformed, cross-org, cross-order, stale or expired row
-aborts the result. No partial success list is returned.
-
-## Storage Bytes Verification
-
-The database can validate stored metadata and object identity. It cannot prove
-that file bytes currently hash to the recorded SHA merely by querying a proof
-row.
-
-The future Next.js server route must:
-
-1. Call the snapshot RPC using the authenticated user's server-side Supabase
-   client, never service role.
-2. Read selected `wos_reference_images` metadata through the same authenticated
-   RLS client.
-3. Download each `wos-private` object through the user-scoped Storage client.
-4. Recompute SHA-256 over the exact downloaded bytes with Web Crypto.
-5. Compare all recomputed hashes with the proof snapshot.
-6. Call the snapshot RPC again and require the same object identity/version,
-   updated time, SHA, expiry and baseline fingerprint.
-7. Return verified only if both snapshots match, all bytes download, every hash
-   matches and no proof expires during the operation.
-
-This satisfies actual byte verification without service role. It relies on the
-existing `wos-private` Storage SELECT policies and fails closed if the caller
-cannot download.
-
-## Future Endpoint
-
-Proposed route:
-
-`GET /api/workshop-orders/m4/proof-verifier?orderId=<uuid>`
-
-Requirements:
-
-- same verified Supabase identity and active Profile requirements as the Inbox
-  read route
-- exact QA project binding, preview environment and dedicated read switch
-- one UUID query parameter only
-- no POST/PATCH/DELETE
-- no service role
-- no raw proof/table rows in response
-- no Storage path, object ID, access token or signed URL in response
-- strict timeout and order-level abort
-- `Cache-Control: no-store, private`
-
-Safe response shape:
-
-```json
-{
-  "ok": true,
-  "code": "QA_PROOF_VERIFIED",
-  "data": {
-    "orderId": "uuid",
-    "orderVersion": 11,
-    "versionLabel": "QA-R6",
-    "baselineId": "uuid",
-    "imageCategories": [
-      "PRODUCT",
-      "FILM_PATTERN",
-      "SIGNED_SAMPLE",
-      "CUSTOMER_APPROVED_SAMPLE"
-    ],
-    "metadataSnapshotStable": true,
-    "contentSha256Verified": true,
-    "officeWorkshopDistinct": true,
-    "proofSetDigestMatch": true,
-    "m2ReceiptChainComplete": true,
-    "blockers": [],
-    "canStart": false
-  }
-}
+```text
+wos-m4-storage-object-v1
+bucket=wos-private
+path=<canonical-private-path>
+id=<lowercase-storage-object-uuid>
+version=<storage-version>
+lastModified=<UTC YYYY-MM-DDTHH:MM:SS.ffffffZ>
 ```
 
-Blocked responses return stable codes such as `PROOF_EXPIRED`,
-`PROOF_OBJECT_CHANGED`, `PROOF_SHA_MISMATCH`, `BASELINE_CARDINALITY_INVALID`,
-`SIGNOFF_MISMATCH` and `RECEIPT_CHAIN_INVALID`, without private paths.
+The UTF-8 bytes, including the final newline, are SHA-256 hashed. SQL uses:
 
-## SECURITY DEFINER Review Requirements
+```sql
+to_char(storage_object_updated_at AT TIME ZONE 'UTC',
+  'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')
+```
 
-Before any future installation:
+The server accepts only an ISO-8601 `Z` or numeric-offset timestamp with one to
+six fractional digits, normalizes it to exactly six UTC fractional digits, and
+requires an exact commitment match. It does not parse or compare timestamps
+with millisecond precision.
 
-- Prove the function owner has only the minimum private-table and
-  `storage.objects` read access needed.
-- Prove function-owned bypass of RLS is compensated by explicit `auth.uid()`,
-  active Profile, organization, order, role and version predicates.
-- Confirm `SET search_path=''` and fully qualified function/table names.
-- Confirm no dynamic SQL, temporary object, arbitrary path or caller-provided
-  organization parameter.
-- Confirm PUBLIC/anon cannot execute and authenticated cannot select base proof
-  or receipt tables directly.
-- Test direct authenticated RPC invocation with the Next.js read switch off and
-  prove the RPC DTO still contains no private path or object identifier.
-- Confirm response includes no private path, object ID, signed URL or raw
-  receipt.
-- Review concurrent object replacement, proof refresh, baseline supersession,
-  receipt replay, role changes and profile deactivation.
+## Server Verification Sequence
 
-## PostgreSQL 17 Offline Test Plan
+`GET /api/workshop-orders/m4/proof-verifier?orderId=<uuid>`:
 
-This round does not create or execute the SQL. A future disposable local PG17
-test must cover:
+1. Resolves the real Supabase identity and active Profile.
+2. Loads the order through the caller RLS and requires exact organization,
+   QA order, version, label and `READINESS_CHECK`.
+3. Calls the snapshot RPC with the caller client.
+4. Loads the four reference-image paths through caller RLS and revalidates the
+   order, organization, entity type, version, category, READY state,
+   non-superseded state and canonical path.
+5. Calls `storage.info(path)` for every image with the caller JWT, rejects
+   archived/delete-marker/invalid records, and recomputes the object commitment.
+6. Requires the Storage `id`, `version` and exact microsecond `lastModified` to
+   match the database commitment. When `size` is present, it must equal the
+   downloaded byte count.
+7. Calls `storage.download(path)` without transforms, recomputes SHA-256 over
+   the raw bytes and compares it to the signed Proof SHA.
+8. Repeats `storage.info(path)` and rejects any identity/version/time drift.
+9. Repeats the database snapshot and rejects fingerprint, digest, expiry or
+   immutable DTO drift.
+10. Rechecks proof expiry against the server clock and returns `canStart=false`.
 
-### Positive
+Every Storage, RPC and malformed-snapshot failure fails closed. The route never
+falls back to a synthetic order, fabricated image or last-known valid detail.
 
-- Active same-org Office/Operator can verify one exact order.
-- Exactly four distinct images and four distinct categories.
-- Four valid private proof/object rows.
-- Matching Office/Workshop digests and distinct signers.
-- Four current-baseline M2 receipts form a continuous version chain.
-- `canStart=false`.
+## Failure Codes
 
-### Negative
+Stable fail-closed outcomes include `FORBIDDEN`, `ORDER_NOT_AVAILABLE`,
+`PROOF_ORDER_NOT_READY`, `VERSION_CONFLICT`, `PROOF_EXPIRED`,
+`PROOF_OBJECT_CHANGED`, `PROOF_OBJECT_UNAVAILABLE`, `PROOF_SHA_MISMATCH`,
+`SNAPSHOT_CHANGED` and `PROOF_VERIFIER_TIMEOUT`.
 
-- fifth image duplicating PRODUCT
-- fifth image duplicating SIGNED_SAMPLE
-- four rows with duplicate category and one missing category
-- duplicate reference-image ID
-- missing/extra baseline item
-- wrong organization/order/version label
-- viewer/anonymous/cross-org caller
-- inactive or ambiguous Profile
-- proof expired or expires during verification
-- archived/delete-marked/changed Storage object
-- malformed SHA-256 or changed proof SHA
-- baseline superseded or multiple CURRENT baselines
-- same Office/Workshop signer
-- missing, ambiguous, inactive or cross-organization signer Profile
-- missing/duplicate/out-of-order M2 receipt
-- proof-set digest mismatch
-- transaction rollback leaves all rows/ACLs unchanged
+The public result never contains private object identity or proof evidence.
 
-## Rollback And Fingerprints
+## SQL Isolation
 
-Before any future installation:
+The QA-only draft consists of:
 
-1. Capture function definitions, ACLs, table grants, policies and relevant
-   proof/receipt counts.
-2. Store raw SQL, rollback SQL, Git blob SHA and raw-file SHA-256.
-3. Generate function argument signatures plus SHA-256 fingerprints for
-   `pg_get_functiondef()`, `proowner`, `proacl`, `proconfig`, owner role
-   memberships, direct dependencies, relevant table ACLs and relevant policies.
-   `pg_get_functiondef()` alone does not identify the Security Definer owner.
-4. Install only in one transaction, with all QA gates OFF.
-5. Roll back by revoking/dropping only the new read functions and any private
-   helper, without dropping tables or deleting immutable proof/receipt history.
-6. Re-verify authenticated execute denial after rollback.
-7. Add a PG17 owner-escalation test proving the owner cannot be swapped to a
-   higher-privilege role without changing the approved fingerprint and tests.
+- `/api` source route and verifier library;
+- Forward phase 1: public database objects, owner role and snapshot RPC;
+- Forward phase 2: activation of authenticated EXECUTE on the safe snapshot;
+- Deactivate rollback: close authenticated EXECUTE first;
+- Database rollback: drop only the fallback functions, policies, grants and
+  role.
 
-## Explicit Non-Authorizations
+There is no Storage-policy forward or rollback file in the active path. The old
+Storage-owner drafts are retained only as historical P0 evidence and are marked
+`HISTORICAL_SUPERSEDED`.
 
-- no SQL creation or installation
-- no table SELECT grant
-- no RLS disablement
-- no Storage policy change
-- no service-role business call
-- no proof/receipt mutation
-- no Gate activation
-- no M4-02 write E2E
-- no automatic start or Production release
+The installer does not need USAGE on schema `storage`, SELECT on
+`storage.objects`, membership in `supabase_storage_admin`, or any `service_role`
+credential.
+
+## Remaining Gates
+
+No SQL installation or QA Preview is requested for this fallback.
+
+Any future attempt needs a newly authorized design that obtains the exact
+PostgreSQL object identity/version/update representation from a trusted,
+order-scoped read path without exposing raw private metadata to the browser.
+Alternatively, Owner could explicitly authorize a different millisecond
+evidence standard, but that would be a security-standard change and is not
+part of this task.
+
+Next gate:
+
+`STOP_OR_REDESIGN_EXACT_OBJECT_METADATA_READ`

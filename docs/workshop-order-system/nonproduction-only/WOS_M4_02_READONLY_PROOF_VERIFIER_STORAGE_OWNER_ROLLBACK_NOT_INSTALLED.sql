@@ -1,0 +1,8 @@
+-- WOS M4-02 HISTORICAL P0 ARTIFACT
+-- HISTORICAL_SUPERSEDED / INSTALL_NOT_AUTHORIZED / DO NOT EXECUTE
+--
+-- No M4 Storage policy is installed by the active fallback, so there is no
+-- Storage-owner rollback phase. The active rollback removes only public M4
+-- functions, owner policies, grants and the dedicated NOLOGIN role.
+--
+-- This file intentionally contains no executable SQL.

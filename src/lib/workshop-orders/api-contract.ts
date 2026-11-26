@@ -197,6 +197,15 @@ export function isWosQaInboxReadonlyEnabled(input: {
   });
 }
 
+export function isWosQaM4ProofReadonlyEnabled(input: {
+  readonly vercelEnv?: string;
+  readonly authMode?: string;
+  readonly enabled?: string;
+  readonly supabaseUrl?: string;
+}): boolean {
+  return isWosQaInboxReadonlyEnabled(input);
+}
+
 // Pin the nonproduction Preview to the vetted hongda-review-dev database.
 // Preview can otherwise inherit Production Supabase URL variables.
 export const WOS_P5C_SANDBOX_REF = 'xulmpqaknlwqqculbsek' as const;

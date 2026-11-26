@@ -1,0 +1,481 @@
+WOS M4-02 OFFICE-ONLY FALLBACK / POSTGRESQL 17 DISPOSABLE EVIDENCE
+Generated from the fail-closed fallback source; no cloud connection or queue variables.
+SUITE=WOS_M4_02_PG17_SUITE
+
+NOTICE:  trigger "wos_qa_p2_m2_reference_image_guard" for relation "public.wos_reference_images" does not exist, skipping
+NOTICE:  column "superseded_at" of relation "wos_visual_baselines" already exists, skipping
+              set_config
+--------------------------------------
+ 10101010-1010-4010-8010-101010101010
+(1 row)
+
+                                                                                                                                                                                                                                                                                      baseline_select
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ {"status": "APPLIED", "orderId": "33333333-3333-4333-8333-333333333333", "version": 8, "canStart": false, "requestId": "71000000-0000-4000-8000-000000000001", "baselineId": "db172c9b-27a1-459c-9346-b3911084f0b4", "proofStatus": "UNVERIFIED", "preSpecDigest": "73b4a8ba800866a4e95196171ba727bec8462d7da6b1d7b1c9bf126c09af71ac", "receiptDigest": "af2340d6d711cdab54909b88d1b4199ff87b2d4ff10420a2ffd2a1e98aa598d1", "postSpecDigest": "38a094681dfe2fa5a37b57bd26043fc61a1a9ee4fba7ce594f1e1bea117a165f", "workflowStatus": "WAITING_MATERIAL", "productionVersionLabel": "QA-R6"}
+(1 row)
+
+                                                                                                                                                                                                                                                                                       office_confirm
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ {"status": "APPLIED", "orderId": "33333333-3333-4333-8333-333333333333", "version": 9, "canStart": false, "requestId": "71000000-0000-4000-8000-000000000002", "baselineId": "db172c9b-27a1-459c-9346-b3911084f0b4", "proofStatus": "UNVERIFIED", "preSpecDigest": "38a094681dfe2fa5a37b57bd26043fc61a1a9ee4fba7ce594f1e1bea117a165f", "receiptDigest": "58b9ecfa19085507140287d17c14b48a755e3f164ed938f00e96d0594cad1226", "postSpecDigest": "5fc627cfcb4b8942eae3c9cb937ec143e3f22bf7bbf6223959a71eaf1a88ba04", "workflowStatus": "WAITING_MATERIAL", "productionVersionLabel": "QA-R6"}
+(1 row)
+
+              set_config
+--------------------------------------
+ 20202020-2020-4020-8020-202020202020
+(1 row)
+
+                                                                                                                                                                                                                                                                                      workshop_confirm
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ {"status": "APPLIED", "orderId": "33333333-3333-4333-8333-333333333333", "version": 10, "canStart": false, "requestId": "71000000-0000-4000-8000-000000000003", "baselineId": "db172c9b-27a1-459c-9346-b3911084f0b4", "proofStatus": "UNVERIFIED", "preSpecDigest": "5fc627cfcb4b8942eae3c9cb937ec143e3f22bf7bbf6223959a71eaf1a88ba04", "receiptDigest": "e0686acb56d4bf74a6ba4fc8b432f609f653aca8b8b14aae095d967379129f86", "postSpecDigest": "6598d4b794d8e06fc7c0feaf629c0f88b748aa69c725c0f992d14d6d84a971bc", "workflowStatus": "WAITING_MATERIAL", "productionVersionLabel": "QA-R6"}
+(1 row)
+
+                                                                                                                                                                                                                                                                                      final_readiness
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ {"status": "APPLIED", "orderId": "33333333-3333-4333-8333-333333333333", "version": 11, "canStart": false, "requestId": "71000000-0000-4000-8000-000000000004", "baselineId": "db172c9b-27a1-459c-9346-b3911084f0b4", "proofStatus": "UNVERIFIED", "preSpecDigest": "6598d4b794d8e06fc7c0feaf629c0f88b748aa69c725c0f992d14d6d84a971bc", "receiptDigest": "60e2d8ec22091bb5c21e8f7ac3dfcaa11b7c73df94853d7cea7cb834476809ec", "postSpecDigest": "e55585e13ed3a00733336fce9d81a51737ebe6bcd9f581165dca607768f90f46", "workflowStatus": "READINESS_CHECK", "productionVersionLabel": "QA-R6"}
+(1 row)
+
+            ?column?
+---------------------------------
+ WOS_M4_02_SYNTHETIC_PHASE1=PASS
+(1 row)
+
+GRANT
+CREATE FUNCTION
+GRANT
+DO
+              set_config
+--------------------------------------
+ 10101010-1010-4010-8010-101010101010
+(1 row)
+
+SET
+DO
+DO
+RESET
+              set_config
+--------------------------------------
+ 70707070-7070-4070-8070-707070707070
+(1 row)
+
+SET
+DO
+RESET
+              set_config
+--------------------------------------
+ 20202020-2020-4020-8020-202020202020
+(1 row)
+
+SET
+ wos_m4_expect_error
+---------------------
+
+(1 row)
+
+DO
+RESET
+              set_config
+--------------------------------------
+ 40404040-4040-4040-8040-404040404040
+(1 row)
+
+SET
+ wos_m4_expect_error
+---------------------
+
+(1 row)
+
+DO
+RESET
+              set_config
+--------------------------------------
+ 60606060-6060-4060-8060-606060606060
+(1 row)
+
+SET
+ wos_m4_expect_error
+---------------------
+
+(1 row)
+
+RESET
+              set_config
+--------------------------------------
+ 50505050-5050-4050-8050-505050505050
+(1 row)
+
+SET
+ wos_m4_expect_error
+---------------------
+
+(1 row)
+
+RESET
+              set_config
+--------------------------------------
+ 80808080-8080-4080-8080-808080808080
+(1 row)
+
+SET
+ wos_m4_expect_error
+---------------------
+
+(1 row)
+
+DO
+RESET
+SET
+ wos_m4_expect_error
+---------------------
+
+(1 row)
+
+ wos_m4_expect_error
+---------------------
+
+(1 row)
+
+RESET
+              set_config
+--------------------------------------
+ 99999999-9999-4999-8999-999999999999
+(1 row)
+
+SET
+ wos_m4_expect_error
+---------------------
+
+(1 row)
+
+RESET
+BEGIN
+UPDATE 1
+              set_config
+--------------------------------------
+ 20202020-2020-4020-8020-202020202020
+(1 row)
+
+SET
+ wos_m4_expect_error
+---------------------
+
+(1 row)
+
+RESET
+ROLLBACK
+BEGIN
+ALTER TABLE
+INSERT 0 1
+              set_config
+--------------------------------------
+ 10101010-1010-4010-8010-101010101010
+(1 row)
+
+SET
+ wos_m4_expect_error
+---------------------
+
+(1 row)
+
+RESET
+ROLLBACK
+              set_config
+--------------------------------------
+ 10101010-1010-4010-8010-101010101010
+(1 row)
+
+SET
+ wos_m4_expect_error
+---------------------
+
+(1 row)
+
+ wos_m4_expect_error
+---------------------
+
+(1 row)
+
+RESET
+BEGIN
+ALTER TABLE
+INSERT 0 1
+INSERT 0 1
+INSERT 0 1
+ALTER TABLE
+INSERT 0 1
+SET
+ wos_m4_expect_error
+---------------------
+
+(1 row)
+
+RESET
+ROLLBACK
+BEGIN
+INSERT 0 1
+SET
+ wos_m4_expect_error
+---------------------
+
+(1 row)
+
+RESET
+ROLLBACK
+BEGIN
+DELETE 1
+SET
+ wos_m4_expect_error
+---------------------
+
+(1 row)
+
+RESET
+ROLLBACK
+BEGIN
+UPDATE 1
+SET
+ wos_m4_expect_error
+---------------------
+
+(1 row)
+
+RESET
+ROLLBACK
+BEGIN
+UPDATE 1
+SET
+ wos_m4_expect_error
+---------------------
+
+(1 row)
+
+RESET
+ROLLBACK
+BEGIN
+UPDATE 1
+SET
+ wos_m4_expect_error
+---------------------
+
+(1 row)
+
+RESET
+ROLLBACK
+BEGIN
+UPDATE 1
+SET
+ wos_m4_expect_error
+---------------------
+
+(1 row)
+
+RESET
+ROLLBACK
+BEGIN
+DROP INDEX
+INSERT 0 1
+SET
+ wos_m4_expect_error
+---------------------
+
+(1 row)
+
+RESET
+ROLLBACK
+BEGIN
+CREATE FUNCTION
+UPDATE 4
+SET
+ wos_m4_expect_error
+---------------------
+
+(1 row)
+
+RESET
+ROLLBACK
+BEGIN
+UPDATE 1
+SET
+ wos_m4_expect_error
+---------------------
+
+(1 row)
+
+RESET
+ROLLBACK
+BEGIN
+SET
+DO
+RESET
+UPDATE 1
+SET
+ wos_m4_expect_error
+---------------------
+
+(1 row)
+
+RESET
+ROLLBACK
+BEGIN
+              set_config
+--------------------------------------
+ 10101010-1010-4010-8010-101010101010
+(1 row)
+
+DO
+ROLLBACK
+BEGIN
+UPDATE 1
+SET
+ wos_m4_expect_error
+---------------------
+
+(1 row)
+
+RESET
+ROLLBACK
+BEGIN
+UPDATE 1
+SET
+ wos_m4_expect_error
+---------------------
+
+(1 row)
+
+RESET
+ROLLBACK
+BEGIN
+UPDATE 1
+SET
+ wos_m4_expect_error
+---------------------
+
+(1 row)
+
+RESET
+ROLLBACK
+BEGIN
+DELETE 1
+SET
+ wos_m4_expect_error
+---------------------
+
+(1 row)
+
+RESET
+ROLLBACK
+BEGIN
+INSERT 0 1
+SET
+ wos_m4_expect_error
+---------------------
+
+(1 row)
+
+RESET
+ROLLBACK
+BEGIN
+UPDATE 1
+SET
+ wos_m4_expect_error
+---------------------
+
+(1 row)
+
+RESET
+ROLLBACK
+BEGIN
+UPDATE 1
+SET
+ wos_m4_expect_error
+---------------------
+
+(1 row)
+
+RESET
+ROLLBACK
+BEGIN
+UPDATE 1
+SET
+ wos_m4_expect_error
+---------------------
+
+(1 row)
+
+RESET
+ROLLBACK
+BEGIN
+UPDATE 1
+SET
+ wos_m4_expect_error
+---------------------
+
+(1 row)
+
+RESET
+ROLLBACK
+BEGIN
+UPDATE 1
+SET
+ wos_m4_expect_error
+---------------------
+
+(1 row)
+
+RESET
+ROLLBACK
+                                        snapshot_fingerprint
+-----------------------------------------------------------------------------------------------------
+ WOS_M4_02_SNAPSHOT_FUNCTION_SHA256=22d0f4b09891414be8dfb7353b97bac95f259a450ed697ee8528631b595a9361
+(1 row)
+
+                                    caller_bridge_fingerprint
+-------------------------------------------------------------------------------------------------
+ WOS_M4_02_CALLER_BRIDGE_SHA256=c4bffcc159132f8018d22dcdfbf48b45421f92483b998db8e8a93ca2a689c887
+(1 row)
+
+                                         security_fingerprint
+------------------------------------------------------------------------------------------------------
+ WOS_M4_02_SECURITY_INVENTORY_SHA256=33028d0072e0d15fb7287a50daa5398a5b8b2da1951b3feacca481abef942815
+(1 row)
+
+           ?column?
+------------------------------
+ WOS_M4_02_PG17_POSITIVE=PASS
+(1 row)
+
+                ?column?
+-----------------------------------------
+ WOS_M4_02_PG17_NEGATIVE_ROLE_SCOPE=PASS
+(1 row)
+
+                 ?column?
+------------------------------------------
+ WOS_M4_02_PG17_NEGATIVE_PROOF_STATE=PASS
+(1 row)
+
+                  ?column?
+--------------------------------------------
+ WOS_M4_02_PG17_NEGATIVE_RECEIPT_CHAIN=PASS
+(1 row)
+
+              ?column?
+------------------------------------
+ WOS_M4_02_PG17_OWNER_SECURITY=PASS
+(1 row)
+
+               ?column?
+--------------------------------------
+ WOS_M4_02_SYNTHETIC_DEACTIVATED=PASS
+(1 row)
+
+DO
+           ?column?
+------------------------------
+ WOS_M4_02_PG17_ROLLBACK=PASS
+(1 row)
+
+WOS_M4_02_PG17_SUITE=PASS
+WOS_M4_02_PG17_NO_CLOUD_CONNECTION=PASS
+WOS_M4_02_EXISTING_P7_STORAGE_RLS=PASS
+WOS_M4_02_NO_NEW_STORAGE_POLICY=PASS
+WOS_M4_02_OFFICE_ONLY_SNAPSHOT=PASS

@@ -1,0 +1,10 @@
+-- WOS M4-02 HISTORICAL P0 ARTIFACT
+-- HISTORICAL_SUPERSEDED / INSTALL_NOT_AUTHORIZED / DO NOT EXECUTE
+--
+-- The former Storage-owner phase required CREATE POLICY on storage.objects and
+-- could not prove a supported hosted executor on QA. PR #275 now uses the
+-- existing P7 Storage RLS with a caller-JWT server verifier and creates no new
+-- Storage policy.
+--
+-- This file intentionally contains no executable SQL. Git history retains the
+-- previous draft for audit continuity.
