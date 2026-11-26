@@ -31,6 +31,14 @@ try {
     }
     const noticeBodies = await page.locator('.document-product-note-body').allTextContents();
     if (!english && baseName === 'all_types') {
+      const plateIndex = noticeTitles.indexOf('版费：');
+      const approvedPlate = [
+        '1. 铜版自制版完成之日起享有18个月质量保证期。正常保管及使用情况下，因制版质量产生的问题由我司负责免费修补;客户修改图稿、尺寸或工艺要求所产生的费用另行计算。',
+        '2. 超过质保期且连续12个月未下单的印版，期满后进行报废处理。印版实物归属及特殊保管要求以双方约定为准。',
+      ].join(String.fromCharCode(10));
+      if (plateIndex < 0 || noticeBodies[plateIndex] !== approvedPlate) {
+        throw new Error('Incorrect approved Chinese plate clause rendered in quotation PDF: ' + JSON.stringify(noticeBodies[plateIndex]));
+      }
       const requiredVerbatimParts = [
         '铜版自制版完成之日起享有18个月质量保证期',
         '超过质保期且连续12个月未下单的印版',
