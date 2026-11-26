@@ -5,6 +5,10 @@ import {
   fetchWosV1,
   isWosV1VerifiedOperation,
 } from '@/lib/workshop-orders/production-app-client';
+import {
+  parseWosV1M2Capability,
+  type WosV1M2Capability,
+} from '@/lib/workshop-orders/production-m2-client';
 import ProductionM2Workbench from './ProductionM2Workbench';
 
 interface OperatorOrder {
@@ -211,6 +215,7 @@ export default function ProductionWorkshopInbox() {
   const [items, setItems] = useState<readonly OperatorOrder[]>([]);
   const [details, setDetails] = useState<Record<string, OperatorDetail>>({});
   const [writeEnabled, setWriteEnabled] = useState(false);
+  const [m2, setM2] = useState<WosV1M2Capability | null>(null);
   const [loading, setLoading] = useState(true);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [message, setMessage] = useState('');
@@ -248,16 +253,19 @@ export default function ProductionWorkshopInbox() {
         || typeof capabilities?.writeEnabled !== 'boolean') {
         setItems([]);
         setWriteEnabled(false);
+        setM2(null);
         setMessage('正式 Inbox 读取失败或无权限，不能显示缓存。');
         return;
       }
       setItems(data.items as OperatorOrder[]);
       setNextCursor(typeof data.nextCursor === 'string' ? data.nextCursor : null);
       setWriteEnabled(capabilities.writeEnabled);
+      setM2(parseWosV1M2Capability(capabilities));
     } catch {
       if (!controller.signal.aborted && nextGeneration === generation.current) {
         setItems([]);
         setWriteEnabled(false);
+        setM2(null);
         setMessage('正式 Inbox 网络读取失败。');
       }
     } finally {
@@ -456,14 +464,15 @@ export default function ProductionWorkshopInbox() {
                   <p className="rounded-md bg-red-50 p-3 font-medium text-red-900">
                     canStart=false。历史 Proof 未复验，图片证据不会被视为当前有效。
                   </p>
-                  {['WAITING_MATERIAL', 'READINESS_CHECK'].includes(
+                  {m2 && ['WAITING_MATERIAL', 'READINESS_CHECK'].includes(
                     order.workflow_status,
                   ) && (
                     <ProductionM2Workbench
                       surface="workshop"
                       order={order}
                       detail={detail}
-                      writeEnabled={writeEnabled}
+                      writeEnabled={writeEnabled && m2.writesEnabled}
+                      adapter={m2.adapter}
                       onSuccess={() => { void refresh(); }}
                     />
                   )}

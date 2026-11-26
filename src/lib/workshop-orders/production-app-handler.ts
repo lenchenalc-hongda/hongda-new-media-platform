@@ -364,6 +364,8 @@ async function readOrderDetail(
         && ['admin', 'manager', 'sales'].includes(actor.role),
       operatorWriteEnabled: runtime.writesEnabled
         && ['admin', 'manager', 'operator'].includes(actor.role),
+      m2Adapter: runtime.m2Adapter ?? null,
+      m2WriteEnabled: runtime.m2WritesEnabled === true,
       canStart: false,
     },
   });
@@ -444,6 +446,8 @@ async function handleGet(
       : null,
     capabilities: {
       writeEnabled: deps.runtime.writesEnabled,
+      m2Adapter: deps.runtime.m2Adapter ?? null,
+      m2WriteEnabled: deps.runtime.m2WritesEnabled === true,
       canStart: false,
     },
   });

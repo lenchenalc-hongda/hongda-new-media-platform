@@ -10,6 +10,10 @@ import {
   WOS_V1_IMAGE_CATEGORIES,
 } from '@/lib/workshop-orders/production-app-contract';
 import {
+  parseWosV1M2Capability,
+  type WosV1M2Capability,
+} from '@/lib/workshop-orders/production-m2-client';
+import {
   inspectWosOfficeCorrectionImages,
 } from '@/lib/workshop-orders/production-office-correction';
 import { createClient } from '@/lib/supabase/client';
@@ -350,6 +354,7 @@ export default function ProductionOfficeOrders() {
   const [items, setItems] = useState<readonly OfficeOrder[]>([]);
   const [details, setDetails] = useState<Record<string, OfficeDetail>>({});
   const [writeEnabled, setWriteEnabled] = useState(false);
+  const [m2, setM2] = useState<WosV1M2Capability | null>(null);
   const [loading, setLoading] = useState(true);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [message, setMessage] = useState('');
@@ -387,6 +392,7 @@ export default function ProductionOfficeOrders() {
         || typeof (data.capabilities as Record<string, unknown>).writeEnabled !== 'boolean') {
         setItems([]);
         setWriteEnabled(false);
+        setM2(null);
         setMessage('正式订单读取失败或无权限，不能显示旧数据。');
         return;
       }
@@ -395,10 +401,12 @@ export default function ProductionOfficeOrders() {
       setWriteEnabled(Boolean(
         (data.capabilities as Record<string, unknown>).writeEnabled,
       ));
+      setM2(parseWosV1M2Capability(data.capabilities));
     } catch {
       if (!controller.signal.aborted && nextGeneration === generation.current) {
         setItems([]);
         setWriteEnabled(false);
+        setM2(null);
         setMessage('正式订单网络读取失败，不能显示缓存。');
       }
     } finally {
@@ -547,14 +555,15 @@ export default function ProductionOfficeOrders() {
                     当前私有图片 Proof：{detail.currentPrivateProofState}；
                     当前图片记录 {detail.images.length} 条；canStart=false。
                   </p>
-                  {['WAITING_MATERIAL', 'READINESS_CHECK'].includes(
+                  {m2 && ['WAITING_MATERIAL', 'READINESS_CHECK'].includes(
                     order.workflow_status,
                   ) && (
                     <ProductionM2Workbench
                       surface="office"
                       order={order}
                       detail={detail}
-                      writeEnabled={writeEnabled}
+                      writeEnabled={writeEnabled && m2.writesEnabled}
+                      adapter={m2.adapter}
                       onSuccess={() => { void refresh(); }}
                     />
                   )}

@@ -19,6 +19,10 @@ files=(
   docs/workshop-order-system/production-readiness/sql/WOS_V1_PRODUCTION_M2_ACTIVATION_NOT_AUTHORIZED.sql
   docs/workshop-order-system/production-readiness/sql/WOS_V1_PRODUCTION_M2_DEACTIVATE_NOT_AUTHORIZED.sql
   docs/workshop-order-system/production-readiness/sql/WOS_V1_PRODUCTION_M2_ROLLBACK_NOT_AUTHORIZED.sql
+  docs/workshop-order-system/production-readiness/sql/WOS_V1_QA_UAT_M2_INSTALL_NOT_AUTHORIZED.sql
+  docs/workshop-order-system/production-readiness/sql/WOS_V1_QA_UAT_M2_ACTIVATE_NOT_AUTHORIZED.sql
+  docs/workshop-order-system/production-readiness/sql/WOS_V1_QA_UAT_M2_DEACTIVATE_NOT_AUTHORIZED.sql
+  docs/workshop-order-system/production-readiness/sql/WOS_V1_QA_UAT_M2_ROLLBACK_NOT_AUTHORIZED.sql
   docs/workshop-order-system/production-readiness/sql/WOS_V1_PRODUCTION_RPC_ACTIVATION_TEMPLATE_NOT_AUTHORIZED.sql
   docs/workshop-order-system/production-readiness/sql/WOS_V1_PRODUCTION_RPC_DEACTIVATE_NOT_AUTHORIZED.sql
   docs/workshop-order-system/production-readiness/sql/WOS_V1_PRODUCTION_FOUNDATION_CONTAINMENT_NOT_AUTHORIZED.sql
@@ -28,6 +32,7 @@ files=(
   docs/workshop-order-system/production-readiness/sql/WOS_V1_HOSTED_QA_DEPENDENCIES_ROLLBACK_NOT_AUTHORIZED.sql
   src/app/api/workshop-orders/v1/route.ts
   src/app/api/workshop-orders/v1-qa/route.ts
+  src/app/api/workshop-orders/v1-qa/m2/route.ts
   src/app/api/workshop-orders/v1/m2/route.ts
   src/app/workshop-orders/inbox/page.tsx
   src/app/workshop-orders/production/new/page.tsx
@@ -41,6 +46,7 @@ files=(
   src/lib/workshop-orders/production-app-handler.ts
   src/lib/workshop-orders/production-app-server.ts
   src/lib/workshop-orders/production-m2-client.ts
+  src/lib/workshop-orders/production-m2-handler.ts
   src/lib/workshop-orders/bounded-request-body.ts
   src/lib/workshop-orders/p2-m2-contract.ts
   supabase/functions/_shared/wos-png-integrity.ts
@@ -53,8 +59,11 @@ files=(
   tests/unit/workshop-order-production-m2-contract.test.ts
   tests/sql/run-wos-v1-production-m2-pg17.sh
   tests/sql/run-wos-v1-production-m2-concurrency-pg17.sh
+  tests/sql/run-wos-v1-production-m2-qa-uat-pg17.sh
   tests/sql/wos-v1-production-m2-pg17-fixture.sql
   tests/sql/wos-v1-production-m2-pg17-assertions.sql
+  tests/sql/wos-v1-production-m2-qa-uat-closed-gate-assertion.sql
+  tests/sql/wos-v1-production-m2-qa-uat-pg17-assertions.sql
   tests/sql/wos-v1-hosted-qa-dependencies-pg17-assertions.sql
   tests/sql/wos-v1-hosted-qa-dependencies-pg17-suite.sh
   tests/sql/wos-v1-hosted-qa-existing-prerequisites.sql
@@ -95,7 +104,18 @@ files=(
   docs/workshop-order-system/production-readiness/WOS_V1_PRODUCTION_BUSINESS_CONTRACT_AUDIT_20261126.md
   docs/workshop-order-system/production-readiness/WOS_V1_BUSINESS_UAT_CHECKLISTS_20261126.md
   docs/workshop-order-system/production-readiness/WOS_V1_GO_NO_GO_20261126.md
+  docs/workshop-order-system/production-readiness/WOS_V1_PRODUCTION_M2_QA_UAT_OWNER_GATE_20261126.md
   docs/workshop-order-system/production-readiness/evidence/WOS_V1_PRODUCTION_READONLY_20261126.json
+  docs/workshop-order-system/production-readiness/evidence/WOS_V1_PRODUCTION_M2_QA_UAT_PREFLIGHT_20261126.json
+  docs/workshop-order-system/qa-fixture/production-m2-uat-20261126/inputs.json
+  docs/workshop-order-system/qa-fixture/production-m2-uat-20261126/v1/product.png
+  docs/workshop-order-system/qa-fixture/production-m2-uat-20261126/v1/film-pattern.png
+  docs/workshop-order-system/qa-fixture/production-m2-uat-20261126/v1/customer-approved-sample.png
+  docs/workshop-order-system/qa-fixture/production-m2-uat-20261126/v1/signed-sample.png
+  docs/workshop-order-system/qa-fixture/production-m2-uat-20261126/v2/product.png
+  docs/workshop-order-system/qa-fixture/production-m2-uat-20261126/v2/film-pattern.png
+  docs/workshop-order-system/qa-fixture/production-m2-uat-20261126/v2/customer-approved-sample.png
+  docs/workshop-order-system/qa-fixture/production-m2-uat-20261126/v2/signed-sample.png
   scripts/wos-production-readiness/write-artifact-fingerprints.sh
 )
 

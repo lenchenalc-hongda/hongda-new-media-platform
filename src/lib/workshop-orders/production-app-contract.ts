@@ -5,6 +5,9 @@ import {
   type WosSupabaseRuntime,
 } from './production-runtime-contract';
 
+export const WOS_V1_PRODUCTION_M2_QA_UAT_AUTHORIZATION_ID =
+  'WOS-V1-PRODUCTION-M2-QA-UAT-001' as const;
+
 export const WOS_V1_APP_OPERATIONS = [
   'CREATE_ORDER',
   'REGISTER_IMAGE',
@@ -220,6 +223,8 @@ export interface WosV1AppRuntimeState {
   readonly project: WosSupabaseRuntime;
   readonly readsEnabled: boolean;
   readonly writesEnabled: boolean;
+  readonly m2Adapter?: 'production' | 'qa-uat';
+  readonly m2WritesEnabled?: boolean;
 }
 
 export interface WosV1QaAppRuntimeInput {
@@ -228,6 +233,9 @@ export interface WosV1QaAppRuntimeInput {
   readonly authMode?: string;
   readonly qaEnabled?: string;
   readonly qaWritesEnabled?: string;
+  readonly qaUatM2Enabled?: string;
+  readonly qaUatM2WritesEnabled?: string;
+  readonly qaUatAuthorizationId?: string;
 }
 
 export interface WosV1QaAppRuntimeState extends WosV1AppRuntimeState {
@@ -246,6 +254,8 @@ export function resolveWosV1AppRuntime(
     project,
     readsEnabled,
     writesEnabled: readsEnabled && input.writesEnabled === 'true',
+    m2Adapter: 'production',
+    m2WritesEnabled: readsEnabled && input.writesEnabled === 'true',
   };
 }
 
@@ -263,11 +273,57 @@ export function resolveWosV1QaAppRuntime(
     && input.vercelEnv === 'preview'
     && input.authMode === 'supabase'
     && input.qaEnabled === 'true';
+  const m2Enabled = readsEnabled
+    && input.qaUatM2Enabled === 'true'
+    && input.qaUatAuthorizationId
+      === WOS_V1_PRODUCTION_M2_QA_UAT_AUTHORIZATION_ID;
   return {
     project,
     readsEnabled,
     writesEnabled: readsEnabled && input.qaWritesEnabled === 'true',
+    ...(m2Enabled ? { m2Adapter: 'qa-uat' as const } : {}),
+    m2WritesEnabled: m2Enabled && input.qaUatM2WritesEnabled === 'true',
     adapter: 'qa-preview',
+  };
+}
+
+export interface WosV1QaM2RuntimeInput {
+  readonly vercelEnv?: string;
+  readonly supabaseUrl?: string;
+  readonly authMode?: string;
+  readonly qaEnabled?: string;
+  readonly qaUatM2Enabled?: string;
+  readonly qaUatM2WritesEnabled?: string;
+  readonly qaUatAuthorizationId?: string;
+}
+
+export interface WosV1QaM2RuntimeState {
+  readonly project: WosSupabaseRuntime;
+  readonly enabled: boolean;
+  readonly writesEnabled: boolean;
+  readonly adapter: 'qa-uat';
+  readonly authorizationId: typeof WOS_V1_PRODUCTION_M2_QA_UAT_AUTHORIZATION_ID;
+}
+
+export function resolveWosV1QaM2Runtime(
+  input: WosV1QaM2RuntimeInput,
+): WosV1QaM2RuntimeState {
+  const project = classifyWosSupabaseRuntime(input.supabaseUrl);
+  const qaProjectPinned = project === 'qa'
+    && input.supabaseUrl === 'https://' + WOS_QA_SUPABASE_REF + '.supabase.co';
+  const enabled = qaProjectPinned
+    && input.vercelEnv === 'preview'
+    && input.authMode === 'supabase'
+    && input.qaEnabled === 'true'
+    && input.qaUatM2Enabled === 'true'
+    && input.qaUatAuthorizationId
+      === WOS_V1_PRODUCTION_M2_QA_UAT_AUTHORIZATION_ID;
+  return {
+    project,
+    enabled,
+    writesEnabled: enabled && input.qaUatM2WritesEnabled === 'true',
+    adapter: 'qa-uat',
+    authorizationId: WOS_V1_PRODUCTION_M2_QA_UAT_AUTHORIZATION_ID,
   };
 }
 

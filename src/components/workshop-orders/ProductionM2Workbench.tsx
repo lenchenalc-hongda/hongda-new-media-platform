@@ -2,7 +2,10 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
-import { fetchWosV1M2 } from '@/lib/workshop-orders/production-m2-client';
+import {
+  fetchWosV1M2,
+  type WosV1M2Adapter,
+} from '@/lib/workshop-orders/production-m2-client';
 import {
   isWosP2M2Result,
   isWosV1StartReleaseResult,
@@ -78,12 +81,14 @@ export default function ProductionM2Workbench({
   order,
   detail,
   writeEnabled,
+  adapter,
   onSuccess,
 }: {
   readonly surface: 'office' | 'workshop';
   readonly order: ProductionM2Order;
   readonly detail: ProductionM2Detail;
   readonly writeEnabled: boolean;
+  readonly adapter: WosV1M2Adapter;
   readonly onSuccess: () => void;
 }) {
   const [role, setRole] = useState<string | null>(null);
@@ -234,7 +239,7 @@ export default function ProductionM2Workbench({
     setBusy(true);
     setMessage('等待数据库事务、Proof 有效期和双签规则核验。');
     try {
-      const result = await fetchWosV1M2(action);
+      const result = await fetchWosV1M2(action, adapter);
       if (!result.ok
         || !isWosP2M2Result(result.data, action)
         || !['WOS_V1_M2_ACTION_APPLIED', 'WOS_V1_M2_REPLAY_VERIFIED']
@@ -281,7 +286,7 @@ export default function ProductionM2Workbench({
     setBusy(true);
     setMessage('等待独立人工放行事务核验。');
     try {
-      const result = await fetchWosV1M2(action);
+      const result = await fetchWosV1M2(action, adapter);
       if (!result.ok
         || !isWosV1StartReleaseResult(result.data, action)
         || !['WOS_V1_START_RELEASE_AUTHORIZED',

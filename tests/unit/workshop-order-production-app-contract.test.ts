@@ -9,6 +9,7 @@ import {
   parseWosV1ReadQuery,
   resolveWosV1AppRuntime,
   resolveWosV1QaAppRuntime,
+  resolveWosV1QaM2Runtime,
   wosV1OperationRoleAllowed,
   wosV1RpcInvocation,
 } from '../../src/lib/workshop-orders/production-app-contract';
@@ -60,6 +61,8 @@ const qaPreview = resolveWosV1QaAppRuntime({
 assert.equal(qaPreview.project, 'qa');
 assert.equal(qaPreview.readsEnabled, true);
 assert.equal(qaPreview.writesEnabled, false);
+assert.equal(qaPreview.m2Adapter, undefined);
+assert.equal(qaPreview.m2WritesEnabled, false);
 assert.equal(qaPreview.adapter, 'qa-preview');
 assert.equal(resolveWosV1QaAppRuntime({
   vercelEnv: 'preview',
@@ -68,6 +71,98 @@ assert.equal(resolveWosV1QaAppRuntime({
   qaEnabled: 'true',
   qaWritesEnabled: 'true',
 }).writesEnabled, true, 'QA writes are available only with the fixed QA runtime');
+const qaM2 = resolveWosV1QaM2Runtime({
+  vercelEnv: 'preview',
+  authMode: 'supabase',
+  supabaseUrl: 'https://xulmpqaknlwqqculbsek.supabase.co',
+  qaEnabled: 'true',
+  qaUatM2Enabled: 'true',
+  qaUatM2WritesEnabled: 'true',
+  qaUatAuthorizationId: 'WOS-V1-PRODUCTION-M2-QA-UAT-001',
+});
+assert.equal(qaM2.enabled, true);
+assert.equal(qaM2.writesEnabled, true);
+assert.equal(qaM2.adapter, 'qa-uat');
+assert.equal(resolveWosV1QaAppRuntime({
+  vercelEnv: 'preview',
+  authMode: 'supabase',
+  supabaseUrl: 'https://xulmpqaknlwqqculbsek.supabase.co',
+  qaEnabled: 'true',
+  qaWritesEnabled: 'false',
+  qaUatM2Enabled: 'true',
+  qaUatM2WritesEnabled: 'true',
+  qaUatAuthorizationId: 'WOS-V1-PRODUCTION-M2-QA-UAT-001',
+}).m2WritesEnabled, true);
+assert.equal(resolveWosV1QaAppRuntime({
+  vercelEnv: 'preview',
+  authMode: 'supabase',
+  supabaseUrl: 'https://xulmpqaknlwqqculbsek.supabase.co',
+  qaEnabled: 'true',
+  qaUatM2Enabled: 'true',
+  qaUatM2WritesEnabled: 'false',
+  qaUatAuthorizationId: 'WOS-V1-PRODUCTION-M2-QA-UAT-001',
+}).m2WritesEnabled, false);
+for (const rejected of [
+  resolveWosV1QaM2Runtime({
+    vercelEnv: 'production',
+    authMode: 'supabase',
+    supabaseUrl: 'https://xulmpqaknlwqqculbsek.supabase.co',
+    qaEnabled: 'true',
+    qaUatM2Enabled: 'true',
+    qaUatM2WritesEnabled: 'true',
+    qaUatAuthorizationId: 'WOS-V1-PRODUCTION-M2-QA-UAT-001',
+  }),
+  resolveWosV1QaM2Runtime({
+    vercelEnv: 'preview',
+    authMode: 'supabase',
+    supabaseUrl: 'https://amqpvxrurenevniilhtl.supabase.co',
+    qaEnabled: 'true',
+    qaUatM2Enabled: 'true',
+    qaUatM2WritesEnabled: 'true',
+    qaUatAuthorizationId: 'WOS-V1-PRODUCTION-M2-QA-UAT-001',
+  }),
+  resolveWosV1QaM2Runtime({
+    vercelEnv: 'preview',
+    authMode: 'not-supabase',
+    supabaseUrl: 'https://xulmpqaknlwqqculbsek.supabase.co',
+    qaEnabled: 'true',
+    qaUatM2Enabled: 'true',
+    qaUatM2WritesEnabled: 'true',
+    qaUatAuthorizationId: 'WOS-V1-PRODUCTION-M2-QA-UAT-001',
+  }),
+  resolveWosV1QaM2Runtime({
+    vercelEnv: 'preview',
+    authMode: 'supabase',
+    supabaseUrl: 'https://xulmpqaknlwqqculbsek.supabase.co',
+    qaEnabled: 'true',
+    qaUatM2Enabled: 'false',
+    qaUatM2WritesEnabled: 'true',
+    qaUatAuthorizationId: 'WOS-V1-PRODUCTION-M2-QA-UAT-001',
+  }),
+  resolveWosV1QaM2Runtime({
+    vercelEnv: 'preview',
+    authMode: 'supabase',
+    supabaseUrl: 'https://xulmpqaknlwqqculbsek.supabase.co',
+    qaEnabled: 'true',
+    qaUatM2Enabled: 'true',
+    qaUatM2WritesEnabled: 'true',
+    qaUatAuthorizationId: 'WOS-V1-STALE-AUTHORIZATION',
+  }),
+]) {
+  assert.equal(rejected.enabled, false);
+  assert.equal(rejected.writesEnabled, false);
+}
+const qaM2ReadOnly = resolveWosV1QaM2Runtime({
+  vercelEnv: 'preview',
+  authMode: 'supabase',
+  supabaseUrl: 'https://xulmpqaknlwqqculbsek.supabase.co',
+  qaEnabled: 'true',
+  qaUatM2Enabled: 'true',
+  qaUatM2WritesEnabled: 'false',
+  qaUatAuthorizationId: 'WOS-V1-PRODUCTION-M2-QA-UAT-001',
+});
+assert.equal(qaM2ReadOnly.enabled, true);
+assert.equal(qaM2ReadOnly.writesEnabled, false);
 for (const rejected of [
   resolveWosV1QaAppRuntime({
     vercelEnv: 'production',

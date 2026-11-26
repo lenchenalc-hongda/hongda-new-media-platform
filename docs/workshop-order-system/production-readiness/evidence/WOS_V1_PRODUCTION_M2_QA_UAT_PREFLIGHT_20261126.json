@@ -1,0 +1,87 @@
+{
+  "checkedAt": "2026-11-26T09:51:55.194324Z",
+  "projectRef": "xulmpqaknlwqqculbsek",
+  "organizationId": "0ff53d93-2b9e-48b9-8113-a4768c39cdd2",
+  "readOnly": true,
+  "liveCounts": {
+    "orders": 90,
+    "referenceImages": 126,
+    "verifiedImageProofs": 36,
+    "wosPrivateStorageObjects": 127,
+    "baselines": 16,
+    "baselineItems": 64
+  },
+  "schemaState": {
+    "productionM2ReceiptsPresent": false,
+    "productionM2StartReleasesPresent": false,
+    "productionM2ActionPresent": false,
+    "productionM2StartReleasePresent": false,
+    "legacyQaM2ActionPresent": true,
+    "qaUatSchemaPresent": false
+  },
+  "newOrderUniqueness": {
+    "requestId": "ccd975a6-1516-4833-afd1-902077e70ed8",
+    "orderNumber": "QA-NONPROD-ccd975a6-1516-4833-afd1-902077e70ed8",
+    "receiptCollisions": 0,
+    "orderNumberCollisions": 0,
+    "orderIdCollisions": 0
+  },
+  "inputUniqueness": {
+    "imageIdsChecked": 8,
+    "imageIdCollisions": 0
+  },
+  "cpc": {
+    "customerId": "11f47ff8-a4de-4a9a-ae00-1f036c682f6f",
+    "customerName": "QA NONPRODUCTION ONLY - WOS CPC TEST CUSTOMER",
+    "customerStatus": "active",
+    "projectId": "1ad314a0-f44f-49f3-b099-685ff0c2eaab",
+    "projectName": "QA NONPRODUCTION ONLY - WOS P1 TEST PROJECT",
+    "projectStatus": "active",
+    "projectArchived": false
+  },
+  "actors": {
+    "office": {
+      "profileId": "f8adf44a-f04e-44b4-9c82-8b96508097bb",
+      "authUserId": "3c0d8866-498a-4e61-a602-28b7a83f75f5",
+      "role": "admin",
+      "active": true,
+      "keychainServiceObserved": true
+    },
+    "workshop": {
+      "profileId": "6068f9b4-0452-4f1c-9952-b667c1ee470e",
+      "authUserId": "a461ef01-e911-44e4-ae49-9b19a50c3c69",
+      "role": "operator",
+      "active": true,
+      "keychainServiceObserved": true
+    },
+    "independentRelease": {
+      "profileId": "eb62a21a-f809-414e-ac14-9c6fdfa1e117",
+      "authUserId": "86eb4bfd-b1a6-4c94-86b3-e0599895f586",
+      "role": "manager",
+      "active": true,
+      "keychainServiceObserved": false
+    }
+  },
+  "negativeActors": {
+    "viewer": {
+      "profileId": "a6226d03-bd17-4a1e-a725-3846eeef3f6c",
+      "authUserId": "7ebfb55d-1595-4417-8d14-3baf81d66aaa",
+      "role": "viewer",
+      "active": true,
+      "keychainServiceObserved": true
+    },
+    "crossOrganizationManager": {
+      "profileId": "86f9acd7-812f-43a2-9dc7-ab773259c62f",
+      "authUserId": "967002b1-1adf-4d0b-98e5-00d1b4544291",
+      "organizationId": "fbdb0989-ae25-4ba4-92f9-3266cc845977",
+      "role": "manager",
+      "active": true,
+      "keychainServiceObserved": true
+    }
+  },
+  "limitations": [
+    "JWT validity and active Profile binding must be reverified immediately before the Owner-authorized write window.",
+    "The independent-release Keychain item was not observed during this source-preparation task.",
+    "No remote QA SQL, Edge deployment, Gate, order, upload or business write was performed."
+  ]
+}

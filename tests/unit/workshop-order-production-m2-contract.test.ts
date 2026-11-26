@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import {
   canActOnWosP2M2,
@@ -121,17 +122,45 @@ const route = readFileSync(
   'src/app/api/workshop-orders/v1/m2/route.ts',
   'utf8',
 );
-assert(route.includes("'wos_v1_m2_action'"));
-assert(route.includes("'wos_v1_authorize_production_start'"));
 assert(route.includes('resolveWosProductionRuntime'));
-assert(route.includes("x-wos-v1-m2"));
-assert(route.includes("startsWith('QA-')"));
-assert(route.includes('FOUR_IMAGE_BASELINE_REQUIRED'));
-assert(route.includes('readBoundedRequestBody(req, 8192)'));
+assert(route.includes('handleWosV1M2Request'));
+assert(route.includes("adapter: 'production'"));
+assert(route.includes('WOS_V1_M2_WRITES_DISABLED'));
 assert(!route.includes('wos_qa_p2_m2_action'));
 assert(!route.includes('service_role'));
 assert(!route.includes('.insert('));
 assert(!route.includes('.update('));
+
+const qaRoute = readFileSync(
+  'src/app/api/workshop-orders/v1-qa/m2/route.ts',
+  'utf8',
+);
+assert(qaRoute.includes('resolveWosV1QaM2Runtime'));
+assert(qaRoute.includes("adapter: 'qa-uat'"));
+assert(qaRoute.includes('WOS_V1_QA_UAT_M2_WRITES_DISABLED'));
+assert(qaRoute.includes('WOS_V1_QA_UAT_AUTHORIZATION_ID'));
+assert(!qaRoute.includes('wos_qa_p2_m2_action'));
+assert(!qaRoute.includes('service_role'));
+
+const handler = readFileSync(
+  'src/lib/workshop-orders/production-m2-handler.ts',
+  'utf8',
+);
+assert(handler.includes("'wos_v1_m2_action'"));
+assert(handler.includes("'wos_v1_authorize_production_start'"));
+assert(handler.includes("'wos_v1_qa_uat_m2_action'"));
+assert(handler.includes("'wos_v1_qa_uat_authorize_production_start'"));
+assert(handler.includes("x-wos-v1-m2"));
+assert(handler.includes('p_authorization_id'));
+assert(handler.includes('WOS_V1_QA_UAT_AUTHORIZATION_ID_REQUIRED'));
+assert(handler.includes("orderNumber.startsWith('QA-NONPROD-')"));
+assert(handler.includes('!orderNumber.startsWith('));
+assert(handler.includes('FOUR_IMAGE_BASELINE_REQUIRED'));
+assert(handler.includes('readBoundedRequestBody(req, 8192)'));
+assert(!handler.includes('wos_qa_p2_m2_action'));
+assert(!handler.includes('service_role'));
+assert(!handler.includes('.insert('));
+assert(!handler.includes('.update('));
 
 const sql = readFileSync(
   'supabase/migrations/20261126090000_wos_v1_production_m2_signoff.sql',
@@ -200,6 +229,8 @@ const workbench = readFileSync(
   'utf8',
 );
 assert(workbench.includes('fetchWosV1M2'));
+assert(workbench.includes('adapter: WosV1M2Adapter'));
+assert(workbench.includes('fetchWosV1M2(action, adapter)'));
 assert(workbench.includes('BASELINE_SELECT'));
 assert(workbench.includes('BASELINE_OFFICE_CONFIRM'));
 assert(workbench.includes('MATERIAL_RECORD'));
@@ -213,6 +244,118 @@ assert(workbench.includes('!finalDatesReady'));
 assert(workbench.includes('const finalReadinessActor'));
 assert(workbench.includes('!finalReadinessActor'));
 assert(workbench.includes('canStart=false'));
+
+const m2Client = readFileSync(
+  'src/lib/workshop-orders/production-m2-client.ts',
+  'utf8',
+);
+assert(m2Client.includes("'/api/workshop-orders/v1-qa/m2'"));
+assert(m2Client.includes("'/api/workshop-orders/v1/m2'"));
+assert(m2Client.includes('parseWosV1M2Capability'));
+assert(!m2Client.includes('NEXT_PUBLIC_WOS_V1_QA_PREVIEW'));
+
+const qaInstall = readFileSync(
+  'docs/workshop-order-system/production-readiness/sql/WOS_V1_QA_UAT_M2_INSTALL_NOT_AUTHORIZED.sql',
+  'utf8',
+);
+assert(qaInstall.includes('wos_v1_qa_uat.write_gates'));
+assert(qaInstall.includes('QA_UAT_M2_GATE_CLOSED'));
+assert(qaInstall.includes('public.wos_v1_m2_action'));
+assert(qaInstall.includes('public.wos_v1_authorize_production_start'));
+assert(qaInstall.includes("order_number LIKE 'QA-NONPROD-%'"));
+assert(qaInstall.includes("interval '15 minutes'"));
+assert(qaInstall.includes('FOR SHARE'));
+assert(qaInstall.includes('WOS_V1_QA_DATABASE_NOT_IDENTIFIED'));
+assert(qaInstall.includes('QA_UAT_AUTHORIZATION_ID_MISMATCH'));
+assert(qaInstall.includes('gate.authorization_id=p_authorization_id'));
+assert(!qaInstall.includes('PERFORM public.wos_qa_p2_m2_action'));
+assert(!qaInstall.includes('RETURN public.wos_qa_p2_m2_action'));
+assert(!qaInstall.includes('service_role'));
+assert(!/GRANT EXECUTE/i.test(qaInstall));
+
+const qaActivate = readFileSync(
+  'docs/workshop-order-system/production-readiness/sql/WOS_V1_QA_UAT_M2_ACTIVATE_NOT_AUTHORIZED.sql',
+  'utf8',
+);
+assert(qaActivate.includes('WOS_V1_QA_UAT_M2_ACTIVATION_NOT_AUTHORIZED'));
+assert(qaActivate.includes('GRANT EXECUTE ON FUNCTION public.wos_v1_qa_uat_m2_action'));
+assert(!qaActivate.includes(
+  'GRANT EXECUTE ON FUNCTION public.wos_v1_m2_action',
+));
+
+const qaClose = readFileSync(
+  'docs/workshop-order-system/production-readiness/sql/WOS_V1_QA_UAT_M2_DEACTIVATE_NOT_AUTHORIZED.sql',
+  'utf8',
+);
+assert(qaClose.includes("state='CLOSED'"));
+assert(qaClose.includes('REVOKE EXECUTE ON FUNCTION public.wos_v1_qa_uat_m2_action'));
+
+const uatRoot =
+  'docs/workshop-order-system/qa-fixture/production-m2-uat-20261126';
+const uat = JSON.parse(readFileSync(`${uatRoot}/inputs.json`, 'utf8')) as {
+  readonly requestId: string;
+  readonly orderNumber: string;
+  readonly qaProject: string;
+  readonly createPayload: Record<string, unknown>;
+  readonly actors: Record<string, {
+    readonly profileId: string;
+    readonly authUserId: string;
+  }>;
+  readonly negativeActors: Record<string, {
+    readonly profileId: string;
+    readonly authUserId: string;
+    readonly organizationId: string;
+    readonly role: string;
+  }>;
+  readonly images: Record<string, readonly {
+    readonly category: string;
+    readonly imageId: string;
+    readonly source: string;
+    readonly sha256: string;
+  }[]>;
+  readonly environment: Record<string, string>;
+};
+assert.equal(uat.qaProject, 'xulmpqaknlwqqculbsek');
+assert.equal(
+  uat.orderNumber,
+  'QA-NONPROD-' + uat.requestId,
+);
+assert.equal(Object.keys(uat.createPayload).length, 21);
+assert.equal(uat.createPayload.orderNumber, uat.orderNumber);
+assert.equal(new Set(
+  Object.values(uat.actors).map(actor => actor.profileId),
+).size, 3);
+assert.equal(new Set(
+  Object.values(uat.actors).map(actor => actor.authUserId),
+).size, 3);
+assert.equal(uat.negativeActors.viewer.role, 'viewer');
+assert.equal(
+  uat.negativeActors.crossOrganizationManager.organizationId,
+  'fbdb0989-ae25-4ba4-92f9-3266cc845977',
+);
+assert.equal(uat.environment.WOS_V1_QA_UAT_M2_ENABLED, 'true');
+assert.equal(uat.environment.WOS_V1_QA_UAT_M2_WRITES_ENABLED, 'true');
+assert.equal(
+  uat.environment.WOS_V1_QA_UAT_AUTHORIZATION_ID,
+  'WOS-V1-PRODUCTION-M2-QA-UAT-001',
+);
+for (const version of ['v1', 'v2']) {
+  const images = uat.images[version];
+  assert.equal(images.length, 4);
+  assert.equal(new Set(images.map(image => image.category)).size, 4);
+  assert.equal(new Set(images.map(image => image.imageId)).size, 4);
+  for (const image of images) {
+    const bytes = readFileSync(`${uatRoot}/${image.source}`);
+    assert.deepEqual(
+      Array.from(bytes.subarray(0, 8)),
+      [137, 80, 78, 71, 13, 10, 26, 10],
+    );
+    assert.equal(
+      createHash('sha256').update(bytes).digest('hex'),
+      image.sha256,
+    );
+  }
+}
 
 assert.equal(await readBoundedRequestBody(
   new Request('http://localhost/api/workshop-orders/v1/m2', {

@@ -145,6 +145,25 @@ The route:
 - uses only caller JWT and reviewed RPCs;
 - never uses `service_role` or direct table writes.
 
+## QA UAT Adapter
+
+The Production route remains unchanged in behavior. QA UAT uses the separate
+`/api/workshop-orders/v1-qa/m2` endpoint, which requires all of:
+
+- `VERCEL_ENV=preview`;
+- the exact QA Supabase project URL;
+- Supabase Auth;
+- `WOS_V1_QA_APP_ENABLED=true`;
+- `WOS_V1_QA_UAT_M2_ENABLED=true`;
+- `WOS_V1_QA_UAT_M2_WRITES_ENABLED=true`;
+- a `QA-NONPROD-*` order in the caller's organization.
+
+The endpoint never calls `wos_qa_p2_m2_action`. It invokes QA-only wrappers
+which delegate to the reviewed Production M2 RPCs only when a private database
+gate matches the exact order, organization, active Profile, action and expiry.
+The wrappers are the only M2 functions granted to `authenticated`; direct
+Production M2 execution remains denied.
+
 ## Verification
 
 ```ini

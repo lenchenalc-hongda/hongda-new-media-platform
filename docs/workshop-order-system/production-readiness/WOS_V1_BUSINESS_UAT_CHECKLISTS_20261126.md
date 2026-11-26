@@ -6,6 +6,18 @@ Status:
 No new QA write is authorized by this checklist. A fresh bounded Owner Gate is
 required before execution.
 
+The PR #283 QA adapter uses:
+
+- `POST /api/workshop-orders/v1-qa/m2` only;
+- exact QA Preview plus `WOS_V1_QA_UAT_M2_ENABLED=true` and
+  `WOS_V1_QA_UAT_M2_WRITES_ENABLED=true`;
+- `WOS_V1_QA_UAT_AUTHORIZATION_ID=WOS-V1-PRODUCTION-M2-QA-UAT-001`;
+- a database wrapper permitting only the exact QA order, organization, active
+  Profile, action list and unexpired gate row;
+- `public.wos_v1_m2_action` and
+  `public.wos_v1_authorize_production_start`, never
+  `wos_qa_p2_m2_action`.
+
 ## Office Acceptance
 
 1. Log in as an active Office Admin or owner Sales profile.
@@ -62,6 +74,7 @@ Failure conditions:
 3. Apply `START_RELEASE`.
 4. Confirm status becomes `READY_TO_START`.
 5. Confirm `productionStarted=false` and no machine/production start occurs.
+6. Confirm the release Profile differs from both signers.
 
 ## Mobile And Workshop Device
 
@@ -85,6 +98,7 @@ Verify:
 - status history and confirmation history are append-only;
 - old V1 images and expired Proofs are denied;
 - no `service_role` or direct table write is used by the browser/API.
+- direct authenticated execution of the production M2 RPCs remains false.
 
 ## Recorded UAT Result
 
