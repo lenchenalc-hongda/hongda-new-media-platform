@@ -75,13 +75,29 @@ gate functions.
 The runner supports:
 
 ```bash
-node scripts/wos-production-readiness/wos-v1-qa-uat-db-closer.mjs install
+node scripts/wos-production-readiness/wos-v1-qa-uat-db-closer.mjs install-closer-only
+node scripts/wos-production-readiness/wos-v1-qa-uat-db-closer.mjs arm-closer-only
+node scripts/wos-production-readiness/wos-v1-qa-uat-db-closer.mjs status-closer-only
+node scripts/wos-production-readiness/wos-v1-qa-uat-db-closer.mjs close-closer-only
+node scripts/wos-production-readiness/wos-v1-qa-uat-db-closer.mjs recover-closer-only
+node scripts/wos-production-readiness/wos-v1-qa-uat-db-closer.mjs install-full-m2
+node scripts/wos-production-readiness/wos-v1-qa-uat-db-closer.mjs activate-full-m2
 node scripts/wos-production-readiness/wos-v1-qa-uat-db-closer.mjs arm
 node scripts/wos-production-readiness/wos-v1-qa-uat-db-closer.mjs status
 node scripts/wos-production-readiness/wos-v1-qa-uat-db-closer.mjs close
 node scripts/wos-production-readiness/wos-v1-qa-uat-db-closer.mjs revoke
 node scripts/wos-production-readiness/wos-v1-qa-uat-db-closer.mjs recover
 ```
+
+`install-closer-only` uses only
+`WOS_V1_QA_CLOSER_ONLY_INSTALL_NOT_AUTHORIZED.sql`. It installs schema
+`wos_v1_qa_closer`, control and receipt tables, heartbeat/tick/close functions,
+and the service-role-only Edge status/heartbeat/close/probe RPCs. It does not
+read or create `write_gates`, Production M2 functions, QA business wrappers,
+order bindings or authenticated grants. It never reads the Activate SQL.
+
+The full M2 install and activation are separate explicit commands. A closer-only
+rehearsal cannot silently activate either authenticated wrapper.
 
 ARM registers a `pg_cron` job every 10 seconds. Every tick before the write
 deadline records the DB executor heartbeat; a tick at or after the deadline
@@ -132,8 +148,10 @@ rejected. Production behavior is unchanged.
 
 The LaunchAgent uses the Supabase service-role REST endpoint rather than
 `psql`, so it does not depend on an inherited shell PATH or a local PostgreSQL
-client. It sends a heartbeat on each run. The first heartbeat creates the Edge
-ARM receipt; `arm --load` cannot succeed without observing it.
+client. The service-role credential must be a JWT with role `service_role` and
+project ref `xulmpqaknlwqqculbsek`; mismatches fail before any RPC. It sends a
+heartbeat on each run and each loop iteration. The first heartbeat creates the
+Edge ARM receipt; `arm --load` cannot succeed without observing it.
 
 At the server write deadline the Edge closer:
 
@@ -143,7 +161,8 @@ At the server write deadline the Edge closer:
    ID and process nonce.
 4. Requires `503 / WOS_V1_QA_EDGE_CLOSED`, `gateStatus=CLOSED`, the exact
    execution ID and a non-empty close timestamp.
-5. Unloads its own LaunchAgent.
+5. Unloads its own LaunchAgent, verifies `launchctl print` no longer finds the
+   label and seals that result into the close receipt.
 
 The runner supports `arm`, `watch`, `status`, `close`, `revoke` and `disarm`.
 `arm --load` is mandatory for a real ARM receipt; a dry-run cannot create a
@@ -152,6 +171,15 @@ fake Edge receipt.
 If the Mac is off or offline, the server clock still rejects every Edge write
 at `write_deadline_at`. The LaunchAgent improves cleanup timing but is not the
 security boundary.
+
+The current Hosted QA `wos-v1-verify-image` is version 34, bundle
+`21fd1a8d31508662c6c0790e9304b793e864ffb321de5b77bcc8145e91f18450`.
+Its downloaded source is preserved under
+`docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_EDGE_V34_SOURCE_20261127`.
+Version 34 does not contain the closer probe branch. The closer-only rehearsal
+therefore requires a separately authorized deployment of the reviewed source;
+the current v34 closure and runtime configuration remain the recovery target.
+No remote Edge deployment is performed by this source-preparation round.
 
 ## ARM Protocol
 
@@ -177,6 +205,24 @@ The future Owner execution must perform these steps in order:
 11. Only then open the three QA UAT Gate rows.
 
 Failure or drift at any step blocks Gate opening.
+
+Credential storage and scope:
+
+```text
+DB DSN Keychain service: WOS_V1_QA_DB_CLOSER_DSN
+DB DSN account: xulmpqaknlwqqculbsek
+Edge service-role Keychain service: WOS_V1_QA_EDGE_CLOSER_SERVICE_ROLE_KEY
+Edge service-role account: xulmpqaknlwqqculbsek
+```
+
+The DB transport accepts only the exact direct host/user
+`db.xulmpqaknlwqqculbsek.supabase.co` / `postgres`, or an AWS Supabase pooler
+host matching the fixed pooler pattern with exact user
+`postgres.xulmpqaknlwqqculbsek`, plus database `postgres` and
+`sslmode=require|verify-ca|verify-full`. The Edge transport rejects non-JWT
+service credentials and JWTs whose `role` is not `service_role` or whose `ref`
+is not the QA project. Neither runner prints the DSN, service key, JWT or
+Keychain value.
 
 ## Local Evidence
 
@@ -212,6 +258,12 @@ Hosted `pg_cron` scheduler, a loaded LaunchAgent in the owner account, or the
 deployed Edge endpoint. Those remain pending until separately authorized
 remote ARM.
 
+The dedicated closer-only harness additionally proves installation without
+Production M2, no `write_gates` or business-table creation, no authenticated
+RPC execution, DB cron heartbeat and expired-tick close, detached Edge
+heartbeat and closed HTTP probe, cron removal, and audit-retaining RPC
+decommissioning.
+
 ## Required Remote Authorization
 
 A future Owner Gate may authorize only the QA project
@@ -233,6 +285,9 @@ The corresponding closeout must:
 - call both close functions;
 - verify DB and Edge close receipts;
 - verify a closed-state Edge probe;
+- require the independently produced Edge HTTP close receipt file, bound to
+  execution ID, process nonce, code SHA, `503 / WOS_V1_QA_EDGE_CLOSED` and its
+  recomputed receipt hash;
 - revoke both wrapper grants from `authenticated`;
 - remove the QA service-role Edge/bind entry points from the exposed schema;
 - unschedule the DB cron job;

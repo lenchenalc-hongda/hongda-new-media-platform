@@ -211,6 +211,22 @@ function serviceKey() {
   const key = process.env.WOS_QA_EDGE_SERVICE_ROLE_KEY
     || keychainSecret(SERVICE_KEYCHAIN, PROJECT_REF);
   if (!key) fail('WOS_V1_QA_EDGE_SERVICE_ROLE_KEY_REQUIRED');
+  if (localTestMode()) return key;
+  const parts = key.split('.');
+  if (parts.length !== 3) {
+    fail('WOS_V1_QA_EDGE_SERVICE_ROLE_JWT_REQUIRED');
+  }
+  let payload;
+  try {
+    payload = JSON.parse(
+      Buffer.from(parts[1], 'base64url').toString('utf8'),
+    );
+  } catch {
+    fail('WOS_V1_QA_EDGE_SERVICE_ROLE_JWT_INVALID');
+  }
+  if (payload?.role !== 'service_role' || payload?.ref !== PROJECT_REF) {
+    fail('WOS_V1_QA_EDGE_SERVICE_ROLE_PROJECT_SCOPE_MISMATCH');
+  }
   return key;
 }
 
@@ -488,6 +504,23 @@ async function closeEdge(state, reason) {
   });
 }
 
+function unloadLaunchAgent(state) {
+  if (localTestMode() || state.launchdLoaded !== true) {
+    return { required: false, verified: false };
+  }
+  const domainLabel = `gui/${process.getuid()}/${state.launchdLabel}`;
+  const bootout = spawnSync('launchctl', ['bootout', domainLabel], {
+    encoding: 'utf8',
+  });
+  const check = spawnSync('launchctl', ['print', domainLabel], {
+    encoding: 'utf8',
+  });
+  if (check.status === 0) {
+    fail('WOS_V1_QA_EDGE_CLOSER_LAUNCHD_UNLOAD_FAILED');
+  }
+  return { required: true, verified: true };
+}
+
 async function watch(stateFile, once) {
   const state = readState(stateFile);
   if (state.status === 'CLOSED') return;
@@ -508,17 +541,23 @@ async function watch(stateFile, once) {
   }
   const result = await closeEdge(state, 'SCHEDULED_EDGE_CLOSE');
   const probe = await probeClosed(state);
-  const receipt = {
-    status: result.status,
+  const launchAgent = unloadLaunchAgent(state);
+  const sealedReceipt = {
+    authorizationId: AUTH_ID,
+    projectRef: PROJECT_REF,
     executionId: state.executionId,
-    closedAt: result.closedAt,
-    timely: result.timely,
-    edgeCleanupDeadlineAt: result.deadlineAt,
-    probeHttpStatus: probe.status,
-    probeCode: probe.code,
-    probeVerified: probe.ok,
+    codeSha256: state.codeSha256,
+    processNonce: state.processNonce,
+    launchAgentUnloaded: launchAgent.required
+      ? launchAgent.verified
+      : false,
+    result,
+    probe,
+  };
+  const receipt = {
+    ...sealedReceipt,
     receiptSha256: createHash('sha256')
-      .update(JSON.stringify({ result, probe }))
+      .update(JSON.stringify(sealedReceipt))
       .digest('hex'),
   };
   writeFileSync(`${stateFile}.close.json`, `${JSON.stringify(receipt, null, 2)}\n`, {
@@ -528,8 +567,6 @@ async function watch(stateFile, once) {
   writeFileSync(stateFile, `${JSON.stringify(closedState, null, 2)}\n`, {
     mode: 0o600,
   });
-  const domainLabel = `gui/${process.getuid()}/${state.launchdLabel}`;
-  spawnSync('launchctl', ['bootout', domainLabel], { stdio: 'ignore' });
   process.stdout.write(`${JSON.stringify(receipt)}\n`);
   if (result.timely !== true) fail('WOS_V1_QA_EDGE_CLOSER_DEADLINE_MISSED');
   if (!probe.ok) fail('WOS_V1_QA_EDGE_CLOSED_PROBE_FAILED');
@@ -543,6 +580,12 @@ async function watchLoop(stateFile) {
     if (Number.isFinite(due) && Date.now() >= due) {
       await watch(stateFile, true);
       return;
+    }
+    try {
+      await watch(stateFile, true);
+    } catch {
+      // Heartbeats can fail after the DB closer runs; keep waiting for the
+      // independent Edge deadline so the Edge state still closes.
     }
     await new Promise(resolve => setTimeout(resolve, 1000));
   }
@@ -608,12 +651,21 @@ function disarm() {
     process.env.WOS_V1_QA_EXECUTION_ID,
     'WOS_V1_QA_EXECUTION_ID_REQUIRED',
   );
-  spawnSync(
-    'launchctl',
-    ['bootout', `gui/${process.getuid()}/${label(id)}`],
-    { stdio: 'ignore' },
-  );
-  process.stdout.write(`${JSON.stringify({ status: 'DISARMED', executionId: id })}\n`);
+  const state = existsSync(statePath(id))
+    ? readState(statePath(id))
+    : {
+        executionId: id,
+        launchdLoaded: true,
+        launchdLabel: label(id),
+      };
+  const launchAgent = unloadLaunchAgent(state);
+  process.stdout.write(`${JSON.stringify({
+    status: 'DISARMED',
+    executionId: id,
+    launchAgentUnloaded: launchAgent.required
+      ? launchAgent.verified
+      : false,
+  })}\n`);
 }
 
 const command = process.argv[2];

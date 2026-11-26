@@ -23,6 +23,8 @@ files=(
   docs/workshop-order-system/production-readiness/sql/WOS_V1_QA_UAT_M2_ACTIVATE_NOT_AUTHORIZED.sql
   docs/workshop-order-system/production-readiness/sql/WOS_V1_QA_UAT_M2_DEACTIVATE_NOT_AUTHORIZED.sql
   docs/workshop-order-system/production-readiness/sql/WOS_V1_QA_UAT_M2_ROLLBACK_NOT_AUTHORIZED.sql
+  docs/workshop-order-system/production-readiness/sql/WOS_V1_QA_CLOSER_ONLY_INSTALL_NOT_AUTHORIZED.sql
+  docs/workshop-order-system/production-readiness/sql/WOS_V1_QA_CLOSER_ONLY_ROLLBACK_NOT_AUTHORIZED.sql
   docs/workshop-order-system/production-readiness/sql/WOS_V1_PRODUCTION_RPC_ACTIVATION_TEMPLATE_NOT_AUTHORIZED.sql
   docs/workshop-order-system/production-readiness/sql/WOS_V1_PRODUCTION_RPC_DEACTIVATE_NOT_AUTHORIZED.sql
   docs/workshop-order-system/production-readiness/sql/WOS_V1_PRODUCTION_FOUNDATION_CONTAINMENT_NOT_AUTHORIZED.sql
@@ -51,6 +53,7 @@ files=(
   src/lib/workshop-orders/p2-m2-contract.ts
   scripts/wos-production-readiness/wos-v1-qa-uat-db-closer.mjs
   scripts/wos-production-readiness/wos-v1-qa-uat-edge-closer.mjs
+  tsconfig.json
   supabase/functions/_shared/wos-png-integrity.ts
   supabase/functions/wos-p7-verify-image/png.ts
   supabase/functions/wos-v1-verify-image/core.ts
@@ -64,6 +67,7 @@ files=(
   tests/sql/run-wos-v1-production-m2-pg17.sh
   tests/sql/run-wos-v1-production-m2-concurrency-pg17.sh
   tests/sql/run-wos-v1-production-m2-qa-uat-pg17.sh
+  tests/sql/run-wos-v1-qa-closer-only-pg17.sh
   tests/sql/wos-v1-production-m2-pg17-fixture.sql
   tests/sql/wos-v1-production-m2-pg17-assertions.sql
   tests/sql/wos-v1-production-m2-qa-uat-closed-gate-assertion.sql
@@ -113,6 +117,11 @@ files=(
   docs/workshop-order-system/production-readiness/evidence/WOS_V1_PRODUCTION_READONLY_20261126.json
   docs/workshop-order-system/production-readiness/evidence/WOS_V1_PRODUCTION_M2_QA_UAT_PREFLIGHT_20261126.json
   docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_UAT_CLOSER_LOCAL_EVIDENCE_20261126.json
+  docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_CLOSER_ONLY_LOCAL_EVIDENCE_20261127.json
+  docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_EDGE_V34_PRESERVATION_20261127.json
+  docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_EDGE_V34_SOURCE_20261127/index.ts
+  docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_EDGE_V34_SOURCE_20261127/core.ts
+  docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_EDGE_V34_SOURCE_20261127/wos-png-integrity.ts
   docs/workshop-order-system/qa-fixture/production-m2-uat-20261126/inputs.json
   docs/workshop-order-system/qa-fixture/production-m2-uat-20261126/v1/product.png
   docs/workshop-order-system/qa-fixture/production-m2-uat-20261126/v1/film-pattern.png

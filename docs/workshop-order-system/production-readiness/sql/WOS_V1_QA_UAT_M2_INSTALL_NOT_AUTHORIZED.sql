@@ -6,6 +6,8 @@
 BEGIN;
 
 DO $guard$
+DECLARE
+  v_closer_active boolean:=false;
 BEGIN
   IF current_setting('wos_v1.qa_uat_install_authorized',true)
     IS DISTINCT FROM 'yes'
@@ -27,6 +29,19 @@ BEGIN
   ) IS NULL OR to_regclass('public.wos_qa_trusted_proof_receipts') IS NULL
   THEN
     RAISE EXCEPTION 'WOS_V1_QA_DATABASE_NOT_IDENTIFIED';
+  END IF;
+  IF to_regclass('wos_v1_qa_closer.lifecycle') IS NOT NULL THEN
+    EXECUTE $closer_active$
+      SELECT EXISTS(
+        SELECT 1 FROM wos_v1_qa_closer.lifecycle
+        WHERE singleton=true AND public_api_owner='CLOSER_ONLY'
+      )
+    $closer_active$ INTO v_closer_active;
+  ELSIF to_regclass('wos_v1_qa_closer.controls') IS NOT NULL THEN
+    v_closer_active:=true;
+  END IF;
+  IF v_closer_active THEN
+    RAISE EXCEPTION 'WOS_V1_QA_CLOSER_ONLY_PUBLIC_API_OWNED';
   END IF;
 END;
 $guard$;

@@ -17,6 +17,11 @@ const armToken = process.env.WOS_QA_UAT_CLOSER_ARM_TOKEN;
 const processNonce = process.env.WOS_QA_UAT_EDGE_PROCESS_NONCE;
 const container = process.env.WOS_QA_PSQL_DOCKER_CONTAINER;
 const database = process.env.WOS_QA_DATABASE;
+const codeSha = process.env.WOS_QA_UAT_CLOSER_CODE_SHA || 'a'.repeat(64);
+const controlSchema =
+  process.env.WOS_QA_CLOSER_CONTROL_SCHEMA || 'wos_v1_qa_uat';
+const receiptOutputPath =
+  process.env.WOS_QA_UAT_EDGE_CLOSE_RECEIPT_OUTPUT;
 
 function fail(code) {
   throw new Error(code);
@@ -38,6 +43,19 @@ function query(sql) {
 if (!executionId || !armToken || !processNonce || !container || !database) {
   fail('EDGE_CLOSER_TEST_ENV_REQUIRED');
 }
+if (!['wos_v1_qa_uat','wos_v1_qa_closer'].includes(controlSchema)) {
+  fail('EDGE_CLOSER_CONTROL_SCHEMA_INVALID');
+}
+const controlTable =
+  controlSchema === 'wos_v1_qa_uat' ? 'closeout_controls' : 'controls';
+const armReceiptTable =
+  controlSchema === 'wos_v1_qa_uat'
+    ? 'closer_arm_receipts'
+    : 'arm_receipts';
+const closeReceiptTable =
+  controlSchema === 'wos_v1_qa_uat'
+    ? 'closer_close_receipts'
+    : 'close_receipts';
 
 const dir = mkdtempSync(join(tmpdir(), 'wos-edge-closer-'));
 const statePath = join(dir, `${executionId}.json`);
@@ -50,6 +68,19 @@ try {
       && request.headers['x-wos-qa-uat-execution-id'] === executionId
       && request.headers['x-wos-qa-uat-closer-nonce'] === processNonce
       && request.headers['x-wos-qa-closer-probe'] === '1';
+    let closedAt = '';
+    if (authorized) {
+      try {
+        closedAt = query(`
+          SELECT to_jsonb(closed_at)#>>'{}'
+          FROM ${controlSchema}.${closeReceiptTable}
+          WHERE execution_id='${executionId}'::uuid
+            AND closer_kind='EDGE';
+        `);
+      } catch {
+        closedAt = '';
+      }
+    }
     response.writeHead(authorized ? 503 : 401, {
       'Content-Type': 'application/json',
     });
@@ -60,7 +91,7 @@ try {
         ? {
             gateStatus: 'CLOSED',
             executionId,
-            closedAt: new Date().toISOString(),
+            closedAt,
           }
         : null,
     }));
@@ -75,16 +106,17 @@ try {
     executionId,
     authorizationId: 'WOS-V1-PRODUCTION-M2-QA-UAT-001',
     projectRef: 'xulmpqaknlwqqculbsek',
+    codeSha256: codeSha,
     functionUrl: `http://127.0.0.1:${address.port}/`,
     processNonce,
     launchdLabel: 'com.hongda.wos.qa-edge-closer.local-test',
-    writeDeadlineAt: new Date(Date.now() + 3000).toISOString(),
+    writeDeadlineAt: new Date(Date.now() + 8000).toISOString(),
     edgeCleanupDeadlineAt: new Date(Date.now() + 60_000).toISOString(),
   };
   writeFileSync(statePath, `${JSON.stringify(state, null, 2)}\n`, { mode: 0o600 });
   const heartbeatBefore = query(`
     SELECT edge_last_heartbeat_at
-    FROM wos_v1_qa_uat.closeout_controls
+    FROM ${controlSchema}.${controlTable}
     WHERE execution_id='${executionId}'::uuid;
   `);
 
@@ -113,7 +145,7 @@ try {
   });
   if (launched.status !== 0) fail('EDGE_CLOSER_LAUNCHER_FAILED');
 
-  const deadline = Date.now() + 15_000;
+  const deadline = Date.now() + 20_000;
   let closed;
   while (Date.now() < deadline) {
     try {
@@ -127,7 +159,7 @@ try {
     }
     await new Promise(resolve => setTimeout(resolve, 250));
   }
-  if (!closed || closed.closeReceipt?.probeVerified !== true) {
+  if (!closed || closed.closeReceipt?.probe?.ok !== true) {
     fail('DETACHED_EDGE_CLOSER_DID_NOT_VERIFY_CLOSE');
   }
 
@@ -135,19 +167,19 @@ try {
     SELECT jsonb_build_object(
       'edgeState',edge_state,
       'closeReceipts',(
-        SELECT count(*) FROM wos_v1_qa_uat.closer_close_receipts receipt
+        SELECT count(*) FROM ${controlSchema}.${closeReceiptTable} receipt
         WHERE receipt.execution_id='${executionId}'::uuid
           AND receipt.closer_kind='EDGE'
       ),
       'edgeLastHeartbeatAt',edge_last_heartbeat_at,
       'receiptHeartbeatAt',(
         SELECT max(receipt.heartbeat_at)
-        FROM wos_v1_qa_uat.closer_arm_receipts receipt
+        FROM ${controlSchema}.${armReceiptTable} receipt
         WHERE receipt.execution_id='${executionId}'::uuid
           AND receipt.closer_kind='EDGE'
       )
     )::text
-    FROM wos_v1_qa_uat.closeout_controls
+    FROM ${controlSchema}.${controlTable}
     WHERE execution_id='${executionId}'::uuid;
   `);
   const parsed = JSON.parse(dbState.split('\n').filter(Boolean).at(-1));
@@ -156,7 +188,17 @@ try {
   }
   if (!parsed.edgeLastHeartbeatAt
     || parsed.edgeLastHeartbeatAt === heartbeatBefore) {
+    process.stderr.write(`${JSON.stringify({
+      heartbeatBefore,
+      edgeLastHeartbeatAt: parsed.edgeLastHeartbeatAt,
+      receiptHeartbeatAt: parsed.receiptHeartbeatAt,
+    })}\n`);
     fail('EDGE_CLOSER_PROCESS_HEARTBEAT_UNCHANGED');
+  }
+  if (receiptOutputPath) {
+    writeFileSync(receiptOutputPath, `${JSON.stringify(closed, null, 2)}\n`, {
+      mode: 0o600,
+    });
   }
   process.stdout.write('WOS_V1_QA_EDGE_CLOSER_MAIN_PROCESS_EXIT=PASS\n');
   process.stdout.write('WOS_V1_QA_EDGE_CLOSER_DETACHED_PROCESS=PASS\n');

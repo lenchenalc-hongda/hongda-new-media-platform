@@ -3,6 +3,7 @@
 import { execFileSync, spawnSync } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
+import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -14,6 +15,14 @@ const OWNED_TEST_CONTAINER =
   /^codex-wos-prod-readiness-pg17-[A-Za-z0-9_.-]+$/;
 const REMOTE_PSQL_IMAGE =
   'postgres@sha256:f9cf3e1f0066f0eb0c48707d864f0ac5941e9ff454a072077d97a4d278d07d73';
+const CLOSER_ONLY_INSTALL = join(
+  ROOT,
+  'docs/workshop-order-system/production-readiness/sql/WOS_V1_QA_CLOSER_ONLY_INSTALL_NOT_AUTHORIZED.sql',
+);
+const CLOSER_ONLY_ROLLBACK = join(
+  ROOT,
+  'docs/workshop-order-system/production-readiness/sql/WOS_V1_QA_CLOSER_ONLY_ROLLBACK_NOT_AUTHORIZED.sql',
+);
 
 function fail(code) {
   throw new Error(code);
@@ -55,14 +64,25 @@ function databaseEnv() {
   if (url.protocol !== 'postgresql:' && url.protocol !== 'postgres:') {
     fail('WOS_QA_DATABASE_URL_INVALID');
   }
-  const sslmode = url.searchParams.get('sslmode')
-    || process.env.PGSSLMODE
-    || 'require';
+  const sslmode = url.searchParams.get('sslmode') || 'require';
+  if (!['require', 'verify-ca', 'verify-full'].includes(sslmode)) {
+    fail('WOS_QA_DATABASE_URL_TLS_REQUIRED');
+  }
+  const user = decodeURIComponent(url.username);
+  const directMatch = url.hostname === `db.${PROJECT_REF}.supabase.co`
+    && user === 'postgres';
+  const poolerMatch =
+    /^aws-[0-9]+-[a-z0-9-]+\.pooler\.supabase\.com$/.test(url.hostname)
+    && user === `postgres.${PROJECT_REF}`;
+  if ((!directMatch && !poolerMatch)
+    || decodeURIComponent(url.pathname.replace(/^\//, '')) !== 'postgres') {
+    fail('WOS_QA_DATABASE_URL_PROJECT_SCOPE_MISMATCH');
+  }
   return {
     ...process.env,
     PGHOST: url.hostname,
     PGPORT: url.port || '5432',
-    PGUSER: decodeURIComponent(url.username),
+    PGUSER: user,
     PGPASSWORD: decodeURIComponent(url.password),
     PGDATABASE: decodeURIComponent(url.pathname.replace(/^\//, '')),
     PGSSLMODE: sslmode,
@@ -190,20 +210,16 @@ function armToken(id) {
   return created;
 }
 
-function settingsSql() {
+function projectSettingsSql() {
   return [
-    "SET wos_v1.qa_uat_install_authorized='yes';",
     `SET wos_v1.qa_project=${sqlLiteral(PROJECT_REF)};`,
-    "SET wos_v1.qa_uat_activation_authorized='yes';",
-    "SET wos_v1.qa_uat_gate_open_authorized='yes';",
-    "SET wos_v1.qa_uat_close_authorized='yes';",
-    "SET wos_v1.qa_uat_rollback_authorized='yes';",
   ].join('\n');
 }
 
-function install() {
+function installFullM2() {
   const sql = [
-    settingsSql(),
+    projectSettingsSql(),
+    "SET wos_v1.qa_uat_install_authorized='yes';",
     readFileSync(
       join(
         ROOT,
@@ -211,6 +227,15 @@ function install() {
       ),
       'utf8',
     ),
+  ].join('\n');
+  runSql(sql);
+  process.stdout.write('WOS_V1_QA_DB_CLOSER_FULL_M2_INSTALL=PASS\n');
+}
+
+function activateFullM2() {
+  const sql = [
+    projectSettingsSql(),
+    "SET wos_v1.qa_uat_activation_authorized='yes';",
     readFileSync(
       join(
         ROOT,
@@ -220,31 +245,124 @@ function install() {
     ),
   ].join('\n');
   runSql(sql);
-  process.stdout.write('WOS_V1_QA_DB_CLOSER_INSTALL=PASS\n');
+  process.stdout.write('WOS_V1_QA_DB_CLOSER_FULL_M2_ACTIVATE=PASS\n');
+}
+
+function installCloserOnly() {
+  const sql = [
+    projectSettingsSql(),
+    "SET wos_v1.qa_closer_install_authorized='yes';",
+    readFileSync(CLOSER_ONLY_INSTALL, 'utf8'),
+  ].join('\n');
+  runSql(sql);
+  process.stdout.write('WOS_V1_QA_DB_CLOSER_ONLY_INSTALL=PASS\n');
 }
 
 async function sleep(ms) {
   await new Promise(resolve => setTimeout(resolve, ms));
 }
 
-async function arm() {
+function closerScope(closerOnly) {
+  if (closerOnly) {
+    return {
+      schema: 'wos_v1_qa_closer',
+      table: 'controls',
+      jobPrefix: 'wos_v1_qa_closer',
+      label: 'CLOSER_ONLY',
+    };
+  }
+  return {
+    schema: 'wos_v1_qa_uat',
+    table: 'closeout_controls',
+    jobPrefix: 'wos_v1_qa_uat_db_closer',
+    label: 'FULL_M2',
+  };
+}
+
+function verifyEdgeCloseReceipt(
+  executionIdValue,
+  expectedCodeSha,
+  expectedEdgeClosedAt,
+) {
+  const path = process.env.WOS_V1_QA_EDGE_CLOSER_STATE_PATH
+    || join(
+      homedir(),
+      'Library/Application Support/HongdaOS/WOSQAUAT/edge-closer',
+      `${executionIdValue}.json`,
+    );
+  let state;
+  try {
+    state = JSON.parse(readFileSync(path, 'utf8'));
+  } catch {
+    fail('WOS_V1_QA_EDGE_CLOSE_RECEIPT_MISSING');
+  }
+  const receipt = state?.closeReceipt;
+  const resultClosedAtMs = Date.parse(receipt?.result?.closedAt || '');
+  const databaseClosedAtMs = Date.parse(expectedEdgeClosedAt || '');
+  if (state?.status !== 'CLOSED'
+    || receipt?.authorizationId !== AUTH_ID
+    || receipt.projectRef !== PROJECT_REF
+    || receipt.executionId !== executionIdValue
+    || receipt.codeSha256 !== expectedCodeSha
+    || typeof receipt.processNonce !== 'string'
+    || receipt.processNonce.length === 0
+    || state.processNonce !== receipt.processNonce
+    || (state.launchdLoaded === true
+      && receipt.launchAgentUnloaded !== true)
+    || !receipt?.result
+    || !receipt?.probe
+    || receipt.result.status !== 'CLOSED'
+    || receipt.result.executionId !== executionIdValue
+    || receipt.result.timely !== true
+    || !Number.isFinite(resultClosedAtMs)
+    || !Number.isFinite(databaseClosedAtMs)
+    || resultClosedAtMs !== databaseClosedAtMs
+    || receipt.probe.status !== 503
+    || receipt.probe.code !== 'WOS_V1_QA_EDGE_CLOSED'
+    || receipt.probe.ok !== true
+    || receipt.probe.executionId !== executionIdValue
+    || receipt.probe.closedAt !== receipt.result.closedAt) {
+    fail('WOS_V1_QA_EDGE_CLOSE_RECEIPT_INVALID');
+  }
+  const expectedReceiptSha = createHash('sha256')
+    .update(JSON.stringify({
+      authorizationId: receipt.authorizationId,
+      projectRef: receipt.projectRef,
+      executionId: receipt.executionId,
+      codeSha256: receipt.codeSha256,
+      processNonce: receipt.processNonce,
+      launchAgentUnloaded: receipt.launchAgentUnloaded,
+      result: receipt.result,
+      probe: receipt.probe,
+    }))
+    .digest('hex');
+  if (receipt.receiptSha256 !== expectedReceiptSha) {
+    fail('WOS_V1_QA_EDGE_CLOSE_RECEIPT_HASH_MISMATCH');
+  }
+  return {
+    receiptSha256: receipt.receiptSha256,
+    processNonce: receipt.processNonce,
+  };
+}
+
+async function arm(closerOnly = false) {
   assertLocalTestScope();
   const id = executionId();
   const token = armToken(id);
   const codeSha = validateSha(process.env.WOS_V1_QA_CODE_SHA256);
-  const jobName = `wos_v1_qa_uat_db_closer_${id.replaceAll('-', '')}`;
+  const scope = closerScope(closerOnly);
+  const jobName = `${scope.jobPrefix}_${id.replaceAll('-', '')}`;
   const requestId = deterministicUuid(`${id}:db-closer`);
   const cronCommand =
-    `SELECT wos_v1_qa_uat.db_close_tick('${id}'::uuid,'${requestId}'::uuid);`;
+    `SELECT ${scope.schema}.db_close_tick('${id}'::uuid,'${requestId}'::uuid);`;
   const sql = `
 BEGIN;
-${settingsSql()}
 DO $arm$
 DECLARE
   v_job_id bigint;
   v_arm jsonb;
 BEGIN
-  v_arm:=wos_v1_qa_uat.arm_db_closer(
+  v_arm:=${scope.schema}.arm_db_closer(
     ${sqlLiteral(id)}::uuid,
     ${sqlLiteral(token)}::uuid,
     ${sqlLiteral(AUTH_ID)},
@@ -275,12 +393,12 @@ BEGIN
       ${sqlLiteral(cronCommand)}
     ) INTO v_job_id;
   END IF;
-  UPDATE wos_v1_qa_uat.closeout_controls
+  UPDATE ${scope.schema}.${scope.table}
   SET db_cron_job_id=v_job_id
   WHERE execution_id=${sqlLiteral(id)}::uuid;
 END;
 $arm$;
-SELECT wos_v1_qa_uat.closer_status(${sqlLiteral(id)}::uuid)::text;
+SELECT ${scope.schema}.closer_status(${sqlLiteral(id)}::uuid)::text;
 COMMIT;
 `;
   const output = runSql(sql);
@@ -293,7 +411,7 @@ COMMIT;
   const priorHeartbeatMs = Date.parse(initial.dbLastHeartbeatAt || '');
   if (process.env.WOS_V1_QA_DB_CLOSER_MOCK_CRON === 'true') {
     runSql(
-      `SELECT wos_v1_qa_uat.db_close_tick(${sqlLiteral(id)}::uuid,${sqlLiteral(requestId)}::uuid)::text;`,
+      `SELECT ${scope.schema}.db_close_tick(${sqlLiteral(id)}::uuid,${sqlLiteral(requestId)}::uuid)::text;`,
     );
   }
   const waitMs = Number(process.env.WOS_V1_QA_DB_HEARTBEAT_WAIT_MS || '35000');
@@ -301,7 +419,7 @@ COMMIT;
   let current = initial;
   while (Date.now() < deadline) {
     const raw = runSql(
-      `SELECT wos_v1_qa_uat.closer_status(${sqlLiteral(id)}::uuid)::text;`,
+      `SELECT ${scope.schema}.closer_status(${sqlLiteral(id)}::uuid)::text;`,
     );
     current = JSON.parse(raw.split('\n').filter(Boolean).at(-1));
     const heartbeatMs = Date.parse(current.dbLastHeartbeatAt || '');
@@ -313,6 +431,7 @@ COMMIT;
       process.stdout.write(`${JSON.stringify({
         ...current,
         status: 'ARMED',
+        scope: scope.label,
       })}\n`);
       return;
     }
@@ -333,26 +452,27 @@ COMMIT;
   fail('WOS_V1_QA_DB_CLOSER_HEARTBEAT_TIMEOUT');
 }
 
-function status() {
+function status(closerOnly = false) {
   const id = executionId();
+  const scope = closerScope(closerOnly);
   const output = runSql(
-    `SELECT wos_v1_qa_uat.closer_status(${sqlLiteral(id)}::uuid)::text;`,
+    `SELECT ${scope.schema}.closer_status(${sqlLiteral(id)}::uuid)::text;`,
   );
   process.stdout.write(`${output}\n`);
 }
 
-function close(kind) {
+function close(closerOnly = false) {
   const id = executionId();
   const requestId = validateUuid(
     process.env.WOS_V1_QA_CLOSE_REQUEST_ID || randomUUID(),
     'WOS_V1_QA_CLOSE_REQUEST_ID_INVALID',
   );
   const reason = String(
-    process.env.WOS_V1_QA_CLOSE_REASON || `${kind}_CLOSE_REQUESTED`,
+    process.env.WOS_V1_QA_CLOSE_REASON
+      || `${closerOnly ? 'CLOSER_ONLY_DB' : 'DB'}_CLOSE_REQUESTED`,
   ).slice(0, 200);
-  const functionName = kind === 'DB'
-    ? 'wos_v1_qa_uat.close_db_closer'
-    : 'wos_v1_qa_uat.close_edge_closer';
+  const functionName =
+    `${closerScope(closerOnly).schema}.close_db_closer`;
   const output = runSql(
     `SELECT ${functionName}(${sqlLiteral(id)}::uuid,${sqlLiteral(requestId)}::uuid,${sqlLiteral(reason)})::text;`,
   );
@@ -365,9 +485,11 @@ function close(kind) {
 }
 
 function recover() {
-  close('DB');
+  close(false);
   const sql = [
-    settingsSql(),
+    projectSettingsSql(),
+    "SET wos_v1.qa_uat_close_authorized='yes';",
+    "SET wos_v1.qa_uat_rollback_authorized='yes';",
     readFileSync(
       join(
         ROOT,
@@ -387,14 +509,61 @@ function recover() {
   process.stdout.write('WOS_V1_QA_DB_CLOSER_DATA_RETAINING_RECOVERY=PASS\n');
 }
 
+function recoverCloserOnly() {
+  close(true);
+  const id = executionId();
+  const sql = `
+    SELECT wos_v1_qa_closer.closer_status(${sqlLiteral(id)}::uuid)::text;
+  `;
+  const statusOutput = runSql(sql);
+  const closerStatus = JSON.parse(
+    statusOutput.split('\n').filter(Boolean).at(-1),
+  );
+  if (closerStatus.dbState !== 'CLOSED'
+    || closerStatus.edgeState !== 'CLOSED'
+    || closerStatus.dbCloseTimely !== true
+    || closerStatus.edgeCloseTimely !== true
+    || !closerStatus.edgeProbeVerifiedAt
+    || closerStatus.edgeProbeExecutionId !== id) {
+    fail('WOS_V1_QA_CLOSER_ONLY_RECOVERY_REQUIRES_VERIFIED_CLOSE');
+  }
+  const edgeReceipt = verifyEdgeCloseReceipt(
+    id,
+    closerStatus.codeSha256,
+    closerStatus.edgeClosedAt,
+  );
+  if (edgeReceipt.processNonce !== closerStatus.edgeProcessNonce) {
+    fail('WOS_V1_QA_EDGE_CLOSE_RECEIPT_NONCE_MISMATCH');
+  }
+  runSql([
+    projectSettingsSql(),
+    "SET wos_v1.qa_closer_rollback_authorized='yes';",
+    readFileSync(CLOSER_ONLY_ROLLBACK, 'utf8'),
+  ].join('\n'));
+  process.stdout.write(`${JSON.stringify({
+    status: 'RECOVERED',
+    executionId: id,
+    edgeReceiptSha256: edgeReceipt.receiptSha256,
+    publicApiOwner: 'NONE',
+    auditRetained: true,
+  })}\n`);
+}
+
 const command = process.argv[2];
 try {
-  if (command === 'install') install();
-  else if (command === 'arm') await arm();
-  else if (command === 'status') status();
-  else if (command === 'close') close('DB');
-  else if (command === 'revoke') close('DB');
+  if (command === 'install-closer-only') installCloserOnly();
+  else if (command === 'install-full-m2') installFullM2();
+  else if (command === 'activate-full-m2') activateFullM2();
+  else if (command === 'arm') await arm(false);
+  else if (command === 'arm-closer-only') await arm(true);
+  else if (command === 'status') status(false);
+  else if (command === 'status-closer-only') status(true);
+  else if (command === 'close') close(false);
+  else if (command === 'close-closer-only') close(true);
+  else if (command === 'revoke') close(false);
+  else if (command === 'revoke-closer-only') close(true);
   else if (command === 'recover') recover();
+  else if (command === 'recover-closer-only') recoverCloserOnly();
   else fail('WOS_V1_QA_DB_CLOSER_COMMAND_INVALID');
 } catch (error) {
   process.stderr.write(`${error instanceof Error ? error.message : 'UNKNOWN'}\n`);

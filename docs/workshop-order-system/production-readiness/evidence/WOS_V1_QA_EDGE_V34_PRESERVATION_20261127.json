@@ -1,0 +1,43 @@
+{
+  "generatedAt": "2026-11-26T23:56:48Z",
+  "qaProject": "xulmpqaknlwqqculbsek",
+  "functionSlug": "wos-v1-verify-image",
+  "functionId": "2028f9e8-d3af-48a3-b5d6-73ad89af7910",
+  "hostedEdgeVersion": 34,
+  "hostedStatus": "ACTIVE",
+  "hostedCreatedAt": "2026-11-23T15:22:27Z",
+  "hostedUpdatedAt": "2026-11-26T06:10:13Z",
+  "hostedBundleSha256": "21fd1a8d31508662c6c0790e9304b793e864ffb321de5b77bcc8145e91f18450",
+  "verifyJwt": true,
+  "importMap": false,
+  "remoteDeploymentTouched": false,
+  "remoteBytesVerifiedThisRound": true,
+  "hostedSource": {
+    "indexSha256": "c439c387943830df597a00a9007699965c6834bc9381fc15684d7f5cd98dc795",
+    "coreSha256": "ac2e9ac30996cacf5aab63bd1ccc1a68f96e839e499ff6c5a84a78f54f16e922",
+    "sharedPngIntegritySha256": "fa2690fdb01030f478552aff19893520d94615dd6f52a2b13672448eaa62ecdf",
+    "preservedDirectory": "docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_EDGE_V34_SOURCE_20261127",
+    "closerProbeSupported": false
+  },
+  "runtimeContractOwnerProvided": {
+    "WOS_SUPABASE_ALLOWED_REFS": "xulmpqaknlwqqculbsek",
+    "WOS_V1_EDGE_ALLOWED_ORIGINS": "https://hongda-wos-p00202-qa-preview-git-32498d-lens-projects-3fc386bd.vercel.app",
+    "WOS_V1_EDGE_WRITES_ENABLED": false,
+    "verify_jwt": true
+  },
+  "sharedUsageIsolation": {
+    "deploymentOverwriteThisRound": false,
+    "closerPath": "wos_v1_qa_uat_edge_probe",
+    "caller": "service_role",
+    "scope": "authorization_id + execution_id + process_nonce",
+    "normalAuthenticatedWritePathChanged": false,
+    "currentV34SupportsCloserProbe": false,
+    "requiredTransition": "DEPLOY_REVIEWED_EXACT_HEAD_EDGE_SOURCE_BEFORE_REMOTE_EDGE_ARM"
+  },
+  "recovery": {
+    "strategy": "REDEPLOY_PRESERVED_V34_SOURCE_CLOSURE_IF_REVIEWED_SOURCE_WAS_DEPLOYED",
+    "baselineBundleSha256": "21fd1a8d31508662c6c0790e9304b793e864ffb321de5b77bcc8145e91f18450",
+    "requiredPreDeployCheck": "Re-download Hosted bytes and require the preserved v34 hashes before overwrite.",
+    "requiredPostRecoveryCheck": "Restore v34 closure, require verify_jwt=true and WOS_V1_EDGE_WRITES_ENABLED=false, then re-download and verify restored bytes."
+  }
+}
