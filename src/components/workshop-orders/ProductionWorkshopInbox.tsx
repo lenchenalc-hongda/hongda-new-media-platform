@@ -5,6 +5,7 @@ import {
   fetchWosV1,
   isWosV1VerifiedOperation,
 } from '@/lib/workshop-orders/production-app-client';
+import ProductionM2Workbench from './ProductionM2Workbench';
 
 interface OperatorOrder {
   readonly id: string;
@@ -38,6 +39,7 @@ interface OperatorDetail {
     readonly openedAt: string;
   }[];
   readonly images: readonly {
+    readonly id: string;
     readonly category: string;
     readonly image_status: string;
     readonly version_label: string;
@@ -58,6 +60,10 @@ interface OperatorDetail {
     readonly id: string;
     readonly version_label: string;
     readonly status: string;
+    readonly confirmed_by_office_profile_id?: string | null;
+    readonly confirmed_by_workshop_profile_id?: string | null;
+    readonly office_confirmed_at?: string | null;
+    readonly workshop_confirmed_at?: string | null;
   }[];
   readonly history: readonly {
     readonly previous_status: string | null;
@@ -450,6 +456,17 @@ export default function ProductionWorkshopInbox() {
                   <p className="rounded-md bg-red-50 p-3 font-medium text-red-900">
                     canStart=false。历史 Proof 未复验，图片证据不会被视为当前有效。
                   </p>
+                  {['WAITING_MATERIAL', 'READINESS_CHECK'].includes(
+                    order.workflow_status,
+                  ) && (
+                    <ProductionM2Workbench
+                      surface="workshop"
+                      order={order}
+                      detail={detail}
+                      writeEnabled={writeEnabled}
+                      onSuccess={() => { void refresh(); }}
+                    />
+                  )}
                   <OperatorActions
                     order={order}
                     detail={detail}

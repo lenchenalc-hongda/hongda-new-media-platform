@@ -13,6 +13,7 @@ import {
   inspectWosOfficeCorrectionImages,
 } from '@/lib/workshop-orders/production-office-correction';
 import { createClient } from '@/lib/supabase/client';
+import ProductionM2Workbench from './ProductionM2Workbench';
 
 type WosV1ImageCategory = (typeof WOS_V1_IMAGE_CATEGORIES)[number];
 
@@ -47,6 +48,31 @@ interface OfficeDetail {
     readonly openedAt: string;
   }[];
   readonly images: readonly OfficeImage[];
+  readonly resources: readonly {
+    readonly resource_type: string;
+    readonly status: string;
+    readonly version_label: string | null;
+    readonly quantity_expected: number | null;
+    readonly quantity_arrived: number | null;
+    readonly arrived_at: string | null;
+    readonly confirmed_at: string | null;
+  }[];
+  readonly baselines: readonly {
+    readonly id: string;
+    readonly version_label: string;
+    readonly status: string;
+    readonly confirmed_by_office_profile_id?: string | null;
+    readonly confirmed_by_workshop_profile_id?: string | null;
+    readonly office_confirmed_at?: string | null;
+    readonly workshop_confirmed_at?: string | null;
+  }[];
+  readonly history: readonly {
+    readonly previous_status: string | null;
+    readonly next_status: string;
+    readonly reason_code: string;
+    readonly created_at: string;
+    readonly metadata: Record<string, unknown>;
+  }[];
   readonly currentPrivateProofState: 'UNVERIFIED';
   readonly canStart: false;
 }
@@ -521,6 +547,17 @@ export default function ProductionOfficeOrders() {
                     当前私有图片 Proof：{detail.currentPrivateProofState}；
                     当前图片记录 {detail.images.length} 条；canStart=false。
                   </p>
+                  {['WAITING_MATERIAL', 'READINESS_CHECK'].includes(
+                    order.workflow_status,
+                  ) && (
+                    <ProductionM2Workbench
+                      surface="office"
+                      order={order}
+                      detail={detail}
+                      writeEnabled={writeEnabled}
+                      onSuccess={() => { void refresh(); }}
+                    />
+                  )}
                   {order.workflow_status === 'NEEDS_INFORMATION' && (
                     <CorrectionEditor
                       order={order}

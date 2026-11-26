@@ -1,0 +1,17 @@
+{
+  "checkedAt": "2026-11-26T08:21:22.576112Z",
+  "database": "postgres",
+  "publicTables": 67,
+  "publicFunctions": 100,
+  "wosTables": 0,
+  "wosFunctions": 0,
+  "wosBucket": 0,
+  "edgeWritesSettingFromDatabase": null,
+  "edgeReadonlySettingFromDatabase": null,
+  "result": "PRE_INSTALL_BASE_MATCH",
+  "limitations": [
+    "No Production deployment SHA was read in this task.",
+    "No Production Vercel feature flag value was read in this task.",
+    "No Production SQL, migration, grant or deployment was performed."
+  ]
+}

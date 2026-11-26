@@ -15,6 +15,10 @@ files=(
   docs/workshop-order-system/production-readiness/sql/WOS_V1_PRODUCTION_RUNTIME_FORWARD_NOT_AUTHORIZED.sql
   docs/workshop-order-system/production-readiness/sql/WOS_V1_PRODUCTION_RUNTIME_ROLLBACK_NOT_AUTHORIZED.sql
   docs/workshop-order-system/production-readiness/sql/WOS_V1_PRODUCTION_RUNTIME_SMOKE_PG17.sql
+  supabase/migrations/20261126090000_wos_v1_production_m2_signoff.sql
+  docs/workshop-order-system/production-readiness/sql/WOS_V1_PRODUCTION_M2_ACTIVATION_NOT_AUTHORIZED.sql
+  docs/workshop-order-system/production-readiness/sql/WOS_V1_PRODUCTION_M2_DEACTIVATE_NOT_AUTHORIZED.sql
+  docs/workshop-order-system/production-readiness/sql/WOS_V1_PRODUCTION_M2_ROLLBACK_NOT_AUTHORIZED.sql
   docs/workshop-order-system/production-readiness/sql/WOS_V1_PRODUCTION_RPC_ACTIVATION_TEMPLATE_NOT_AUTHORIZED.sql
   docs/workshop-order-system/production-readiness/sql/WOS_V1_PRODUCTION_RPC_DEACTIVATE_NOT_AUTHORIZED.sql
   docs/workshop-order-system/production-readiness/sql/WOS_V1_PRODUCTION_FOUNDATION_CONTAINMENT_NOT_AUTHORIZED.sql
@@ -24,9 +28,11 @@ files=(
   docs/workshop-order-system/production-readiness/sql/WOS_V1_HOSTED_QA_DEPENDENCIES_ROLLBACK_NOT_AUTHORIZED.sql
   src/app/api/workshop-orders/v1/route.ts
   src/app/api/workshop-orders/v1-qa/route.ts
+  src/app/api/workshop-orders/v1/m2/route.ts
   src/app/workshop-orders/inbox/page.tsx
   src/app/workshop-orders/production/new/page.tsx
   src/components/workshop-orders/ProductionOfficeOrders.tsx
+  src/components/workshop-orders/ProductionM2Workbench.tsx
   src/components/workshop-orders/ProductionOfficeWorkflow.tsx
   src/components/workshop-orders/ProductionOrderForm.tsx
   src/components/workshop-orders/ProductionWorkshopInbox.tsx
@@ -34,6 +40,9 @@ files=(
   src/lib/workshop-orders/production-app-contract.ts
   src/lib/workshop-orders/production-app-handler.ts
   src/lib/workshop-orders/production-app-server.ts
+  src/lib/workshop-orders/production-m2-client.ts
+  src/lib/workshop-orders/bounded-request-body.ts
+  src/lib/workshop-orders/p2-m2-contract.ts
   supabase/functions/_shared/wos-png-integrity.ts
   supabase/functions/wos-p7-verify-image/png.ts
   supabase/functions/wos-v1-verify-image/core.ts
@@ -41,6 +50,11 @@ files=(
   tests/unit/workshop-order-production-app-contract.test.ts
   tests/unit/workshop-order-production-app-http.test.ts
   tests/unit/workshop-order-production-edge-core.test.ts
+  tests/unit/workshop-order-production-m2-contract.test.ts
+  tests/sql/run-wos-v1-production-m2-pg17.sh
+  tests/sql/run-wos-v1-production-m2-concurrency-pg17.sh
+  tests/sql/wos-v1-production-m2-pg17-fixture.sql
+  tests/sql/wos-v1-production-m2-pg17-assertions.sql
   tests/sql/wos-v1-hosted-qa-dependencies-pg17-assertions.sql
   tests/sql/wos-v1-hosted-qa-dependencies-pg17-suite.sh
   tests/sql/wos-v1-hosted-qa-existing-prerequisites.sql
@@ -78,12 +92,16 @@ files=(
   docs/workshop-order-system/production-readiness/V1_APP_01_IMPLEMENTATION_REPORT.md
   docs/workshop-order-system/production-readiness/V1_APP_01_ROUTE_AND_EDGE_CONFIG.md
   docs/workshop-order-system/production-readiness/WOS_V1_INT_01_HOSTED_QA_READINESS.md
+  docs/workshop-order-system/production-readiness/WOS_V1_PRODUCTION_BUSINESS_CONTRACT_AUDIT_20261126.md
+  docs/workshop-order-system/production-readiness/WOS_V1_BUSINESS_UAT_CHECKLISTS_20261126.md
+  docs/workshop-order-system/production-readiness/WOS_V1_GO_NO_GO_20261126.md
+  docs/workshop-order-system/production-readiness/evidence/WOS_V1_PRODUCTION_READONLY_20261126.json
   scripts/wos-production-readiness/write-artifact-fingerprints.sh
 )
 
 {
   echo "# WOS V1 Production Readiness Artifact Fingerprints"
-  echo "# Generated: 2026-11-23"
+  echo "# Generated: $(date -u +%Y-%m-%d)"
   echo "# Format: SHA256  GIT_BLOB_SHA1  PATH"
   echo
   for file in "${files[@]}"; do
