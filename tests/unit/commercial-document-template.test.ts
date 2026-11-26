@@ -340,10 +340,10 @@ assert.deepEqual(oldRestored.noticeOverrides, {});
 
 
 // Contractual words below are the user-approved canonical Chinese terms.
-// Deliberately strict about the unusual "1。" punctuation; do not autocorrect wording.
+// Strictly preserve the owner-approved "1. " numbering, ASCII ";" and both original lines.
 const expectedApprovedZh = {
   plate: [
-    '1。 铜版自制版完成之日起享有18个月质量保证期。正常保管及使用情况下，因制版质量产生的问题由我司负责免费修补；客户修改图稿、尺寸或工艺要求所产生的费用另行计算。',
+    '1. 铜版自制版完成之日起享有18个月质量保证期。正常保管及使用情况下，因制版质量产生的问题由我司负责免费修补;客户修改图稿、尺寸或工艺要求所产生的费用另行计算。',
     '2. 超过质保期且连续12个月未下单的印版，期满后进行报废处理。印版实物归属及特殊保管要求以双方约定为准。',
   ].join('\n'),
   gravure_film: [
