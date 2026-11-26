@@ -457,6 +457,12 @@ for (const marker of [
 for (const marker of [
   'WOS_SUPABASE_ALLOWED_REFS',
   'WOS_V1_EDGE_WRITES_ENABLED',
+  'WOS_V1_QA_EDGE_AUTHORIZATION_REQUIRED',
+  'wos_v1_qa_uat_edge_write_allowed',
+  'wos_v1_qa_uat_edge_probe',
+  'wos_v1_qa_uat_edge_record_proof',
+  'x-wos-qa-uat-execution-id',
+  'x-wos-qa-uat-closer-nonce',
   'readBoundedText(request, MAX_REQUEST_BYTES)',
   'wos_p7_service_storage_snapshot',
   'wos_v1_renew_expired_image_proof',
@@ -465,8 +471,10 @@ for (const marker of [
   'OBJECT_CHANGED_DURING_VERIFICATION',
   'WOS_V1_TRUSTED_IMAGE_PROOF_ISSUED',
 ]) assert(edge.includes(marker), 'production Edge missing ' + marker);
-assert(!edge.includes('xulmpqaknlwqqculbsek'));
-assert(!edge.includes('wos_qa_'));
+assert(!edge.includes('wos_v1_qa_uat_edge_renew_proof'));
+assert(edge.includes('QA_UAT_PROJECT_REF'));
+assert(edge.includes('QA_UAT_AUTHORIZATION_ID'));
+assert(edge.includes('qaUatRuntime'));
 assert(!edge.includes('storagePath: body.storagePath'));
 for (const marker of [
   'WOS_V1_IMAGE_CATEGORIES',
@@ -481,6 +489,10 @@ for (const marker of [
 ]) assert(officeWorkflow.includes(marker), 'Office production UI missing ' + marker);
 assert(appClient.includes("functions.invoke('wos-v1-verify-image'"));
 assert(appClient.includes('NEXT_PUBLIC_WOS_V1_QA_PREVIEW'));
+assert(appClient.includes('x-wos-qa-uat-authorization-id'));
+assert(appClient.includes('WOS_V1_PRODUCTION_M2_QA_UAT_AUTHORIZATION_ID'));
+assert(appClient.includes('NEXT_PUBLIC_WOS_V1_QA_UAT_EXECUTION_ID'));
+assert(appClient.includes('NEXT_PUBLIC_WOS_V1_QA_UAT_CLOSER_NONCE'));
 assert(appClient.includes('/api/workshop-orders/v1-qa'));
 for (const page of [officePage, workshopPage]) {
   assert(page.includes('resolveWosV1QaAppRuntime'));
@@ -508,4 +520,5 @@ console.log('workshop-order-production-app-contract.test.ts: PASS');
 console.log('WOS_V1_APP_PRODUCTION_ONLY_RUNTIME=PASS');
 console.log('WOS_V1_APP_ROLE_AND_RESULT_CONTRACTS=PASS');
 console.log('WOS_V1_PROJECT_NEUTRAL_EDGE_SOURCE=PASS');
+console.log('WOS_V1_EDGE_QA_HARD_LEASE_BRANCH=PASS');
 console.log('WOS_V1_QA_ADAPTER_DEFAULT_DENY=PASS');

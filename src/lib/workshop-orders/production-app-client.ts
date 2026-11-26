@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import {
   canonicalWosV1ImagePath,
+  WOS_V1_PRODUCTION_M2_QA_UAT_AUTHORIZATION_ID,
   type WosV1AppRequest,
   type WosV1AppOperation,
   type WOS_V1_IMAGE_CATEGORIES,
@@ -134,6 +135,16 @@ export async function uploadAndVerifyWosV1Image(input: {
     }
   }
   const invoked = await input.client.functions.invoke('wos-v1-verify-image', {
+    headers: process.env.NEXT_PUBLIC_WOS_V1_QA_PREVIEW === 'true'
+      ? {
+          'x-wos-qa-uat-authorization-id':
+            WOS_V1_PRODUCTION_M2_QA_UAT_AUTHORIZATION_ID,
+          'x-wos-qa-uat-execution-id':
+            process.env.NEXT_PUBLIC_WOS_V1_QA_UAT_EXECUTION_ID || '',
+          'x-wos-qa-uat-closer-nonce':
+            process.env.NEXT_PUBLIC_WOS_V1_QA_UAT_CLOSER_NONCE || '',
+        }
+      : {},
     body: {
       orderId: input.orderId,
       imageId: input.imageId,

@@ -31,6 +31,19 @@ DROP FUNCTION IF EXISTS public.wos_v1_qa_uat_m2_action(
 DROP FUNCTION IF EXISTS public.wos_v1_qa_uat_open_gate(
   text,uuid,uuid,uuid,text[],timestamptz
 );
+DROP FUNCTION IF EXISTS public.wos_v1_qa_uat_edge_record_proof(
+  uuid,uuid,uuid,uuid,uuid,text,uuid,text,timestamptz,text
+);
+DROP FUNCTION IF EXISTS public.wos_v1_qa_uat_edge_probe(uuid,uuid);
+DROP FUNCTION IF EXISTS public.wos_v1_qa_uat_close_edge(uuid,uuid,text);
+DROP FUNCTION IF EXISTS public.wos_v1_qa_uat_bind_order(
+  uuid,uuid,uuid,uuid,uuid,text
+);
+DROP FUNCTION IF EXISTS public.wos_v1_qa_uat_edge_heartbeat(uuid,uuid,uuid);
+DROP FUNCTION IF EXISTS public.wos_v1_qa_uat_edge_control_status(text,text);
+DROP FUNCTION IF EXISTS public.wos_v1_qa_uat_edge_write_allowed(
+  text,text,uuid,uuid,uuid,uuid,uuid
+);
 DROP FUNCTION IF EXISTS wos_v1_qa_uat.gate_allowed(
   uuid,uuid,uuid,text
 );

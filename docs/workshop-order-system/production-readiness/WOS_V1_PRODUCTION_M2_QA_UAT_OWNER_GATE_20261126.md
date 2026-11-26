@@ -1,7 +1,7 @@
 # WOS V1 Production M2 QA UAT Owner Gate
 
 Status:
-`PREPARED_NOT_AUTHORIZED`
+`PREPARED_REMOTE_CLOSER_ARM_NOT_AUTHORIZED`
 
 Authorization ID:
 `WOS-V1-PRODUCTION-M2-QA-UAT-001`
@@ -48,6 +48,9 @@ EDGE_CLOSE_MAX_SECONDS=840
 PROOF_VALIDITY_SECONDS=600
 PROOF_RENEWAL=FORBIDDEN
 REOPEN_CLOSED_GATE=FORBIDDEN
+QA_UAT_EXECUTION_ID=efddb60c-4a70-4b46-bf18-46629a4397d2
+QA_UAT_EDGE_PROCESS_NONCE=77ac7769-25a2-495a-8892-467d16abb00e
+DB_CLOSER_PSQL_IMAGE=postgres@sha256:f9cf3e1f0066f0eb0c48707d864f0ac5941e9ff454a072077d97a4d278d07d73
 ```
 
 The independent-release identity is now bound to the exact Auth User and
@@ -76,20 +79,60 @@ WOS_V1_QA_APP_WRITES_ENABLED=true
 WOS_V1_QA_UAT_AUTHORIZATION_ID=WOS-V1-PRODUCTION-M2-QA-UAT-001
 WOS_V1_QA_UAT_M2_ENABLED=true
 WOS_V1_QA_UAT_M2_WRITES_ENABLED=true
+NEXT_PUBLIC_WOS_V1_QA_UAT_EXECUTION_ID=efddb60c-4a70-4b46-bf18-46629a4397d2
+NEXT_PUBLIC_WOS_V1_QA_UAT_CLOSER_NONCE=77ac7769-25a2-495a-8892-467d16abb00e
 ```
 
 No Production variable may be changed. The page must call
 `/api/workshop-orders/v1-qa/m2` only after the server read capability reports
 `m2Adapter=qa-uat`.
 
+The execution ID and nonce above must be fixed before the exact-HEAD Preview
+build. The Edge closer must consume the same nonce; a value generated only
+after the Preview is built is invalid. An env-only Preview rebuild of the same
+Git SHA is permitted only if those values were omitted or changed before any
+Gate opens, and the resulting hosted deployment is revalidated.
+
+## Edge Runtime
+
+Supabase `wos-v1-verify-image` in QA project
+`xulmpqaknlwqqculbsek` must use this exact runtime contract:
+
+```ini
+WOS_SUPABASE_ALLOWED_REFS=xulmpqaknlwqqculbsek
+WOS_V1_EDGE_ALLOWED_ORIGINS=https://hongda-wos-p00202-qa-preview-git-32498d-lens-projects-3fc386bd.vercel.app
+WOS_V1_EDGE_WRITES_ENABLED=false
+WOS_V1_QA_REVISION_IMAGES_ENABLED=true
+verify_jwt=true
+```
+
+The Origin is the stable branch alias for
+`codex/wos-v1-production-m2-signoff-20261126`. The exact Preview deployment
+must resolve that alias before ARM. A deployment-specific URL may be recorded
+as evidence, but it is not accepted as a substitute without an amended Owner
+Gate.
+
+The initial deployment and ARM preflight run with
+`WOS_V1_EDGE_WRITES_ENABLED=false`. After both closer receipts are verified,
+the Owner window changes only this flag to `true`, redeploys the exact reviewed
+source, downloads the Hosted source bytes and verifies both the source closure
+and `verify_jwt=true` before opening business Gates. Recovery changes the flag
+back to `false`, redeploys the same reviewed source, and verifies
+`WOS_V1_EDGE_WRITES_DISABLED`. A secret update alone is not accepted as
+deployment evidence.
+
 ## Source And SQL
 
 Required reviewed source:
 
+- `supabase/functions/wos-v1-verify-image/index.ts`
+- `src/lib/workshop-orders/production-app-client.ts`
 - `src/lib/workshop-orders/production-m2-handler.ts`
 - `src/app/api/workshop-orders/v1-qa/m2/route.ts`
 - `src/lib/workshop-orders/production-m2-client.ts`
 - `src/components/workshop-orders/ProductionM2Workbench.tsx`
+- `scripts/wos-production-readiness/wos-v1-qa-uat-db-closer.mjs`
+- `scripts/wos-production-readiness/wos-v1-qa-uat-edge-closer.mjs`
 
 Required QA SQL, in order:
 
@@ -100,7 +143,8 @@ Required QA SQL, in order:
 5. `docs/workshop-order-system/production-readiness/sql/WOS_V1_QA_UAT_M2_ACTIVATE_NOT_AUTHORIZED.sql`
 
 The finalized PR comment must contain the actual SHA-256 of every SQL file,
-loader, Edge verifier, eight PNGs, runner and rollback file.
+loader, Edge verifier, DB/Edge closer runner, LaunchAgent source, eight PNGs,
+runner and rollback file.
 
 ## Database Gate
 
@@ -117,7 +161,13 @@ Independent Manager
 ```
 
 Every row must use the exact authorization ID, QA project, order ID,
-organization, active Profile and an expiry no more than 15 minutes away.
+organization, active Profile and an expiry no later than the immutable
+480-second write deadline.
+
+Before any Gate row may open, both DB and Edge ARM receipts must exist for the
+same execution ID, authorization ID, project and code SHA. One-closer-only
+state must fail closed. The Edge receipt is valid only after its LaunchAgent is
+verified loaded.
 
 `authenticated` may execute only the QA wrappers. Direct execution of:
 
@@ -133,27 +183,39 @@ must remain `false`.
 1. Recompute local file hashes, PR HEAD, CI, QA live fingerprints and Gate OFF.
 2. Validate Office, Workshop, Viewer, cross-organization and independent
    Manager JWTs through `/auth/v1/user`.
-3. ARM independent database, Edge and business-Gate closers and prove a dry-run
-   close path.
-4. Install the reviewed QA runtime/reactivation dependencies.
-5. Install the production M2 migration and QA wrapper. Verify direct RPC ACL is
+3. Install the reviewed QA runtime/reactivation dependencies.
+4. Install the production M2 migration and QA wrapper. Verify direct RPC ACL is
    still denied.
-6. Deploy only the exact reviewed QA Preview source and verify the hosted bundle
-   and environment.
-7. Create exactly one order and bind its returned ID to the CREATE receipt and
-   payload fingerprint.
-8. Complete Office V1 four-PNG Proof and submission.
-9. Complete Workshop ACCEPT and RETURN_FOR_INFORMATION.
-10. Complete Office six-field V2 correction, four new PNG Proofs, resubmission
+5. Deploy only the exact reviewed Edge and QA Preview source, download the
+   hosted source, and verify the bundle/environment.
+6. ARM the DB closer with one execution ID, exact code SHA and immutable UTC
+   deadlines. Verify the `pg_cron` job and DB ARM receipt.
+7. ARM the Edge closer with the same execution ID/token/code SHA and
+   precommitted process nonce via `arm --load`. Verify the LaunchAgent and
+   Edge ARM receipt.
+8. Verify one-closer-only Gate opening and close probes fail closed.
+9. Reconfirm Hosted Edge/Preview source, environment and ARM receipts are
+   unchanged; any drift blocks the first order.
+10. Set only `WOS_V1_EDGE_WRITES_ENABLED=true`, redeploy the exact reviewed
+    source, download Hosted bytes, and verify `verify_jwt=true` plus the exact
+    source/origin allowlist before the first business request.
+11. Create exactly one order. Bind its CREATE-response ID only after matching
+    the immutable CREATE receipt's Request, Office Profile, order ID, order
+    number and CREATE payload fingerprint.
+12. Complete Office V1 four-PNG Proof and submission.
+13. Complete Workshop ACCEPT and RETURN_FOR_INFORMATION.
+14. Complete Office six-field V2 correction, four new PNG Proofs, resubmission
     and Workshop review to `WAITING_MATERIAL`.
-11. Open the three QA UAT M2 gates and start the DB closer deadline.
-12. Record four nonfinal material states, then Office Baseline select/sign,
+15. Open the three QA UAT M2 gates.
+16. Record four nonfinal material states, then Office Baseline select/sign,
     Workshop sign, atomic final material readiness and independent release.
-13. Verify image replacement and Proof change invalidate both signatures.
-14. Execute negative role, organization, version, quantity, old-image,
+17. Verify image replacement and Proof change invalidate both signatures.
+18. Execute negative role, organization, version, quantity, old-image,
     old-Proof, replay and Gate-closed tests.
-15. Capture desktop and mobile screenshots at 360, 390, 768 and 1280 widths.
-16. Close all Gates and Edge switches, revoke wrapper execution and retain all
+19. Capture desktop and mobile screenshots at 360, 390, 768 and 1280 widths.
+20. Set `WOS_V1_EDGE_WRITES_ENABLED=false`, redeploy the same reviewed source,
+    prove `WOS_V1_EDGE_WRITES_DISABLED`, close all Gates, revoke wrapper
+    execution, unschedule the DB job, unload the LaunchAgent and retain all
     business/audit rows.
 
 ## Required Positive Result
@@ -191,8 +253,16 @@ DIRECT_PRODUCTION_RPC_DENIED=PASS
 
 ## Close And Recovery
 
-The independent database closer must close all open QA UAT gate rows and run
-the QA UAT deactivation/rollback before its 540-second absolute deadline.
+The DB runner must close all open QA UAT gate rows, revoke wrapper grants and
+write its close receipt before the 540-second cleanup deadline.
+
+The Edge runner must call the server-side Edge close, verify a real
+`503 / WOS_V1_QA_EDGE_CLOSED` probe with `gateStatus=CLOSED`, the exact
+execution ID and a non-empty close timestamp, then unload its LaunchAgent
+before the 840-second cleanup deadline.
+
+`WOS_V1_QA_UAT_CLOSER_IMPLEMENTATION_20261126.md` defines the exact local
+harness, ARM protocol and remote scope.
 
 Recovery must:
 

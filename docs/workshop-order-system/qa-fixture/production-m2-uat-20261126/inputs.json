@@ -143,7 +143,20 @@
     "WOS_V1_QA_APP_WRITES_ENABLED": "true",
     "WOS_V1_QA_UAT_AUTHORIZATION_ID": "WOS-V1-PRODUCTION-M2-QA-UAT-001",
     "WOS_V1_QA_UAT_M2_ENABLED": "true",
-    "WOS_V1_QA_UAT_M2_WRITES_ENABLED": "true"
+    "WOS_V1_QA_UAT_M2_WRITES_ENABLED": "true",
+    "NEXT_PUBLIC_WOS_V1_QA_UAT_EXECUTION_ID": "efddb60c-4a70-4b46-bf18-46629a4397d2",
+    "NEXT_PUBLIC_WOS_V1_QA_UAT_CLOSER_NONCE": "77ac7769-25a2-495a-8892-467d16abb00e"
+  },
+  "edgeEnvironment": {
+    "WOS_SUPABASE_ALLOWED_REFS": "xulmpqaknlwqqculbsek",
+    "WOS_V1_EDGE_ALLOWED_ORIGINS": "https://hongda-wos-p00202-qa-preview-git-32498d-lens-projects-3fc386bd.vercel.app",
+    "WOS_V1_EDGE_WRITES_ENABLED_BEFORE_ARM": false,
+    "WOS_V1_EDGE_WRITES_ENABLED_DURING_AUTHORIZED_GATE": true,
+    "WOS_V1_QA_REVISION_IMAGES_ENABLED": true,
+    "verify_jwt": true
+  },
+  "dbCloserEnvironment": {
+    "psqlClientImage": "postgres@sha256:f9cf3e1f0066f0eb0c48707d864f0ac5941e9ff454a072077d97a4d278d07d73"
   },
   "limits": {
     "maxNewOrders": 1,

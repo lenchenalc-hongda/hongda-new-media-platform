@@ -49,6 +49,8 @@ files=(
   src/lib/workshop-orders/production-m2-handler.ts
   src/lib/workshop-orders/bounded-request-body.ts
   src/lib/workshop-orders/p2-m2-contract.ts
+  scripts/wos-production-readiness/wos-v1-qa-uat-db-closer.mjs
+  scripts/wos-production-readiness/wos-v1-qa-uat-edge-closer.mjs
   supabase/functions/_shared/wos-png-integrity.ts
   supabase/functions/wos-p7-verify-image/png.ts
   supabase/functions/wos-v1-verify-image/core.ts
@@ -57,6 +59,8 @@ files=(
   tests/unit/workshop-order-production-app-http.test.ts
   tests/unit/workshop-order-production-edge-core.test.ts
   tests/unit/workshop-order-production-m2-contract.test.ts
+  tests/unit/wos-v1-qa-closers.test.ts
+  tests/live/wos-v1-qa-edge-closer-process-kill.mjs
   tests/sql/run-wos-v1-production-m2-pg17.sh
   tests/sql/run-wos-v1-production-m2-concurrency-pg17.sh
   tests/sql/run-wos-v1-production-m2-qa-uat-pg17.sh
@@ -105,8 +109,10 @@ files=(
   docs/workshop-order-system/production-readiness/WOS_V1_BUSINESS_UAT_CHECKLISTS_20261126.md
   docs/workshop-order-system/production-readiness/WOS_V1_GO_NO_GO_20261126.md
   docs/workshop-order-system/production-readiness/WOS_V1_PRODUCTION_M2_QA_UAT_OWNER_GATE_20261126.md
+  docs/workshop-order-system/production-readiness/WOS_V1_QA_UAT_CLOSER_IMPLEMENTATION_20261126.md
   docs/workshop-order-system/production-readiness/evidence/WOS_V1_PRODUCTION_READONLY_20261126.json
   docs/workshop-order-system/production-readiness/evidence/WOS_V1_PRODUCTION_M2_QA_UAT_PREFLIGHT_20261126.json
+  docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_UAT_CLOSER_LOCAL_EVIDENCE_20261126.json
   docs/workshop-order-system/qa-fixture/production-m2-uat-20261126/inputs.json
   docs/workshop-order-system/qa-fixture/production-m2-uat-20261126/v1/product.png
   docs/workshop-order-system/qa-fixture/production-m2-uat-20261126/v1/film-pattern.png

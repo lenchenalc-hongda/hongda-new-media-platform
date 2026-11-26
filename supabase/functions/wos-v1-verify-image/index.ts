@@ -20,6 +20,8 @@ import {
 const MAX_REQUEST_BYTES = 4096;
 const BODY_READ_TIMEOUT_MS = 5000;
 const MAX_EXECUTION_MS = 20000;
+const QA_UAT_PROJECT_REF = 'xulmpqaknlwqqculbsek';
+const QA_UAT_AUTHORIZATION_ID = 'WOS-V1-PRODUCTION-M2-QA-UAT-001';
 const baseHeaders = {
   'Cache-Control': 'no-store, private',
   'Content-Type': 'application/json; charset=utf-8',
@@ -39,7 +41,7 @@ function output(
   if (origin && allowedOrigins.includes(origin)) {
     headers.set('Access-Control-Allow-Origin', origin);
     headers.set('Access-Control-Allow-Headers',
-      'authorization, apikey, content-type, x-client-info');
+      'authorization, apikey, content-type, x-client-info, x-wos-qa-uat-authorization-id, x-wos-qa-uat-execution-id, x-wos-qa-uat-closer-nonce');
     headers.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
     headers.set('Access-Control-Max-Age', '600');
     headers.set('Vary', 'Origin');
@@ -159,7 +161,7 @@ Deno.serve(async request => {
     headers.delete('Content-Type');
     headers.set('Access-Control-Allow-Origin', origin);
     headers.set('Access-Control-Allow-Headers',
-      'authorization, apikey, content-type, x-client-info');
+      'authorization, apikey, content-type, x-client-info, x-wos-qa-uat-authorization-id, x-wos-qa-uat-execution-id, x-wos-qa-uat-closer-nonce');
     headers.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
     headers.set('Access-Control-Max-Age', '600');
     headers.set('Vary', 'Origin');
@@ -175,6 +177,65 @@ Deno.serve(async request => {
   if (!approvedSupabaseRuntimeUrl(runtimeUrl, allowedRefs)) {
     return output(request, 'WOS_V1_EDGE_RUNTIME_DENIED', 503);
   }
+  const publishable = publicKey();
+  const service = secretKey();
+  const qaUatRuntime = new URL(runtimeUrl!).hostname ===
+    `${QA_UAT_PROJECT_REF}.supabase.co`;
+  const qaAuthorizationId =
+    request.headers.get('x-wos-qa-uat-authorization-id');
+  const qaExecutionId = request.headers.get('x-wos-qa-uat-execution-id');
+  const qaCloserNonce =
+    request.headers.get('x-wos-qa-uat-closer-nonce');
+  const uuidPattern =
+    /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
+  if (qaUatRuntime && (
+    qaAuthorizationId !== QA_UAT_AUTHORIZATION_ID
+    || !uuidPattern.test(qaExecutionId || '')
+    || !uuidPattern.test(qaCloserNonce || '')
+  )) {
+    return output(request, 'WOS_V1_QA_EDGE_AUTHORIZATION_REQUIRED', 503);
+  }
+  if (qaUatRuntime
+    && request.headers.get('x-wos-qa-closer-probe') === '1') {
+    if (!service
+      || request.headers.get('authorization') !== `Bearer ${service}`) {
+      return output(request, 'WOS_V1_EDGE_SERVER_CONFIG_INCOMPLETE', 503);
+    }
+    try {
+      const admin = createClient(runtimeUrl!, service, {
+        auth: { autoRefreshToken: false, persistSession: false },
+      });
+      const control = await admin.rpc('wos_v1_qa_uat_edge_probe', {
+        p_execution_id: qaExecutionId,
+        p_process_nonce: qaCloserNonce,
+      });
+      const controlData = control.data
+        && typeof control.data === 'object'
+        && !Array.isArray(control.data)
+        ? control.data as Record<string, unknown>
+        : null;
+      const status = String(controlData?.status || '');
+      if (control.error) {
+        return output(request, 'WOS_V1_QA_EDGE_GATE_UNAVAILABLE', 503);
+      }
+      if (String(controlData?.executionId || '') !== qaExecutionId) {
+        return output(request, 'WOS_V1_QA_EDGE_PROBE_SCOPE_DENIED', 503);
+      }
+      if (status !== 'OPEN') {
+        return output(request, 'WOS_V1_QA_EDGE_CLOSED', 503, {
+          gateStatus: status,
+          executionId: qaExecutionId,
+          closedAt: controlData?.closedAt ?? null,
+        });
+      }
+      return output(request, 'WOS_V1_QA_EDGE_OPEN_PROBE', 200, {
+        gateStatus: status,
+        executionId: qaExecutionId,
+      });
+    } catch {
+      return output(request, 'WOS_V1_QA_EDGE_GATE_UNAVAILABLE', 503);
+    }
+  }
   if (Deno.env.get('WOS_V1_EDGE_WRITES_ENABLED') !== 'true') {
     return output(request, 'WOS_V1_EDGE_WRITES_DISABLED', 503);
   }
@@ -185,8 +246,6 @@ Deno.serve(async request => {
   if (!/^Bearer [^\s]+$/.test(authorization)) {
     return output(request, 'UNAUTHENTICATED', 401);
   }
-  const publishable = publicKey();
-  const service = secretKey();
   if (!publishable || !service) {
     return output(request, 'WOS_V1_EDGE_SERVER_CONFIG_INCOMPLETE', 503);
   }
@@ -242,6 +301,23 @@ Deno.serve(async request => {
           access.code === 'ORDER_NOT_FOUND' ? 404 : 403,
         );
       }
+      const admin = createClient(runtimeUrl!, service, {
+        auth: { autoRefreshToken: false, persistSession: false },
+      });
+      if (qaUatRuntime) {
+        const gate = await admin.rpc('wos_v1_qa_uat_edge_write_allowed', {
+          p_authorization_id: QA_UAT_AUTHORIZATION_ID,
+          p_project_ref: QA_UAT_PROJECT_REF,
+          p_execution_id: qaExecutionId,
+          p_process_nonce: qaCloserNonce,
+          p_actor_profile_id: profile.id,
+          p_organization_id: profile.org_id,
+          p_order_id: order.id,
+        });
+        if (gate.error || gate.data !== true) {
+          return output(request, 'WOS_V1_QA_EDGE_GATE_CLOSED', 503);
+        }
+      }
       const path = canonicalWosV1ImagePath({
         organizationId: profile.org_id,
         orderId: order.id,
@@ -253,9 +329,6 @@ Deno.serve(async request => {
         return output(request, 'INVALID_IMAGE_PATH', 400);
       }
 
-      const admin = createClient(runtimeUrl!, service, {
-        auth: { autoRefreshToken: false, persistSession: false },
-      });
       const snapshot = async (): Promise<WosV1ObjectSnapshot | null> => {
         const result = await admin.rpc('wos_p7_service_storage_snapshot', {
           p_path: path,
@@ -300,7 +373,11 @@ Deno.serve(async request => {
         first.updatedAt,
         body.sha256,
       ].join('\n'));
-      const renewal = await admin.rpc('wos_v1_renew_expired_image_proof', {
+      const renewalArgs = {
+        ...(qaUatRuntime ? {
+          p_execution_id: qaExecutionId,
+          p_process_nonce: qaCloserNonce,
+        } : {}),
         p_image_id: body.imageId,
         p_order_id: order.id,
         p_actor_user_id: auth.data.user.id,
@@ -309,26 +386,28 @@ Deno.serve(async request => {
         p_storage_object_version: first.version,
         p_storage_object_updated_at: first.updatedAt,
         p_sha256: body.sha256,
-      });
-      if (renewal.error
-        || !renewal.data
-        || typeof renewal.data !== 'object'
-        || Array.isArray(renewal.data)
-        || !['ABSENT', 'UNCHANGED', 'RENEWED'].includes(
-          String((renewal.data as Record<string, unknown>).status),
-        )) {
-        return output(request, 'WOS_V1_PROOF_RENEWAL_UNAVAILABLE', 503);
+      };
+      if (!qaUatRuntime) {
+        const renewal = await admin.rpc(
+          'wos_v1_renew_expired_image_proof',
+          renewalArgs,
+        );
+        if (renewal.error
+          || !renewal.data
+          || typeof renewal.data !== 'object'
+          || Array.isArray(renewal.data)
+          || !['ABSENT', 'UNCHANGED', 'RENEWED'].includes(
+            String((renewal.data as Record<string, unknown>).status),
+          )) {
+          return output(request, 'WOS_V1_PROOF_RENEWAL_UNAVAILABLE', 503);
+        }
       }
-      const proof = await admin.rpc('wos_p7_record_trusted_image_proof', {
-        p_image_id: body.imageId,
-        p_order_id: order.id,
-        p_actor_user_id: auth.data.user.id,
-        p_storage_path: path,
-        p_storage_object_id: first.id,
-        p_storage_object_version: first.version,
-        p_storage_object_updated_at: first.updatedAt,
-        p_sha256: body.sha256,
-      });
+      const proof = await admin.rpc(
+        qaUatRuntime
+          ? 'wos_v1_qa_uat_edge_record_proof'
+          : 'wos_p7_record_trusted_image_proof',
+        renewalArgs,
+      );
       if (proof.error
         || !isWosV1ProofResult(proof.data, {
           imageId: body.imageId,

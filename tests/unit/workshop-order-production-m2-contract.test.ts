@@ -270,8 +270,19 @@ assert(qaInstall.includes('QA_UAT_AUTHORIZATION_ID_MISMATCH'));
 assert(qaInstall.includes('gate.authorization_id=p_authorization_id'));
 assert(!qaInstall.includes('PERFORM public.wos_qa_p2_m2_action'));
 assert(!qaInstall.includes('RETURN public.wos_qa_p2_m2_action'));
-assert(!qaInstall.includes('service_role'));
-assert(!/GRANT EXECUTE/i.test(qaInstall));
+assert(!/GRANT EXECUTE ON FUNCTION public\.wos_v1_qa_uat_m2_action[\s\S]{0,80}TO service_role/.test(
+  qaInstall,
+));
+assert(!/GRANT EXECUTE ON FUNCTION public\.wos_v1_qa_uat_authorize_production_start[\s\S]{0,80}TO service_role/.test(
+  qaInstall,
+));
+assert(qaInstall.includes(
+  'GRANT EXECUTE ON FUNCTION public.wos_v1_qa_uat_edge_write_allowed',
+));
+assert(qaInstall.includes(
+  'GRANT EXECUTE ON FUNCTION public.wos_v1_qa_uat_edge_control_status',
+));
+assert(!/GRANT EXECUTE[\s\S]{0,160}TO authenticated/.test(qaInstall));
 
 const qaActivate = readFileSync(
   'docs/workshop-order-system/production-readiness/sql/WOS_V1_QA_UAT_M2_ACTIVATE_NOT_AUTHORIZED.sql',

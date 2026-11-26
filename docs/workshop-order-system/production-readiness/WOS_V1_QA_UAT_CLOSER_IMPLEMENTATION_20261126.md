@@ -1,0 +1,246 @@
+# WOS V1 QA UAT Independent Closer Implementation
+
+Status:
+`SOURCE_AND_LOCAL_HARNESS_PASS / INDEPENDENT_SOURCE_REVIEW_PASS / REMOTE_ARM_NOT_AUTHORIZED`
+
+This document defines the final two-closer design for:
+
+`WOS-V1-PRODUCTION-M2-QA-UAT-001`
+
+It does not authorize any remote SQL, Cron job, Edge deployment, environment
+change, Gate opening, order creation or Production operation.
+
+## Security Model
+
+Both closers share one immutable control row:
+
+```text
+authorization_id
+project_ref
+execution_id
+code_sha256
+opened_at
+write_deadline_at = opened_at + 480 seconds
+db_cleanup_deadline_at = opened_at + 540 seconds
+edge_cleanup_deadline_at = opened_at + 840 seconds
+```
+
+The database server derives `opened_at`; callers cannot submit or extend it.
+Critical fields cannot be changed. A closed DB or Edge state cannot be
+reopened. There is one positive control row per authorization ID, and the
+existing closed row prevents a later retry from creating a new positive run
+under the same authorization.
+
+Before any business Gate may open, both of these receipts must exist:
+
+```text
+DB closer ARM receipt
+EDGE closer ARM receipt
+```
+
+Each receipt is created only after its actual executor writes a heartbeat.
+Heartbeats must be no older than 30 seconds. The authorized CREATE-response
+order ID is bound exactly once before the first image proof, and only after
+the immutable CREATE receipt matches the fixed Request, Office Profile,
+organization, order number, order ID and CREATE payload fingerprint.
+
+The database wrappers and Edge verifier check control state, order binding,
+heartbeat recency and server clock on every write. Final QA Edge proof
+insertion calls a QA-only transactional wrapper, so the guard and write occur
+in one transaction. Missing receipts, stale heartbeats, closed state or
+expiration raise a permission error. Cron or launchd delay therefore cannot
+extend write authorization.
+
+## DB Closer
+
+Primary source:
+
+```text
+docs/workshop-order-system/production-readiness/sql/WOS_V1_QA_UAT_M2_INSTALL_NOT_AUTHORIZED.sql
+scripts/wos-production-readiness/wos-v1-qa-uat-db-closer.mjs
+```
+
+The install SQL creates:
+
+```text
+wos_v1_qa_uat.closeout_controls
+wos_v1_qa_uat.closer_arm_receipts
+wos_v1_qa_uat.closer_close_receipts
+```
+
+It also creates the DB/Edge ARM functions, close functions, status function,
+server-side write-deadline checks and the two public service-role-only Edge
+gate functions.
+
+The runner supports:
+
+```bash
+node scripts/wos-production-readiness/wos-v1-qa-uat-db-closer.mjs install
+node scripts/wos-production-readiness/wos-v1-qa-uat-db-closer.mjs arm
+node scripts/wos-production-readiness/wos-v1-qa-uat-db-closer.mjs status
+node scripts/wos-production-readiness/wos-v1-qa-uat-db-closer.mjs close
+node scripts/wos-production-readiness/wos-v1-qa-uat-db-closer.mjs revoke
+node scripts/wos-production-readiness/wos-v1-qa-uat-db-closer.mjs recover
+```
+
+ARM registers a `pg_cron` job every 10 seconds. Every tick before the write
+deadline records the DB executor heartbeat; a tick at or after the deadline
+atomically closes all authorized QA gates, revokes both QA wrapper grants
+from `authenticated`, writes a DB close receipt and unschedules the job. ARM
+succeeds only after a real cron heartbeat is observed. Close and replay both
+verify the exact cron job is absent.
+
+If `pg_cron` is unavailable, ARM fails and rolls back the control row. A
+manual scheduler cannot be represented as an automatic DB closer.
+
+The runner uses `psql` when available, an explicitly named disposable
+container for local CI, or the immutable
+`postgres@sha256:f9cf3e1f0066f0eb0c48707d864f0ac5941e9ff454a072077d97a4d278d07d73`
+client image for a remote QA DSN. Test-only manual ticks are accepted only in
+an owned `codex-wos-prod-readiness-pg17-*` container and an `_ci` database.
+
+## Edge Closer
+
+Primary source:
+
+```text
+supabase/functions/wos-v1-verify-image/index.ts
+src/lib/workshop-orders/production-app-client.ts
+scripts/wos-production-readiness/wos-v1-qa-uat-edge-closer.mjs
+tests/live/wos-v1-qa-edge-closer-process-kill.mjs
+```
+
+QA Preview image verification now sends the fixed authorization header. The
+QA Edge branch requires:
+
+1. Exact QA project runtime.
+2. Exact authorization ID.
+3. Exact execution ID and Edge process nonce.
+4. Active profile and same-organization QA order.
+5. Exact CREATE-response order binding.
+6. Both closer ARM receipts and fresh heartbeats.
+7. `edge_state=ARMED`.
+8. `clock_timestamp() < write_deadline_at`.
+
+Any database failure, missing gate or expired deadline returns fail-closed.
+The environment flag remains an additional global disable, but is no longer
+the expiry mechanism.
+
+The QA branch never calls a Proof renewal RPC. It records only a new Proof
+through the transactionally guarded QA wrapper; an existing expired Proof is
+rejected. Production behavior is unchanged.
+
+The LaunchAgent uses the Supabase service-role REST endpoint rather than
+`psql`, so it does not depend on an inherited shell PATH or a local PostgreSQL
+client. It sends a heartbeat on each run. The first heartbeat creates the Edge
+ARM receipt; `arm --load` cannot succeed without observing it.
+
+At the server write deadline the Edge closer:
+
+1. Calls `close_edge_closer`.
+2. Writes an immutable Edge close receipt.
+3. Calls a service-role-authenticated no-write probe for the exact execution
+   ID and process nonce.
+4. Requires `503 / WOS_V1_QA_EDGE_CLOSED`, `gateStatus=CLOSED`, the exact
+   execution ID and a non-empty close timestamp.
+5. Unloads its own LaunchAgent.
+
+The runner supports `arm`, `watch`, `status`, `close`, `revoke` and `disarm`.
+`arm --load` is mandatory for a real ARM receipt; a dry-run cannot create a
+fake Edge receipt.
+
+If the Mac is off or offline, the server clock still rejects every Edge write
+at `write_deadline_at`. The LaunchAgent improves cleanup timing but is not the
+security boundary.
+
+## ARM Protocol
+
+The future Owner execution must perform these steps in order:
+
+1. Install the exact reviewed QA UAT SQL on QA only.
+2. Set the DB closer DSN and Edge service-role credential in dedicated
+   Keychain services.
+3. Build and deploy the exact-HEAD Preview with the precommitted execution ID
+   and process nonce in its public runtime configuration.
+4. Run `db-closer arm` once with that execution ID and exact code SHA. The
+   database derives the UTC start and deadline values.
+5. Verify the returned DB ARM receipt and active `pg_cron` job.
+6. Run `edge-closer arm --load` with the same execution ID, arm token,
+   precommitted nonce and code SHA.
+7. Verify the LaunchAgent is loaded and its process heartbeat created the
+   Edge ARM receipt.
+8. Verify both receipts have the same authorization, project, execution ID,
+   code SHA and write deadline.
+9. Bind the exact CREATE-response order ID only after matching the immutable
+   CREATE receipt, Office Profile, order number and payload fingerprint.
+10. Verify a one-closer-only Gate open is denied.
+11. Only then open the three QA UAT Gate rows.
+
+Failure or drift at any step blocks Gate opening.
+
+## Local Evidence
+
+```ini
+DB_CLOSER_SOURCE=READY
+EDGE_CLOSER_SOURCE=READY
+DB_CLOSER_FAIL_CLOSED=PG17_PASS
+EDGE_CLOSER_FAIL_CLOSED=PG17_AND_SOURCE_PASS
+DB_CLOSE_WITHIN_540S=LOCAL_HARNESS_PASS
+EDGE_CLOSE_WITHIN_840S=LOCAL_HARNESS_PASS
+MAIN_PROCESS_KILL_TEST=LOCAL_LIVE_DB_SESSION_TERMINATION_PASS
+EDGE_PROCESS_HEARTBEAT=LOCAL_DETACHED_PROCESS_PASS
+CREATE_RECEIPT_ORDER_BINDING=PASS
+QA_PROOF_RENEWAL=FORBIDDEN_AND_ABSENT
+TEST_BYPASS_SCOPE=PASS
+CONCURRENT_CLOSE_IDEMPOTENT=PASS
+CLOSED_GATE_REARM=DENIED
+DB_CRON_UNSCHEDULE=PASS_LOCAL
+CLOSED_GATE_DENIAL=PASS
+DATA_RETENTION=PASS
+INDEPENDENT_SOURCE_REVIEW=PASS
+P0_FINDINGS=0
+P1_FINDINGS=0
+P2_FINDINGS=0
+```
+
+The local harness uses a disposable PostgreSQL 17 database and a mock
+`cron.schedule` table for DB runner integration. It terminates a live
+database-holding executor session and verifies the independent closer still
+completes. It rejects test-only manual ticks outside an owned disposable
+container and verifies QA Proof renewal is absent. It does not prove the live
+Hosted `pg_cron` scheduler, a loaded LaunchAgent in the owner account, or the
+deployed Edge endpoint. Those remain pending until separately authorized
+remote ARM.
+
+## Required Remote Authorization
+
+A future Owner Gate may authorize only the QA project
+`xulmpqaknlwqqculbsek` to:
+
+- install the exact closer SQL;
+- register one DB closer `pg_cron` job;
+- deploy only the reviewed `wos-v1-verify-image` function with
+  `verify_jwt=true`, the QA ref allowlist, exact Preview Origin and writes
+  initially disabled;
+- deploy the exact QA Preview;
+- load one Edge closer LaunchAgent;
+- ARM both closers with one unique execution ID and exact code SHA;
+- verify status, server-deadline denial and independent close;
+- open the bounded QA UAT Gates only after both ARM receipts pass.
+
+The corresponding closeout must:
+
+- call both close functions;
+- verify DB and Edge close receipts;
+- verify a closed-state Edge probe;
+- revoke both wrapper grants from `authenticated`;
+- remove the QA service-role Edge/bind entry points from the exposed schema;
+- unschedule the DB cron job;
+- unload the Edge LaunchAgent;
+- restore Edge write/read environment flags to false and redeploy the exact
+  reviewed Edge source;
+- run RC02 and Reactivation data-retaining Recovery;
+- preserve all QA orders, images, Proofs, Storage objects and audit rows.
+
+Production deployment, Production SQL, PR merge and automatic production
+start remain forbidden.
