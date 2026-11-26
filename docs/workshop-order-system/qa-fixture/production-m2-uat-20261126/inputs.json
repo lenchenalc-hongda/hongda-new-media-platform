@@ -55,12 +55,13 @@
       "jwtPreflight": "REQUIRED"
     },
     "independentRelease": {
-      "profileId": "eb62a21a-f809-414e-ac14-9c6fdfa1e117",
-      "authUserId": "86eb4bfd-b1a6-4c94-86b3-e0599895f586",
+      "profileId": "9164ac91-a50c-4023-836c-5c0887b619fb",
+      "authUserId": "b55ccc94-6352-4cad-8600-fad32955d014",
+      "email": "testingadmin@hongda.cn",
       "role": "manager",
+      "organizationId": "0ff53d93-2b9e-48b9-8113-a4768c39cdd2",
       "keychainService": "WOS_V1_QA_IDENTITY_INDEPENDENT_MANAGER",
-      "jwtPreflight": "REQUIRED",
-      "keychainStatus": "ENTRY_NOT_OBSERVED_DURING_PREPARATION"
+      "jwtPreflight": "REQUIRED"
     }
   },
   "negativeActors": {

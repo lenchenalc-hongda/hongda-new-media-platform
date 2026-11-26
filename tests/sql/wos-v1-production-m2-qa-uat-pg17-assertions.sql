@@ -378,7 +378,7 @@ RESET ROLE;
 
 SELECT set_config(
   'request.jwt.claim.sub',
-  '80808080-8080-4080-8080-808080808080',
+  current_setting('wos.qa_uat.manager_auth_user'),
   false
 );
 SET ROLE authenticated;
@@ -569,7 +569,7 @@ RESET ROLE;
 
 SELECT set_config(
   'request.jwt.claim.sub',
-  '80808080-8080-4080-8080-808080808080',
+  current_setting('wos.qa_uat.manager_auth_user'),
   false
 );
 SET ROLE authenticated;

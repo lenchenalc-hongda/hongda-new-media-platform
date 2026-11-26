@@ -236,7 +236,50 @@ CREATE_PAYLOAD_JSON="$(jq -c '.createPayload' "$UAT_INPUTS")"
 EXPECTED_CREATE_FP="$(jq -r '.createPayloadFingerprint' "$UAT_INPUTS")"
 UAT_REQUEST_ID="$(jq -r '.requestId' "$UAT_INPUTS")"
 UAT_OFFICE_AUTH_USER="$(jq -r '.actors.office.authUserId' "$UAT_INPUTS")"
+UAT_OFFICE_PROFILE="$(jq -r '.actors.office.profileId' "$UAT_INPUTS")"
+UAT_WORKSHOP_PROFILE="$(jq -r '.actors.workshop.profileId' "$UAT_INPUTS")"
+UAT_MANAGER_AUTH_USER="$(jq -r '.actors.independentRelease.authUserId' "$UAT_INPUTS")"
+UAT_MANAGER_PROFILE="$(jq -r '.actors.independentRelease.profileId' "$UAT_INPUTS")"
+UAT_MANAGER_ROLE="$(jq -r '.actors.independentRelease.role' "$UAT_INPUTS")"
+UAT_MANAGER_ORGANIZATION="$(jq -r '.actors.independentRelease.organizationId' "$UAT_INPUTS")"
+UAT_MANAGER_KEYCHAIN="$(jq -r '.actors.independentRelease.keychainService' "$UAT_INPUTS")"
+UAT_VIEWER_PROFILE="$(jq -r '.negativeActors.viewer.profileId' "$UAT_INPUTS")"
+UAT_VIEWER_AUTH_USER="$(jq -r '.negativeActors.viewer.authUserId' "$UAT_INPUTS")"
+UAT_CROSS_ORG_PROFILE="$(jq -r '.negativeActors.crossOrganizationManager.profileId' "$UAT_INPUTS")"
+UAT_CROSS_ORG_AUTH_USER="$(jq -r '.negativeActors.crossOrganizationManager.authUserId' "$UAT_INPUTS")"
 UAT_ORGANIZATION_ID="$(jq -r '.qaOrganizationId' "$UAT_INPUTS")"
+[[ "$UAT_MANAGER_AUTH_USER" = 'b55ccc94-6352-4cad-8600-fad32955d014' ]] \
+  || fail 'UAT_MANAGER_AUTH_USER_MISMATCH'
+[[ "$UAT_MANAGER_PROFILE" = '9164ac91-a50c-4023-836c-5c0887b619fb' ]] \
+  || fail 'UAT_MANAGER_PROFILE_MISMATCH'
+[[ "$UAT_MANAGER_ROLE" = 'manager' ]] \
+  || fail 'UAT_MANAGER_ROLE_MISMATCH'
+[[ "$UAT_MANAGER_ORGANIZATION" = "$UAT_ORGANIZATION_ID" ]] \
+  || fail 'UAT_MANAGER_ORGANIZATION_MISMATCH'
+[[ "$UAT_MANAGER_KEYCHAIN" = 'WOS_V1_QA_IDENTITY_INDEPENDENT_MANAGER' ]] \
+  || fail 'UAT_MANAGER_KEYCHAIN_MISMATCH'
+[[ "$UAT_MANAGER_PROFILE" != "$UAT_OFFICE_PROFILE" ]] \
+  || fail 'UAT_MANAGER_OFFICE_PROFILE_COLLISION'
+[[ "$UAT_MANAGER_PROFILE" != "$UAT_WORKSHOP_PROFILE" ]] \
+  || fail 'UAT_MANAGER_WORKSHOP_PROFILE_COLLISION'
+[[ "$UAT_MANAGER_AUTH_USER" != "$UAT_OFFICE_AUTH_USER" ]] \
+  || fail 'UAT_MANAGER_OFFICE_AUTH_COLLISION'
+[[ "$UAT_MANAGER_AUTH_USER" != "$(jq -r '.actors.workshop.authUserId' "$UAT_INPUTS")" ]] \
+  || fail 'UAT_MANAGER_WORKSHOP_AUTH_COLLISION'
+[[ "$UAT_MANAGER_PROFILE" != "$UAT_VIEWER_PROFILE" ]] \
+  || fail 'UAT_MANAGER_VIEWER_PROFILE_COLLISION'
+[[ "$UAT_MANAGER_AUTH_USER" != "$UAT_VIEWER_AUTH_USER" ]] \
+  || fail 'UAT_MANAGER_VIEWER_AUTH_COLLISION'
+[[ "$UAT_MANAGER_PROFILE" != "$UAT_CROSS_ORG_PROFILE" ]] \
+  || fail 'UAT_MANAGER_CROSS_ORG_PROFILE_COLLISION'
+[[ "$UAT_MANAGER_AUTH_USER" != "$UAT_CROSS_ORG_AUTH_USER" ]] \
+  || fail 'UAT_MANAGER_CROSS_ORG_AUTH_COLLISION'
+
+psql_db "$DB" -q -c "
+  UPDATE public.profiles
+  SET id='$UAT_MANAGER_PROFILE',user_id='$UAT_MANAGER_AUTH_USER'
+  WHERE id='88888888-8888-4888-8888-888888888888';
+" >/dev/null
 ACTUAL_CREATE_FP="$(psql_db "$DB" -qAt \
   -v payload="$CREATE_PAYLOAD_JSON" \
   -v request_id="$UAT_REQUEST_ID" \
@@ -255,6 +298,7 @@ SQL
 )"
 [[ "$ACTUAL_CREATE_FP" = "$EXPECTED_CREATE_FP" ]] \
   || fail 'CREATE_PAYLOAD_FINGERPRINT_MISMATCH'
+echo 'WOS_V1_QA_UAT_MANAGER_BINDING=PASS'
 
 psql_db "$DB" -q -c "
   UPDATE public.wos_production_orders
@@ -396,14 +440,16 @@ psql_db "$DB" -q -c "
     'WOS-V1-PRODUCTION-M2-QA-UAT-001',
     '33333333-3333-4333-8333-333333333333',
     'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
-    '88888888-8888-4888-8888-888888888888',
+    '$UAT_MANAGER_PROFILE',
     ARRAY['START_RELEASE'],
     clock_timestamp()+interval '14 minutes'
   );
 " >/dev/null
 
-psql_db "$DB" -q \
-  < "$ROOT/tests/sql/wos-v1-production-m2-qa-uat-pg17-assertions.sql"
+{
+  printf "SET wos.qa_uat.manager_auth_user='%s';\n" "$UAT_MANAGER_AUTH_USER"
+  cat "$ROOT/tests/sql/wos-v1-production-m2-qa-uat-pg17-assertions.sql"
+} | psql_db "$DB" -q
 
 [[ "$(psql_db "$DB" -qAt -c "
   SELECT md5(jsonb_agg(jsonb_build_object(

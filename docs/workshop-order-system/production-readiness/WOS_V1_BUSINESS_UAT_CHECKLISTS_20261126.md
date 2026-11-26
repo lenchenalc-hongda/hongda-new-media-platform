@@ -69,7 +69,10 @@ Failure conditions:
 
 ## Independent Release
 
-1. Log in as an active Admin/Manager distinct from both signers.
+1. Log in as the fixed active Manager
+   `testingadmin@hongda.cn`, Auth User
+   `b55ccc94-6352-4cad-8600-fad32955d014`, Profile
+   `9164ac91-a50c-4023-836c-5c0887b619fb`.
 2. Verify all four final material states, current Baseline and Proof validity.
 3. Apply `START_RELEASE`.
 4. Confirm status becomes `READY_TO_START`.
@@ -93,7 +96,10 @@ Verify:
 - request IDs and receipts for all actions;
 - Office and Workshop profile IDs differ;
 - final readiness profile ID differs from the Office signer;
-- release profile ID differs from both;
+- release Profile `9164ac91-a50c-4023-836c-5c0887b619fb` differs from both
+  Office and Workshop Profiles;
+- release Auth User `b55ccc94-6352-4cad-8600-fad32955d014` differs from both
+  signing Auth Users;
 - image IDs, Proof expiry and Storage identity are unchanged;
 - status history and confirmation history are append-only;
 - old V1 images and expired Proofs are denied;

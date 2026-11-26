@@ -296,10 +296,16 @@ const uat = JSON.parse(readFileSync(`${uatRoot}/inputs.json`, 'utf8')) as {
   readonly requestId: string;
   readonly orderNumber: string;
   readonly qaProject: string;
+  readonly qaOrganizationId: string;
   readonly createPayload: Record<string, unknown>;
   readonly actors: Record<string, {
     readonly profileId: string;
     readonly authUserId: string;
+    readonly email?: string;
+    readonly role: string;
+    readonly organizationId?: string;
+    readonly keychainService: string;
+    readonly jwtPreflight?: string;
   }>;
   readonly negativeActors: Record<string, {
     readonly profileId: string;
@@ -328,6 +334,109 @@ assert.equal(new Set(
 assert.equal(new Set(
   Object.values(uat.actors).map(actor => actor.authUserId),
 ).size, 3);
+const independentRelease = uat.actors.independentRelease;
+assert.deepEqual(independentRelease, {
+  profileId: '9164ac91-a50c-4023-836c-5c0887b619fb',
+  authUserId: 'b55ccc94-6352-4cad-8600-fad32955d014',
+  email: 'testingadmin@hongda.cn',
+  role: 'manager',
+  organizationId: '0ff53d93-2b9e-48b9-8113-a4768c39cdd2',
+  keychainService: 'WOS_V1_QA_IDENTITY_INDEPENDENT_MANAGER',
+  jwtPreflight: 'REQUIRED',
+});
+assert.notEqual(
+  independentRelease.profileId,
+  uat.actors.office.profileId,
+);
+assert.notEqual(
+  independentRelease.profileId,
+  uat.actors.workshop.profileId,
+);
+assert.notEqual(
+  independentRelease.authUserId,
+  uat.actors.office.authUserId,
+);
+assert.notEqual(
+  independentRelease.authUserId,
+  uat.actors.workshop.authUserId,
+);
+assert.equal(independentRelease.organizationId, uat.qaOrganizationId);
+assert.notEqual(
+  independentRelease.profileId,
+  uat.negativeActors.viewer.profileId,
+);
+assert.notEqual(
+  independentRelease.authUserId,
+  uat.negativeActors.viewer.authUserId,
+);
+assert.notEqual(
+  independentRelease.profileId,
+  uat.negativeActors.crossOrganizationManager.profileId,
+);
+assert.notEqual(
+  independentRelease.authUserId,
+  uat.negativeActors.crossOrganizationManager.authUserId,
+);
+const preflightRaw = readFileSync(
+  'docs/workshop-order-system/production-readiness/evidence/WOS_V1_PRODUCTION_M2_QA_UAT_PREFLIGHT_20261126.json',
+  'utf8',
+);
+const preflight = JSON.parse(preflightRaw) as {
+  readonly actors: {
+    readonly independentRelease: {
+      readonly profileId: string;
+      readonly authUserId: string;
+      readonly email: string;
+      readonly role: string;
+      readonly organizationId: string;
+      readonly active: boolean;
+      readonly authSessionObserved: boolean;
+      readonly keychainServiceObserved: boolean;
+    };
+  };
+};
+assert.deepEqual(preflight.actors.independentRelease, {
+  profileId: '9164ac91-a50c-4023-836c-5c0887b619fb',
+  authUserId: 'b55ccc94-6352-4cad-8600-fad32955d014',
+  email: 'testingadmin@hongda.cn',
+  role: 'manager',
+  organizationId: '0ff53d93-2b9e-48b9-8113-a4768c39cdd2',
+  active: true,
+  authSessionObserved: true,
+  keychainServiceObserved: false,
+});
+const ownerGate = readFileSync(
+  'docs/workshop-order-system/production-readiness/WOS_V1_PRODUCTION_M2_QA_UAT_OWNER_GATE_20261126.md',
+  'utf8',
+);
+assert(ownerGate.includes(
+  'INDEPENDENT_RELEASE_AUTH_USER=b55ccc94-6352-4cad-8600-fad32955d014',
+));
+assert(ownerGate.includes(
+  'INDEPENDENT_RELEASE_PROFILE=9164ac91-a50c-4023-836c-5c0887b619fb',
+));
+const uatRunner = readFileSync(
+  'tests/sql/run-wos-v1-production-m2-qa-uat-pg17.sh',
+  'utf8',
+);
+assert(uatRunner.includes(
+  'b55ccc94-6352-4cad-8600-fad32955d014',
+));
+assert(uatRunner.includes(
+  '9164ac91-a50c-4023-836c-5c0887b619fb',
+));
+assert(
+  /SELECT public\.wos_v1_qa_uat_open_gate\(\s*'WOS-V1-PRODUCTION-M2-QA-UAT-001'[\s\S]*?'\$UAT_MANAGER_PROFILE'[\s\S]*?ARRAY\['START_RELEASE'\]/
+    .test(uatRunner),
+);
+for (const stale of [
+  '86eb4bfd-b1a6-4c94-86b3-e0599895f586',
+  'eb62a21a-f809-414e-ac14-9c6fdfa1e117',
+]) {
+  assert(!preflightRaw.includes(stale));
+  assert(!ownerGate.includes(stale));
+  assert(!uatRunner.includes(stale));
+}
 assert.equal(uat.negativeActors.viewer.role, 'viewer');
 assert.equal(
   uat.negativeActors.crossOrganizationManager.organizationId,

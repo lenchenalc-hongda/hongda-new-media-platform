@@ -28,8 +28,11 @@ OFFICE_PROFILE=f8adf44a-f04e-44b4-9c82-8b96508097bb
 OFFICE_AUTH_USER=3c0d8866-498a-4e61-a602-28b7a83f75f5
 WORKSHOP_PROFILE=6068f9b4-0452-4f1c-9952-b667c1ee470e
 WORKSHOP_AUTH_USER=a461ef01-e911-44e4-ae49-9b19a50c3c69
-INDEPENDENT_RELEASE_PROFILE=eb62a21a-f809-414e-ac14-9c6fdfa1e117
-INDEPENDENT_RELEASE_AUTH_USER=86eb4bfd-b1a6-4c94-86b3-e0599895f586
+INDEPENDENT_RELEASE_PROFILE=9164ac91-a50c-4023-836c-5c0887b619fb
+INDEPENDENT_RELEASE_AUTH_USER=b55ccc94-6352-4cad-8600-fad32955d014
+INDEPENDENT_RELEASE_EMAIL=testingadmin@hongda.cn
+INDEPENDENT_RELEASE_ORGANIZATION=0ff53d93-2b9e-48b9-8113-a4768c39cdd2
+INDEPENDENT_RELEASE_KEYCHAIN=WOS_V1_QA_IDENTITY_INDEPENDENT_MANAGER
 VIEWER_PROFILE=a6226d03-bd17-4a1e-a725-3846eeef3f6c
 VIEWER_AUTH_USER=7ebfb55d-1595-4417-8d14-3baf81d66aaa
 CROSS_ORG_MANAGER_PROFILE=86f9acd7-812f-43a2-9dc7-ab773259c62f
@@ -47,11 +50,16 @@ PROOF_RENEWAL=FORBIDDEN
 REOPEN_CLOSED_GATE=FORBIDDEN
 ```
 
-The independent-release Keychain entry
-`WOS_V1_QA_IDENTITY_INDEPENDENT_MANAGER` was not observed during source
-preparation. Before any write, the executor must obtain and validate a real
-session for the existing Profile above through an authorized login flow. It
-must not reset a password or create a new identity.
+The independent-release identity is now bound to the exact Auth User and
+Profile above. A real login was observed for that Auth User and the database
+Profile was verified as active, role `manager`, in the QA organization. The
+display name alone is not identity evidence. Before any write, the refreshed
+session must be stored in
+`WOS_V1_QA_IDENTITY_INDEPENDENT_MANAGER`, checked for exactly one Keychain
+item, and revalidated through `/auth/v1/user` plus the bound Profile row.
+
+The former independent-release Auth User and Profile UUIDs are retired from
+all positive test bindings. They may remain only in Git history for audit.
 
 ## Preview Flags
 
@@ -102,7 +110,9 @@ Before the M2 stage, open exactly three rows in
 Office Profile     -> BASELINE_SELECT, BASELINE_OFFICE_CONFIRM
 Workshop Profile   -> MATERIAL_RECORD, BASELINE_WORKSHOP_CONFIRM,
                       FINAL_READINESS_CONFIRM
-Independent Manager-> START_RELEASE
+Independent Manager
+9164ac91-a50c-4023-836c-5c0887b619fb
+                   -> START_RELEASE
 ```
 
 Every row must use the exact authorization ID, QA project, order ID,
