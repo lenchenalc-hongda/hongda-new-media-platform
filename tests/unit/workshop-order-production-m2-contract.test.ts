@@ -391,6 +391,8 @@ const preflight = JSON.parse(preflightRaw) as {
       readonly organizationId: string;
       readonly active: boolean;
       readonly authSessionObserved: boolean;
+      readonly authUserEndpointVerified: boolean;
+      readonly refreshVerified: boolean;
       readonly keychainServiceObserved: boolean;
     };
   };
@@ -403,7 +405,9 @@ assert.deepEqual(preflight.actors.independentRelease, {
   organizationId: '0ff53d93-2b9e-48b9-8113-a4768c39cdd2',
   active: true,
   authSessionObserved: true,
-  keychainServiceObserved: false,
+  authUserEndpointVerified: true,
+  refreshVerified: true,
+  keychainServiceObserved: true,
 });
 const ownerGate = readFileSync(
   'docs/workshop-order-system/production-readiness/WOS_V1_PRODUCTION_M2_QA_UAT_OWNER_GATE_20261126.md',

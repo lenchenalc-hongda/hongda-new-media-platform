@@ -54,9 +54,10 @@ The independent-release identity is now bound to the exact Auth User and
 Profile above. A real login was observed for that Auth User and the database
 Profile was verified as active, role `manager`, in the QA organization. The
 display name alone is not identity evidence. Before any write, the refreshed
-session must be stored in
+session was stored in
 `WOS_V1_QA_IDENTITY_INDEPENDENT_MANAGER`, checked for exactly one Keychain
-item, and revalidated through `/auth/v1/user` plus the bound Profile row.
+item, refreshed, and revalidated through `/auth/v1/user` plus the bound Profile
+row. Revalidate all five identities again immediately before the write window.
 
 The former independent-release Auth User and Profile UUIDs are retired from
 all positive test bindings. They may remain only in Git history for audit.

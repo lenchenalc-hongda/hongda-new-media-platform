@@ -1,5 +1,5 @@
 {
-  "checkedAt": "2026-11-26T14:04:24Z",
+  "checkedAt": "2026-11-26T14:20:47Z",
   "projectRef": "xulmpqaknlwqqculbsek",
   "organizationId": "0ff53d93-2b9e-48b9-8113-a4768c39cdd2",
   "readOnly": true,
@@ -62,7 +62,9 @@
       "organizationId": "0ff53d93-2b9e-48b9-8113-a4768c39cdd2",
       "active": true,
       "authSessionObserved": true,
-      "keychainServiceObserved": false
+      "authUserEndpointVerified": true,
+      "refreshVerified": true,
+      "keychainServiceObserved": true
     }
   },
   "negativeActors": {
@@ -82,9 +84,15 @@
       "keychainServiceObserved": true
     }
   },
+  "identityKeychainUniqueness": {
+    "office": 1,
+    "workshop": 1,
+    "independentRelease": 1,
+    "viewer": 1,
+    "crossOrganizationManager": 1
+  },
   "limitations": [
     "JWT validity and active Profile binding must be reverified immediately before the Owner-authorized write window.",
-    "The refreshed independent-release session must be stored in its dedicated Keychain service before the write window.",
     "A separate manager account with a similar display name was rejected because its Auth User and Profile IDs did not match the fixed positive Manager binding.",
     "No remote QA SQL, Edge deployment, Gate, order, upload or business write was performed."
   ]
