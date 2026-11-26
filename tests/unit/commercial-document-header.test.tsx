@@ -38,7 +38,11 @@ for (const kind of ['quotation', 'machine_contract'] as const) {
       assert(html.includes('document-product-note-label'), 'Category titles retain consistent typography');
       assert(html.includes('document-product-note-body'), 'Approved body text must use a preserved multiline layout');
       assert(html.includes('grid-template-columns: 120px minmax(0, 1fr)'), 'PDF categories should have consistent compact label widths');
-      assert(html.includes(language === 'zh' ? '1。 铜版自制版完成之日起享有18个月质量保证期' : '18-month quality guarantee'));
+      assert(html.includes(language === 'zh' ? '1. 铜版自制版完成之日起享有18个月质量保证期。正常保管及使用情况下，因制版质量产生的问题由我司负责免费修补;客户修改图稿、尺寸或工艺要求所产生的费用另行计算。' : '18-month quality guarantee'));
+      if (language === 'zh') {
+        assert(html.includes('2. 超过质保期且连续12个月未下单的印版，期满后进行报废处理。印版实物归属及特殊保管要求以双方约定为准。'), 'Chinese quote/PDF must preserve second plate clause');
+        assert(!html.includes('1。 铜版'), 'Old incorrect first-clause numbering must not render');
+      }
       if (counts.length === 1) {
         assert(!html.includes(language === 'zh' ? '设备电压、频率、气源及技术配置以双方最终确认的设备规格为准。' : 'Standard power:'));
         assert(!html.includes(language === 'zh' ? '烫印结合力应依据' : 'Transfer adhesion must'));
