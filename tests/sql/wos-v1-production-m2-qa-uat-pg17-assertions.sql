@@ -42,7 +42,7 @@ BEGIN
       '71000000-0000-4000-8000-000000000000',
       'MATERIAL_RECORD',
       jsonb_build_object(
-        'productionVersionLabel','V1',
+        'productionVersionLabel','V2',
         'note','Direct core RPC must remain inaccessible.',
         'resourceType','FILM',
         'resourceStatus','ARRIVED',
@@ -70,13 +70,13 @@ DO $$
 BEGIN
   BEGIN
     PERFORM public.wos_v1_qa_uat_m2_action(
-      'WOS-V1-PRODUCTION-M2-QA-UAT-005',
+      'WOS-V1-PRODUCTION-M2-QA-UAT-006',
       '33333333-3333-4333-8333-333333333333',
       7,
       '71000000-0000-4000-8000-000000000001',
       'MATERIAL_RECORD',
       jsonb_build_object(
-        'productionVersionLabel','V1',
+        'productionVersionLabel','V2',
         'note','Office gate must not permit Workshop actions.',
         'resourceType','FILM',
         'resourceStatus','ARRIVED',
@@ -110,7 +110,7 @@ BEGIN
       '71000000-0000-4000-8000-000000000004',
       'BASELINE_SELECT',
       jsonb_build_object(
-        'productionVersionLabel','V1',
+        'productionVersionLabel','V2',
         'note','Stale authorization ID must never reuse an old gate.',
         'imageIds',jsonb_build_array(
           '41111111-1111-4111-8111-111111111111',
@@ -137,13 +137,13 @@ DO $$
 BEGIN
   BEGIN
     PERFORM public.wos_v1_qa_uat_m2_action(
-      'WOS-V1-PRODUCTION-M2-QA-UAT-005',
+      'WOS-V1-PRODUCTION-M2-QA-UAT-006',
       '33333333-3333-4333-8333-333333333333',
       7,
       '71000000-0000-4000-8000-000000000002',
       'MATERIAL_RECORD',
       jsonb_build_object(
-        'productionVersionLabel','V1',
+        'productionVersionLabel','V2',
         'note','Expired gate must fail closed.',
         'resourceType','FILM',
         'resourceStatus','ARRIVED',
@@ -171,13 +171,13 @@ DO $$
 BEGIN
   BEGIN
     PERFORM public.wos_v1_qa_uat_m2_action(
-      'WOS-V1-PRODUCTION-M2-QA-UAT-005',
+      'WOS-V1-PRODUCTION-M2-QA-UAT-006',
       '33333333-3333-4333-8333-333333333333',
       7,
       '71000000-0000-4000-8000-000000000003',
       'MATERIAL_RECORD',
       jsonb_build_object(
-        'productionVersionLabel','V1',
+        'productionVersionLabel','V2',
         'note','Cross-organization caller must be denied.',
         'resourceType','FILM',
         'resourceStatus','ARRIVED',
@@ -216,13 +216,13 @@ DECLARE
 BEGIN
   FOR index IN 1..4 LOOP
     result:=public.wos_v1_qa_uat_m2_action(
-      'WOS-V1-PRODUCTION-M2-QA-UAT-005',
+      'WOS-V1-PRODUCTION-M2-QA-UAT-006',
       '33333333-3333-4333-8333-333333333333',
       expected_version,
       request_ids[index]::uuid,
       'MATERIAL_RECORD',
       jsonb_build_object(
-        'productionVersionLabel','V1',
+        'productionVersionLabel','V2',
         'note','QA UAT records nonfinal material readiness.',
         'resourceType',resources[index],
         'resourceStatus',statuses[index],
@@ -259,15 +259,15 @@ BEGIN
   SELECT jsonb_agg(id::text ORDER BY category) INTO image_ids
   FROM public.wos_reference_images
   WHERE entity_id='33333333-3333-4333-8333-333333333333'
-    AND version_label='V1' AND image_status='READY';
+    AND version_label='V2' AND image_status='READY';
   result:=public.wos_v1_qa_uat_m2_action(
-      'WOS-V1-PRODUCTION-M2-QA-UAT-005',
+      'WOS-V1-PRODUCTION-M2-QA-UAT-006',
     '33333333-3333-4333-8333-333333333333',
     11,
     '73000000-0000-4000-8000-000000000001',
     'BASELINE_SELECT',
     jsonb_build_object(
-      'productionVersionLabel','V1',
+      'productionVersionLabel','V2',
       'note','QA UAT Office selects the exact four-image Baseline.',
       'imageIds',image_ids
     )
@@ -290,15 +290,15 @@ DECLARE result jsonb; baseline_id uuid;
 BEGIN
   SELECT id INTO baseline_id FROM public.wos_visual_baselines
   WHERE entity_id='33333333-3333-4333-8333-333333333333'
-    AND status='DRAFT' AND version_label='V1';
+    AND status='DRAFT' AND version_label='V2';
   result:=public.wos_v1_qa_uat_m2_action(
-      'WOS-V1-PRODUCTION-M2-QA-UAT-005',
+      'WOS-V1-PRODUCTION-M2-QA-UAT-006',
     '33333333-3333-4333-8333-333333333333',
     12,
     '73000000-0000-4000-8000-000000000002',
     'BASELINE_OFFICE_CONFIRM',
     jsonb_build_object(
-      'productionVersionLabel','V1',
+      'productionVersionLabel','V2',
       'note','QA UAT Office signs the current Proof set.',
       'baselineId',baseline_id
     )
@@ -319,15 +319,15 @@ DECLARE result jsonb; baseline_id uuid;
 BEGIN
   SELECT id INTO baseline_id FROM public.wos_visual_baselines
   WHERE entity_id='33333333-3333-4333-8333-333333333333'
-    AND status='CURRENT' AND version_label='V1';
+    AND status='CURRENT' AND version_label='V2';
   result:=public.wos_v1_qa_uat_m2_action(
-      'WOS-V1-PRODUCTION-M2-QA-UAT-005',
+      'WOS-V1-PRODUCTION-M2-QA-UAT-006',
     '33333333-3333-4333-8333-333333333333',
     13,
     '73000000-0000-4000-8000-000000000003',
     'BASELINE_WORKSHOP_CONFIRM',
     jsonb_build_object(
-      'productionVersionLabel','V1',
+      'productionVersionLabel','V2',
       'note','QA UAT Workshop signs the same current Proof set.',
       'baselineId',baseline_id
     )
@@ -348,15 +348,15 @@ DECLARE result jsonb; baseline_id uuid;
 BEGIN
   SELECT id INTO baseline_id FROM public.wos_visual_baselines
   WHERE entity_id='33333333-3333-4333-8333-333333333333'
-    AND status='CURRENT' AND version_label='V1';
+    AND status='CURRENT' AND version_label='V2';
   result:=public.wos_v1_qa_uat_m2_action(
-      'WOS-V1-PRODUCTION-M2-QA-UAT-005',
+      'WOS-V1-PRODUCTION-M2-QA-UAT-006',
     '33333333-3333-4333-8333-333333333333',
     14,
     '73000000-0000-4000-8000-000000000004',
     'FINAL_READINESS_CONFIRM',
     jsonb_build_object(
-      'productionVersionLabel','V1',
+      'productionVersionLabel','V2',
       'note','QA UAT final material transaction for all four categories.',
       'baselineId',baseline_id,
       'physicalCheckAttested',true,
@@ -387,9 +387,9 @@ DECLARE result jsonb; baseline_id uuid;
 BEGIN
   SELECT id INTO baseline_id FROM public.wos_visual_baselines
   WHERE entity_id='33333333-3333-4333-8333-333333333333'
-    AND status='CURRENT' AND version_label='V1';
+    AND status='CURRENT' AND version_label='V2';
   result:=public.wos_v1_qa_uat_authorize_production_start(
-    'WOS-V1-PRODUCTION-M2-QA-UAT-005',
+    'WOS-V1-PRODUCTION-M2-QA-UAT-006',
     '33333333-3333-4333-8333-333333333333',
     15,
     '74000000-0000-4000-8000-000000000001',
@@ -403,7 +403,7 @@ BEGIN
     OR (result->>'canStart')::boolean<>false
   THEN RAISE EXCEPTION 'QA_UAT_START_RELEASE_FAILED: %',result; END IF;
   result:=public.wos_v1_qa_uat_authorize_production_start(
-    'WOS-V1-PRODUCTION-M2-QA-UAT-005',
+    'WOS-V1-PRODUCTION-M2-QA-UAT-006',
     '33333333-3333-4333-8333-333333333333',
     15,
     '74000000-0000-4000-8000-000000000001',
@@ -455,15 +455,15 @@ BEGIN
   SELECT jsonb_agg(id::text ORDER BY category) INTO image_ids
   FROM public.wos_reference_images
   WHERE entity_id='33333333-3333-4333-8333-333333333333'
-    AND version_label='V1' AND image_status='READY';
+    AND version_label='V2' AND image_status='READY';
   result:=public.wos_v1_qa_uat_m2_action(
-      'WOS-V1-PRODUCTION-M2-QA-UAT-005',
+      'WOS-V1-PRODUCTION-M2-QA-UAT-006',
     '33333333-3333-4333-8333-333333333333',
     17,
     '75000000-0000-4000-8000-000000000001',
     'BASELINE_SELECT',
     jsonb_build_object(
-      'productionVersionLabel','V1',
+      'productionVersionLabel','V2',
       'note','QA UAT reselects the restored current image set.',
       'imageIds',image_ids
     )
@@ -484,15 +484,15 @@ DECLARE result jsonb; baseline_id uuid;
 BEGIN
   SELECT id INTO baseline_id FROM public.wos_visual_baselines
   WHERE entity_id='33333333-3333-4333-8333-333333333333'
-    AND status='DRAFT' AND version_label='V1';
+    AND status='DRAFT' AND version_label='V2';
   result:=public.wos_v1_qa_uat_m2_action(
-      'WOS-V1-PRODUCTION-M2-QA-UAT-005',
+      'WOS-V1-PRODUCTION-M2-QA-UAT-006',
     '33333333-3333-4333-8333-333333333333',
     18,
     '75000000-0000-4000-8000-000000000002',
     'BASELINE_OFFICE_CONFIRM',
     jsonb_build_object(
-      'productionVersionLabel','V1',
+      'productionVersionLabel','V2',
       'note','QA UAT Office re-signs after image restoration.',
       'baselineId',baseline_id
     )
@@ -513,15 +513,15 @@ DECLARE result jsonb; baseline_id uuid;
 BEGIN
   SELECT id INTO baseline_id FROM public.wos_visual_baselines
   WHERE entity_id='33333333-3333-4333-8333-333333333333'
-    AND status='CURRENT' AND version_label='V1';
+    AND status='CURRENT' AND version_label='V2';
   result:=public.wos_v1_qa_uat_m2_action(
-      'WOS-V1-PRODUCTION-M2-QA-UAT-005',
+      'WOS-V1-PRODUCTION-M2-QA-UAT-006',
     '33333333-3333-4333-8333-333333333333',
     19,
     '75000000-0000-4000-8000-000000000003',
     'BASELINE_WORKSHOP_CONFIRM',
     jsonb_build_object(
-      'productionVersionLabel','V1',
+      'productionVersionLabel','V2',
       'note','QA UAT Workshop re-signs after image restoration.',
       'baselineId',baseline_id
     )
@@ -542,15 +542,15 @@ DECLARE result jsonb; baseline_id uuid;
 BEGIN
   SELECT id INTO baseline_id FROM public.wos_visual_baselines
   WHERE entity_id='33333333-3333-4333-8333-333333333333'
-    AND status='CURRENT' AND version_label='V1';
+    AND status='CURRENT' AND version_label='V2';
   result:=public.wos_v1_qa_uat_m2_action(
-      'WOS-V1-PRODUCTION-M2-QA-UAT-005',
+      'WOS-V1-PRODUCTION-M2-QA-UAT-006',
     '33333333-3333-4333-8333-333333333333',
     20,
     '75000000-0000-4000-8000-000000000004',
     'FINAL_READINESS_CONFIRM',
     jsonb_build_object(
-      'productionVersionLabel','V1',
+      'productionVersionLabel','V2',
       'note','QA UAT final material retry after image restoration.',
       'baselineId',baseline_id,
       'physicalCheckAttested',true,
@@ -578,9 +578,9 @@ DECLARE result jsonb; baseline_id uuid;
 BEGIN
   SELECT id INTO baseline_id FROM public.wos_visual_baselines
   WHERE entity_id='33333333-3333-4333-8333-333333333333'
-    AND status='CURRENT' AND version_label='V1';
+    AND status='CURRENT' AND version_label='V2';
   result:=public.wos_v1_qa_uat_authorize_production_start(
-    'WOS-V1-PRODUCTION-M2-QA-UAT-005',
+    'WOS-V1-PRODUCTION-M2-QA-UAT-006',
     '33333333-3333-4333-8333-333333333333',
     21,
     '75000000-0000-4000-8000-000000000005',

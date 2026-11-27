@@ -8,6 +8,7 @@ import {
   mkdirSync,
   readFileSync,
   renameSync,
+  rmSync,
   writeFileSync,
 } from 'node:fs';
 import { homedir } from 'node:os';
@@ -16,7 +17,9 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '../..');
 const SCRIPT = fileURLToPath(import.meta.url);
-const AUTH_ID = 'WOS-V1-PRODUCTION-M2-QA-UAT-005';
+const AUTH_ID =
+  process.env.WOS_V1_QA_AUTHORIZATION_ID
+  || 'WOS-V1-PRODUCTION-M2-QA-UAT-006';
 const PROJECT_REF = 'xulmpqaknlwqqculbsek';
 const ARM_KEYCHAIN = 'WOS_V1_QA_DB_CLOSER_ARM_TOKEN';
 const SERVICE_KEYCHAIN = 'WOS_V1_QA_EDGE_CLOSER_SERVICE_ROLE_KEY';
@@ -259,6 +262,12 @@ function testPsqlRpc(name, body) {
       ${sqlLiteral(body.p_arm_token)}::uuid,
       ${sqlLiteral(body.p_process_nonce)}::uuid
     )::text;`;
+  } else if (name === 'wos_v1_qa_uat_edge_preflight') {
+    sql = `SELECT public.wos_v1_qa_uat_edge_preflight(
+      ${sqlLiteral(body.p_execution_id)}::uuid,
+      ${sqlLiteral(body.p_arm_token)}::uuid,
+      ${sqlLiteral(body.p_process_nonce)}::uuid
+    )::text;`;
   } else if (name === 'wos_v1_qa_uat_close_edge') {
     sql = `SELECT public.wos_v1_qa_uat_close_edge(
       ${sqlLiteral(body.p_execution_id)}::uuid,
@@ -302,6 +311,31 @@ async function edgeRpc(name, body) {
   return payload;
 }
 
+async function closeArmFailure(id, reason) {
+  try {
+    unloadLaunchAgent({
+      launchdLoaded: true,
+      launchdLabel: label(id),
+    });
+  } catch {
+    fail('WOS_V1_QA_EDGE_ARM_FAILURE_LAUNCHD_UNVERIFIED');
+  }
+  let result;
+  try {
+    result = await edgeRpc('wos_v1_qa_uat_close_edge', {
+      p_execution_id: id,
+      p_request_id: randomUUID(),
+      p_reason: reason.slice(0, 200),
+    });
+  } catch {
+    fail('WOS_V1_QA_EDGE_ARM_FAILURE_CLOSE_UNVERIFIED');
+  }
+  if (result?.status !== 'CLOSED') {
+    fail('WOS_V1_QA_EDGE_ARM_FAILURE_CLOSE_UNVERIFIED');
+  }
+  return result;
+}
+
 async function arm() {
   assertLocalTestScope();
   const id = validateUuid(
@@ -338,7 +372,43 @@ async function arm() {
     && control.edgeProcessNonce !== processNonce) {
     fail('WOS_V1_QA_EDGE_PROCESS_NONCE_CONFLICT');
   }
-  const priorHeartbeatMs = Date.parse(control?.edgeLastHeartbeatAt || '');
+  let bootstrapHeartbeat = null;
+  let credentialProbe = null;
+  if (load) {
+    try {
+      bootstrapHeartbeat = await edgeRpc('wos_v1_qa_uat_edge_preflight', {
+        p_execution_id: id,
+        p_arm_token: token,
+        p_process_nonce: processNonce,
+      });
+    } catch {
+      await closeArmFailure(id, 'WOS_V1_QA_EDGE_PREFLIGHT_RPC_FAILED');
+      fail('WOS_V1_QA_EDGE_PREFLIGHT_RPC_FAILED');
+    }
+    try {
+      credentialProbe = await probeCredential({
+        executionId: id,
+        authorizationId: AUTH_ID,
+        projectRef: PROJECT_REF,
+        codeSha256: codeSha,
+        functionUrl: functionUrl(),
+        processNonce,
+      });
+    } catch {
+      await closeArmFailure(id, 'WOS_V1_QA_EDGE_CREDENTIAL_PROBE_EXCEPTION');
+      fail('WOS_V1_QA_EDGE_CREDENTIAL_PROBE_EXCEPTION');
+    }
+    if (!credentialProbe.ok) {
+      await closeArmFailure(id, 'WOS_V1_QA_EDGE_CREDENTIAL_PREFLIGHT_FAILED');
+      fail(
+        `WOS_V1_QA_EDGE_CREDENTIAL_PREFLIGHT_FAILED_${credentialProbe.code}`,
+      );
+    }
+  }
+  const priorHeartbeatAt =
+    bootstrapHeartbeat?.previousHeartbeatAt
+    || control?.edgeLastHeartbeatAt
+    || '';
   mkdirSync(stateDir(), { recursive: true, mode: 0o700 });
   mkdirSync(plistDir(), { recursive: true });
   const pending = {
@@ -354,6 +424,8 @@ async function arm() {
     processNonce,
     writeDeadlineAt: control?.writeDeadlineAt ?? null,
     edgeCleanupDeadlineAt: control?.edgeCleanupDeadlineAt ?? null,
+    bootstrapHeartbeat,
+    credentialProbe,
     armedAt: new Date().toISOString(),
   };
   writeFileSync(path, `${JSON.stringify(pending, null, 2)}\n`, { mode: 0o600 });
@@ -373,21 +445,28 @@ async function arm() {
 
   if (load) {
     const domain = `gui/${process.getuid()}`;
-    spawnSync('launchctl', ['bootout', `${domain}/${label(id)}`], {
-      stdio: 'ignore',
-    });
-    execFileSync('launchctl', ['bootstrap', domain, plist], {
-      stdio: 'ignore',
-    });
-    execFileSync('launchctl', ['kickstart', '-k', `${domain}/${label(id)}`], {
-      stdio: 'ignore',
-    });
-    const check = spawnSync(
-      'launchctl',
-      ['print', `${domain}/${label(id)}`],
-      { encoding: 'utf8' },
-    );
-    if (check.status !== 0) fail('WOS_V1_QA_EDGE_CLOSER_LAUNCHD_NOT_LOADED');
+    try {
+      spawnSync('launchctl', ['bootout', `${domain}/${label(id)}`], {
+        stdio: 'ignore',
+      });
+      execFileSync('launchctl', ['bootstrap', domain, plist], {
+        stdio: 'ignore',
+      });
+      execFileSync('launchctl', ['kickstart', '-k', `${domain}/${label(id)}`], {
+        stdio: 'ignore',
+      });
+      const check = spawnSync(
+        'launchctl',
+        ['print', `${domain}/${label(id)}`],
+        { encoding: 'utf8' },
+      );
+      if (check.status !== 0) {
+        fail('WOS_V1_QA_EDGE_CLOSER_LAUNCHD_NOT_LOADED');
+      }
+    } catch {
+      await closeArmFailure(id, 'WOS_V1_QA_EDGE_CLOSER_LAUNCHD_NOT_LOADED');
+      fail('WOS_V1_QA_EDGE_CLOSER_LAUNCHD_NOT_LOADED');
+    }
   }
 
   const waitUntil = Date.now() + 35_000;
@@ -397,34 +476,43 @@ async function arm() {
       p_authorization_id: AUTH_ID,
       p_project_ref: PROJECT_REF,
     });
-    const heartbeatMs = Date.parse(armedControl.edgeLastHeartbeatAt || '');
+    const heartbeatAt = String(armedControl.edgeLastHeartbeatAt || '');
+    const heartbeatMs = Date.parse(heartbeatAt);
     if (armedControl.status === 'OPEN'
       && armedControl.executionId === id
       && armedControl.codeSha256 === codeSha
       && armedControl.edgeProcessNonce === processNonce
       && Number.isFinite(heartbeatMs)
-      && (!Number.isFinite(priorHeartbeatMs) || heartbeatMs > priorHeartbeatMs)
+      && heartbeatAt !== priorHeartbeatAt
       && heartbeatMs >= Date.now() - 30_000) {
       break;
     }
     await new Promise(resolve => setTimeout(resolve, 1000));
   }
-  const armedHeartbeatMs = Date.parse(
-    armedControl.edgeLastHeartbeatAt || '',
-  );
+  const armedHeartbeatAt = String(armedControl.edgeLastHeartbeatAt || '');
+  const armedHeartbeatMs = Date.parse(armedHeartbeatAt);
   if (armedControl.status !== 'OPEN'
     || armedControl.executionId !== id
     || armedControl.codeSha256 !== codeSha
     || armedControl.edgeProcessNonce !== processNonce
     || !Number.isFinite(armedHeartbeatMs)
-    || (Number.isFinite(priorHeartbeatMs) && armedHeartbeatMs <= priorHeartbeatMs)
+    || armedHeartbeatAt === priorHeartbeatAt
     || armedHeartbeatMs < Date.now() - 30_000) {
-    spawnSync(
-      'launchctl',
-      ['bootout', `gui/${process.getuid()}/${label(id)}`],
-      { stdio: 'ignore' },
-    );
+    await closeArmFailure(id, 'WOS_V1_QA_EDGE_CLOSER_HEARTBEAT_TIMEOUT');
     fail('WOS_V1_QA_EDGE_CLOSER_HEARTBEAT_TIMEOUT');
+  }
+  let openProbe;
+  try {
+    openProbe = await probeOpen(armedControl);
+  } catch {
+    await closeArmFailure(id, 'WOS_V1_QA_EDGE_OPEN_PROBE_EXCEPTION');
+    fail('WOS_V1_QA_EDGE_OPEN_PROBE_EXCEPTION');
+  }
+  if (!openProbe.ok) {
+    await closeArmFailure(id, 'WOS_V1_QA_EDGE_OPEN_PROBE_FAILED');
+    fail(
+      `WOS_V1_QA_EDGE_OPEN_PROBE_FAILED_${openProbe.code}`,
+    );
   }
   const armed = {
     ...pending,
@@ -433,6 +521,7 @@ async function arm() {
     edgeCleanupDeadlineAt: armedControl.edgeCleanupDeadlineAt,
     launchdLabel: label(id),
     launchdLoaded: load,
+    openProbe,
     plistPath: plist,
   };
   const digest = createHash('sha256')
@@ -441,7 +530,9 @@ async function arm() {
   writeFileSync(path, `${JSON.stringify({ ...armed, receiptSha256: digest }, null, 2)}\n`, {
     mode: 0o600,
   });
-  if (load) spawnFinalizer(path);
+  if (load) {
+    await spawnFinalizer(path);
+  }
   process.stdout.write(`${JSON.stringify({
     status: 'ARMED',
     executionId: id,
@@ -464,8 +555,9 @@ function readState(path) {
   return state;
 }
 
-async function probeClosed(state) {
+async function probeEdge(state, mode) {
   const service = serviceKey();
+  const credentialPreflight = mode === 'CREDENTIAL';
   const response = await fetch(state.functionUrl, {
     method: 'POST',
     headers: {
@@ -476,6 +568,9 @@ async function probeClosed(state) {
       'x-wos-qa-uat-execution-id': state.executionId,
       'x-wos-qa-uat-closer-nonce': state.processNonce,
       'x-wos-qa-closer-probe': '1',
+      ...(credentialPreflight
+        ? { 'x-wos-qa-closer-credential-preflight': '1' }
+        : {}),
     },
     body: '{}',
     signal: AbortSignal.timeout(20_000),
@@ -485,20 +580,101 @@ async function probeClosed(state) {
     ? payload.data
     : null;
   const closedAt = typeof data?.closedAt === 'string' ? data.closedAt : '';
+  const commonOk = payload
+    && typeof payload === 'object'
+    && data?.executionId === state.executionId;
   return {
     status: response.status,
     code: payload && typeof payload === 'object'
       ? String(payload.code || '')
       : '',
-    ok: response.status === 503
-      && payload
-      && payload.code === 'WOS_V1_QA_EDGE_CLOSED'
-      && data?.gateStatus === 'CLOSED'
-      && data?.executionId === state.executionId
-      && closedAt.length > 0,
+    ok: mode === 'CREDENTIAL'
+      ? response.status === 200
+        && payload?.code === 'WOS_V1_QA_EDGE_CREDENTIAL_VERIFIED'
+        && commonOk
+      : mode === 'OPEN'
+      ? response.status === 200
+        && payload?.code === 'WOS_V1_QA_EDGE_OPEN_PROBE'
+        && data?.gateStatus === 'OPEN'
+        && commonOk
+      : response.status === 503
+        && payload?.code === 'WOS_V1_QA_EDGE_CLOSED'
+        && data?.gateStatus === 'CLOSED'
+        && commonOk
+        && closedAt.length > 0,
+    gateStatus: data?.gateStatus || null,
     executionId: data?.executionId || null,
     closedAt: closedAt || null,
   };
+}
+
+async function probeOpen(state) {
+  return probeEdge(state, 'OPEN');
+}
+
+async function probeClosed(state) {
+  return probeEdge(state, 'CLOSED');
+}
+
+async function probeCredential(state) {
+  return probeEdge(state, 'CREDENTIAL');
+}
+
+function closedTimesMatch(result, probe) {
+  const resultClosedAt = String(result?.closedAt || '');
+  const probeClosedAt = String(probe?.closedAt || '');
+  const cleanupDeadlineAt = Date.parse(
+    result?.deadlineAt || result?.cleanupDeadlineAt || '',
+  );
+  const closedAtMs = Date.parse(resultClosedAt);
+  return resultClosedAt.length > 0
+    && resultClosedAt === probeClosedAt
+    && Number.isFinite(closedAtMs)
+    && Number.isFinite(cleanupDeadlineAt)
+    && closedAtMs <= cleanupDeadlineAt;
+}
+
+async function credentialPreflight() {
+  const id = validateUuid(
+    process.env.WOS_V1_QA_EXECUTION_ID,
+    'WOS_V1_QA_EXECUTION_ID_REQUIRED',
+  );
+  const codeSha = validateSha(process.env.WOS_V1_QA_CODE_SHA256);
+  const nonce = validateUuid(
+    process.env.WOS_V1_QA_EDGE_PROCESS_NONCE,
+    'WOS_V1_QA_EDGE_PROCESS_NONCE_REQUIRED',
+  );
+  const expected = String(
+    process.env.WOS_V1_QA_EDGE_PROBE_EXPECT || 'CREDENTIAL',
+  ).toUpperCase();
+  if (!['CREDENTIAL', 'OPEN', 'CLOSED'].includes(expected)) {
+    fail('WOS_V1_QA_EDGE_PROBE_EXPECT_INVALID');
+  }
+  const state = {
+    executionId: id,
+    authorizationId: AUTH_ID,
+    projectRef: PROJECT_REF,
+    codeSha256: codeSha,
+    functionUrl: functionUrl(),
+    processNonce: nonce,
+  };
+  const probe = expected === 'CREDENTIAL'
+    ? await probeCredential(state)
+    : expected === 'OPEN'
+      ? await probeOpen(state)
+      : await probeClosed(state);
+  process.stdout.write(`${JSON.stringify({
+    status: probe.ok ? 'PASS' : 'FAIL',
+    expected,
+    httpStatus: probe.status,
+    code: probe.code,
+    executionId: probe.executionId,
+    gateStatus: probe.gateStatus,
+  })}\n`);
+  if (!probe.ok) {
+    fail(`WOS_V1_QA_EDGE_CREDENTIAL_PREFLIGHT_FAILED_${probe.code}`);
+  }
+  process.stdout.write('EDGE_CREDENTIAL_PREFLIGHT=PASS\n');
 }
 
 async function closeEdge(state, reason) {
@@ -569,7 +745,29 @@ function writeClosedState(stateFile, state, receipt) {
   });
 }
 
-function spawnFinalizer(stateFile) {
+function writeUnverifiedCloseState(
+  stateFile,
+  state,
+  receipt,
+  reason,
+) {
+  writePrivateJson(stateFile, {
+    ...state,
+    status: 'CLOSE_UNVERIFIED',
+    launchdLoaded: state.launchdLoaded === true,
+    closeReceipt: receipt,
+    closeVerificationError: reason,
+  });
+}
+
+function finalizerAckPath(stateFile) {
+  return `${stateFile}.finalizer.ack.json`;
+}
+
+async function spawnFinalizer(stateFile) {
+  const state = readState(stateFile);
+  const ackPath = finalizerAckPath(stateFile);
+  rmSync(ackPath, { force: true });
   const child = spawn(
     process.execPath,
     [SCRIPT, 'finalize', '--state', stateFile],
@@ -580,15 +778,60 @@ function spawnFinalizer(stateFile) {
     },
   );
   child.unref();
+  const deadline = Date.now() + 2000;
+  while (Date.now() < deadline) {
+    if (existsSync(ackPath)) {
+      try {
+        const ack = JSON.parse(readFileSync(ackPath, 'utf8'));
+        if (ack?.status === 'STARTED'
+          && ack?.executionId === state.executionId) {
+          return;
+        }
+      } catch {
+        // The finalizer may still be atomically replacing the handshake.
+      }
+    }
+    await new Promise(resolve => setTimeout(resolve, 50));
+  }
+  child.kill('SIGTERM');
+  await closeArmFailure(state.executionId, 'WOS_V1_QA_EDGE_FINALIZER_SPAWN_FAILED');
+  fail('WOS_V1_QA_EDGE_FINALIZER_SPAWN_FAILED');
 }
 
 async function finalizeClose(stateFile) {
   const state = readState(stateFile);
+  writePrivateJson(finalizerAckPath(stateFile), {
+    status: 'STARTED',
+    executionId: state.executionId,
+    processId: process.pid,
+    startedAt: new Date().toISOString(),
+  });
   const timeout = Date.parse(state.edgeCleanupDeadlineAt || '') + 60_000;
   while (Date.now() <= timeout) {
     const current = readState(stateFile);
+    if (current.status === 'CLOSE_UNVERIFIED') {
+      const launchAgent = unloadLaunchAgent(current);
+      writePrivateJson(stateFile, {
+        ...current,
+        launchdLoaded: launchAgent.required
+          && launchAgent.verified
+          ? false
+          : current.launchdLoaded,
+      });
+      fail('WOS_V1_QA_EDGE_CLOSED_PROBE_FAILED');
+    }
     if (current.status === 'CLOSED' && current.closeReceipt) {
       const launchAgent = unloadLaunchAgent(current);
+      if (current.closeReceipt.result?.timely !== true
+        || current.closeReceipt.probe?.ok !== true) {
+        writeUnverifiedCloseState(
+          stateFile,
+          current,
+          current.closeReceipt,
+          'WOS_V1_QA_EDGE_CLOSED_PROBE_FAILED',
+        );
+        fail('WOS_V1_QA_EDGE_CLOSED_PROBE_FAILED');
+      }
       const receipt = sealCloseReceipt(
         current,
         current.closeReceipt.result,
@@ -632,16 +875,35 @@ async function watch(stateFile, once) {
     false,
     'SCHEDULED_EDGE_CLOSE_PRE_FINALIZER',
   );
-  writeClosedState(stateFile, state, receipt);
   process.stdout.write(`${JSON.stringify(receipt)}\n`);
-  if (result.timely !== true) fail('WOS_V1_QA_EDGE_CLOSER_DEADLINE_MISSED');
-  if (!probe.ok) fail('WOS_V1_QA_EDGE_CLOSED_PROBE_FAILED');
+  if (result.timely !== true
+    || !probe.ok
+    || !closedTimesMatch(result, probe)) {
+    writeUnverifiedCloseState(
+      stateFile,
+      state,
+      receipt,
+      result.timely !== true
+        ? 'WOS_V1_QA_EDGE_CLOSER_DEADLINE_MISSED'
+        : !probe.ok
+          ? 'WOS_V1_QA_EDGE_CLOSED_PROBE_FAILED'
+          : 'WOS_V1_QA_EDGE_CLOSED_TIMESTAMP_MISMATCH',
+    );
+    if (result.timely !== true) {
+      fail('WOS_V1_QA_EDGE_CLOSER_DEADLINE_MISSED');
+    }
+    fail('WOS_V1_QA_EDGE_CLOSED_PROBE_FAILED');
+  }
+  writeClosedState(stateFile, state, receipt);
 }
 
 async function watchLoop(stateFile) {
   while (true) {
     const state = readState(stateFile);
     if (state.status === 'CLOSED') return;
+    if (state.status === 'CLOSE_UNVERIFIED') {
+      fail('WOS_V1_QA_EDGE_CLOSED_PROBE_FAILED');
+    }
     const due = Date.parse(state.writeDeadlineAt || state.edgeCleanupDeadlineAt);
     if (Number.isFinite(due) && Date.now() >= due) {
       await watch(stateFile, true);
@@ -679,7 +941,9 @@ async function manualClose() {
   const probe = await probeClosed(state);
   process.stdout.write(`${JSON.stringify({ result, probe })}\n`);
   if (result.timely !== true) fail('WOS_V1_QA_EDGE_CLOSER_DEADLINE_MISSED');
-  if (!probe.ok) fail('WOS_V1_QA_EDGE_CLOSED_PROBE_FAILED');
+  if (!probe.ok || !closedTimesMatch(result, probe)) {
+    fail('WOS_V1_QA_EDGE_CLOSED_PROBE_FAILED');
+  }
 }
 
 async function status() {
@@ -748,6 +1012,9 @@ try {
     if (process.argv.includes('--loop')) await watchLoop(stateFile);
     else await watch(stateFile, process.argv.includes('--once'));
   } else if (command === 'status') await status();
+  else if (command === 'credential-preflight') {
+    await credentialPreflight();
+  }
   else if (command === 'close' || command === 'revoke') await manualClose();
   else if (command === 'disarm') disarm();
   else fail('WOS_V1_QA_EDGE_CLOSER_COMMAND_INVALID');

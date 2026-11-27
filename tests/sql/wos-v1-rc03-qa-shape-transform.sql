@@ -99,7 +99,7 @@ USING (
 );
 
 CREATE POLICY wos_p7_storage_reader_roles
-ON storage.objects FOR SELECT TO authenticated
+ON storage.objects AS RESTRICTIVE FOR SELECT TO authenticated
 USING (
   bucket_id IS DISTINCT FROM 'wos-private'
   OR EXISTS (

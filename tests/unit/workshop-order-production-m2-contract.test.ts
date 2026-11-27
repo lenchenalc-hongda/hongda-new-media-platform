@@ -310,7 +310,7 @@ assert(qaAppActivate.includes(
 ));
 assert(qaAppActivate.includes('WOS_V1_QA_UAT_APP_EXECUTION_MISMATCH'));
 assert(qaAppActivate.includes(
-  "'791577cc-23bb-4b8d-93dd-e90b6630abe2'",
+  "'0e5e6ac1-cf10-4c2c-ba79-6e1619b2e632'",
 ));
 assert(qaAppActivate.includes('WOS_V1_QA_UAT_APP_RPC_NOT_INSTALLED'));
 assert(qaAppActivate.includes('WOS_V1_QA_UAT_APP_BROAD_TABLE_ACCESS'));
@@ -328,10 +328,16 @@ assert(qaAppActivate.includes(
   'current_setting(\'wos_v1.qa_execution_id\', true)::uuid',
 ));
 assert(qaAppActivate.includes(
-  'GRANT EXECUTE ON FUNCTION public.wos_create_production_order(uuid,jsonb)',
+  'FROM PUBLIC, anon, authenticated;',
 ));
 assert(qaAppActivate.includes(
   'GRANT EXECUTE ON FUNCTION public.wos_operator_review_correction(',
+));
+assert(!qaAppActivate.includes(
+  'GRANT EXECUTE ON FUNCTION public.wos_create_production_order(uuid,jsonb)',
+));
+assert(qaAppActivate.includes(
+  'WOS_V1_QA_UAT_CREATE_FORBIDDEN_IN_RESUME_MODE',
 ));
 assert(!qaAppActivate.includes(
   'GRANT EXECUTE ON FUNCTION public.wos_v1_m2_action',
@@ -372,12 +378,20 @@ assert(qaClose.includes('REVOKE EXECUTE ON FUNCTION public.wos_v1_qa_uat_m2_acti
 
 const uatRoot =
   'docs/workshop-order-system/qa-fixture/production-m2-uat-20261126';
-const uat = JSON.parse(readFileSync(`${uatRoot}/inputs.json`, 'utf8')) as {
+const uat = JSON.parse(
+  readFileSync(`${uatRoot}/inputs-uat006.json`, 'utf8'),
+) as {
   readonly requestId: string;
   readonly orderNumber: string;
   readonly qaProject: string;
   readonly qaOrganizationId: string;
-  readonly createPayload: Record<string, unknown>;
+  readonly mode: string;
+  readonly resumeOrderId: string;
+  readonly resumeExpectedVersion: number;
+  readonly resumeExpectedVersionLabel: string;
+  readonly resumeExpectedWorkflowStatus: string;
+  readonly executionId: string;
+  readonly edgeProcessNonce: string;
   readonly actors: Record<string, {
     readonly profileId: string;
     readonly authUserId: string;
@@ -401,13 +415,26 @@ const uat = JSON.parse(readFileSync(`${uatRoot}/inputs.json`, 'utf8')) as {
   }[]>;
   readonly environment: Record<string, string>;
 };
+const legacyUat = JSON.parse(
+  readFileSync(`${uatRoot}/inputs.json`, 'utf8'),
+) as {
+  readonly createPayload: Record<string, unknown>;
+};
 assert.equal(uat.qaProject, 'xulmpqaknlwqqculbsek');
 assert.equal(
   uat.orderNumber,
   'QA-NONPROD-' + uat.requestId,
 );
-assert.equal(Object.keys(uat.createPayload).length, 21);
-assert.equal(uat.createPayload.orderNumber, uat.orderNumber);
+assert.equal(Object.keys(legacyUat.createPayload).length, 21);
+assert.equal(legacyUat.createPayload.orderNumber, uat.orderNumber);
+assert.equal(uat.mode, 'RESUME_EXISTING_ORDER');
+assert.equal(
+  uat.resumeOrderId,
+  '3ade0180-e6bf-49da-b80b-fd00cd1948a8',
+);
+assert.equal(uat.resumeExpectedVersion, 5);
+assert.equal(uat.resumeExpectedVersionLabel, 'V2');
+assert.equal(uat.resumeExpectedWorkflowStatus, 'NEEDS_INFORMATION');
 assert.equal(new Set(
   Object.values(uat.actors).map(actor => actor.profileId),
 ).size, 3);
@@ -510,7 +537,7 @@ assert(uatRunner.includes(
   '9164ac91-a50c-4023-836c-5c0887b619fb',
 ));
 assert(
-  /SELECT public\.wos_v1_qa_uat_open_gate\(\s*'WOS-V1-PRODUCTION-M2-QA-UAT-005'[\s\S]*?'\$UAT_MANAGER_PROFILE'[\s\S]*?ARRAY\['START_RELEASE'\]/
+  /SELECT public\.wos_v1_qa_uat_open_gate\(\s*'WOS-V1-PRODUCTION-M2-QA-UAT-006'[\s\S]*?'\$UAT_MANAGER_PROFILE'[\s\S]*?ARRAY\['START_RELEASE'\]/
     .test(uatRunner),
 );
 for (const stale of [
@@ -527,10 +554,10 @@ assert.equal(
   'fbdb0989-ae25-4ba4-92f9-3266cc845977',
 );
 assert.equal(uat.environment.WOS_V1_QA_UAT_M2_ENABLED, 'true');
-assert.equal(uat.environment.WOS_V1_QA_UAT_M2_WRITES_ENABLED, 'true');
+assert.equal(uat.environment.WOS_V1_QA_UAT_M2_WRITES_ENABLED, 'false');
 assert.equal(
   uat.environment.WOS_V1_QA_UAT_AUTHORIZATION_ID,
-  'WOS-V1-PRODUCTION-M2-QA-UAT-005',
+  'WOS-V1-PRODUCTION-M2-QA-UAT-006',
 );
 for (const version of ['v1', 'v2']) {
   const images = uat.images[version];

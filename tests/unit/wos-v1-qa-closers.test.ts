@@ -96,6 +96,7 @@ for (const marker of [
   'public.wos_v1_qa_uat_edge_write_allowed',
   'public.wos_v1_qa_uat_edge_control_status',
   'public.wos_v1_qa_uat_edge_heartbeat',
+  'public.wos_v1_qa_uat_edge_preflight',
   'public.wos_v1_qa_uat_bind_order',
   'public.wos_v1_qa_uat_close_edge',
   'public.wos_v1_qa_uat_edge_probe',
@@ -148,7 +149,8 @@ for (const marker of [
   'WOS_V1_QA_EDGE_CLOSE_RECEIPT_INVALID',
   'WOS_V1_QA_EDGE_CLOSE_RECEIPT_HASH_MISMATCH',
   'WOS_V1_QA_EDGE_CLOSE_RECEIPT_MISSING',
-  "const QA_APP_EXECUTION_ID = '791577cc-23bb-4b8d-93dd-e90b6630abe2'",
+  "process.env.WOS_V1_QA_APP_EXECUTION_ID",
+  "|| '0e5e6ac1-cf10-4c2c-ba79-6e1619b2e632'",
   'WOS_V1_QA_APP_EXECUTION_ID_MISMATCH',
   'WOS_V1_QA_APP_LOCAL_TEST_SCOPE_REQUIRED',
   "wos_v1.qa_local_test",
@@ -187,6 +189,7 @@ for (const marker of [
   'wos_v1_qa_closer.closer_status',
   'public.wos_v1_qa_uat_edge_control_status',
   'public.wos_v1_qa_uat_edge_heartbeat',
+  'public.wos_v1_qa_uat_edge_preflight',
   'public.wos_v1_qa_uat_close_edge',
   'public.wos_v1_qa_uat_edge_probe',
   "interval '480 seconds'",
@@ -215,6 +218,7 @@ for (const marker of [
   'edge_probe_oid',
   'edge_probe_definition_md5',
   'DROP FUNCTION IF EXISTS public.wos_v1_qa_uat_edge_probe',
+  'DROP FUNCTION IF EXISTS public.wos_v1_qa_uat_edge_preflight',
   'audit tables retained',
 ]) {
   assert(closerOnlyRollback.includes(marker),
@@ -240,10 +244,24 @@ for (const marker of [
   'processNonce',
   'WOS_V1_QA_EDGE_PROCESS_NONCE_REQUIRED',
   'WOS_V1_QA_EDGE_PROCESS_NONCE_CONFLICT',
+  'WOS_V1_QA_EDGE_CREDENTIAL_PREFLIGHT_FAILED_',
+  'WOS_V1_QA_EDGE_ARM_FAILURE_CLOSE_UNVERIFIED',
+  'WOS_V1_QA_EDGE_OPEN_PROBE_FAILED_',
+  "command === 'credential-preflight'",
+  'probeOpen',
+  'probeCredential',
+  'wos_v1_qa_uat_edge_preflight',
+  'closeArmFailure',
+  'CLOSE_UNVERIFIED',
+  'closedTimesMatch',
+  'WOS_V1_QA_EDGE_CLOSED_TIMESTAMP_MISMATCH',
+  'EDGE_CREDENTIAL_PREFLIGHT=PASS',
   'WOS_V1_QA_EDGE_TEST_MODE_CANNOT_LOAD_LAUNCHD',
   'WOS_V1_QA_EDGE_LOCAL_TEST_SCOPE_REQUIRED',
   'WOS_V1_QA_EDGE_CLOSER_LAUNCHD_UNLOAD_FAILED',
   'spawnFinalizer(path)',
+  'finalizerAckPath',
+  'WOS_V1_QA_EDGE_FINALIZER_SPAWN_FAILED',
   'SCHEDULED_EDGE_CLOSE_PRE_FINALIZER',
   'SCHEDULED_EDGE_CLOSE_FINALIZER',
   'launchAgentUnloaded',
@@ -259,12 +277,37 @@ assert.match(
   edgeCloser,
   /async function watchLoop[\s\S]*await watch\(stateFile, true\)/,
 );
+const edgeArmSource = edgeCloser.slice(
+  edgeCloser.indexOf('async function arm()'),
+  edgeCloser.indexOf('function readState('),
+);
+assert(
+  edgeArmSource.indexOf('wos_v1_qa_uat_edge_preflight')
+    < edgeArmSource.indexOf('probeCredential({'),
+);
+assert(edgeArmSource.includes('bootstrapHeartbeat'));
+assert(edgeArmSource.includes('await spawnFinalizer(path)'));
+assert(edgeArmSource.includes('heartbeatAt !== priorHeartbeatAt'));
+assert(edgeArmSource.includes('armedHeartbeatAt === priorHeartbeatAt'));
+assert(
+  edgeArmSource.indexOf('wos_v1_qa_uat_close_edge')
+    < edgeArmSource.indexOf('WOS_V1_QA_EDGE_CREDENTIAL_PREFLIGHT_FAILED_'),
+);
+const credentialPreflightSource = edgeCloser.slice(
+  edgeCloser.indexOf('async function credentialPreflight()'),
+  edgeCloser.indexOf('async function closeEdge('),
+);
+assert(
+  credentialPreflightSource.indexOf(
+    'validateSha(process.env.WOS_V1_QA_CODE_SHA256)',
+  ) < credentialPreflightSource.indexOf('codeSha256: codeSha'),
+);
 assert(edgeProcessKill.includes('WOS_V1_QA_EDGE_CLOSER_MAIN_PROCESS_EXIT'));
 assert(edgeProcessKill.includes('detached:true'));
 assert(edgeProcessKill.includes('WOS_QA_CLOSER_CONTROL_SCHEMA'));
 
 for (const marker of [
-  'QA_UAT_AUTHORIZATION_ID',
+  'WOS_V1_QA_UAT_AUTHORIZATION_ID',
   'x-wos-qa-uat-authorization-id',
   'x-wos-qa-uat-execution-id',
   'x-wos-qa-uat-closer-nonce',

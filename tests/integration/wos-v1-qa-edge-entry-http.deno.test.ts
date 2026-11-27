@@ -5,7 +5,7 @@ import {
   type WosV1VerifyImageHandlerOptions,
 } from '../../supabase/functions/wos-v1-verify-image/index.ts';
 
-const authId = 'WOS-V1-PRODUCTION-M2-QA-UAT-005';
+const authId = 'WOS-V1-PRODUCTION-M2-QA-UAT-006';
 const executionId = 'efddb60c-4a70-4b46-bf18-46629a4397d2';
 const processNonce = '77ac7769-25a2-495a-8892-467d16abb00e';
 const qaProjectRef = 'xulmpqaknlwqqculbsek';
@@ -44,12 +44,14 @@ type Scenario = {
   secretKeysJson: string;
   legacyServiceRoleJwt: string;
   dedicatedCloserJwt?: string;
+  omitDedicatedCloserJwt?: boolean;
   authorization: string | null;
   requestAuthId?: string;
   requestExecutionId?: string;
   requestNonce?: string;
   runtimeUrl?: string;
   gateError?: boolean;
+  credentialPreflight?: boolean;
   control: Record<string, unknown> | null;
   expectedStatus: number;
   expectedCode: string;
@@ -66,9 +68,25 @@ const openControl = {
 };
 
 const cases: Record<string, Scenario> = {
+  credential_preflight_not_armed_pass: {
+    secretKeysJson: '{}',
+    legacyServiceRoleJwt: legacyJwt,
+    dedicatedCloserJwt: legacyJwt,
+    authorization: `Bearer ${legacyJwt}`,
+    credentialPreflight: true,
+    control: {
+      status: 'NOT_ARMED',
+      executionId,
+      edgeProcessNonce: processNonce,
+    },
+    expectedStatus: 200,
+    expectedCode: 'WOS_V1_QA_EDGE_CREDENTIAL_VERIFIED',
+    expectedAdminKey: legacyJwt,
+  },
   legacy_only_closer_pass: {
     secretKeysJson: '{}',
     legacyServiceRoleJwt: legacyJwt,
+    dedicatedCloserJwt: legacyJwt,
     authorization: `Bearer ${legacyJwt}`,
     control: openControl,
     expectedStatus: 200,
@@ -78,6 +96,7 @@ const cases: Record<string, Scenario> = {
   dual_key_closer_pass_admin_new_secret: {
     secretKeysJson: JSON.stringify({ default: newSecret }),
     legacyServiceRoleJwt: legacyJwt,
+    dedicatedCloserJwt: legacyJwt,
     authorization: `Bearer ${legacyJwt}`,
     control: openControl,
     expectedStatus: 200,
@@ -97,58 +116,65 @@ const cases: Record<string, Scenario> = {
   wrong_jwt_denied: {
     secretKeysJson: JSON.stringify({ default: newSecret }),
     legacyServiceRoleJwt: legacyJwt,
+    dedicatedCloserJwt: legacyJwt,
     authorization: `Bearer ${wrongJwt}`,
     control: openControl,
     expectedStatus: 503,
-    expectedCode: 'WOS_V1_EDGE_SERVER_CONFIG_INCOMPLETE',
+    expectedCode: 'WOS_V1_QA_EDGE_CLOSER_CREDENTIAL_MISMATCH',
   },
   ordinary_user_jwt_denied: {
     secretKeysJson: JSON.stringify({ default: newSecret }),
     legacyServiceRoleJwt: legacyJwt,
+    dedicatedCloserJwt: legacyJwt,
     authorization: `Bearer ${userJwt}`,
     control: openControl,
     expectedStatus: 503,
-    expectedCode: 'WOS_V1_EDGE_SERVER_CONFIG_INCOMPLETE',
+    expectedCode: 'WOS_V1_QA_EDGE_CLOSER_CREDENTIAL_MISMATCH',
   },
   ordinary_user_claim_in_trusted_env_denied: {
     secretKeysJson: JSON.stringify({ default: newSecret }),
     legacyServiceRoleJwt: userJwt,
+    dedicatedCloserJwt: userJwt,
     authorization: `Bearer ${userJwt}`,
     control: openControl,
     expectedStatus: 503,
-    expectedCode: 'WOS_V1_EDGE_SERVER_CONFIG_INCOMPLETE',
+    expectedCode: 'WOS_V1_QA_EDGE_CLOSER_CREDENTIAL_MISMATCH',
   },
   wrong_project_service_claim_denied: {
     secretKeysJson: JSON.stringify({ default: newSecret }),
     legacyServiceRoleJwt: wrongProjectJwt,
+    dedicatedCloserJwt: wrongProjectJwt,
     authorization: `Bearer ${wrongProjectJwt}`,
     control: openControl,
     expectedStatus: 503,
-    expectedCode: 'WOS_V1_EDGE_SERVER_CONFIG_INCOMPLETE',
+    expectedCode: 'WOS_V1_QA_EDGE_CLOSER_CREDENTIAL_MISMATCH',
   },
   new_secret_as_closer_denied: {
     secretKeysJson: JSON.stringify({ default: newSecret }),
     legacyServiceRoleJwt: legacyJwt,
+    dedicatedCloserJwt: legacyJwt,
     authorization: `Bearer ${newSecret}`,
     control: openControl,
     expectedStatus: 503,
-    expectedCode: 'WOS_V1_EDGE_SERVER_CONFIG_INCOMPLETE',
+    expectedCode: 'WOS_V1_QA_EDGE_CLOSER_CREDENTIAL_MISMATCH',
   },
   missing_authorization_denied: {
     secretKeysJson: JSON.stringify({ default: newSecret }),
     legacyServiceRoleJwt: legacyJwt,
+    dedicatedCloserJwt: legacyJwt,
     authorization: null,
     control: openControl,
     expectedStatus: 503,
-    expectedCode: 'WOS_V1_EDGE_SERVER_CONFIG_INCOMPLETE',
+    expectedCode: 'WOS_V1_QA_EDGE_CLOSER_CREDENTIAL_MISMATCH',
   },
-  missing_legacy_jwt_denied: {
+  missing_dedicated_closer_jwt_denied: {
     secretKeysJson: JSON.stringify({ default: newSecret }),
     legacyServiceRoleJwt: '',
+    omitDedicatedCloserJwt: true,
     authorization: `Bearer ${legacyJwt}`,
     control: openControl,
     expectedStatus: 503,
-    expectedCode: 'WOS_V1_EDGE_SERVER_CONFIG_INCOMPLETE',
+    expectedCode: 'WOS_V1_QA_EDGE_CLOSER_CREDENTIAL_MISSING',
   },
   project_mismatch_denied: {
     secretKeysJson: JSON.stringify({ default: newSecret }),
@@ -269,6 +295,7 @@ Deno.test('Edge entry dual-key and fail-closed matrix', async () => {
     JSON.stringify({ default: 'sb_publishable_synthetic' }),
   );
   Deno.env.set('WOS_V1_EDGE_WRITES_ENABLED', 'false');
+  Deno.env.set('WOS_V1_QA_UAT_AUTHORIZATION_ID', authId);
 
   let activeScenario = cases.legacy_only_closer_pass;
   let capturedAdminKey = '';
@@ -343,7 +370,14 @@ Deno.test('Edge entry dual-key and fail-closed matrix', async () => {
         scenario.legacyServiceRoleJwt,
       );
       if (scenario.dedicatedCloserJwt === undefined) {
-        Deno.env.delete('WOS_V1_QA_EDGE_CLOSER_SERVICE_ROLE_KEY');
+        if (scenario.omitDedicatedCloserJwt) {
+          Deno.env.delete('WOS_V1_QA_EDGE_CLOSER_SERVICE_ROLE_KEY');
+        } else {
+          Deno.env.set(
+            'WOS_V1_QA_EDGE_CLOSER_SERVICE_ROLE_KEY',
+            scenario.legacyServiceRoleJwt,
+          );
+        }
       } else {
         Deno.env.set(
           'WOS_V1_QA_EDGE_CLOSER_SERVICE_ROLE_KEY',
@@ -363,6 +397,9 @@ Deno.test('Edge entry dual-key and fail-closed matrix', async () => {
       });
       if (scenario.authorization !== null) {
         headers.set('Authorization', scenario.authorization || '');
+      }
+      if (scenario.credentialPreflight) {
+        headers.set('x-wos-qa-closer-credential-preflight', '1');
       }
       const response = await fetch(`${edgeBase}/`, {
         method: 'POST',
@@ -426,6 +463,10 @@ Deno.test('Edge entry dual-key and fail-closed matrix', async () => {
       throw new Error('edge_writes_disabled');
     }
     console.log('edge_writes_disabled=PASS');
+    console.log('EDGE_CREDENTIAL_PREFLIGHT=PASS');
+    console.log('HTTP_503_CLOSED_PROBE=PASS');
+    console.log('WRONG_CREDENTIAL_DENIAL=PASS');
+    console.log('GATE_UNAVAILABLE_FAIL_CLOSED=PASS');
   } finally {
     await edge.shutdown();
     await postgrest.shutdown();

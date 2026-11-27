@@ -8,10 +8,12 @@ DECLARE
   v_probe_oid oid;
   v_close_oid oid;
   v_heartbeat_oid oid;
+  v_preflight_oid oid;
   v_status_oid oid;
   v_probe_definition_md5 text;
   v_close_definition_md5 text;
   v_heartbeat_definition_md5 text;
+  v_preflight_definition_md5 text;
   v_status_definition_md5 text;
 BEGIN
   IF current_setting('wos_v1.qa_closer_rollback_authorized',true)
@@ -25,12 +27,15 @@ BEGIN
     RAISE EXCEPTION 'WOS_V1_QA_PROJECT_MISMATCH';
   END IF;
   SELECT public_api_owner,edge_probe_oid,close_edge_oid,
-    edge_heartbeat_oid,edge_status_oid,
+    edge_heartbeat_oid,edge_preflight_oid,edge_status_oid,
     edge_probe_definition_md5,close_edge_definition_md5,
-    edge_heartbeat_definition_md5,edge_status_definition_md5
-  INTO STRICT v_owner,v_probe_oid,v_close_oid,v_heartbeat_oid,v_status_oid,
+    edge_heartbeat_definition_md5,edge_preflight_definition_md5,
+    edge_status_definition_md5
+  INTO STRICT v_owner,v_probe_oid,v_close_oid,v_heartbeat_oid,
+    v_preflight_oid,v_status_oid,
     v_probe_definition_md5,v_close_definition_md5,
-    v_heartbeat_definition_md5,v_status_definition_md5
+    v_heartbeat_definition_md5,v_preflight_definition_md5,
+    v_status_definition_md5
   FROM wos_v1_qa_closer.lifecycle
   WHERE singleton=true;
   IF v_owner<>'CLOSER_ONLY' THEN
@@ -83,6 +88,16 @@ BEGIN
   THEN
     RAISE EXCEPTION 'WOS_V1_QA_CLOSER_PUBLIC_API_OWNERSHIP_MISMATCH';
   END IF;
+  IF v_preflight_oid IS NULL
+    OR v_preflight_oid<>
+      'public.wos_v1_qa_uat_edge_preflight(uuid,uuid,uuid)'
+        ::regprocedure::oid
+    OR v_preflight_definition_md5 IS DISTINCT FROM md5(pg_get_functiondef(
+      'public.wos_v1_qa_uat_edge_preflight(uuid,uuid,uuid)'::regprocedure
+    ))
+  THEN
+    RAISE EXCEPTION 'WOS_V1_QA_CLOSER_PUBLIC_API_OWNERSHIP_MISMATCH';
+  END IF;
   IF v_status_oid IS NULL
     OR v_status_oid<>
       'public.wos_v1_qa_uat_edge_control_status(text,text)'
@@ -99,16 +114,19 @@ $guard$;
 DROP FUNCTION IF EXISTS public.wos_v1_qa_uat_edge_probe(uuid,uuid);
 DROP FUNCTION IF EXISTS public.wos_v1_qa_uat_close_edge(uuid,uuid,text);
 DROP FUNCTION IF EXISTS public.wos_v1_qa_uat_edge_heartbeat(uuid,uuid,uuid);
+DROP FUNCTION IF EXISTS public.wos_v1_qa_uat_edge_preflight(uuid,uuid,uuid);
 DROP FUNCTION IF EXISTS public.wos_v1_qa_uat_edge_control_status(text,text);
 UPDATE wos_v1_qa_closer.lifecycle
 SET public_api_owner='NONE',
     edge_probe_oid=NULL,
     close_edge_oid=NULL,
     edge_heartbeat_oid=NULL,
+    edge_preflight_oid=NULL,
     edge_status_oid=NULL,
     edge_probe_definition_md5=NULL,
     close_edge_definition_md5=NULL,
     edge_heartbeat_definition_md5=NULL,
+    edge_preflight_definition_md5=NULL,
     edge_status_definition_md5=NULL,
     updated_at=clock_timestamp()
 WHERE singleton=true;

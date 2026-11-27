@@ -1,0 +1,67 @@
+{
+  "schemaVersion": 1,
+  "capturedAt": "2026-11-27T17:28:10Z",
+  "status": "SOURCE_REGRESSION_PASS",
+  "validation": {
+    "wosSuite": "PASS",
+    "typecheck": "PASS",
+    "build": "PASS",
+    "pg17StorageAndBusiness": "PASS",
+    "pg17StorageAndBusinessLogSha256": "1d459165021e0d3415e136f4040522cadf15eb86c548b5b9512a7ff0af29f7f8",
+    "closerOnlyPg17": "PASS",
+    "closerOnlyPg17LogSha256": "44dc2d924cc46581e9da3989440032be6fce03be76218af8360754c7554626c5",
+    "independentReview": "PASS",
+    "independentReviewP0": 0,
+    "independentReviewP1": 0,
+    "postReviewFinalizerHandshake": "PASS",
+    "postReviewLaunchAgentCleanupVerification": "PASS"
+  },
+  "storage": {
+    "officeV2Upload": "PASS",
+    "operatorWaitingMaterialRead": "PASS",
+    "oldVersionDenied": "PASS",
+    "expiredProofDenied": "PASS",
+    "supersededImageDenied": "PASS",
+    "crossOrganizationDenied": "PASS",
+    "viewerDenied": "PASS",
+    "anonDenied": "PASS",
+    "restrictiveOrGuard": "PASS",
+    "authenticatedAllowAllInjection": "PASS",
+    "gateClosedDenied": "PASS",
+    "nonWosPolicyRetained": "PASS",
+    "exactPolicyRollback": "PASS"
+  },
+  "edgeCloser": {
+    "dedicatedCredentialRequired": true,
+    "credentialPreflightBeforeLaunchd": "PASS",
+    "preflightCreatesNoArmReceipt": "PASS",
+    "armFailureClosesEdge": "PASS",
+    "openProbeAfterDualArm": "PASS",
+    "wrongCredentialDenied": "PASS",
+    "gateUnavailableFailClosed": "PASS",
+    "closedProbe": "HTTP_503_WOS_V1_QA_EDGE_CLOSED_PASS",
+    "unverifiedCloseState": "CLOSE_UNVERIFIED_FAIL_CLOSED_PASS"
+  },
+  "business": {
+    "fullPg17Flow": "PASS",
+    "versionConflictDenied": "PASS",
+    "materialShortageDenied": "PASS",
+    "duplicateSignerDenied": "PASS",
+    "viewerWriteDenied": "PASS",
+    "crossOrganizationWriteDenied": "PASS",
+    "closedGateDenied": "PASS",
+    "dataRetainingRecovery": "PASS"
+  },
+  "uat006": {
+    "mode": "RESUME_EXISTING_ORDER",
+    "orderId": "3ade0180-e6bf-49da-b80b-fd00cd1948a8",
+    "expectedStartVersion": 5,
+    "expectedStartLabel": "V2",
+    "expectedStartStatus": "NEEDS_INFORMATION",
+    "maxNewOrders": 0,
+    "maxCreateCalls": 0,
+    "authenticatedCreateRpcExecute": false,
+    "executionId": "0e5e6ac1-cf10-4c2c-ba79-6e1619b2e632",
+    "edgeProcessNonce": "6b6ea151-7114-47df-9f9b-039f3fed5def"
+  }
+}

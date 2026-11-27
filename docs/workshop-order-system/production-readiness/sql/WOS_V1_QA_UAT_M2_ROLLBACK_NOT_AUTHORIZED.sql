@@ -40,6 +40,7 @@ DROP FUNCTION IF EXISTS public.wos_v1_qa_uat_bind_order(
   uuid,uuid,uuid,uuid,uuid,text
 );
 DROP FUNCTION IF EXISTS public.wos_v1_qa_uat_edge_heartbeat(uuid,uuid,uuid);
+DROP FUNCTION IF EXISTS public.wos_v1_qa_uat_edge_preflight(uuid,uuid,uuid);
 DROP FUNCTION IF EXISTS public.wos_v1_qa_uat_edge_control_status(text,text);
 DROP FUNCTION IF EXISTS public.wos_v1_qa_uat_edge_write_allowed(
   text,text,uuid,uuid,uuid,uuid,uuid

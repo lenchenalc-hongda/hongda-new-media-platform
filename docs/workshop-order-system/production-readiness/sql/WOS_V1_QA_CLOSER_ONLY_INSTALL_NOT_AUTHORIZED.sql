@@ -33,6 +33,9 @@ BEGIN
       'public.wos_v1_qa_uat_edge_heartbeat(uuid,uuid,uuid)'
     ) IS NOT NULL
     OR to_regprocedure(
+      'public.wos_v1_qa_uat_edge_preflight(uuid,uuid,uuid)'
+    ) IS NOT NULL
+    OR to_regprocedure(
       'public.wos_v1_qa_uat_close_edge(uuid,uuid,text)'
     ) IS NOT NULL
     OR to_regprocedure(
@@ -76,13 +79,18 @@ CREATE TABLE IF NOT EXISTS wos_v1_qa_closer.lifecycle (
   edge_probe_oid oid,
   close_edge_oid oid,
   edge_heartbeat_oid oid,
+  edge_preflight_oid oid,
   edge_status_oid oid,
   edge_probe_definition_md5 text,
   close_edge_definition_md5 text,
   edge_heartbeat_definition_md5 text,
+  edge_preflight_definition_md5 text,
   edge_status_definition_md5 text,
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp()
 );
+ALTER TABLE wos_v1_qa_closer.lifecycle
+  ADD COLUMN IF NOT EXISTS edge_preflight_oid oid,
+  ADD COLUMN IF NOT EXISTS edge_preflight_definition_md5 text;
 ALTER TABLE wos_v1_qa_closer.lifecycle ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON TABLE wos_v1_qa_closer.lifecycle
   FROM PUBLIC,anon,authenticated;
@@ -274,7 +282,7 @@ DECLARE
   v_control wos_v1_qa_closer.controls%ROWTYPE;
   v_now timestamptz:=clock_timestamp();
 BEGIN
-  IF p_authorization_id<>'WOS-V1-PRODUCTION-M2-QA-UAT-005'
+  IF p_authorization_id<>'WOS-V1-PRODUCTION-M2-QA-UAT-006'
     OR p_project_ref<>'xulmpqaknlwqqculbsek'
   THEN
     RAISE EXCEPTION 'QA_CLOSER_SCOPE_MISMATCH';
@@ -451,6 +459,66 @@ EXCEPTION WHEN NO_DATA_FOUND OR TOO_MANY_ROWS THEN
 END;
 $edge_heartbeat$;
 REVOKE ALL ON FUNCTION wos_v1_qa_closer.record_edge_heartbeat(
+  uuid,uuid,uuid
+) FROM PUBLIC,anon,authenticated;
+
+CREATE OR REPLACE FUNCTION wos_v1_qa_closer.preflight_edge_nonce(
+  p_execution_id uuid,
+  p_arm_token uuid,
+  p_process_nonce uuid
+) RETURNS jsonb
+LANGUAGE plpgsql SECURITY DEFINER SET search_path=''
+AS $edge_preflight$
+DECLARE
+  v_control wos_v1_qa_closer.controls%ROWTYPE;
+  v_now timestamptz:=clock_timestamp();
+BEGIN
+  SELECT * INTO STRICT v_control
+  FROM wos_v1_qa_closer.controls control
+  WHERE control.execution_id=p_execution_id
+  FOR UPDATE;
+  IF v_control.arm_token<>p_arm_token
+    OR v_control.code_sha256 IS NULL
+  THEN
+    RAISE EXCEPTION 'QA_CLOSER_EDGE_PREFLIGHT_SCOPE_DENIED';
+  END IF;
+  IF v_now>=v_control.write_deadline_at THEN
+    RAISE EXCEPTION 'QA_CLOSER_WRITE_DEADLINE_EXPIRED';
+  END IF;
+  IF v_control.db_state='CLOSED' OR v_control.edge_state='CLOSED' THEN
+    RAISE EXCEPTION 'QA_CLOSER_EDGE_ALREADY_CLOSED';
+  END IF;
+  IF v_control.edge_process_nonce IS NOT NULL
+    AND v_control.edge_process_nonce<>p_process_nonce
+  THEN
+    RAISE EXCEPTION 'QA_CLOSER_EDGE_PROCESS_NONCE_CONFLICT';
+  END IF;
+  IF v_control.db_last_heartbeat_at IS NULL
+    OR v_control.db_last_heartbeat_at<v_now-interval '30 seconds'
+    OR NOT EXISTS(
+      SELECT 1 FROM wos_v1_qa_closer.arm_receipts receipt
+      WHERE receipt.execution_id=p_execution_id
+        AND receipt.closer_kind='DB'
+        AND receipt.executor_kind='PG_CRON'
+    )
+  THEN
+    RAISE EXCEPTION 'QA_CLOSER_EDGE_DB_HEARTBEAT_REQUIRED';
+  END IF;
+  UPDATE wos_v1_qa_closer.controls
+  SET edge_process_nonce=coalesce(edge_process_nonce,p_process_nonce)
+  WHERE execution_id=p_execution_id;
+  RETURN jsonb_build_object(
+    'status','PREFLIGHT',
+    'executionId',p_execution_id,
+    'processNonce',p_process_nonce,
+    'previousHeartbeatAt',v_control.edge_last_heartbeat_at,
+    'preflightAt',v_now
+  );
+EXCEPTION WHEN NO_DATA_FOUND OR TOO_MANY_ROWS THEN
+  RAISE EXCEPTION 'QA_CLOSER_CONTROL_MISSING';
+END;
+$edge_preflight$;
+REVOKE ALL ON FUNCTION wos_v1_qa_closer.preflight_edge_nonce(
   uuid,uuid,uuid
 ) FROM PUBLIC,anon,authenticated;
 
@@ -741,7 +809,7 @@ DECLARE
   v_control wos_v1_qa_closer.controls%ROWTYPE;
   v_status text;
 BEGIN
-  IF p_authorization_id<>'WOS-V1-PRODUCTION-M2-QA-UAT-005'
+  IF p_authorization_id<>'WOS-V1-PRODUCTION-M2-QA-UAT-006'
     OR p_project_ref<>'xulmpqaknlwqqculbsek'
   THEN
     RAISE EXCEPTION 'QA_CLOSER_EDGE_SCOPE_MISMATCH' USING ERRCODE='42501';
@@ -822,6 +890,24 @@ REVOKE ALL ON FUNCTION public.wos_v1_qa_uat_edge_heartbeat(uuid,uuid,uuid)
   FROM PUBLIC,anon,authenticated;
 GRANT EXECUTE ON FUNCTION public.wos_v1_qa_uat_edge_heartbeat(uuid,uuid,uuid)
   TO service_role;
+
+CREATE OR REPLACE FUNCTION public.wos_v1_qa_uat_edge_preflight(
+  p_execution_id uuid,
+  p_arm_token uuid,
+  p_process_nonce uuid
+) RETURNS jsonb
+LANGUAGE sql SECURITY DEFINER SET search_path=''
+AS $edge_preflight_public$
+  SELECT wos_v1_qa_closer.preflight_edge_nonce(
+    p_execution_id,p_arm_token,p_process_nonce
+  )
+$edge_preflight_public$;
+REVOKE ALL ON FUNCTION public.wos_v1_qa_uat_edge_preflight(
+  uuid,uuid,uuid
+) FROM PUBLIC,anon,authenticated;
+GRANT EXECUTE ON FUNCTION public.wos_v1_qa_uat_edge_preflight(
+  uuid,uuid,uuid
+) TO service_role;
 
 CREATE OR REPLACE FUNCTION public.wos_v1_qa_uat_close_edge(
   p_execution_id uuid,
@@ -983,6 +1069,9 @@ SET edge_status_oid=
       'public.wos_v1_qa_uat_edge_control_status(text,text)'::regprocedure::oid,
     edge_heartbeat_oid=
       'public.wos_v1_qa_uat_edge_heartbeat(uuid,uuid,uuid)'::regprocedure::oid,
+    edge_preflight_oid=
+      'public.wos_v1_qa_uat_edge_preflight(uuid,uuid,uuid)'
+        ::regprocedure::oid,
     close_edge_oid=
       'public.wos_v1_qa_uat_close_edge(uuid,uuid,text)'::regprocedure::oid,
     edge_probe_oid=
@@ -992,6 +1081,9 @@ SET edge_status_oid=
     )),
     edge_heartbeat_definition_md5=md5(pg_get_functiondef(
       'public.wos_v1_qa_uat_edge_heartbeat(uuid,uuid,uuid)'::regprocedure
+    )),
+    edge_preflight_definition_md5=md5(pg_get_functiondef(
+      'public.wos_v1_qa_uat_edge_preflight(uuid,uuid,uuid)'::regprocedure
     )),
     close_edge_definition_md5=md5(pg_get_functiondef(
       'public.wos_v1_qa_uat_close_edge(uuid,uuid,text)'::regprocedure

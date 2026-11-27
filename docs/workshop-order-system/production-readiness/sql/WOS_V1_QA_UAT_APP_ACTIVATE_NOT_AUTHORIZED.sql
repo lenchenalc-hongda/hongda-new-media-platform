@@ -26,10 +26,10 @@ BEGIN
     RAISE EXCEPTION 'WOS_V1_QA_UAT_APP_PROJECT_MISMATCH';
   END IF;
   IF current_setting('wos_v1.qa_authorization_id', true)
-      IS DISTINCT FROM 'WOS-V1-PRODUCTION-M2-QA-UAT-005'
+      IS DISTINCT FROM 'WOS-V1-PRODUCTION-M2-QA-UAT-006'
     OR (
       current_setting('wos_v1.qa_execution_id', true)
-        IS DISTINCT FROM '791577cc-23bb-4b8d-93dd-e90b6630abe2'
+        IS DISTINCT FROM '0e5e6ac1-cf10-4c2c-ba79-6e1619b2e632'
       AND current_setting('wos_v1.qa_local_test', true)
         IS DISTINCT FROM 'yes'
     )
@@ -143,7 +143,7 @@ END;
 $guard$;
 
 REVOKE EXECUTE ON FUNCTION public.wos_create_production_order(uuid,jsonb)
-FROM PUBLIC, anon;
+FROM PUBLIC, anon, authenticated;
 REVOKE EXECUTE ON FUNCTION public.wos_register_uploaded_reference_image(
   uuid,uuid,text,text
 ) FROM PUBLIC, anon;
@@ -166,8 +166,6 @@ REVOKE EXECUTE ON FUNCTION public.wos_operator_review_correction(
   uuid,integer,uuid,text
 ) FROM PUBLIC, anon;
 
-GRANT EXECUTE ON FUNCTION public.wos_create_production_order(uuid,jsonb)
-TO authenticated;
 GRANT EXECUTE ON FUNCTION public.wos_register_uploaded_reference_image(
   uuid,uuid,text,text
 ) TO authenticated;
@@ -195,7 +193,6 @@ DECLARE
   business_function regprocedure;
 BEGIN
   FOREACH business_function IN ARRAY ARRAY[
-    'public.wos_create_production_order(uuid,jsonb)',
     'public.wos_register_uploaded_reference_image(uuid,uuid,text,text)',
     'public.wos_confirm_office_completeness(uuid,integer,text,text)',
     'public.wos_submit_production_order(uuid,integer,text,uuid)',
@@ -212,6 +209,20 @@ BEGIN
       RAISE EXCEPTION 'WOS_V1_QA_UAT_APP_RPC_ACL_VIOLATION';
     END IF;
   END LOOP;
+  IF has_function_privilege(
+      'authenticated',
+      'public.wos_create_production_order(uuid,jsonb)',
+      'EXECUTE'
+    )
+    OR has_function_privilege(
+      'anon',
+      'public.wos_create_production_order(uuid,jsonb)',
+      'EXECUTE'
+    )
+  THEN
+    RAISE EXCEPTION
+      'WOS_V1_QA_UAT_CREATE_FORBIDDEN_IN_RESUME_MODE';
+  END IF;
   IF has_function_privilege(
       'authenticated',
       'public.wos_v1_m2_action(uuid,integer,uuid,text,jsonb)',

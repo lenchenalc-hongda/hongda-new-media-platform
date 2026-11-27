@@ -27,7 +27,7 @@ const executionId = '9d375980-42f3-4f94-85cf-f45652d1501b';
 const baseState = {
   status: 'CLOSED',
   executionId,
-  authorizationId: 'WOS-V1-PRODUCTION-M2-QA-UAT-005',
+  authorizationId: 'WOS-V1-PRODUCTION-M2-QA-UAT-006',
   projectRef: 'xulmpqaknlwqqculbsek',
   codeSha256: 'a601eb785bac26b90ac80c76e375cb03ec0f50cb8f2691978d5683a5826bd628',
   functionUrl:
@@ -131,6 +131,7 @@ exit 1
   assert.equal(launched.status, 0, launched.stderr);
 
   const state = await waitForClosedReceipt(stateFile);
+  assert(existsSync(`${stateFile}.finalizer.ack.json`));
   assert(existsSync(marker), 'finalizer did not invoke launchctl bootout');
   assert.equal(state.launchdLoaded, false);
   const sealed = {
@@ -147,6 +148,39 @@ exit 1
     state.closeReceipt.receiptSha256,
     createHash('sha256').update(JSON.stringify(sealed)).digest('hex'),
   );
+
+  const unverifiedState = join(dir, 'unverified-state.json');
+  writeFileSync(unverifiedState, `${JSON.stringify({
+    ...baseState,
+    status: 'CLOSE_UNVERIFIED',
+    closeReceipt: {
+      ...baseState.closeReceipt,
+      probe: {
+        status: 503,
+        code: 'WOS_V1_EDGE_SERVER_CONFIG_INCOMPLETE',
+        ok: false,
+      },
+    },
+  }, null, 2)}\n`, { mode: 0o600 });
+  const unverified = spawnSync(process.execPath, [
+    actualScript,
+    'finalize',
+    '--state',
+    unverifiedState,
+  ], {
+    encoding: 'utf8',
+    env: finalizerEnv(`${successBin}:${process.env.PATH || ''}`),
+  });
+  assert.notEqual(unverified.status, 0);
+  assert.match(
+    unverified.stderr,
+    /WOS_V1_QA_EDGE_CLOSED_PROBE_FAILED/,
+  );
+  const unverifiedSaved = JSON.parse(
+    readFileSync(unverifiedState, 'utf8'),
+  );
+  assert.equal(unverifiedSaved.status, 'CLOSE_UNVERIFIED');
+  assert.equal(unverifiedSaved.launchdLoaded, false);
 
   const rejectedState = join(dir, 'rejected-state.json');
   writeState(rejectedState);
@@ -191,6 +225,7 @@ exit 1
     /WOS_V1_QA_EDGE_CLOSER_LAUNCHD_UNLOAD_FAILED/);
 
   console.log('WOS_V1_QA_EDGE_FINALIZER_DETACHED=PASS');
+  console.log('WOS_V1_QA_EDGE_FINALIZER_UNVERIFIED_FAIL_CLOSED=PASS');
   console.log('WOS_V1_QA_EDGE_FINALIZER_LAUNCHCTL_REJECTED=PASS');
   console.log('WOS_V1_QA_EDGE_FINALIZER_LAUNCHCTL_MISSING=PASS');
   console.log('WOS_V1_QA_EDGE_FINALIZER=PASS');

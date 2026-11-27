@@ -289,6 +289,11 @@ echo 'WOS_V1_QA_CLOSER_ONLY_AUTH_CONSTRAINT_MIGRATED=PASS'
     )
     AND NOT has_function_privilege(
       'authenticated',
+      'public.wos_v1_qa_uat_edge_preflight(uuid,uuid,uuid)',
+      'EXECUTE'
+    )
+    AND NOT has_function_privilege(
+      'authenticated',
       'public.wos_v1_qa_uat_edge_control_status(text,text)',
       'EXECUTE'
     )
@@ -323,6 +328,28 @@ DB_ARM="$(
 ")" = 't' ]] || fail 'CLOSER_ONLY_DB_ARM_RECEIPT_INVALID'
 echo 'WOS_V1_QA_CLOSER_ONLY_DB_ARM=PASS'
 
+EDGE_PREFLIGHT="$(psql_db "$DB" -qAt -c "
+  SELECT public.wos_v1_qa_uat_edge_preflight(
+    '$EXECUTION_ID'::uuid,
+    '$ARM_TOKEN'::uuid,
+    '$EDGE_NONCE'::uuid
+  )::text;
+")"
+[[ "$(printf '%s' "$EDGE_PREFLIGHT" | jq -r '.status')" = 'PREFLIGHT' ]] \
+  || fail 'CLOSER_ONLY_EDGE_PREFLIGHT_FAILED'
+[[ "$(psql_db "$DB" -qAt -c "
+  SELECT edge_process_nonce='$EDGE_NONCE'::uuid
+    AND NOT EXISTS(
+      SELECT 1
+      FROM wos_v1_qa_closer.arm_receipts
+      WHERE execution_id='$EXECUTION_ID'::uuid
+        AND closer_kind='EDGE'
+    )
+  FROM wos_v1_qa_closer.controls
+  WHERE execution_id='$EXECUTION_ID'::uuid
+")" = 't' ]] || fail 'CLOSER_ONLY_EDGE_PREFLIGHT_CREATED_ARM_RECEIPT'
+echo 'WOS_V1_QA_CLOSER_ONLY_EDGE_PREFLIGHT=PASS'
+
 psql_db "$DB" -qAt -c "
   SELECT wos_v1_qa_closer.record_edge_heartbeat(
     '$EXECUTION_ID'::uuid,
@@ -340,6 +367,50 @@ PROBE_OPEN="$(psql_db "$DB" -qAt -c "
   || fail 'CLOSER_ONLY_PROBE_OPEN_INVALID'
 [[ "$(printf '%s' "$PROBE_OPEN" | jq -r '.edgeProcessNonce')" = "$EDGE_NONCE" ]] \
   || fail 'CLOSER_ONLY_PROBE_OPEN_NONCE_MISMATCH'
+EDGE_STALE_AT='2026-11-27T00:00:00Z'
+psql_db "$DB" -q -c "
+  UPDATE wos_v1_qa_closer.controls
+  SET edge_last_heartbeat_at='$EDGE_STALE_AT'::timestamptz
+  WHERE execution_id='$EXECUTION_ID'::uuid;
+  UPDATE wos_v1_qa_closer.arm_receipts
+  SET heartbeat_at='$EDGE_STALE_AT'::timestamptz
+  WHERE execution_id='$EXECUTION_ID'::uuid
+    AND closer_kind='EDGE';
+" >/dev/null
+psql_db "$DB" -qAt -c "
+  SELECT public.wos_v1_qa_uat_edge_preflight(
+    '$EXECUTION_ID'::uuid,
+    '$ARM_TOKEN'::uuid,
+    '$EDGE_NONCE'::uuid
+  )::text;
+" >/dev/null
+[[ "$(psql_db "$DB" -qAt -c "
+  SELECT edge_last_heartbeat_at='$EDGE_STALE_AT'::timestamptz
+    AND (
+      SELECT receipt.heartbeat_at='$EDGE_STALE_AT'::timestamptz
+      FROM wos_v1_qa_closer.arm_receipts receipt
+      WHERE receipt.execution_id='$EXECUTION_ID'::uuid
+        AND receipt.closer_kind='EDGE'
+    )
+  FROM wos_v1_qa_closer.controls
+  WHERE execution_id='$EXECUTION_ID'::uuid
+")" = 't' ]] || fail 'CLOSER_ONLY_PREFLIGHT_REFRESHED_STALE_EDGE'
+PROBE_STALE_AFTER_PREFLIGHT="$(psql_db "$DB" -qAt -c "
+  SELECT public.wos_v1_qa_uat_edge_probe(
+    '$EXECUTION_ID'::uuid,
+    '$EDGE_NONCE'::uuid
+  )::text;
+")"
+[[ "$(printf '%s' "$PROBE_STALE_AFTER_PREFLIGHT" | jq -r '.status')" = 'STALE' ]] \
+  || fail 'CLOSER_ONLY_STALE_EDGE_PREFLIGHT_OPENED'
+psql_db "$DB" -qAt -c "
+  SELECT wos_v1_qa_closer.record_edge_heartbeat(
+    '$EXECUTION_ID'::uuid,
+    '$ARM_TOKEN'::uuid,
+    '$EDGE_NONCE'::uuid
+  )::text;
+" >/dev/null
+echo 'WOS_V1_QA_CLOSER_ONLY_STALE_EDGE_PREFLIGHT_DENIED=PASS'
 psql_db "$DB" -q -c "
   UPDATE wos_v1_qa_closer.controls
   SET db_last_heartbeat_at=clock_timestamp()-interval '31 seconds'
@@ -587,6 +658,9 @@ WOS_V1_QA_EDGE_CLOSER_STATE_PATH="$EDGE_RECEIPT_PATH" \
     AND to_regprocedure(
       'public.wos_v1_qa_uat_close_edge(uuid,uuid,text)'
     ) IS NULL
+    AND to_regprocedure(
+      'public.wos_v1_qa_uat_edge_preflight(uuid,uuid,uuid)'
+    ) IS NULL
     AND to_regclass('wos_v1_qa_uat.write_gates') IS NULL
 ")" = 't' ]] || fail 'CLOSER_ONLY_RECOVERY_INVALID'
 echo 'WOS_V1_QA_CLOSER_ONLY_RECOVERY=PASS'
@@ -647,7 +721,7 @@ BEGIN
     edge_process_nonce,db_cron_job_id
   ) VALUES(
     '$TICK_EXECUTION_ID',
-    'WOS-V1-PRODUCTION-M2-QA-UAT-005',
+    'WOS-V1-PRODUCTION-M2-QA-UAT-006',
     'xulmpqaknlwqqculbsek',
     repeat('b',64),
     '$ARM_TOKEN',

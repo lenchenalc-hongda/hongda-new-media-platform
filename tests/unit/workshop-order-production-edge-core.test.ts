@@ -332,10 +332,19 @@ assert(edgeIndex.includes('evaluateWosV1QaCloserProbeAuth('));
 assert(edgeIndex.includes('evaluateWosV1QaCloserProbeGate('));
 assert(edgeIndex.includes('WOS_V1_QA_EDGE_CLOSER_SERVICE_ROLE_KEY'));
 assert(
-  /function closerProbeLegacyJwt\(\)[\s\S]{0,240}WOS_V1_QA_EDGE_CLOSER_SERVICE_ROLE_KEY[\s\S]{0,120}SUPABASE_SERVICE_ROLE_KEY/.test(
+  /function closerProbeDedicatedJwt\(\)[\s\S]{0,180}WOS_V1_QA_EDGE_CLOSER_SERVICE_ROLE_KEY/.test(
     edgeIndex,
   ),
 );
+assert(!edgeIndex.includes(
+  'return Deno.env.get(\'WOS_V1_QA_EDGE_CLOSER_SERVICE_ROLE_KEY\')\n'
+    + '    || Deno.env.get(\'SUPABASE_SERVICE_ROLE_KEY\')',
+));
+assert(edgeIndex.includes('WOS_V1_QA_UAT_AUTHORIZATION_ID'));
+assert(edgeIndex.includes('x-wos-qa-closer-credential-preflight'));
+assert(edgeIndex.includes('WOS_V1_QA_EDGE_CREDENTIAL_VERIFIED'));
+assert(edgeCore.includes('WOS_V1_QA_EDGE_CLOSER_CREDENTIAL_MISSING'));
+assert(edgeCore.includes('WOS_V1_QA_EDGE_CLOSER_CREDENTIAL_MISMATCH'));
 
 console.log('workshop-order-production-edge-core.test.ts: PASS');
 console.log('WOS_V1_EDGE_FOUR_CATEGORY_ACCESS=PASS');

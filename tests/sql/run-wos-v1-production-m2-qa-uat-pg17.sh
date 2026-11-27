@@ -43,6 +43,17 @@ cleanup() {
   fi
   psql_db postgres -q -c "DROP DATABASE IF EXISTS \"$QA_SHAPE_DB\" WITH (FORCE)" \
     >/dev/null 2>&1 || true
+  psql_db postgres -q -c \
+    "DROP DATABASE IF EXISTS \"wos_v1_qa_storage_compat_ci\" WITH (FORCE)" \
+    >/dev/null 2>&1 || true
+  psql_db postgres -q -c \
+    "DROP DATABASE IF EXISTS \"wos_v1_qa_storage_guard_ci\" WITH (FORCE)" \
+    >/dev/null 2>&1 || true
+  if [[ "${WOS_UAT006_CONTINUITY_KEEP_DB:-0}" != '1' ]]; then
+    psql_db postgres -q -c \
+      "DROP DATABASE IF EXISTS \"wos_v1_uat006_continuity_ci\" WITH (FORCE)" \
+      >/dev/null 2>&1 || true
+  fi
   psql_db postgres -q -c "DROP DATABASE IF EXISTS \"$DB\" WITH (FORCE)" \
     >/dev/null 2>&1 || true
   exit "$status"
@@ -87,6 +98,18 @@ qa_shape_acl() {
   "
 }
 
+qa_shape_bucket_config() {
+  psql_db "$QA_SHAPE_DB" -qAt -c "
+    SELECT md5(jsonb_build_object(
+      'public',public,
+      'fileSizeLimit',file_size_limit,
+      'allowedMimeTypes',allowed_mime_types
+    )::text)
+    FROM storage.buckets
+    WHERE id='wos-private'
+  "
+}
+
 qa_shape_storage_policies() {
   psql_db "$QA_SHAPE_DB" -qAt -c "
     SELECT md5(COALESCE(jsonb_agg(jsonb_build_object(
@@ -96,6 +119,42 @@ qa_shape_storage_policies() {
     FROM pg_policies
     WHERE schemaname='storage' AND tablename='objects'
       AND policyname LIKE 'wos\\_%' ESCAPE '\\'
+  "
+}
+
+db_storage_policies() {
+  local database="$1"
+  psql_db "$database" -qAt -c "
+    SELECT md5(COALESCE(jsonb_agg(jsonb_build_object(
+      'name',policyname,'roles',roles::text[],'cmd',cmd,
+      'permissive',permissive,'qual',qual,'check',with_check
+    ) ORDER BY policyname)::text,''))
+    FROM pg_policies
+    WHERE schemaname='storage' AND tablename='objects'
+      AND policyname LIKE 'wos\\_%' ESCAPE '\\'
+  "
+}
+
+db_policy_fingerprint() {
+  local database="$1"
+  local filter="$2"
+  psql_db "$database" -qAt -c "
+    SELECT md5(jsonb_build_object(
+      'policies',(
+        SELECT jsonb_agg(jsonb_build_object(
+          'name',policyname,
+          'permissive',permissive,
+          'roles',roles::text[],
+          'command',cmd,
+          'qual',qual,
+          'withCheck',with_check
+        ) ORDER BY policyname)
+        FROM pg_catalog.pg_policies
+        WHERE schemaname='storage'
+          AND tablename='objects'
+          AND policyname $filter
+      )
+    )::text)
   "
 }
 
@@ -149,6 +208,7 @@ qa_shape_history_fingerprint() {
 
 QA_SHAPE_COUNTS_BEFORE="$(qa_shape_counts)"
 QA_SHAPE_ACL_BEFORE="$(qa_shape_acl)"
+QA_SHAPE_BUCKET_BEFORE="$(qa_shape_bucket_config)"
 QA_SHAPE_STORAGE_BEFORE="$(qa_shape_storage_policies)"
 QA_SHAPE_HISTORY_BEFORE="$(qa_shape_history_fingerprint)"
 psql_db "$QA_SHAPE_DB" -q -1 \
@@ -194,6 +254,137 @@ psql_db "$QA_SHAPE_DB" -q -1 \
   printf "SET wos_v1.qa_project='xulmpqaknlwqqculbsek';\n"
   cat "$ROOT/docs/workshop-order-system/production-readiness/sql/WOS_V1_QA_UAT_M2_ACTIVATE_NOT_AUTHORIZED.sql"
 } | psql_db "$QA_SHAPE_DB" -q
+STORAGE_GUARD_DB='wos_v1_qa_storage_guard_ci'
+psql_db postgres -q -c \
+  "DROP DATABASE IF EXISTS \"$STORAGE_GUARD_DB\" WITH (FORCE)"
+psql_db postgres -q -c \
+  "CREATE DATABASE \"$STORAGE_GUARD_DB\" TEMPLATE \"$QA_SHAPE_DB\""
+psql_db "$STORAGE_GUARD_DB" -q -c "
+  CREATE POLICY wos_guard_unknown_allow_all
+  ON storage.objects AS PERMISSIVE FOR SELECT TO authenticated
+  USING (true);
+"
+if {
+  printf "SET wos_v1.qa_storage_compat_install_authorized='yes';\n"
+  printf "SET wos_v1.qa_project='xulmpqaknlwqqculbsek';\n"
+  cat "$ROOT/docs/workshop-order-system/production-readiness/sql/WOS_V1_QA_UAT_STORAGE_COMPAT_INSTALL_NOT_AUTHORIZED.sql"
+} | psql_db "$STORAGE_GUARD_DB" -q >/tmp/wos-uat006-storage-guard-$$.log 2>&1
+then
+  fail 'QA_STORAGE_COMPAT_UNKNOWN_POLICY_ALLOWED'
+fi
+[[ "$(psql_db "$STORAGE_GUARD_DB" -qAt -c "
+  SELECT to_regnamespace('wos_v1_qa_storage_compat') IS NULL;
+")" = 't' ]] || fail 'QA_STORAGE_COMPAT_GUARD_PARTIAL_INSTALL'
+psql_db postgres -q -c \
+  "DROP DATABASE IF EXISTS \"$STORAGE_GUARD_DB\" WITH (FORCE)"
+echo 'WOS_V1_QA_UAT_STORAGE_UNKNOWN_POLICY_DENIED=PASS'
+QA_SHAPE_WOS_POLICY_FP="$(db_policy_fingerprint \
+  "$QA_SHAPE_DB" "LIKE 'wos\\_%' ESCAPE '\\'")"
+QA_SHAPE_NON_WOS_POLICY_FP="$(db_policy_fingerprint \
+  "$QA_SHAPE_DB" "NOT LIKE 'wos\\_%' ESCAPE '\\'")"
+{
+  printf "SET wos_v1.qa_storage_compat_install_authorized='yes';\n"
+  printf "SET wos_v1.qa_project='xulmpqaknlwqqculbsek';\n"
+  printf "SET wos_v1.qa_storage_local_test='yes';\n"
+  printf "SET wos_v1.qa_storage_expected_wos_fingerprint='%s';\n" \
+    "$QA_SHAPE_WOS_POLICY_FP"
+  printf "SET wos_v1.qa_storage_expected_non_wos_fingerprint='%s';\n" \
+    "$QA_SHAPE_NON_WOS_POLICY_FP"
+  cat "$ROOT/docs/workshop-order-system/production-readiness/sql/WOS_V1_QA_UAT_STORAGE_COMPAT_INSTALL_NOT_AUTHORIZED.sql"
+} | psql_db "$QA_SHAPE_DB" -q
+[[ "$(db_storage_policies "$QA_SHAPE_DB")" != "$QA_SHAPE_STORAGE_BEFORE" ]] \
+  || fail 'QA_STORAGE_COMPAT_POLICY_NOT_INSTALLED'
+[[ "$(psql_db "$QA_SHAPE_DB" -qAt -c "
+  SELECT count(*)=4
+    AND bool_and(policyname IN (
+      'wos_qa_uat_private_insert',
+      'wos_qa_uat_private_insert_guard',
+      'wos_qa_uat_private_select',
+      'wos_qa_uat_private_select_guard'
+    ))
+    AND NOT has_table_privilege(
+      'authenticated','wos_v1_qa_uat.closeout_controls','SELECT'
+    )
+    AND NOT has_table_privilege(
+      'authenticated','public.wos_qa_trusted_proof_receipts','SELECT'
+    )
+  FROM pg_policies
+  WHERE schemaname='storage' AND tablename='objects'
+    AND policyname LIKE 'wos\\_%' ESCAPE '\\';
+")" = 't' ]] || fail 'QA_STORAGE_COMPAT_POLICY_ACL_INVALID'
+[[ "$(psql_db "$QA_SHAPE_DB" -qAt <<'SQL'
+BEGIN;
+CREATE POLICY wos_guard_after_install_allow_all
+ON storage.objects AS PERMISSIVE FOR SELECT TO anon, authenticated
+USING (true);
+GRANT SELECT ON storage.objects TO anon;
+SET LOCAL ROLE anon;
+SELECT count(*)=0
+FROM storage.objects
+WHERE bucket_id='wos-private';
+ROLLBACK;
+SQL
+)" = 't' ]] || fail 'QA_STORAGE_COMPAT_RESTRICTIVE_OR_GUARD_INVALID'
+echo 'WOS_V1_QA_UAT_STORAGE_COMPAT_INSTALL=PASS'
+echo 'WOS_V1_QA_UAT_STORAGE_RESTRICTIVE_OR_GUARD=PASS'
+
+STORAGE_DB='wos_v1_qa_storage_compat_ci'
+psql_db postgres -q -c \
+  "DROP DATABASE IF EXISTS \"$STORAGE_DB\" WITH (FORCE)"
+psql_db postgres -q -c \
+  "CREATE DATABASE \"$STORAGE_DB\" TEMPLATE \"$QA_SHAPE_DB\""
+WOS_PG_DOCKER_CONTAINER="$CONTAINER" \
+WOS_RC04_STORAGE_DB="$STORAGE_DB" \
+WOS_STORAGE_POLICY_MODE='qa_uat_compat' \
+  node "$ROOT/tests/sql/wos-v1-rc04-storage-api-smoke.mjs"
+{
+  printf "SET wos_v1.qa_storage_compat_rollback_authorized='yes';\n"
+  printf "SET wos_v1.qa_project='xulmpqaknlwqqculbsek';\n"
+  cat "$ROOT/docs/workshop-order-system/production-readiness/sql/WOS_V1_QA_UAT_STORAGE_COMPAT_ROLLBACK_NOT_AUTHORIZED.sql"
+} | psql_db "$STORAGE_DB" -q
+[[ "$(db_storage_policies "$STORAGE_DB")" = "$QA_SHAPE_STORAGE_BEFORE" ]] \
+  || fail 'QA_STORAGE_COMPAT_ROLLBACK_POLICY_MISMATCH'
+[[ "$(psql_db "$STORAGE_DB" -qAt -c "
+  SELECT md5(jsonb_build_object(
+    'public',public,
+    'fileSizeLimit',file_size_limit,
+    'allowedMimeTypes',allowed_mime_types
+  )::text)
+  FROM storage.buckets WHERE id='wos-private';
+")" = "$QA_SHAPE_BUCKET_BEFORE" ]] \
+  || fail 'QA_STORAGE_COMPAT_ROLLBACK_BUCKET_MISMATCH'
+echo 'WOS_V1_QA_UAT_STORAGE_COMPAT_ROLLBACK=PASS'
+if [[ "${WOS_STORAGE_COMPAT_KEEP_DB:-0}" != '1' ]]; then
+  psql_db postgres -q -c \
+    "DROP DATABASE IF EXISTS \"$STORAGE_DB\" WITH (FORCE)"
+fi
+{
+  printf "SET wos_v1.qa_storage_compat_rollback_authorized='yes';\n"
+  printf "SET wos_v1.qa_project='xulmpqaknlwqqculbsek';\n"
+  cat "$ROOT/docs/workshop-order-system/production-readiness/sql/WOS_V1_QA_UAT_STORAGE_COMPAT_ROLLBACK_NOT_AUTHORIZED.sql"
+} | psql_db "$QA_SHAPE_DB" -q
+[[ "$(qa_shape_storage_policies)" = "$QA_SHAPE_STORAGE_BEFORE" ]] \
+  || fail 'QA_STORAGE_COMPAT_SOURCE_POLICY_NOT_RESTORED'
+[[ "$(qa_shape_bucket_config)" = "$QA_SHAPE_BUCKET_BEFORE" ]] \
+  || fail 'QA_STORAGE_COMPAT_SOURCE_BUCKET_NOT_RESTORED'
+UAT006_CONTINUITY_DB='wos_v1_uat006_continuity_ci'
+psql_db postgres -q -c \
+  "DROP DATABASE IF EXISTS \"$UAT006_CONTINUITY_DB\" WITH (FORCE)"
+psql_db postgres -q -c \
+  "CREATE DATABASE \"$UAT006_CONTINUITY_DB\" TEMPLATE \"$QA_SHAPE_DB\""
+psql_db "$UAT006_CONTINUITY_DB" -q \
+  -v authorization_id='WOS-V1-PRODUCTION-M2-QA-UAT-006' \
+  -v execution_id='0e5e6ac1-cf10-4c2c-ba79-6e1619b2e632' \
+  -v arm_token='92929292-9292-4292-8292-929292929292' \
+  -v process_nonce='6b6ea151-7114-47df-9f9b-039f3fed5def' \
+  -v code_sha256="$(printf 'd%.0s' {1..64})" \
+  -v manager_profile='11111111-1111-4111-8111-111111111112' \
+  < "$ROOT/tests/sql/wos-v1-uat006-continuity-pg17.sql"
+echo 'WOS_V1_UAT006_CONTINUITY_TO_READY=PASS'
+if [[ "${WOS_UAT006_CONTINUITY_KEEP_DB:-0}" != '1' ]]; then
+  psql_db postgres -q -c \
+    "DROP DATABASE IF EXISTS \"$UAT006_CONTINUITY_DB\" WITH (FORCE)"
+fi
 {
   printf "SET wos_v1.qa_uat_close_authorized='yes';\n"
   printf "SET wos_v1.qa_project='xulmpqaknlwqqculbsek';\n"
@@ -214,6 +405,8 @@ psql_db "$QA_SHAPE_DB" -q -1 \
   || fail 'QA_SHAPE_RECOVERY_CHANGED_ACL'
 [[ "$(qa_shape_storage_policies)" = "$QA_SHAPE_STORAGE_BEFORE" ]] \
   || fail 'QA_SHAPE_RECOVERY_CHANGED_STORAGE_POLICY'
+[[ "$(qa_shape_bucket_config)" = "$QA_SHAPE_BUCKET_BEFORE" ]] \
+  || fail 'QA_SHAPE_RECOVERY_CHANGED_STORAGE_BUCKET'
 [[ "$(qa_shape_history_fingerprint)" = "$QA_SHAPE_HISTORY_BEFORE" ]] \
   || fail 'QA_SHAPE_RECOVERY_CHANGED_HISTORICAL_ROWS'
 echo 'WOS_V1_PRODUCTION_M2_QA_SHAPE_COMPAT=PASS'
@@ -263,9 +456,10 @@ psql_db "$DB" -q -c "
   \$\$;
 "
 
-UAT_INPUTS="$ROOT/docs/workshop-order-system/qa-fixture/production-m2-uat-20261126/inputs.json"
-CREATE_PAYLOAD_JSON="$(jq -c '.createPayload' "$UAT_INPUTS")"
-EXPECTED_CREATE_FP="$(jq -r '.createPayloadFingerprint' "$UAT_INPUTS")"
+UAT_INPUTS_005="$ROOT/docs/workshop-order-system/qa-fixture/production-m2-uat-20261126/inputs.json"
+UAT_INPUTS="$ROOT/docs/workshop-order-system/qa-fixture/production-m2-uat-20261126/inputs-uat006.json"
+CREATE_PAYLOAD_JSON="$(jq -c '.createPayload' "$UAT_INPUTS_005")"
+EXPECTED_CREATE_FP="$(jq -r '.createPayloadFingerprint' "$UAT_INPUTS_005")"
 UAT_REQUEST_ID="$(jq -r '.requestId' "$UAT_INPUTS")"
 UAT_OFFICE_AUTH_USER="$(jq -r '.actors.office.authUserId' "$UAT_INPUTS")"
 UAT_OFFICE_PROFILE="$(jq -r '.actors.office.profileId' "$UAT_INPUTS")"
@@ -381,6 +575,8 @@ psql_db "$DB" -q -c "
 
 psql_db "$DB" -q -1 \
   < "$ROOT/supabase/migrations/20261126090000_wos_v1_production_m2_signoff.sql"
+psql_db "$DB" -q \
+  < "$ROOT/tests/sql/wos-v1-uat006-resume-pg17.sql"
 psql_db "$DB" -q -c "
   CREATE FUNCTION public.wos_create_production_order(uuid,jsonb)
   RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=''
@@ -522,7 +718,7 @@ WITH control AS (
     db_last_heartbeat_at,edge_last_heartbeat_at,edge_process_nonce
   ) VALUES(
     '93939393-9393-4393-8393-939393939393',
-    'WOS-V1-PRODUCTION-M2-QA-UAT-005',
+    'WOS-V1-PRODUCTION-M2-QA-UAT-006',
     'xulmpqaknlwqqculbsek',
     repeat('b',64),
     '94949494-9494-4494-8494-949494949494',
@@ -557,7 +753,7 @@ DO \$deadline\$
 BEGIN
   BEGIN
     PERFORM wos_v1_qa_uat.assert_write_open(
-      'WOS-V1-PRODUCTION-M2-QA-UAT-005',
+      'WOS-V1-PRODUCTION-M2-QA-UAT-006',
       '33333333-3333-4333-8333-333333333333'
     );
     RAISE EXCEPTION 'QA_UAT_EXPIRED_WRITE_WAS_ALLOWED';
@@ -571,7 +767,7 @@ DO \$edge_deadline\$
 BEGIN
   BEGIN
     PERFORM public.wos_v1_qa_uat_edge_write_allowed(
-      'WOS-V1-PRODUCTION-M2-QA-UAT-005',
+      'WOS-V1-PRODUCTION-M2-QA-UAT-006',
       'xulmpqaknlwqqculbsek',
       '93939393-9393-4393-8393-939393939393',
       '95959595-9595-4595-8595-959595959595',
@@ -683,7 +879,7 @@ psql_db "$DB" -q -c "
   BEGIN
     BEGIN
       PERFORM public.wos_v1_qa_uat_open_gate(
-        'WOS-V1-PRODUCTION-M2-QA-UAT-005',
+        'WOS-V1-PRODUCTION-M2-QA-UAT-006',
         '33333333-3333-4333-8333-333333333333',
         'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
         '11111111-1111-4111-8111-111111111111',
@@ -711,7 +907,7 @@ psql_db "$DB" -qAt -c "
 " >/dev/null
 EDGE_STATUS_OPEN="$(psql_db "$DB" -qAt -c "
   SELECT public.wos_v1_qa_uat_edge_control_status(
-    'WOS-V1-PRODUCTION-M2-QA-UAT-005',
+    'WOS-V1-PRODUCTION-M2-QA-UAT-006',
     'xulmpqaknlwqqculbsek'
   )::text;
 ")"
@@ -726,7 +922,7 @@ EDGE_STATUS_STALE="$(psql_db "$DB" -qAt -c "
   SET db_last_heartbeat_at=clock_timestamp()-interval '31 seconds'
   WHERE execution_id='$UAT_CLOSER_EXECUTION_ID'::uuid;
   SELECT public.wos_v1_qa_uat_edge_control_status(
-    'WOS-V1-PRODUCTION-M2-QA-UAT-005',
+    'WOS-V1-PRODUCTION-M2-QA-UAT-006',
     'xulmpqaknlwqqculbsek'
   )::text;
   ROLLBACK;
@@ -845,7 +1041,6 @@ APP_ACTIVATE_OUTPUT="$(
   SELECT NOT EXISTS (
       SELECT 1
       FROM (VALUES
-        ('public.wos_create_production_order(uuid,jsonb)'::regprocedure),
         ('public.wos_register_uploaded_reference_image(uuid,uuid,text,text)'::regprocedure),
         ('public.wos_confirm_office_completeness(uuid,integer,text,text)'::regprocedure),
         ('public.wos_submit_production_order(uuid,integer,text,uuid)'::regprocedure),
@@ -858,6 +1053,16 @@ APP_ACTIVATE_OUTPUT="$(
         OR NOT has_function_privilege(
           'authenticated',procedure,'EXECUTE'
         )
+    )
+    AND NOT has_function_privilege(
+      'authenticated',
+      'public.wos_create_production_order(uuid,jsonb)',
+      'EXECUTE'
+    )
+    AND NOT has_function_privilege(
+      'anon',
+      'public.wos_create_production_order(uuid,jsonb)',
+      'EXECUTE'
     )
     AND NOT has_function_privilege(
       'authenticated',
@@ -906,7 +1111,7 @@ psql_db "$DB" -q -c "
   BEGIN
     BEGIN
       PERFORM public.wos_v1_qa_uat_edge_write_allowed(
-        'WOS-V1-PRODUCTION-M2-QA-UAT-005',
+        'WOS-V1-PRODUCTION-M2-QA-UAT-006',
         'xulmpqaknlwqqculbsek',
         '$UAT_CLOSER_EXECUTION_ID',
         '$UAT_EDGE_PROCESS_NONCE',
@@ -929,7 +1134,7 @@ echo 'WOS_V1_QA_UAT_CREATE_RECEIPT_BINDING_DRIFT_DENIED=PASS'
 psql_db "$DB" -q -c "
   SET ROLE service_role;
   SELECT public.wos_v1_qa_uat_edge_write_allowed(
-    'WOS-V1-PRODUCTION-M2-QA-UAT-005',
+    'WOS-V1-PRODUCTION-M2-QA-UAT-006',
     'xulmpqaknlwqqculbsek',
     '$UAT_CLOSER_EXECUTION_ID',
     '$UAT_EDGE_PROCESS_NONCE',
@@ -941,7 +1146,7 @@ psql_db "$DB" -q -c "
   BEGIN
     BEGIN
       PERFORM public.wos_v1_qa_uat_edge_write_allowed(
-        'WOS-V1-PRODUCTION-M2-QA-UAT-005',
+        'WOS-V1-PRODUCTION-M2-QA-UAT-006',
         'xulmpqaknlwqqculbsek',
         '$UAT_CLOSER_EXECUTION_ID',
         '$UAT_EDGE_PROCESS_NONCE',
@@ -959,7 +1164,7 @@ psql_db "$DB" -q -c "
   BEGIN
     BEGIN
       PERFORM public.wos_v1_qa_uat_edge_write_allowed(
-        'WOS-V1-PRODUCTION-M2-QA-UAT-005',
+        'WOS-V1-PRODUCTION-M2-QA-UAT-006',
         'xulmpqaknlwqqculbsek',
         '$UAT_CLOSER_EXECUTION_ID',
         '$UAT_EDGE_PROCESS_NONCE',
@@ -982,7 +1187,7 @@ psql_db "$DB" -q -c "
     authorization_id,project_ref,organization_id,order_id,actor_profile_id,
     allowed_actions,opened_at,expires_at
   ) VALUES(
-    'WOS-V1-PRODUCTION-M2-QA-UAT-005-EXPIRED',
+    'WOS-V1-PRODUCTION-M2-QA-UAT-006-EXPIRED',
     'xulmpqaknlwqqculbsek',
     'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
     '33333333-3333-4333-8333-333333333333',
@@ -994,7 +1199,7 @@ psql_db "$DB" -q -c "
   SET wos_v1.qa_uat_gate_open_authorized='yes';
   SET wos_v1.qa_project='xulmpqaknlwqqculbsek';
   SELECT public.wos_v1_qa_uat_open_gate(
-    'WOS-V1-PRODUCTION-M2-QA-UAT-005',
+    'WOS-V1-PRODUCTION-M2-QA-UAT-006',
     '33333333-3333-4333-8333-333333333333',
     'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
     '11111111-1111-4111-8111-111111111111',
@@ -1002,7 +1207,7 @@ psql_db "$DB" -q -c "
     clock_timestamp()+interval '7 minutes'
   );
   SELECT public.wos_v1_qa_uat_open_gate(
-    'WOS-V1-PRODUCTION-M2-QA-UAT-005',
+    'WOS-V1-PRODUCTION-M2-QA-UAT-006',
     '33333333-3333-4333-8333-333333333333',
     'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
     '22222222-2222-4222-8222-222222222222',
@@ -1010,7 +1215,7 @@ psql_db "$DB" -q -c "
     clock_timestamp()+interval '7 minutes'
   );
   SELECT public.wos_v1_qa_uat_open_gate(
-    'WOS-V1-PRODUCTION-M2-QA-UAT-005',
+    'WOS-V1-PRODUCTION-M2-QA-UAT-006',
     '33333333-3333-4333-8333-333333333333',
     'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
     '$UAT_MANAGER_PROFILE',
@@ -1195,7 +1400,7 @@ EDGE_PROBE_CLOSED="$(psql_db "$DB" -qAt -c "
   || fail 'FULL_M2_EDGE_PROBE_CLOSED_NONCE_MISMATCH'
 [[ "$(psql_db "$DB" -qAt -c "
   SELECT public.wos_v1_qa_uat_edge_control_status(
-    'WOS-V1-PRODUCTION-M2-QA-UAT-005',
+    'WOS-V1-PRODUCTION-M2-QA-UAT-006',
     'xulmpqaknlwqqculbsek'
   )->>'status';
 ")" = 'CLOSED' ]] || fail 'EDGE_CONTROL_NOT_CLOSED'
@@ -1205,7 +1410,7 @@ psql_db "$DB" -q -c "
   BEGIN
     BEGIN
       PERFORM public.wos_v1_qa_uat_edge_write_allowed(
-        'WOS-V1-PRODUCTION-M2-QA-UAT-005',
+        'WOS-V1-PRODUCTION-M2-QA-UAT-006',
         'xulmpqaknlwqqculbsek',
         '$UAT_CLOSER_EXECUTION_ID',
         '$UAT_EDGE_PROCESS_NONCE',
@@ -1296,6 +1501,9 @@ echo 'WOS_V1_QA_UAT_APP_DEACTIVATION=PASS'
     ) IS NULL
     AND to_regprocedure(
       'public.wos_v1_qa_uat_bind_order(uuid,uuid,uuid,uuid,uuid,text)'
+    ) IS NULL
+    AND to_regprocedure(
+      'public.wos_v1_qa_uat_edge_preflight(uuid,uuid,uuid)'
     ) IS NULL
     AND (SELECT count(*) FROM public.wos_v1_m2_receipts)=12
     AND (SELECT count(*) FROM public.wos_v1_start_releases)=2

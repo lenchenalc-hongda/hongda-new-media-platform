@@ -223,16 +223,20 @@ export type WosV1QaCloserProbeAuthResult =
     };
 
 export function evaluateWosV1QaCloserProbeAuth(input: {
+  expectedAuthorizationId: string;
   authorizationId: string | null;
   executionId: string | null;
   processNonce: string | null;
   authorization: string | null;
   adminKey: string;
-  legacyServiceRoleJwt: string | undefined;
+  dedicatedCloserJwt: string | undefined;
 }): WosV1QaCloserProbeAuthResult {
   const uuidPattern =
     /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
-  if (input.authorizationId !== 'WOS-V1-PRODUCTION-M2-QA-UAT-005'
+  const authorizationPattern =
+    /^WOS-V1-PRODUCTION-M2-QA-UAT-[0-9]{3}$/;
+  if (!authorizationPattern.test(input.expectedAuthorizationId)
+    || input.authorizationId !== input.expectedAuthorizationId
     || !uuidPattern.test(input.executionId || '')
     || !uuidPattern.test(input.processNonce || '')) {
     return {
@@ -241,13 +245,27 @@ export function evaluateWosV1QaCloserProbeAuth(input: {
       status: 503,
     };
   }
-  if (!input.adminKey || !matchesLegacyQaCloserJwt(
-    input.authorization,
-    input.legacyServiceRoleJwt,
-  )) {
+  if (!input.adminKey) {
     return {
       allowed: false,
       code: 'WOS_V1_EDGE_SERVER_CONFIG_INCOMPLETE',
+      status: 503,
+    };
+  }
+  if (!input.dedicatedCloserJwt) {
+    return {
+      allowed: false,
+      code: 'WOS_V1_QA_EDGE_CLOSER_CREDENTIAL_MISSING',
+      status: 503,
+    };
+  }
+  if (!matchesLegacyQaCloserJwt(
+    input.authorization,
+    input.dedicatedCloserJwt,
+  )) {
+    return {
+      allowed: false,
+      code: 'WOS_V1_QA_EDGE_CLOSER_CREDENTIAL_MISMATCH',
       status: 503,
     };
   }

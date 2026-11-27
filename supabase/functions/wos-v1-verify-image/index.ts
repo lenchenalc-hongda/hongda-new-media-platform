@@ -26,7 +26,6 @@ const MAX_REQUEST_BYTES = 4096;
 const BODY_READ_TIMEOUT_MS = 5000;
 const MAX_EXECUTION_MS = 20000;
 const QA_UAT_PROJECT_REF = 'xulmpqaknlwqqculbsek';
-const QA_UAT_AUTHORIZATION_ID = 'WOS-V1-PRODUCTION-M2-QA-UAT-005';
 const baseHeaders = {
   'Cache-Control': 'no-store, private',
   'Content-Type': 'application/json; charset=utf-8',
@@ -46,7 +45,7 @@ function output(
   if (origin && allowedOrigins.includes(origin)) {
     headers.set('Access-Control-Allow-Origin', origin);
     headers.set('Access-Control-Allow-Headers',
-      'authorization, apikey, content-type, x-client-info, x-wos-qa-uat-authorization-id, x-wos-qa-uat-execution-id, x-wos-qa-uat-closer-nonce');
+      'authorization, apikey, content-type, x-client-info, x-wos-qa-uat-authorization-id, x-wos-qa-uat-execution-id, x-wos-qa-uat-closer-nonce, x-wos-qa-closer-credential-preflight');
     headers.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
     headers.set('Access-Control-Max-Age', '600');
     headers.set('Vary', 'Origin');
@@ -75,9 +74,12 @@ function secretKey(): string {
   );
 }
 
-function closerProbeLegacyJwt(): string | undefined {
-  return Deno.env.get('WOS_V1_QA_EDGE_CLOSER_SERVICE_ROLE_KEY')
-    || Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+function qaUatAuthorizationId(): string {
+  return Deno.env.get('WOS_V1_QA_UAT_AUTHORIZATION_ID') || '';
+}
+
+function closerProbeDedicatedJwt(): string | undefined {
+  return Deno.env.get('WOS_V1_QA_EDGE_CLOSER_SERVICE_ROLE_KEY');
 }
 
 async function withTimeout<T>(promise: Promise<T>): Promise<T> {
@@ -176,7 +178,7 @@ export async function handleWosV1VerifyImageRequest(
     headers.delete('Content-Type');
     headers.set('Access-Control-Allow-Origin', origin);
     headers.set('Access-Control-Allow-Headers',
-      'authorization, apikey, content-type, x-client-info, x-wos-qa-uat-authorization-id, x-wos-qa-uat-execution-id, x-wos-qa-uat-closer-nonce');
+      'authorization, apikey, content-type, x-client-info, x-wos-qa-uat-authorization-id, x-wos-qa-uat-execution-id, x-wos-qa-uat-closer-nonce, x-wos-qa-closer-credential-preflight');
     headers.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
     headers.set('Access-Control-Max-Age', '600');
     headers.set('Vary', 'Origin');
@@ -196,6 +198,7 @@ export async function handleWosV1VerifyImageRequest(
   const service = secretKey();
   const qaUatRuntime = new URL(runtimeUrl!).hostname ===
     `${QA_UAT_PROJECT_REF}.supabase.co`;
+  const qaUatAuthorizationIdValue = qaUatAuthorizationId();
   const qaAuthorizationId =
     request.headers.get('x-wos-qa-uat-authorization-id');
   const qaExecutionId = request.headers.get('x-wos-qa-uat-execution-id');
@@ -204,7 +207,10 @@ export async function handleWosV1VerifyImageRequest(
   const uuidPattern =
     /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
   if (qaUatRuntime && (
-    qaAuthorizationId !== QA_UAT_AUTHORIZATION_ID
+    !/^WOS-V1-PRODUCTION-M2-QA-UAT-[0-9]{3}$/.test(
+      qaUatAuthorizationIdValue,
+    )
+    || qaAuthorizationId !== qaUatAuthorizationIdValue
     || !uuidPattern.test(qaExecutionId || '')
     || !uuidPattern.test(qaCloserNonce || '')
   )) {
@@ -213,12 +219,13 @@ export async function handleWosV1VerifyImageRequest(
   if (qaUatRuntime
     && request.headers.get('x-wos-qa-closer-probe') === '1') {
     const authDecision = evaluateWosV1QaCloserProbeAuth({
+      expectedAuthorizationId: qaUatAuthorizationIdValue,
       authorizationId: qaAuthorizationId,
       executionId: qaExecutionId,
       processNonce: qaCloserNonce,
       authorization: request.headers.get('authorization'),
       adminKey: service,
-      legacyServiceRoleJwt: closerProbeLegacyJwt(),
+      dedicatedCloserJwt: closerProbeDedicatedJwt(),
     });
     if (!authDecision.allowed) {
       return output(
@@ -241,6 +248,29 @@ export async function handleWosV1VerifyImageRequest(
         && !Array.isArray(control.data)
         ? control.data as Record<string, unknown>
         : null;
+      if (request.headers.get(
+        'x-wos-qa-closer-credential-preflight',
+      ) === '1') {
+        if (Boolean(control.error)
+          || String(controlData?.executionId || '') !== qaExecutionId
+          || String(controlData?.status || '') === 'DENIED') {
+          return output(
+            request,
+            'WOS_V1_QA_EDGE_GATE_UNAVAILABLE',
+            503,
+          );
+        }
+        return output(
+          request,
+          'WOS_V1_QA_EDGE_CREDENTIAL_VERIFIED',
+          200,
+          {
+            gateStatus:
+              String(controlData?.status || 'UNAVAILABLE'),
+            executionId: qaExecutionId,
+          },
+        );
+      }
       const gateDecision = evaluateWosV1QaCloserProbeGate({
         error: Boolean(control.error),
         executionId: qaExecutionId || '',
@@ -335,7 +365,7 @@ export async function handleWosV1VerifyImageRequest(
       });
       if (qaUatRuntime) {
         const gate = await admin.rpc('wos_v1_qa_uat_edge_write_allowed', {
-          p_authorization_id: QA_UAT_AUTHORIZATION_ID,
+          p_authorization_id: qaUatAuthorizationIdValue,
           p_project_ref: QA_UAT_PROJECT_REF,
           p_execution_id: qaExecutionId,
           p_process_nonce: qaCloserNonce,

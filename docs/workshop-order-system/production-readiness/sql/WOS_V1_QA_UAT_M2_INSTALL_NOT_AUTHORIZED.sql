@@ -419,7 +419,7 @@ DECLARE
   v_control wos_v1_qa_uat.closeout_controls%ROWTYPE;
   v_now timestamptz:=clock_timestamp();
 BEGIN
-  IF p_authorization_id<>'WOS-V1-PRODUCTION-M2-QA-UAT-005'
+  IF p_authorization_id<>'WOS-V1-PRODUCTION-M2-QA-UAT-006'
     OR p_project_ref<>'xulmpqaknlwqqculbsek'
   THEN
     RAISE EXCEPTION 'QA_UAT_CLOSER_SCOPE_MISMATCH';
@@ -597,6 +597,66 @@ END;
 $edge_heartbeat$;
 REVOKE ALL ON FUNCTION wos_v1_qa_uat.record_edge_heartbeat(uuid,uuid,uuid)
   FROM PUBLIC,anon,authenticated;
+
+CREATE OR REPLACE FUNCTION wos_v1_qa_uat.preflight_edge_nonce(
+  p_execution_id uuid,
+  p_arm_token uuid,
+  p_process_nonce uuid
+) RETURNS jsonb
+LANGUAGE plpgsql SECURITY DEFINER SET search_path=''
+AS $edge_preflight$
+DECLARE
+  v_control wos_v1_qa_uat.closeout_controls%ROWTYPE;
+  v_now timestamptz:=clock_timestamp();
+BEGIN
+  SELECT * INTO STRICT v_control
+  FROM wos_v1_qa_uat.closeout_controls control
+  WHERE control.execution_id=p_execution_id
+  FOR UPDATE;
+  IF v_control.arm_token<>p_arm_token
+    OR v_control.code_sha256 IS NULL
+  THEN
+    RAISE EXCEPTION 'QA_UAT_EDGE_PREFLIGHT_SCOPE_DENIED';
+  END IF;
+  IF v_now>=v_control.write_deadline_at THEN
+    RAISE EXCEPTION 'QA_UAT_WRITE_DEADLINE_EXPIRED';
+  END IF;
+  IF v_control.db_state='CLOSED' OR v_control.edge_state='CLOSED' THEN
+    RAISE EXCEPTION 'QA_UAT_EDGE_CLOSER_ALREADY_CLOSED';
+  END IF;
+  IF v_control.edge_process_nonce IS NOT NULL
+    AND v_control.edge_process_nonce<>p_process_nonce
+  THEN
+    RAISE EXCEPTION 'QA_UAT_EDGE_PROCESS_NONCE_CONFLICT';
+  END IF;
+  IF v_control.db_last_heartbeat_at IS NULL
+    OR v_control.db_last_heartbeat_at<v_now-interval '30 seconds'
+    OR NOT EXISTS(
+      SELECT 1 FROM wos_v1_qa_uat.closer_arm_receipts receipt
+      WHERE receipt.execution_id=p_execution_id
+        AND receipt.closer_kind='DB'
+        AND receipt.executor_kind='PG_CRON'
+    )
+  THEN
+    RAISE EXCEPTION 'QA_UAT_EDGE_DB_HEARTBEAT_REQUIRED';
+  END IF;
+  UPDATE wos_v1_qa_uat.closeout_controls
+  SET edge_process_nonce=coalesce(edge_process_nonce,p_process_nonce)
+  WHERE execution_id=p_execution_id;
+  RETURN jsonb_build_object(
+    'status','PREFLIGHT',
+    'executionId',p_execution_id,
+    'processNonce',p_process_nonce,
+    'previousHeartbeatAt',v_control.edge_last_heartbeat_at,
+    'preflightAt',v_now
+  );
+EXCEPTION WHEN NO_DATA_FOUND OR TOO_MANY_ROWS THEN
+  RAISE EXCEPTION 'QA_UAT_EDGE_CLOSER_CONTROL_MISSING';
+END;
+$edge_preflight$;
+REVOKE ALL ON FUNCTION wos_v1_qa_uat.preflight_edge_nonce(
+  uuid,uuid,uuid
+) FROM PUBLIC,anon,authenticated;
 
 CREATE OR REPLACE FUNCTION wos_v1_qa_uat.bind_qa_uat_order(
   p_execution_id uuid,
@@ -1026,7 +1086,7 @@ AS $edge_allowed$
 DECLARE
   v_control wos_v1_qa_uat.closeout_controls%ROWTYPE;
 BEGIN
-  IF p_authorization_id<>'WOS-V1-PRODUCTION-M2-QA-UAT-005'
+  IF p_authorization_id<>'WOS-V1-PRODUCTION-M2-QA-UAT-006'
     OR p_project_ref<>'xulmpqaknlwqqculbsek'
   THEN
     RAISE EXCEPTION 'QA_UAT_EDGE_SCOPE_MISMATCH' USING ERRCODE='42501';
@@ -1149,7 +1209,7 @@ DECLARE
   v_control wos_v1_qa_uat.closeout_controls%ROWTYPE;
   v_status text;
 BEGIN
-  IF p_authorization_id<>'WOS-V1-PRODUCTION-M2-QA-UAT-005'
+  IF p_authorization_id<>'WOS-V1-PRODUCTION-M2-QA-UAT-006'
     OR p_project_ref<>'xulmpqaknlwqqculbsek'
   THEN
     RAISE EXCEPTION 'QA_UAT_EDGE_SCOPE_MISMATCH' USING ERRCODE='42501';
@@ -1229,6 +1289,24 @@ REVOKE ALL ON FUNCTION public.wos_v1_qa_uat_edge_heartbeat(uuid,uuid,uuid)
   FROM PUBLIC,anon,authenticated;
 GRANT EXECUTE ON FUNCTION public.wos_v1_qa_uat_edge_heartbeat(uuid,uuid,uuid)
   TO service_role;
+
+CREATE OR REPLACE FUNCTION public.wos_v1_qa_uat_edge_preflight(
+  p_execution_id uuid,
+  p_arm_token uuid,
+  p_process_nonce uuid
+) RETURNS jsonb
+LANGUAGE sql SECURITY DEFINER SET search_path=''
+AS $edge_preflight_public$
+  SELECT wos_v1_qa_uat.preflight_edge_nonce(
+    p_execution_id,p_arm_token,p_process_nonce
+  )
+$edge_preflight_public$;
+REVOKE ALL ON FUNCTION public.wos_v1_qa_uat_edge_preflight(
+  uuid,uuid,uuid
+) FROM PUBLIC,anon,authenticated;
+GRANT EXECUTE ON FUNCTION public.wos_v1_qa_uat_edge_preflight(
+  uuid,uuid,uuid
+) TO service_role;
 
 CREATE OR REPLACE FUNCTION public.wos_v1_qa_uat_bind_order(
   p_execution_id uuid,
@@ -1407,7 +1485,7 @@ BEGIN
   WHERE profile.user_id=p_actor_user_id
     AND profile.is_active=true;
   RETURN public.wos_v1_qa_uat_edge_write_allowed(
-    'WOS-V1-PRODUCTION-M2-QA-UAT-005',
+    'WOS-V1-PRODUCTION-M2-QA-UAT-006',
     'xulmpqaknlwqqculbsek',
     p_execution_id,
     p_process_nonce,
@@ -1535,7 +1613,7 @@ DECLARE
   v_actor public.profiles%ROWTYPE;
   v_order public.wos_production_orders%ROWTYPE;
 BEGIN
-  IF btrim(p_authorization_id)<>'WOS-V1-PRODUCTION-M2-QA-UAT-005' THEN
+  IF btrim(p_authorization_id)<>'WOS-V1-PRODUCTION-M2-QA-UAT-006' THEN
     RAISE EXCEPTION 'QA_UAT_AUTHORIZATION_ID_MISMATCH' USING ERRCODE='42501';
   END IF;
   PERFORM wos_v1_qa_uat.assert_write_open(
@@ -1605,7 +1683,7 @@ DECLARE
   v_actor public.profiles%ROWTYPE;
   v_order public.wos_production_orders%ROWTYPE;
 BEGIN
-  IF btrim(p_authorization_id)<>'WOS-V1-PRODUCTION-M2-QA-UAT-005' THEN
+  IF btrim(p_authorization_id)<>'WOS-V1-PRODUCTION-M2-QA-UAT-006' THEN
     RAISE EXCEPTION 'QA_UAT_AUTHORIZATION_ID_MISMATCH' USING ERRCODE='42501';
   END IF;
   PERFORM wos_v1_qa_uat.assert_write_open(
