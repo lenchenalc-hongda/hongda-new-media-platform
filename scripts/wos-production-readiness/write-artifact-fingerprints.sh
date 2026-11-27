@@ -38,6 +38,8 @@ files=(
   src/app/api/workshop-orders/v1/m2/route.ts
   src/app/workshop-orders/inbox/page.tsx
   src/app/workshop-orders/production/new/page.tsx
+  src/components/layout/AppLayout.tsx
+  src/components/layout/Sidebar.tsx
   src/components/workshop-orders/ProductionOfficeOrders.tsx
   src/components/workshop-orders/ProductionM2Workbench.tsx
   src/components/workshop-orders/ProductionOfficeWorkflow.tsx

@@ -1,7 +1,7 @@
 'use client';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
 import {
   getActiveNavItemPath,
@@ -9,6 +9,7 @@ import {
   getVisiblePortalGroups,
 } from '@/lib/constants/navigation';
 import { isFeatureEnabled, FEATURES } from '@/lib/features';
+import { APP_VERSION } from '@/lib/version';
 import {
   useCanAccessCustomerProjectCenter,
   useCanAccessCustomerProjectSettings,
@@ -38,6 +39,86 @@ export default function Sidebar() {
   const enabledGroups = applyCreateVisibility(baseGroups, canCreateReview);
   const activePortal = getPortalForPath(pathname);
   const [expandedPortal, setExpandedPortal] = useState<string>(activePortal);
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const [isMobileViewport, setIsMobileViewport] = useState(false);
+  const openButtonRef = useRef<HTMLButtonElement>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const sidebarRef = useRef<HTMLElement>(null);
+  const previouslyFocusedRef = useRef<HTMLElement | null>(null);
+  const wasMobileOpenRef = useRef(false);
+
+  useEffect(() => {
+    const query = window.matchMedia('(max-width: 767px)');
+    const update = () => {
+      setIsMobileViewport(query.matches);
+      if (!query.matches) setMobileOpen(false);
+    };
+    update();
+    query.addEventListener('change', update);
+    return () => query.removeEventListener('change', update);
+  }, []);
+
+  useEffect(() => {
+    setMobileOpen(false);
+  }, [pathname]);
+
+  useEffect(() => {
+    if (!mobileOpen || !isMobileViewport) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [isMobileViewport, mobileOpen]);
+
+  useEffect(() => {
+    if (!mobileOpen || !isMobileViewport) return;
+    closeButtonRef.current?.focus();
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        setMobileOpen(false);
+        return;
+      }
+      if (event.key !== 'Tab' || !sidebarRef.current) return;
+      const focusable = Array.from(sidebarRef.current.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      )).filter(element => element.offsetParent !== null);
+      if (focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [isMobileViewport, mobileOpen]);
+
+  useEffect(() => {
+    if (wasMobileOpenRef.current && !mobileOpen && isMobileViewport) {
+      window.requestAnimationFrame(() => {
+        (previouslyFocusedRef.current ?? openButtonRef.current)?.focus();
+      });
+    }
+    wasMobileOpenRef.current = mobileOpen;
+  }, [isMobileViewport, mobileOpen]);
+
+  const openMobileNav = () => {
+    if (!isMobileViewport) return;
+    previouslyFocusedRef.current = document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null;
+    setMobileOpen(true);
+  };
+
+  const closeMobileNav = () => {
+    setMobileOpen(false);
+  };
 
   const isHome = pathname === '/workspace-home';
   const portalColors: Record<string, string> = {
@@ -52,22 +133,78 @@ export default function Sidebar() {
   };
 
   return (
-    <aside className="w-56 bg-white border-r border-gray-200 flex flex-col h-screen sticky top-0 overflow-hidden">
+    <>
+      <header className="fixed inset-x-0 top-0 z-40 flex h-14 items-center gap-3 border-b border-gray-200 bg-white px-3 md:hidden">
+        <button
+          type="button"
+          ref={openButtonRef}
+          id="mobile-navigation-trigger"
+          aria-label="打开主导航"
+          aria-expanded={mobileOpen}
+          aria-controls="app-sidebar"
+          onClick={openMobileNav}
+          className="flex h-10 w-10 items-center justify-center rounded-md border border-gray-200 text-gray-700"
+        >
+          <svg aria-hidden="true" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+          </svg>
+        </button>
+        <Link href="/workspace-home" className="flex min-w-0 items-center gap-2 no-underline">
+          <img src="/hongda-os-original-emblem.png" alt="" className="h-7 w-7 shrink-0 object-contain" width={28} height={28} />
+          <span className="truncate text-sm font-bold text-gray-800">Hongda OS</span>
+        </Link>
+        <span className="ml-auto text-[10px] text-gray-400">{APP_VERSION}</span>
+      </header>
+
+      <button
+        type="button"
+        aria-label="关闭主导航遮罩"
+        onClick={closeMobileNav}
+        className={cn(
+          'fixed inset-0 z-40 bg-black/30 md:hidden',
+          mobileOpen ? 'block' : 'hidden',
+        )}
+      />
+
+      {(!isMobileViewport || mobileOpen) && (
+        <aside
+          ref={sidebarRef}
+          id="app-sidebar"
+          aria-label="主导航"
+          role={isMobileViewport && mobileOpen ? 'dialog' : undefined}
+          aria-modal={isMobileViewport && mobileOpen ? true : undefined}
+          className={cn(
+            'fixed inset-y-0 left-0 z-50 flex h-[100dvh] w-56 flex-col overflow-hidden border-r border-gray-200 bg-white shadow-xl transition-transform duration-200 md:static md:z-auto md:h-screen md:translate-x-0 md:shadow-none',
+            mobileOpen ? 'visible translate-x-0' : 'invisible -translate-x-full md:visible',
+          )}
+        >
       {/* Brand */}
-      <div className="px-4 py-3 border-b border-gray-200">
-        <Link href="/workspace-home" className="flex items-center gap-2 no-underline">
+      <div className="flex items-center border-b border-gray-200 px-4 py-3">
+        <Link href="/workspace-home" onClick={closeMobileNav} className="flex items-center gap-2 no-underline">
           <img src="/hongda-os-original-emblem.png" alt="宏达印业 Logo" className="w-7 h-7 object-contain shrink-0" width={28} height={28} />
           <div>
             <p className="text-sm font-bold text-gray-800 leading-tight">Hongda OS</p>
             <p className="text-[10px] text-gray-500">宏达印业数字化业务系统</p>
           </div>
         </Link>
+        <button
+          type="button"
+          ref={closeButtonRef}
+          aria-label="关闭主导航"
+          onClick={closeMobileNav}
+          className="ml-auto flex h-9 w-9 items-center justify-center rounded-md text-gray-500 md:hidden"
+        >
+          <svg aria-hidden="true" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
       </div>
 
       {/* Portal Groups */}
       <nav className="flex-1 overflow-y-auto py-1">
         {/* Home link */}
         <Link href="/workspace-home"
+          onClick={closeMobileNav}
           className={cn('flex items-center gap-2 px-4 py-2 text-sm transition-colors no-underline mx-2 rounded-lg',
             isHome ? 'bg-blue-50 text-blue-700 font-medium' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50')}>
           <span className="text-base">🏠</span>
@@ -119,6 +256,7 @@ export default function Sidebar() {
                     }
                     return (
                       <Link key={item.path} href={item.path}
+                        onClick={closeMobileNav}
                         className={cn(
                           'flex items-center gap-2 px-4 py-1.5 text-xs transition-colors no-underline border-l-2 ml-4',
                           isActive
@@ -140,7 +278,7 @@ export default function Sidebar() {
       <div className="px-4 py-2 border-t border-gray-200 text-[10px] text-gray-400 flex items-center justify-between">
         <span>宏达印业</span>
         <div className="flex items-center gap-2">
-          <Link href="/workspace-home" className="hover:text-blue-600 no-underline text-gray-400">首页</Link>
+          <Link href="/workspace-home" onClick={closeMobileNav} className="hover:text-blue-600 no-underline text-gray-400">首页</Link>
           <button
             type="button"
             onClick={async () => {
@@ -155,6 +293,8 @@ export default function Sidebar() {
           </button>
         </div>
       </div>
-    </aside>
+        </aside>
+      )}
+    </>
   );
 }
