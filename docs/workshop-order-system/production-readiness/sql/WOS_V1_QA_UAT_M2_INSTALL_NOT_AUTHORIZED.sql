@@ -87,7 +87,7 @@ CREATE INDEX IF NOT EXISTS wos_v1_qa_uat_write_gates_lookup_idx
 CREATE TABLE IF NOT EXISTS wos_v1_qa_uat.closeout_controls (
   execution_id uuid PRIMARY KEY,
   authorization_id text NOT NULL UNIQUE CHECK (
-    authorization_id='WOS-V1-PRODUCTION-M2-QA-UAT-001'
+    authorization_id='WOS-V1-PRODUCTION-M2-QA-UAT-002'
   ),
   project_ref text NOT NULL CHECK (project_ref='xulmpqaknlwqqculbsek'),
   code_sha256 text NOT NULL CHECK (code_sha256 ~ '^[a-f0-9]{64}$'),
@@ -336,9 +336,22 @@ BEGIN
     WHERE receipt.execution_id=v_control.execution_id
       AND receipt.authorization_id=p_authorization_id
       AND receipt.project_ref='xulmpqaknlwqqculbsek'
+      AND receipt.code_sha256=v_control.code_sha256
+      AND receipt.arm_token=v_control.arm_token
+      AND receipt.write_deadline_at=v_control.write_deadline_at
       AND receipt.state='ARMED'
-      AND receipt.arm_token IS NOT NULL
-      AND receipt.closer_kind IN ('DB','EDGE')
+      AND (
+        (
+          receipt.closer_kind='DB'
+          AND receipt.executor_kind='PG_CRON'
+          AND receipt.cleanup_deadline_at=v_control.db_cleanup_deadline_at
+        )
+        OR (
+          receipt.closer_kind='EDGE'
+          AND receipt.executor_kind='LAUNCHD'
+          AND receipt.cleanup_deadline_at=v_control.edge_cleanup_deadline_at
+        )
+      )
   )<>2 THEN
     RAISE EXCEPTION 'QA_UAT_CLOSERS_NOT_ARMED' USING ERRCODE='42501';
   END IF;
@@ -363,7 +376,7 @@ DECLARE
   v_control wos_v1_qa_uat.closeout_controls%ROWTYPE;
   v_now timestamptz:=clock_timestamp();
 BEGIN
-  IF p_authorization_id<>'WOS-V1-PRODUCTION-M2-QA-UAT-001'
+  IF p_authorization_id<>'WOS-V1-PRODUCTION-M2-QA-UAT-002'
     OR p_project_ref<>'xulmpqaknlwqqculbsek'
   THEN
     RAISE EXCEPTION 'QA_UAT_CLOSER_SCOPE_MISMATCH';
@@ -970,7 +983,7 @@ AS $edge_allowed$
 DECLARE
   v_control wos_v1_qa_uat.closeout_controls%ROWTYPE;
 BEGIN
-  IF p_authorization_id<>'WOS-V1-PRODUCTION-M2-QA-UAT-001'
+  IF p_authorization_id<>'WOS-V1-PRODUCTION-M2-QA-UAT-002'
     OR p_project_ref<>'xulmpqaknlwqqculbsek'
   THEN
     RAISE EXCEPTION 'QA_UAT_EDGE_SCOPE_MISMATCH' USING ERRCODE='42501';
@@ -1052,9 +1065,22 @@ BEGIN
     WHERE receipt.execution_id=v_control.execution_id
       AND receipt.authorization_id=p_authorization_id
       AND receipt.project_ref=p_project_ref
+      AND receipt.code_sha256=v_control.code_sha256
+      AND receipt.arm_token=v_control.arm_token
+      AND receipt.write_deadline_at=v_control.write_deadline_at
       AND receipt.state='ARMED'
-      AND receipt.executor_kind IN ('PG_CRON','LAUNCHD')
-      AND receipt.closer_kind IN ('DB','EDGE')
+      AND (
+        (
+          receipt.closer_kind='DB'
+          AND receipt.executor_kind='PG_CRON'
+          AND receipt.cleanup_deadline_at=v_control.db_cleanup_deadline_at
+        )
+        OR (
+          receipt.closer_kind='EDGE'
+          AND receipt.executor_kind='LAUNCHD'
+          AND receipt.cleanup_deadline_at=v_control.edge_cleanup_deadline_at
+        )
+      )
   )<>2 THEN
     RAISE EXCEPTION 'QA_UAT_EDGE_CLOSERS_NOT_ARMED' USING ERRCODE='42501';
   END IF;
@@ -1080,7 +1106,7 @@ DECLARE
   v_control wos_v1_qa_uat.closeout_controls%ROWTYPE;
   v_status text;
 BEGIN
-  IF p_authorization_id<>'WOS-V1-PRODUCTION-M2-QA-UAT-001'
+  IF p_authorization_id<>'WOS-V1-PRODUCTION-M2-QA-UAT-002'
     OR p_project_ref<>'xulmpqaknlwqqculbsek'
   THEN
     RAISE EXCEPTION 'QA_UAT_EDGE_SCOPE_MISMATCH' USING ERRCODE='42501';
@@ -1097,8 +1123,24 @@ BEGIN
     SELECT count(*)
     FROM wos_v1_qa_uat.closer_arm_receipts receipt
     WHERE receipt.execution_id=v_control.execution_id
+      AND receipt.authorization_id=v_control.authorization_id
+      AND receipt.project_ref=v_control.project_ref
+      AND receipt.code_sha256=v_control.code_sha256
+      AND receipt.arm_token=v_control.arm_token
+      AND receipt.write_deadline_at=v_control.write_deadline_at
       AND receipt.state='ARMED'
-      AND receipt.closer_kind IN ('DB','EDGE')
+      AND (
+        (
+          receipt.closer_kind='DB'
+          AND receipt.executor_kind='PG_CRON'
+          AND receipt.cleanup_deadline_at=v_control.db_cleanup_deadline_at
+        )
+        OR (
+          receipt.closer_kind='EDGE'
+          AND receipt.executor_kind='LAUNCHD'
+          AND receipt.cleanup_deadline_at=v_control.edge_cleanup_deadline_at
+        )
+      )
   )<>2 THEN
     v_status:='NOT_ARMED';
   ELSIF v_control.db_last_heartbeat_at IS NULL
@@ -1203,33 +1245,101 @@ BEGIN
       'status','DENIED','executionId',p_execution_id
     );
   END IF;
-  IF v_control.edge_state='CLOSED' THEN
-    SELECT * INTO STRICT v_receipt
-    FROM wos_v1_qa_uat.closer_close_receipts receipt
-    WHERE receipt.execution_id=p_execution_id
-      AND receipt.closer_kind='EDGE';
+  IF v_control.db_state='CLOSED' OR v_control.edge_state='CLOSED' THEN
+    IF v_control.edge_state='CLOSED' THEN
+      SELECT * INTO STRICT v_receipt
+      FROM wos_v1_qa_uat.closer_close_receipts receipt
+      WHERE receipt.execution_id=p_execution_id
+        AND receipt.closer_kind='EDGE';
+    END IF;
     RETURN jsonb_build_object(
       'status','CLOSED',
       'executionId',p_execution_id,
-      'closedAt',v_receipt.closed_at,
-      'timely',v_receipt.timely
+      'edgeProcessNonce',v_control.edge_process_nonce,
+      'closedAt',CASE
+        WHEN v_control.edge_state='CLOSED' THEN v_receipt.closed_at
+        ELSE NULL
+      END,
+      'timely',CASE
+        WHEN v_control.edge_state='CLOSED' THEN v_receipt.timely
+        ELSE NULL
+      END
+    );
+  END IF;
+  IF v_control.db_state<>'ARMED' OR v_control.edge_state<>'ARMED' THEN
+    RETURN jsonb_build_object(
+      'status','NOT_ARMED',
+      'executionId',p_execution_id,
+      'edgeProcessNonce',v_control.edge_process_nonce,
+      'dbState',v_control.db_state,
+      'edgeState',v_control.edge_state
     );
   END IF;
   IF clock_timestamp()>=v_control.write_deadline_at THEN
     RETURN jsonb_build_object(
       'status','EXPIRED',
       'executionId',p_execution_id,
+      'edgeProcessNonce',v_control.edge_process_nonce,
       'writeDeadlineAt',v_control.write_deadline_at
+    );
+  END IF;
+  IF (
+    SELECT count(*)
+    FROM wos_v1_qa_uat.closer_arm_receipts receipt
+    WHERE receipt.execution_id=p_execution_id
+      AND receipt.authorization_id=v_control.authorization_id
+      AND receipt.project_ref=v_control.project_ref
+      AND receipt.code_sha256=v_control.code_sha256
+      AND receipt.arm_token=v_control.arm_token
+      AND receipt.write_deadline_at=v_control.write_deadline_at
+      AND receipt.state='ARMED'
+      AND (
+        (
+          receipt.closer_kind='DB'
+          AND receipt.executor_kind='PG_CRON'
+          AND receipt.cleanup_deadline_at=v_control.db_cleanup_deadline_at
+        )
+        OR (
+          receipt.closer_kind='EDGE'
+          AND receipt.executor_kind='LAUNCHD'
+          AND receipt.cleanup_deadline_at=v_control.edge_cleanup_deadline_at
+        )
+      )
+  )<>2 THEN
+    RETURN jsonb_build_object(
+      'status','NOT_ARMED',
+      'executionId',p_execution_id,
+      'edgeProcessNonce',v_control.edge_process_nonce,
+      'writeDeadlineAt',v_control.write_deadline_at
+    );
+  END IF;
+  IF v_control.db_last_heartbeat_at IS NULL
+    OR v_control.db_last_heartbeat_at<clock_timestamp()-interval '30 seconds'
+    OR v_control.edge_last_heartbeat_at IS NULL
+    OR v_control.edge_last_heartbeat_at<clock_timestamp()-interval '30 seconds'
+  THEN
+    RETURN jsonb_build_object(
+      'status','STALE',
+      'executionId',p_execution_id,
+      'edgeProcessNonce',v_control.edge_process_nonce,
+      'writeDeadlineAt',v_control.write_deadline_at,
+      'dbLastHeartbeatAt',v_control.db_last_heartbeat_at,
+      'edgeLastHeartbeatAt',v_control.edge_last_heartbeat_at
     );
   END IF;
   RETURN jsonb_build_object(
     'status','OPEN',
     'executionId',p_execution_id,
-    'writeDeadlineAt',v_control.write_deadline_at
+    'edgeProcessNonce',v_control.edge_process_nonce,
+    'writeDeadlineAt',v_control.write_deadline_at,
+    'dbLastHeartbeatAt',v_control.db_last_heartbeat_at,
+    'edgeLastHeartbeatAt',v_control.edge_last_heartbeat_at
   );
 EXCEPTION WHEN NO_DATA_FOUND OR TOO_MANY_ROWS THEN
   RETURN jsonb_build_object(
-    'status','NOT_ARMED','executionId',p_execution_id
+    'status','NOT_ARMED',
+    'executionId',p_execution_id,
+    'edgeProcessNonce',NULL
   );
 END;
 $edge_probe$;
@@ -1254,7 +1364,7 @@ BEGIN
   WHERE profile.user_id=p_actor_user_id
     AND profile.is_active=true;
   RETURN public.wos_v1_qa_uat_edge_write_allowed(
-    'WOS-V1-PRODUCTION-M2-QA-UAT-001',
+    'WOS-V1-PRODUCTION-M2-QA-UAT-002',
     'xulmpqaknlwqqculbsek',
     p_execution_id,
     p_process_nonce,
@@ -1382,7 +1492,7 @@ DECLARE
   v_actor public.profiles%ROWTYPE;
   v_order public.wos_production_orders%ROWTYPE;
 BEGIN
-  IF btrim(p_authorization_id)<>'WOS-V1-PRODUCTION-M2-QA-UAT-001' THEN
+  IF btrim(p_authorization_id)<>'WOS-V1-PRODUCTION-M2-QA-UAT-002' THEN
     RAISE EXCEPTION 'QA_UAT_AUTHORIZATION_ID_MISMATCH' USING ERRCODE='42501';
   END IF;
   PERFORM wos_v1_qa_uat.assert_write_open(
@@ -1452,7 +1562,7 @@ DECLARE
   v_actor public.profiles%ROWTYPE;
   v_order public.wos_production_orders%ROWTYPE;
 BEGIN
-  IF btrim(p_authorization_id)<>'WOS-V1-PRODUCTION-M2-QA-UAT-001' THEN
+  IF btrim(p_authorization_id)<>'WOS-V1-PRODUCTION-M2-QA-UAT-002' THEN
     RAISE EXCEPTION 'QA_UAT_AUTHORIZATION_ID_MISMATCH' USING ERRCODE='42501';
   END IF;
   PERFORM wos_v1_qa_uat.assert_write_open(

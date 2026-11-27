@@ -1,3 +1,4 @@
+/// <reference lib="deno.ns" />
 import { createClient } from 'npm:@supabase/supabase-js@2.58.0';
 import { pngValid } from '../_shared/wos-png-integrity.ts';
 import {
@@ -6,14 +7,16 @@ import {
   canonicalWosV1ImagePath,
   deterministicProofRequestId,
   evaluateWosV1ImageAccess,
+  evaluateWosV1QaCloserProbeAuth,
+  evaluateWosV1QaCloserProbeGate,
   isWosV1ProofResult,
   objectSnapshotStable,
-  matchesLegacyQaCloserJwt,
   selectWosV1AdminApiKey,
   parseAllowedSupabaseRefs,
   parseAllowedOrigins,
   parseWosV1ImageVerificationBody,
   snapshotMatchesUpload,
+  wosV1EdgeWritesEnabled,
   type WosV1ImageOrder,
   type WosV1ImageProfile,
   type WosV1ObjectSnapshot,
@@ -23,7 +26,7 @@ const MAX_REQUEST_BYTES = 4096;
 const BODY_READ_TIMEOUT_MS = 5000;
 const MAX_EXECUTION_MS = 20000;
 const QA_UAT_PROJECT_REF = 'xulmpqaknlwqqculbsek';
-const QA_UAT_AUTHORIZATION_ID = 'WOS-V1-PRODUCTION-M2-QA-UAT-001';
+const QA_UAT_AUTHORIZATION_ID = 'WOS-V1-PRODUCTION-M2-QA-UAT-002';
 const baseHeaders = {
   'Cache-Control': 'no-store, private',
   'Content-Type': 'application/json; charset=utf-8',
@@ -73,7 +76,7 @@ function secretKey(): string {
 }
 
 async function withTimeout<T>(promise: Promise<T>): Promise<T> {
-  let timer: number | undefined;
+  let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     return await Promise.race([
       promise,
@@ -93,7 +96,7 @@ async function readWithDeadline(
   reader: ReadableStreamDefaultReader<Uint8Array>,
   remainingMs: number,
 ): Promise<ReadableStreamReadResult<Uint8Array>> {
-  let timer: number | undefined;
+  let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     return await Promise.race([
       reader.read(),
@@ -144,7 +147,15 @@ async function readBoundedText(
   }
 }
 
-Deno.serve(async request => {
+export type WosV1VerifyImageHandlerOptions = {
+  createAdminClient?: typeof createClient;
+};
+
+export async function handleWosV1VerifyImageRequest(
+  request: Request,
+  options: WosV1VerifyImageHandlerOptions = {},
+): Promise<Response> {
+  const adminClientFactory = options.createAdminClient ?? createClient;
   const origin = request.headers.get('origin');
   const allowedOrigins = parseAllowedOrigins(
     Deno.env.get('WOS_V1_EDGE_ALLOWED_ORIGINS'),
@@ -196,14 +207,24 @@ Deno.serve(async request => {
   }
   if (qaUatRuntime
     && request.headers.get('x-wos-qa-closer-probe') === '1') {
-    if (!service || !matchesLegacyQaCloserJwt(
-      request.headers.get('authorization'),
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY'),
-    )) {
-      return output(request, 'WOS_V1_EDGE_SERVER_CONFIG_INCOMPLETE', 503);
+    const authDecision = evaluateWosV1QaCloserProbeAuth({
+      authorizationId: qaAuthorizationId,
+      executionId: qaExecutionId,
+      processNonce: qaCloserNonce,
+      authorization: request.headers.get('authorization'),
+      adminKey: service,
+      legacyServiceRoleJwt: Deno.env.get('SUPABASE_SERVICE_ROLE_KEY'),
+    });
+    if (!authDecision.allowed) {
+      return output(
+        request,
+        authDecision.code,
+        authDecision.status,
+        authDecision.data ?? null,
+      );
     }
     try {
-      const admin = createClient(runtimeUrl!, service, {
+      const admin = adminClientFactory(runtimeUrl!, service, {
         auth: { autoRefreshToken: false, persistSession: false },
       });
       const control = await admin.rpc('wos_v1_qa_uat_edge_probe', {
@@ -215,29 +236,31 @@ Deno.serve(async request => {
         && !Array.isArray(control.data)
         ? control.data as Record<string, unknown>
         : null;
-      const status = String(controlData?.status || '');
-      if (control.error) {
-        return output(request, 'WOS_V1_QA_EDGE_GATE_UNAVAILABLE', 503);
-      }
-      if (String(controlData?.executionId || '') !== qaExecutionId) {
-        return output(request, 'WOS_V1_QA_EDGE_PROBE_SCOPE_DENIED', 503);
-      }
-      if (status !== 'OPEN') {
-        return output(request, 'WOS_V1_QA_EDGE_CLOSED', 503, {
-          gateStatus: status,
-          executionId: qaExecutionId,
-          closedAt: controlData?.closedAt ?? null,
-        });
+      const gateDecision = evaluateWosV1QaCloserProbeGate({
+        error: Boolean(control.error),
+        executionId: qaExecutionId || '',
+        processNonce: qaCloserNonce || '',
+        control: controlData,
+      });
+      if (!gateDecision.allowed) {
+        return output(
+          request,
+          gateDecision.code,
+          gateDecision.status,
+          gateDecision.data ?? null,
+        );
       }
       return output(request, 'WOS_V1_QA_EDGE_OPEN_PROBE', 200, {
-        gateStatus: status,
+        gateStatus: 'OPEN',
         executionId: qaExecutionId,
       });
     } catch {
       return output(request, 'WOS_V1_QA_EDGE_GATE_UNAVAILABLE', 503);
     }
   }
-  if (Deno.env.get('WOS_V1_EDGE_WRITES_ENABLED') !== 'true') {
+  if (!wosV1EdgeWritesEnabled(
+    Deno.env.get('WOS_V1_EDGE_WRITES_ENABLED'),
+  )) {
     return output(request, 'WOS_V1_EDGE_WRITES_DISABLED', 503);
   }
   if (!request.headers.get('content-type')?.startsWith('application/json')) {
@@ -429,4 +452,8 @@ Deno.serve(async request => {
     }
     return output(request, 'WOS_V1_IMAGE_VERIFY_UNAVAILABLE', 503);
   }
-});
+}
+
+if (import.meta.main) {
+  Deno.serve(request => handleWosV1VerifyImageRequest(request));
+}

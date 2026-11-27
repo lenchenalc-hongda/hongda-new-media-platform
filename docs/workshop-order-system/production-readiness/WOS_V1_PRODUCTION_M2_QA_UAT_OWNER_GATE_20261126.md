@@ -1,7 +1,11 @@
 # WOS V1 Production M2 QA UAT Owner Gate
 
 Status:
-`PREPARED_REMOTE_CLOSER_ARM_NOT_AUTHORIZED`
+`CONSUMED_HISTORICAL_EVIDENCE / DO_NOT_EXECUTE`
+
+This `...-001` execution record is consumed. The active replacement is
+`WOS_V1_PRODUCTION_M2_QA_CLOSER_REHEARSAL_OWNER_GATE_20261127.md` with
+technical authorization ID `WOS-V1-PRODUCTION-M2-QA-UAT-002`.
 
 Authorization ID:
 `WOS-V1-PRODUCTION-M2-QA-UAT-001`

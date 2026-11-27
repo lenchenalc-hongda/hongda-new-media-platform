@@ -5,10 +5,15 @@ Status:
 
 This document defines the final two-closer design for:
 
-`WOS-V1-PRODUCTION-M2-QA-UAT-001`
+`WOS-V1-PRODUCTION-M2-QA-UAT-002`
 
 It does not authorize any remote SQL, Cron job, Edge deployment, environment
 change, Gate opening, order creation or Production operation.
+
+The prior `WOS-V1-PRODUCTION-M2-QA-UAT-001` replay authorization is consumed
+and remains historical evidence only. The active source is bound to `002`;
+reuse of the old positive control row is rejected by the immutable control
+identity and closed-state guards.
 
 ## Security Model
 
@@ -146,6 +151,25 @@ The QA branch never calls a Proof renewal RPC. It records only a new Proof
 through the transactionally guarded QA wrapper; an existing expired Proof is
 rejected. Production behavior is unchanged.
 
+The Edge handler separates two credentials:
+
+1. Admin RPC calls prefer `SUPABASE_SECRET_KEYS.default` and use the legacy
+   `SUPABASE_SERVICE_ROLE_KEY` only when no new Secret Key is configured.
+2. The closer probe must present the exact configured legacy service-role JWT.
+   An `sb_secret_*` Admin key is never accepted in the Authorization header.
+3. The exact JWT comparison remains the trust anchor. The handler additionally
+   decodes the already matched JWT and requires `role=service_role` and the
+   fixed QA project `ref`. This is defense in depth, not a replacement for
+   Supabase platform `verify_jwt=true`.
+
+The local HTTP harness imports the actual exported Edge handler and uses the
+real `@supabase/supabase-js` client against a local mock PostgREST endpoint.
+It asserts that the Admin RPC request uses `SUPABASE_SECRET_KEYS.default` when
+both key formats exist, while a closer request with only the legacy JWT still
+passes. It also covers wrong JWTs, an ordinary-user JWT, a new Secret Key used
+as a JWT, missing credentials, project/authorization/execution/nonce
+mismatches, unavailable or missing DB state, expiration and closed writes.
+
 The LaunchAgent uses the Supabase service-role REST endpoint rather than
 `psql`, so it does not depend on an inherited shell PATH or a local PostgreSQL
 client. The service-role credential must be a JWT with role `service_role` and
@@ -168,18 +192,27 @@ The runner supports `arm`, `watch`, `status`, `close`, `revoke` and `disarm`.
 `arm --load` is mandatory for a real ARM receipt; a dry-run cannot create a
 fake Edge receipt.
 
+The SQL probe returns `OPEN` only when both states are `ARMED`, both matching
+DB/Edge ARM receipts exist, both heartbeats are no older than 30 seconds and
+the server deadline has not passed. It returns `NOT_ARMED`, `STALE`, `EXPIRED`
+or `CLOSED` without allowing writes. Every non-denied status includes the
+server-side `edgeProcessNonce`; an `OPEN` response with a missing or mismatched
+nonce is denied by the Edge handler.
+
 If the Mac is off or offline, the server clock still rejects every Edge write
 at `write_deadline_at`. The LaunchAgent improves cleanup timing but is not the
 security boundary.
 
-The current Hosted QA `wos-v1-verify-image` is version 34, bundle
+The current Hosted QA `wos-v1-verify-image` is version 36, bundle
 `21fd1a8d31508662c6c0790e9304b793e864ffb321de5b77bcc8145e91f18450`.
-Its downloaded source is preserved under
+Version 36 contains the restored source bytes previously preserved from v34
+under
 `docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_EDGE_V34_SOURCE_20261127`.
-Version 34 does not contain the closer probe branch. The closer-only rehearsal
-therefore requires a separately authorized deployment of the reviewed source;
-the current v34 closure and runtime configuration remain the recovery target.
-No remote Edge deployment is performed by this source-preparation round.
+The current v36 closure does not contain the closer probe branch. The
+closer-only rehearsal therefore requires a separately authorized deployment of
+the reviewed source; the v36 closure and runtime configuration remain the
+recovery target. No remote Edge deployment is performed by this
+source-preparation round.
 
 ## ARM Protocol
 
@@ -230,7 +263,7 @@ Keychain value.
 DB_CLOSER_SOURCE=READY
 EDGE_CLOSER_SOURCE=READY
 DB_CLOSER_FAIL_CLOSED=PG17_PASS
-EDGE_CLOSER_FAIL_CLOSED=PG17_AND_SOURCE_PASS
+EDGE_CLOSER_FAIL_CLOSED=PG17_AND_REAL_SUPABASE_CLIENT_HTTP_PASS
 DB_CLOSE_WITHIN_540S=LOCAL_HARNESS_PASS
 EDGE_CLOSE_WITHIN_840S=LOCAL_HARNESS_PASS
 MAIN_PROCESS_KILL_TEST=LOCAL_LIVE_DB_SESSION_TERMINATION_PASS

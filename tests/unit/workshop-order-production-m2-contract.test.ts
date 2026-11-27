@@ -441,7 +441,7 @@ assert(uatRunner.includes(
   '9164ac91-a50c-4023-836c-5c0887b619fb',
 ));
 assert(
-  /SELECT public\.wos_v1_qa_uat_open_gate\(\s*'WOS-V1-PRODUCTION-M2-QA-UAT-001'[\s\S]*?'\$UAT_MANAGER_PROFILE'[\s\S]*?ARRAY\['START_RELEASE'\]/
+  /SELECT public\.wos_v1_qa_uat_open_gate\(\s*'WOS-V1-PRODUCTION-M2-QA-UAT-002'[\s\S]*?'\$UAT_MANAGER_PROFILE'[\s\S]*?ARRAY\['START_RELEASE'\]/
     .test(uatRunner),
 );
 for (const stale of [
@@ -461,7 +461,7 @@ assert.equal(uat.environment.WOS_V1_QA_UAT_M2_ENABLED, 'true');
 assert.equal(uat.environment.WOS_V1_QA_UAT_M2_WRITES_ENABLED, 'true');
 assert.equal(
   uat.environment.WOS_V1_QA_UAT_AUTHORIZATION_ID,
-  'WOS-V1-PRODUCTION-M2-QA-UAT-001',
+  'WOS-V1-PRODUCTION-M2-QA-UAT-002',
 );
 for (const version of ['v1', 'v2']) {
   const images = uat.images[version];

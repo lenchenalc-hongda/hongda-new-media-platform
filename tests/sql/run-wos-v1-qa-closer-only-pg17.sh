@@ -198,6 +198,77 @@ DB_ARM="$(
 ")" = 't' ]] || fail 'CLOSER_ONLY_DB_ARM_RECEIPT_INVALID'
 echo 'WOS_V1_QA_CLOSER_ONLY_DB_ARM=PASS'
 
+psql_db "$DB" -qAt -c "
+  SELECT wos_v1_qa_closer.record_edge_heartbeat(
+    '$EXECUTION_ID'::uuid,
+    '$ARM_TOKEN'::uuid,
+    '$EDGE_NONCE'::uuid
+  )::text;
+" >/dev/null
+PROBE_OPEN="$(psql_db "$DB" -qAt -c "
+  SELECT public.wos_v1_qa_uat_edge_probe(
+    '$EXECUTION_ID'::uuid,
+    '$EDGE_NONCE'::uuid
+  )::text;
+")"
+[[ "$(printf '%s' "$PROBE_OPEN" | jq -r '.status')" = 'OPEN' ]] \
+  || fail 'CLOSER_ONLY_PROBE_OPEN_INVALID'
+[[ "$(printf '%s' "$PROBE_OPEN" | jq -r '.edgeProcessNonce')" = "$EDGE_NONCE" ]] \
+  || fail 'CLOSER_ONLY_PROBE_OPEN_NONCE_MISMATCH'
+psql_db "$DB" -q -c "
+  UPDATE wos_v1_qa_closer.controls
+  SET db_last_heartbeat_at=clock_timestamp()-interval '31 seconds'
+  WHERE execution_id='$EXECUTION_ID'::uuid;
+" >/dev/null
+PROBE_STALE="$(psql_db "$DB" -qAt -c "
+  SELECT public.wos_v1_qa_uat_edge_probe(
+    '$EXECUTION_ID'::uuid,
+    '$EDGE_NONCE'::uuid
+  )::text;
+")"
+[[ "$(printf '%s' "$PROBE_STALE" | jq -r '.status')" = 'STALE' ]] \
+  || fail 'CLOSER_ONLY_PROBE_STALE_INVALID'
+[[ "$(printf '%s' "$PROBE_STALE" | jq -r '.edgeProcessNonce')" = "$EDGE_NONCE" ]] \
+  || fail 'CLOSER_ONLY_PROBE_STALE_NONCE_MISMATCH'
+psql_db "$DB" -q -c "
+  UPDATE wos_v1_qa_closer.controls
+  SET db_last_heartbeat_at=clock_timestamp(),
+      edge_last_heartbeat_at=clock_timestamp()
+  WHERE execution_id='$EXECUTION_ID'::uuid;
+" >/dev/null
+PROBE_NOT_ARMED="$(psql_db "$DB" -qAt -c "
+  BEGIN;
+  DELETE FROM wos_v1_qa_closer.arm_receipts
+  WHERE execution_id='$EXECUTION_ID'::uuid
+    AND closer_kind='EDGE';
+  SELECT public.wos_v1_qa_uat_edge_probe(
+    '$EXECUTION_ID'::uuid,
+    '$EDGE_NONCE'::uuid
+  )::text;
+  ROLLBACK;
+")"
+[[ "$(printf '%s' "$PROBE_NOT_ARMED" | jq -r '.status')" = 'NOT_ARMED' ]] \
+  || fail 'CLOSER_ONLY_PROBE_NOT_ARMED_INVALID'
+[[ "$(printf '%s' "$PROBE_NOT_ARMED" | jq -r '.edgeProcessNonce')" = "$EDGE_NONCE" ]] \
+  || fail 'CLOSER_ONLY_PROBE_NOT_ARMED_NONCE_MISMATCH'
+PROBE_RECEIPT_DRIFT="$(psql_db "$DB" -qAt -c "
+  BEGIN;
+  UPDATE wos_v1_qa_closer.arm_receipts
+  SET cleanup_deadline_at=cleanup_deadline_at+interval '1 second'
+  WHERE execution_id='$EXECUTION_ID'::uuid
+    AND closer_kind='EDGE';
+  SELECT public.wos_v1_qa_uat_edge_probe(
+    '$EXECUTION_ID'::uuid,
+    '$EDGE_NONCE'::uuid
+  )::text;
+  ROLLBACK;
+")"
+[[ "$(printf '%s' "$PROBE_RECEIPT_DRIFT" | jq -r '.status')" = 'NOT_ARMED' ]] \
+  || fail 'CLOSER_ONLY_PROBE_RECEIPT_DRIFT_INVALID'
+echo 'WOS_V1_QA_CLOSER_ONLY_PROBE_OPEN_AND_STALE=PASS'
+echo 'WOS_V1_QA_CLOSER_ONLY_PROBE_NOT_ARMED=PASS'
+echo 'WOS_V1_QA_CLOSER_ONLY_PROBE_RECEIPT_DRIFT_DENIED=PASS'
+
 WOS_QA_UAT_CLOSER_EXECUTION_ID="$EXECUTION_ID" \
 WOS_QA_UAT_CLOSER_ARM_TOKEN="$ARM_TOKEN" \
 WOS_QA_UAT_EDGE_PROCESS_NONCE="$EDGE_NONCE" \
@@ -431,7 +502,7 @@ BEGIN
     edge_process_nonce,db_cron_job_id
   ) VALUES(
     '$TICK_EXECUTION_ID',
-    'WOS-V1-PRODUCTION-M2-QA-UAT-001',
+    'WOS-V1-PRODUCTION-M2-QA-UAT-002',
     'xulmpqaknlwqqculbsek',
     repeat('b',64),
     '$ARM_TOKEN',

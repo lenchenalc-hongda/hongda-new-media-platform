@@ -1,0 +1,31 @@
+{
+  "generatedAt": "2026-11-27T02:20:00Z",
+  "verificationSource": "READ_ONLY_REMOTE_QUERY_BEFORE_LOCAL_REMEDIATION",
+  "qaProject": "xulmpqaknlwqqculbsek",
+  "functionSlug": "wos-v1-verify-image",
+  "functionId": "2028f9e8-d3af-48a3-b5d6-73ad89af7910",
+  "hostedEdgeVersion": 36,
+  "hostedStatus": "ACTIVE",
+  "hostedBundleSha256": "21fd1a8d31508662c6c0790e9304b793e864ffb321de5b77bcc8145e91f18450",
+  "verifyJwt": true,
+  "importMap": false,
+  "remoteDeploymentTouchedThisRound": false,
+  "hostedSource": {
+    "indexSha256": "c439c387943830df597a00a9007699965c6834bc9381fc15684d7f5cd98dc795",
+    "coreSha256": "ac2e9ac30996cacf5aab63bd1ccc1a68f96e839e499ff6c5a84a78f54f16e922",
+    "sharedPngIntegritySha256": "fa2690fdb01030f478552aff19893520d94615dd6f52a2b13672448eaa62ecdf",
+    "preservedDirectory": "docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_EDGE_V34_SOURCE_20261127",
+    "closerProbeSupported": false
+  },
+  "runtimeContract": {
+    "WOS_SUPABASE_ALLOWED_REFS": "xulmpqaknlwqqculbsek",
+    "WOS_V1_EDGE_ALLOWED_ORIGINS": "https://hongda-wos-p00202-qa-preview-git-32498d-lens-projects-3fc386bd.vercel.app",
+    "WOS_V1_EDGE_WRITES_ENABLED": false,
+    "verify_jwt": true
+  },
+  "recovery": {
+    "baseline": "RESTORED_V34_SOURCE_BYTES_ACTIVE_AS_VERSION_36",
+    "requiredPreDeployCheck": "Re-download Hosted bytes and require bundle 21fd1a8d31508662c6c0790e9304b793e864ffb321de5b77bcc8145e91f18450, the source hashes above and verify_jwt=true.",
+    "requiredPostRecoveryCheck": "Deploy the preserved v34 source closure, verify WOS_V1_EDGE_WRITES_ENABLED=false, Hosted bytes and verify_jwt=true, and record the new server-assigned version number."
+  }
+}

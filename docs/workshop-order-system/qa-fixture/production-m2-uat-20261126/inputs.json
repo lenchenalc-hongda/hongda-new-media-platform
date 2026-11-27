@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "authorizationId": "WOS-V1-PRODUCTION-M2-QA-UAT-001",
-  "sourceParentHead": "9e76d5fdbdbb0884853df88de30d20948a7147f1",
+  "authorizationId": "WOS-V1-PRODUCTION-M2-QA-UAT-002",
+  "sourceParentHead": "61db9cc8fb386aea47a81bd768a0ae61b5d7b3ed",
   "pr": 283,
   "qaProject": "xulmpqaknlwqqculbsek",
   "qaOrganizationId": "0ff53d93-2b9e-48b9-8113-a4768c39cdd2",
@@ -141,11 +141,11 @@
     "NEXT_PUBLIC_WOS_V1_QA_PREVIEW": "true",
     "WOS_V1_QA_APP_ENABLED": "true",
     "WOS_V1_QA_APP_WRITES_ENABLED": "true",
-    "WOS_V1_QA_UAT_AUTHORIZATION_ID": "WOS-V1-PRODUCTION-M2-QA-UAT-001",
+    "WOS_V1_QA_UAT_AUTHORIZATION_ID": "WOS-V1-PRODUCTION-M2-QA-UAT-002",
     "WOS_V1_QA_UAT_M2_ENABLED": "true",
     "WOS_V1_QA_UAT_M2_WRITES_ENABLED": "true",
-    "NEXT_PUBLIC_WOS_V1_QA_UAT_EXECUTION_ID": "efddb60c-4a70-4b46-bf18-46629a4397d2",
-    "NEXT_PUBLIC_WOS_V1_QA_UAT_CLOSER_NONCE": "77ac7769-25a2-495a-8892-467d16abb00e"
+    "NEXT_PUBLIC_WOS_V1_QA_UAT_EXECUTION_ID": "f502bd0b-c132-4588-ae46-8ec2ae71bffd",
+    "NEXT_PUBLIC_WOS_V1_QA_UAT_CLOSER_NONCE": "6fbcd563-819c-4935-9643-c4ebbf42b0c7"
   },
   "edgeEnvironment": {
     "WOS_SUPABASE_ALLOWED_REFS": "xulmpqaknlwqqculbsek",

@@ -166,13 +166,141 @@ export function selectWosV1AdminApiKey(
   return legacyServiceRoleJwt || '';
 }
 
+export function wosV1EdgeWritesEnabled(value: string | undefined): boolean {
+  return value === 'true';
+}
+
+function decodeLegacyServiceRoleJwtPayload(
+  jwt: string,
+): Record<string, unknown> | null {
+  const parts = jwt.split('.');
+  if (parts.length !== 3) return null;
+  try {
+    const base64 = parts[1]
+      .replace(/-/g, '+')
+      .replace(/_/g, '/')
+      .padEnd(Math.ceil(parts[1].length / 4) * 4, '=');
+    const bytes = Uint8Array.from(
+      atob(base64),
+      character => character.charCodeAt(0),
+    );
+    const value = JSON.parse(new TextDecoder().decode(bytes));
+    return value && typeof value === 'object' && !Array.isArray(value)
+      ? value as Record<string, unknown>
+      : null;
+  } catch {
+    return null;
+  }
+}
+
 export function matchesLegacyQaCloserJwt(
   authorization: string | null,
   legacyServiceRoleJwt: string | undefined,
 ): boolean {
-  return typeof legacyServiceRoleJwt === 'string'
-    && /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(legacyServiceRoleJwt)
-    && authorization === `Bearer ${legacyServiceRoleJwt}`;
+  if (typeof legacyServiceRoleJwt !== 'string'
+    || authorization !== (legacyServiceRoleJwt
+      ? `Bearer ${legacyServiceRoleJwt}`
+      : '')
+    || !/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(
+      legacyServiceRoleJwt,
+    )) {
+    return false;
+  }
+  // Exact configured-env equality is the trust anchor. The claims are an
+  // additional QA-project and role guard; platform verify_jwt remains required.
+  const claims = decodeLegacyServiceRoleJwtPayload(legacyServiceRoleJwt);
+  return claims?.role === 'service_role'
+    && claims?.ref === 'xulmpqaknlwqqculbsek';
+}
+
+export type WosV1QaCloserProbeAuthResult =
+  | { allowed: true }
+  | {
+      allowed: false;
+      code: string;
+      status: 503;
+      data?: Record<string, unknown>;
+    };
+
+export function evaluateWosV1QaCloserProbeAuth(input: {
+  authorizationId: string | null;
+  executionId: string | null;
+  processNonce: string | null;
+  authorization: string | null;
+  adminKey: string;
+  legacyServiceRoleJwt: string | undefined;
+}): WosV1QaCloserProbeAuthResult {
+  const uuidPattern =
+    /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
+  if (input.authorizationId !== 'WOS-V1-PRODUCTION-M2-QA-UAT-002'
+    || !uuidPattern.test(input.executionId || '')
+    || !uuidPattern.test(input.processNonce || '')) {
+    return {
+      allowed: false,
+      code: 'WOS_V1_QA_EDGE_AUTHORIZATION_REQUIRED',
+      status: 503,
+    };
+  }
+  if (!input.adminKey || !matchesLegacyQaCloserJwt(
+    input.authorization,
+    input.legacyServiceRoleJwt,
+  )) {
+    return {
+      allowed: false,
+      code: 'WOS_V1_EDGE_SERVER_CONFIG_INCOMPLETE',
+      status: 503,
+    };
+  }
+  return { allowed: true };
+}
+
+export function evaluateWosV1QaCloserProbeGate(input: {
+  error: boolean;
+  executionId: string;
+  processNonce: string;
+  control:
+    | {
+        status?: unknown;
+        executionId?: unknown;
+        edgeProcessNonce?: unknown;
+        closedAt?: unknown;
+      }
+    | null;
+}): WosV1QaCloserProbeAuthResult {
+  if (input.error) {
+    return {
+      allowed: false,
+      code: 'WOS_V1_QA_EDGE_GATE_UNAVAILABLE',
+      status: 503,
+    };
+  }
+  const status = String(input.control?.status || '');
+  const responseNonce = input.control?.edgeProcessNonce;
+  if (String(input.control?.executionId || '') !== input.executionId
+    || status === 'DENIED'
+    || (responseNonce != null
+      && String(responseNonce) !== input.processNonce)
+    || (status === 'OPEN'
+      && String(responseNonce || '') !== input.processNonce)) {
+    return {
+      allowed: false,
+      code: 'WOS_V1_QA_EDGE_PROBE_SCOPE_DENIED',
+      status: 503,
+    };
+  }
+  if (status !== 'OPEN') {
+    return {
+      allowed: false,
+      code: 'WOS_V1_QA_EDGE_CLOSED',
+      status: 503,
+      data: {
+        gateStatus: status,
+        executionId: input.executionId,
+        closedAt: input.control?.closedAt ?? null,
+      },
+    };
+  }
+  return { allowed: true };
 }
 
 export function parseAllowedSupabaseRefs(value: string | undefined): readonly string[] {

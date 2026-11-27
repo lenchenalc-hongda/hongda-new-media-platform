@@ -91,7 +91,23 @@ assert.equal(approvedSupabaseRuntimeUrl(
 ), false);
 
 // Regression: sb_secret_* Admin RPC access and legacy closer JWT are separate.
-const legacyCloserJwt = 'header.payload.signature';
+const syntheticJwt = (payload: Record<string, unknown>) => {
+  const encode = (value: Record<string, unknown>) =>
+    Buffer.from(JSON.stringify(value)).toString('base64url');
+  return `${encode({ alg: 'HS256', typ: 'JWT' })}.${encode(payload)}.synthetic`;
+};
+const legacyCloserJwt = syntheticJwt({
+  role: 'service_role',
+  ref: 'xulmpqaknlwqqculbsek',
+});
+const ordinaryUserJwt = syntheticJwt({
+  role: 'authenticated',
+  ref: 'xulmpqaknlwqqculbsek',
+});
+const wrongProjectServiceJwt = syntheticJwt({
+  role: 'service_role',
+  ref: 'wrongprojectrefvalue',
+});
 const newAdminKey = 'sb_secret_test_only_admin';
 assert.equal(selectWosV1AdminApiKey(
   JSON.stringify({ default: newAdminKey }), legacyCloserJwt,
@@ -114,6 +130,12 @@ assert.equal(matchesLegacyQaCloserJwt(
 assert.equal(matchesLegacyQaCloserJwt(
   `Bearer ${legacyCloserJwt}`, undefined,
 ), false, 'missing legacy key must fail closed');
+assert.equal(matchesLegacyQaCloserJwt(
+  `Bearer ${ordinaryUserJwt}`, ordinaryUserJwt,
+), false, 'ordinary user claims cannot become service_role');
+assert.equal(matchesLegacyQaCloserJwt(
+  `Bearer ${wrongProjectServiceJwt}`, wrongProjectServiceJwt,
+), false, 'service-role JWT must be bound to the QA project');
 
 const profile = {
   id: profileId,
@@ -276,6 +298,10 @@ const edgeIndex = readFileSync(
   'supabase/functions/wos-v1-verify-image/index.ts',
   'utf8',
 );
+const edgeCore = readFileSync(
+  'supabase/functions/wos-v1-verify-image/core.ts',
+  'utf8',
+);
 assert(candidate.includes('TRUSTED_BINARY_PROOF_REQUIRED'));
 assert(candidate.includes('FROM PUBLIC,anon,authenticated,service_role'));
 assert(candidate.includes("proof.expires_at>clock_timestamp()"));
@@ -298,10 +324,12 @@ assert(edgeIndex.includes('wos_v1_qa_uat_edge_write_allowed'));
 assert(edgeIndex.includes('wos_v1_qa_uat_edge_probe'));
 assert(!edgeIndex.includes('wos_v1_qa_uat_edge_renew_proof'));
 assert(edgeIndex.includes('wos_v1_qa_uat_edge_record_proof'));
-assert(edgeIndex.includes('WOS_V1_QA_EDGE_CLOSED'));
-assert(edgeIndex.includes('matchesLegacyQaCloserJwt('));
+assert(edgeCore.includes('WOS_V1_QA_EDGE_CLOSED'));
+assert(edgeCore.includes('matchesLegacyQaCloserJwt('));
 assert(!edgeIndex.includes("request.headers.get('authorization') !== `Bearer ${service}`"));
-assert(edgeIndex.includes('WOS_V1_QA_EDGE_GATE_UNAVAILABLE'));
+assert(edgeCore.includes('WOS_V1_QA_EDGE_GATE_UNAVAILABLE'));
+assert(edgeIndex.includes('evaluateWosV1QaCloserProbeAuth('));
+assert(edgeIndex.includes('evaluateWosV1QaCloserProbeGate('));
 
 console.log('workshop-order-production-edge-core.test.ts: PASS');
 console.log('WOS_V1_EDGE_FOUR_CATEGORY_ACCESS=PASS');
