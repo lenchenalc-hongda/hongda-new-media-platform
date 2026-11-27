@@ -5,7 +5,7 @@ Status: `NO_FINDINGS`
 ## Scope
 
 The review covered the QA-only application RPC activation and deactivation
-package used by `WOS-V1-PRODUCTION-M2-QA-UAT-004`:
+package used by `WOS-V1-PRODUCTION-M2-QA-UAT-005`:
 
 - `WOS_V1_QA_UAT_APP_ACTIVATE_NOT_AUTHORIZED.sql`
 - `WOS_V1_QA_UAT_APP_DEACTIVATE_NOT_AUTHORIZED.sql`
@@ -18,9 +18,9 @@ package used by `WOS-V1-PRODUCTION-M2-QA-UAT-004`:
    reports a deadline or Cron cleanup failure, then continues the retaining
    rollback before rethrowing the first failure.
 2. The activation runner is pinned to execution
-   `812aebd9-75d5-427a-9047-5c84a5d6fe42`; the alternative execution ID is
+   `791577cc-23bb-4b8d-93dd-e90b6630abe2`; the alternative execution ID is
    available only under an owned `_ci` Docker test scope.
-3. Activation requires the exact UAT-004 authorization, the fixed QA project,
+3. Activation requires the exact UAT-005 authorization, the fixed QA project,
    fresh DB and Edge heartbeats, and a write deadline at least four minutes
    ahead.
 4. Activation removes stale `PUBLIC` and `anon` EXECUTE grants, broad order

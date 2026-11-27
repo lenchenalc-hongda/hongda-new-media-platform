@@ -11,7 +11,7 @@ The PR #283 QA adapter uses:
 - `POST /api/workshop-orders/v1-qa/m2` only;
 - exact QA Preview plus `WOS_V1_QA_UAT_M2_ENABLED=true` and
   `WOS_V1_QA_UAT_M2_WRITES_ENABLED=true`;
-- `WOS_V1_QA_UAT_AUTHORIZATION_ID=WOS-V1-PRODUCTION-M2-QA-UAT-004`;
+- `WOS_V1_QA_UAT_AUTHORIZATION_ID=WOS-V1-PRODUCTION-M2-QA-UAT-005`;
 - a database wrapper permitting only the exact QA order, organization, active
   Profile, action list and unexpired gate row;
 - `public.wos_v1_m2_action` and

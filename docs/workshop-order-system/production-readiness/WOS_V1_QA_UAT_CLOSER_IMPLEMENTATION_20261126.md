@@ -5,14 +5,14 @@ Status:
 
 This document defines the final two-closer design for:
 
-`WOS-V1-PRODUCTION-M2-QA-UAT-004`
+`WOS-V1-PRODUCTION-M2-QA-UAT-005`
 
 It does not authorize any remote SQL, Cron job, Edge deployment, environment
 change, Gate opening, order creation or Production operation.
 
 The prior `...-001`, failed-Closed `...-002`, and completed closer-only
 `...-003` executions are consumed and remain historical evidence only. The
-active business source is bound to `004`; reuse of an old positive control row
+active business source is bound to `005`; reuse of an old positive control row
 is rejected by the immutable control identity, audit-preserving authorization
 pattern and closed-state guards.
 
