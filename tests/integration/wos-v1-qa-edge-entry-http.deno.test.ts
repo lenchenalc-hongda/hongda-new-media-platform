@@ -5,7 +5,7 @@ import {
   type WosV1VerifyImageHandlerOptions,
 } from '../../supabase/functions/wos-v1-verify-image/index.ts';
 
-const authId = 'WOS-V1-PRODUCTION-M2-QA-UAT-002';
+const authId = 'WOS-V1-PRODUCTION-M2-QA-UAT-003';
 const executionId = 'efddb60c-4a70-4b46-bf18-46629a4397d2';
 const processNonce = '77ac7769-25a2-495a-8892-467d16abb00e';
 const qaProjectRef = 'xulmpqaknlwqqculbsek';
@@ -43,6 +43,7 @@ const wrongProjectJwt = syntheticJwt({
 type Scenario = {
   secretKeysJson: string;
   legacyServiceRoleJwt: string;
+  dedicatedCloserJwt?: string;
   authorization: string | null;
   requestAuthId?: string;
   requestExecutionId?: string;
@@ -77,6 +78,16 @@ const cases: Record<string, Scenario> = {
   dual_key_closer_pass_admin_new_secret: {
     secretKeysJson: JSON.stringify({ default: newSecret }),
     legacyServiceRoleJwt: legacyJwt,
+    authorization: `Bearer ${legacyJwt}`,
+    control: openControl,
+    expectedStatus: 200,
+    expectedCode: 'WOS_V1_QA_EDGE_OPEN_PROBE',
+    expectedAdminKey: newSecret,
+  },
+  dedicated_closer_secret_wins_over_stale_reserved_secret: {
+    secretKeysJson: JSON.stringify({ default: newSecret }),
+    legacyServiceRoleJwt: wrongJwt,
+    dedicatedCloserJwt: legacyJwt,
     authorization: `Bearer ${legacyJwt}`,
     control: openControl,
     expectedStatus: 200,
@@ -331,6 +342,14 @@ Deno.test('Edge entry dual-key and fail-closed matrix', async () => {
         'SUPABASE_SERVICE_ROLE_KEY',
         scenario.legacyServiceRoleJwt,
       );
+      if (scenario.dedicatedCloserJwt === undefined) {
+        Deno.env.delete('WOS_V1_QA_EDGE_CLOSER_SERVICE_ROLE_KEY');
+      } else {
+        Deno.env.set(
+          'WOS_V1_QA_EDGE_CLOSER_SERVICE_ROLE_KEY',
+          scenario.dedicatedCloserJwt,
+        );
+      }
       Deno.env.set('SUPABASE_URL', scenario.runtimeUrl || qaRuntimeUrl);
       const headers = new Headers({
         'Content-Type': 'application/json',

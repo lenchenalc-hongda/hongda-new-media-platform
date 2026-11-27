@@ -94,7 +94,7 @@ SET public_api_owner='CLOSER_ONLY',updated_at=clock_timestamp();
 CREATE TABLE IF NOT EXISTS wos_v1_qa_closer.controls (
   execution_id uuid PRIMARY KEY,
   authorization_id text NOT NULL UNIQUE CHECK (
-    authorization_id='WOS-V1-PRODUCTION-M2-QA-UAT-002'
+    authorization_id LIKE 'WOS-V1-PRODUCTION-M2-QA-UAT-%'
   ),
   project_ref text NOT NULL CHECK (project_ref='xulmpqaknlwqqculbsek'),
   code_sha256 text NOT NULL CHECK (code_sha256 ~ '^[a-f0-9]{64}$'),
@@ -128,6 +128,49 @@ CREATE TABLE IF NOT EXISTS wos_v1_qa_closer.controls (
 ALTER TABLE wos_v1_qa_closer.controls ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON TABLE wos_v1_qa_closer.controls
   FROM PUBLIC,anon,authenticated;
+
+DO $migrate_authorization_check$
+DECLARE
+  v_constraint text;
+BEGIN
+  IF EXISTS(
+    SELECT 1
+    FROM wos_v1_qa_closer.controls control
+    WHERE control.authorization_id
+      !~ '^WOS-V1-PRODUCTION-M2-QA-UAT-[0-9]{3}$'
+  ) THEN
+    RAISE EXCEPTION 'WOS_V1_QA_CLOSER_AUTHORIZATION_AUDIT_INVALID';
+  END IF;
+  FOR v_constraint IN
+    SELECT constraint_row.conname
+    FROM pg_constraint constraint_row
+    WHERE constraint_row.conrelid=
+        'wos_v1_qa_closer.controls'::regclass
+      AND constraint_row.contype='c'
+      AND pg_get_constraintdef(constraint_row.oid)
+        LIKE '%authorization_id%'
+      AND constraint_row.conkey=ARRAY[
+        (
+          SELECT attribute_row.attnum
+          FROM pg_attribute attribute_row
+          WHERE attribute_row.attrelid=
+              'wos_v1_qa_closer.controls'::regclass
+            AND attribute_row.attname='authorization_id'
+        )
+      ]::smallint[]
+  LOOP
+    EXECUTE format(
+      'ALTER TABLE wos_v1_qa_closer.controls DROP CONSTRAINT %I',
+      v_constraint
+    );
+  END LOOP;
+  ALTER TABLE wos_v1_qa_closer.controls
+    ADD CONSTRAINT wos_v1_qa_closer_controls_authorization_id_check
+    CHECK (
+      authorization_id ~ '^WOS-V1-PRODUCTION-M2-QA-UAT-[0-9]{3}$'
+    );
+END;
+$migrate_authorization_check$;
 
 CREATE TABLE IF NOT EXISTS wos_v1_qa_closer.arm_receipts (
   execution_id uuid NOT NULL
@@ -231,7 +274,7 @@ DECLARE
   v_control wos_v1_qa_closer.controls%ROWTYPE;
   v_now timestamptz:=clock_timestamp();
 BEGIN
-  IF p_authorization_id<>'WOS-V1-PRODUCTION-M2-QA-UAT-002'
+  IF p_authorization_id<>'WOS-V1-PRODUCTION-M2-QA-UAT-003'
     OR p_project_ref<>'xulmpqaknlwqqculbsek'
   THEN
     RAISE EXCEPTION 'QA_CLOSER_SCOPE_MISMATCH';
@@ -698,7 +741,7 @@ DECLARE
   v_control wos_v1_qa_closer.controls%ROWTYPE;
   v_status text;
 BEGIN
-  IF p_authorization_id<>'WOS-V1-PRODUCTION-M2-QA-UAT-002'
+  IF p_authorization_id<>'WOS-V1-PRODUCTION-M2-QA-UAT-003'
     OR p_project_ref<>'xulmpqaknlwqqculbsek'
   THEN
     RAISE EXCEPTION 'QA_CLOSER_EDGE_SCOPE_MISMATCH' USING ERRCODE='42501';

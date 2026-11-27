@@ -116,12 +116,14 @@ files=(
   docs/workshop-order-system/production-readiness/WOS_V1_GO_NO_GO_20261126.md
   docs/workshop-order-system/production-readiness/WOS_V1_PRODUCTION_M2_QA_UAT_OWNER_GATE_20261126.md
   docs/workshop-order-system/production-readiness/WOS_V1_PRODUCTION_M2_QA_CLOSER_REHEARSAL_OWNER_GATE_20261127.md
+  docs/workshop-order-system/production-readiness/WOS_V1_PRODUCTION_M2_QA_CLOSER_REHEARSAL_OWNER_GATE_20261127_R2.md
   docs/workshop-order-system/production-readiness/WOS_V1_QA_UAT_CLOSER_IMPLEMENTATION_20261126.md
   docs/workshop-order-system/production-readiness/evidence/WOS_V1_PRODUCTION_READONLY_20261126.json
   docs/workshop-order-system/production-readiness/evidence/WOS_V1_PRODUCTION_M2_QA_UAT_PREFLIGHT_20261126.json
   docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_UAT_CLOSER_LOCAL_EVIDENCE_20261126.json
   docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_CLOSER_ONLY_LOCAL_EVIDENCE_20261127.json
   docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_CLOSER_INDEPENDENT_REVIEW_20261127.md
+  docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_CLOSER_REMOTE_FAIL_CLOSED_20261127.json
   docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_EDGE_V34_PRESERVATION_20261127.json
   docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_EDGE_V36_PRESERVATION_20261127.json
   docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_EDGE_V34_SOURCE_20261127/index.ts

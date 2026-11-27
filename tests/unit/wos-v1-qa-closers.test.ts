@@ -26,7 +26,7 @@ const ownerGate = readFileSync(
   'utf8',
 );
 const closerRehearsalOwnerGate = readFileSync(
-  'docs/workshop-order-system/production-readiness/WOS_V1_PRODUCTION_M2_QA_CLOSER_REHEARSAL_OWNER_GATE_20261127.md',
+  'docs/workshop-order-system/production-readiness/WOS_V1_PRODUCTION_M2_QA_CLOSER_REHEARSAL_OWNER_GATE_20261127_R2.md',
   'utf8',
 );
 const inputs = JSON.parse(readFileSync(
@@ -265,8 +265,8 @@ assert(
 
 const historicalExecutionId = 'efddb60c-4a70-4b46-bf18-46629a4397d2';
 const historicalNonce = '77ac7769-25a2-495a-8892-467d16abb00e';
-const executionId = 'f502bd0b-c132-4588-ae46-8ec2ae71bffd';
-const processNonce = '6fbcd563-819c-4935-9643-c4ebbf42b0c7';
+const executionId = '9d375980-42f3-4f94-85cf-f45652d1501b';
+const processNonce = '6aa2c612-0e33-4918-b156-9b1bb3fee1d1';
 assert(ownerGate.includes(historicalExecutionId));
 assert(ownerGate.includes(historicalNonce));
 for (const document of [closerRehearsalOwnerGate, JSON.stringify(inputs)]) {
@@ -288,14 +288,12 @@ assert.equal(
   processNonce,
 );
 for (const marker of [
-  'WOS-V1-PRODUCTION-M2-QA-UAT-002',
-  'WOS-V1-PRODUCTION-M2-QA-CLOSER-REHEARSAL-20261127-02',
-  'f502bd0b-c132-4588-ae46-8ec2ae71bffd',
-  '6fbcd563-819c-4935-9643-c4ebbf42b0c7',
-  'dpl_FnCwe8fuwfhjCdtYt8r8fbJcDrDC',
-  'HOSTED_VERSION_BEFORE=36',
-  'DB_CLOSER_SHA256=27625bb9cb73fbcf915eee032f8e80446da89974357bb5fb616f0fdd8ee3a224',
-  'EDGE_CLOSER_SHA256=e41fa8f63b565ecedfe02893d5f54e3ede529e5fade30965a1a3ba4b83a38196',
+  'WOS-V1-PRODUCTION-M2-QA-UAT-003',
+  'WOS-V1-PRODUCTION-M2-QA-CLOSER-REHEARSAL-20261127-03',
+  '9d375980-42f3-4f94-85cf-f45652d1501b',
+  '6aa2c612-0e33-4918-b156-9b1bb3fee1d1',
+  'HOSTED_VERSION_BEFORE=38',
+  'WOS_V1_QA_EDGE_CLOSER_SERVICE_ROLE_KEY',
   'QA_ORDER_CREATE=FORBIDDEN',
   'PR283_MERGE=FORBIDDEN',
 ]) {

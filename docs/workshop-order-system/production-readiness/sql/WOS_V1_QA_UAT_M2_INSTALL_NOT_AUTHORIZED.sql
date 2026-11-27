@@ -87,7 +87,7 @@ CREATE INDEX IF NOT EXISTS wos_v1_qa_uat_write_gates_lookup_idx
 CREATE TABLE IF NOT EXISTS wos_v1_qa_uat.closeout_controls (
   execution_id uuid PRIMARY KEY,
   authorization_id text NOT NULL UNIQUE CHECK (
-    authorization_id='WOS-V1-PRODUCTION-M2-QA-UAT-002'
+    authorization_id LIKE 'WOS-V1-PRODUCTION-M2-QA-UAT-%'
   ),
   project_ref text NOT NULL CHECK (project_ref='xulmpqaknlwqqculbsek'),
   code_sha256 text NOT NULL CHECK (code_sha256 ~ '^[a-f0-9]{64}$'),
@@ -140,6 +140,49 @@ ALTER TABLE wos_v1_qa_uat.closeout_controls
 ALTER TABLE wos_v1_qa_uat.closeout_controls ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON TABLE wos_v1_qa_uat.closeout_controls
   FROM PUBLIC,anon,authenticated;
+
+DO $migrate_authorization_check$
+DECLARE
+  v_constraint text;
+BEGIN
+  IF EXISTS(
+    SELECT 1
+    FROM wos_v1_qa_uat.closeout_controls control
+    WHERE control.authorization_id
+      !~ '^WOS-V1-PRODUCTION-M2-QA-UAT-[0-9]{3}$'
+  ) THEN
+    RAISE EXCEPTION 'WOS_V1_QA_UAT_AUTHORIZATION_AUDIT_INVALID';
+  END IF;
+  FOR v_constraint IN
+    SELECT constraint_row.conname
+    FROM pg_constraint constraint_row
+    WHERE constraint_row.conrelid=
+        'wos_v1_qa_uat.closeout_controls'::regclass
+      AND constraint_row.contype='c'
+      AND pg_get_constraintdef(constraint_row.oid)
+        LIKE '%authorization_id%'
+      AND constraint_row.conkey=ARRAY[
+        (
+          SELECT attribute_row.attnum
+          FROM pg_attribute attribute_row
+          WHERE attribute_row.attrelid=
+              'wos_v1_qa_uat.closeout_controls'::regclass
+            AND attribute_row.attname='authorization_id'
+        )
+      ]::smallint[]
+  LOOP
+    EXECUTE format(
+      'ALTER TABLE wos_v1_qa_uat.closeout_controls DROP CONSTRAINT %I',
+      v_constraint
+    );
+  END LOOP;
+  ALTER TABLE wos_v1_qa_uat.closeout_controls
+    ADD CONSTRAINT wos_v1_qa_uat_controls_authorization_id_check
+    CHECK (
+      authorization_id ~ '^WOS-V1-PRODUCTION-M2-QA-UAT-[0-9]{3}$'
+    );
+END;
+$migrate_authorization_check$;
 
 CREATE TABLE IF NOT EXISTS wos_v1_qa_uat.closer_arm_receipts (
   execution_id uuid NOT NULL
@@ -376,7 +419,7 @@ DECLARE
   v_control wos_v1_qa_uat.closeout_controls%ROWTYPE;
   v_now timestamptz:=clock_timestamp();
 BEGIN
-  IF p_authorization_id<>'WOS-V1-PRODUCTION-M2-QA-UAT-002'
+  IF p_authorization_id<>'WOS-V1-PRODUCTION-M2-QA-UAT-003'
     OR p_project_ref<>'xulmpqaknlwqqculbsek'
   THEN
     RAISE EXCEPTION 'QA_UAT_CLOSER_SCOPE_MISMATCH';
@@ -983,7 +1026,7 @@ AS $edge_allowed$
 DECLARE
   v_control wos_v1_qa_uat.closeout_controls%ROWTYPE;
 BEGIN
-  IF p_authorization_id<>'WOS-V1-PRODUCTION-M2-QA-UAT-002'
+  IF p_authorization_id<>'WOS-V1-PRODUCTION-M2-QA-UAT-003'
     OR p_project_ref<>'xulmpqaknlwqqculbsek'
   THEN
     RAISE EXCEPTION 'QA_UAT_EDGE_SCOPE_MISMATCH' USING ERRCODE='42501';
@@ -1106,7 +1149,7 @@ DECLARE
   v_control wos_v1_qa_uat.closeout_controls%ROWTYPE;
   v_status text;
 BEGIN
-  IF p_authorization_id<>'WOS-V1-PRODUCTION-M2-QA-UAT-002'
+  IF p_authorization_id<>'WOS-V1-PRODUCTION-M2-QA-UAT-003'
     OR p_project_ref<>'xulmpqaknlwqqculbsek'
   THEN
     RAISE EXCEPTION 'QA_UAT_EDGE_SCOPE_MISMATCH' USING ERRCODE='42501';
@@ -1364,7 +1407,7 @@ BEGIN
   WHERE profile.user_id=p_actor_user_id
     AND profile.is_active=true;
   RETURN public.wos_v1_qa_uat_edge_write_allowed(
-    'WOS-V1-PRODUCTION-M2-QA-UAT-002',
+    'WOS-V1-PRODUCTION-M2-QA-UAT-003',
     'xulmpqaknlwqqculbsek',
     p_execution_id,
     p_process_nonce,
@@ -1492,7 +1535,7 @@ DECLARE
   v_actor public.profiles%ROWTYPE;
   v_order public.wos_production_orders%ROWTYPE;
 BEGIN
-  IF btrim(p_authorization_id)<>'WOS-V1-PRODUCTION-M2-QA-UAT-002' THEN
+  IF btrim(p_authorization_id)<>'WOS-V1-PRODUCTION-M2-QA-UAT-003' THEN
     RAISE EXCEPTION 'QA_UAT_AUTHORIZATION_ID_MISMATCH' USING ERRCODE='42501';
   END IF;
   PERFORM wos_v1_qa_uat.assert_write_open(
@@ -1562,7 +1605,7 @@ DECLARE
   v_actor public.profiles%ROWTYPE;
   v_order public.wos_production_orders%ROWTYPE;
 BEGIN
-  IF btrim(p_authorization_id)<>'WOS-V1-PRODUCTION-M2-QA-UAT-002' THEN
+  IF btrim(p_authorization_id)<>'WOS-V1-PRODUCTION-M2-QA-UAT-003' THEN
     RAISE EXCEPTION 'QA_UAT_AUTHORIZATION_ID_MISMATCH' USING ERRCODE='42501';
   END IF;
   PERFORM wos_v1_qa_uat.assert_write_open(

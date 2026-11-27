@@ -232,7 +232,7 @@ export function evaluateWosV1QaCloserProbeAuth(input: {
 }): WosV1QaCloserProbeAuthResult {
   const uuidPattern =
     /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
-  if (input.authorizationId !== 'WOS-V1-PRODUCTION-M2-QA-UAT-002'
+  if (input.authorizationId !== 'WOS-V1-PRODUCTION-M2-QA-UAT-003'
     || !uuidPattern.test(input.executionId || '')
     || !uuidPattern.test(input.processNonce || '')) {
     return {

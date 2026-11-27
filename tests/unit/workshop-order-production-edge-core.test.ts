@@ -330,6 +330,12 @@ assert(!edgeIndex.includes("request.headers.get('authorization') !== `Bearer ${s
 assert(edgeCore.includes('WOS_V1_QA_EDGE_GATE_UNAVAILABLE'));
 assert(edgeIndex.includes('evaluateWosV1QaCloserProbeAuth('));
 assert(edgeIndex.includes('evaluateWosV1QaCloserProbeGate('));
+assert(edgeIndex.includes('WOS_V1_QA_EDGE_CLOSER_SERVICE_ROLE_KEY'));
+assert(
+  /function closerProbeLegacyJwt\(\)[\s\S]{0,240}WOS_V1_QA_EDGE_CLOSER_SERVICE_ROLE_KEY[\s\S]{0,120}SUPABASE_SERVICE_ROLE_KEY/.test(
+    edgeIndex,
+  ),
+);
 
 console.log('workshop-order-production-edge-core.test.ts: PASS');
 console.log('WOS_V1_EDGE_FOUR_CATEGORY_ACCESS=PASS');

@@ -126,6 +126,77 @@ psql_db postgres -q -c "CREATE DATABASE \"$TICK_DB\""
 bootstrap_fixture "$DB"
 bootstrap_fixture "$TICK_DB"
 
+psql_db "$DB" -q <<'SQL'
+CREATE SCHEMA wos_v1_qa_closer;
+CREATE TABLE wos_v1_qa_closer.controls (
+  execution_id uuid PRIMARY KEY,
+  authorization_id text NOT NULL UNIQUE CHECK (
+    authorization_id='WOS-V1-PRODUCTION-M2-QA-UAT-002'
+  ),
+  project_ref text NOT NULL CHECK (project_ref='xulmpqaknlwqqculbsek'),
+  code_sha256 text NOT NULL CHECK (code_sha256 ~ '^[a-f0-9]{64}$'),
+  arm_token uuid NOT NULL,
+  opened_at timestamptz NOT NULL,
+  write_deadline_at timestamptz NOT NULL,
+  db_cleanup_deadline_at timestamptz NOT NULL,
+  edge_cleanup_deadline_at timestamptz NOT NULL,
+  db_state text NOT NULL DEFAULT 'ARMED'
+    CHECK (db_state IN ('ARMED','CLOSED')),
+  edge_state text NOT NULL DEFAULT 'ARMED'
+    CHECK (edge_state IN ('ARMED','CLOSED')),
+  db_closed_at timestamptz,
+  edge_closed_at timestamptz,
+  db_last_heartbeat_at timestamptz,
+  edge_last_heartbeat_at timestamptz,
+  edge_process_nonce uuid,
+  edge_probe_verified_at timestamptz,
+  edge_probe_execution_id uuid,
+  db_cron_job_id bigint,
+  edge_job_label text,
+  close_reason text,
+  CHECK (write_deadline_at=opened_at+interval '480 seconds'),
+  CHECK (db_cleanup_deadline_at=opened_at+interval '540 seconds'),
+  CHECK (edge_cleanup_deadline_at=opened_at+interval '840 seconds'),
+  CHECK ((db_state='ARMED' AND db_closed_at IS NULL)
+      OR (db_state='CLOSED' AND db_closed_at IS NOT NULL)),
+  CHECK ((edge_state='ARMED' AND edge_closed_at IS NULL)
+      OR (edge_state='CLOSED' AND edge_closed_at IS NOT NULL))
+);
+ALTER TABLE wos_v1_qa_closer.controls ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON TABLE wos_v1_qa_closer.controls
+  FROM PUBLIC,anon,authenticated;
+DO $historical$
+DECLARE
+  v_now timestamptz:=clock_timestamp()-interval '2 hours';
+BEGIN
+  INSERT INTO wos_v1_qa_closer.controls(
+    execution_id,authorization_id,project_ref,code_sha256,arm_token,
+    opened_at,write_deadline_at,db_cleanup_deadline_at,edge_cleanup_deadline_at,
+    db_state,edge_state,db_closed_at,edge_closed_at,
+    edge_process_nonce,edge_probe_verified_at,edge_probe_execution_id,close_reason
+  ) VALUES(
+    '92929292-9292-4292-8292-929292929292',
+    'WOS-V1-PRODUCTION-M2-QA-UAT-002',
+    'xulmpqaknlwqqculbsek',
+    repeat('c',64),
+    '93939393-9393-4393-8393-939393939393',
+    v_now,
+    v_now+interval '480 seconds',
+    v_now+interval '540 seconds',
+    v_now+interval '840 seconds',
+    'CLOSED',
+    'CLOSED',
+    v_now+interval '100 minutes',
+    v_now+interval '101 minutes',
+    '95959595-9595-4595-8595-959595959595',
+    v_now+interval '102 minutes',
+    '92929292-9292-4292-8292-929292929292',
+    'HISTORICAL_AUDIT_ONLY'
+  );
+END;
+$historical$;
+SQL
+
 WOS_QA_PSQL_DOCKER_CONTAINER="$CONTAINER" \
 WOS_QA_DATABASE="$DB" \
   node "$ROOT/scripts/wos-production-readiness/wos-v1-qa-uat-db-closer.mjs" \
@@ -145,6 +216,57 @@ WOS_QA_DATABASE="$DB" \
 ")" = 't' ]] || fail 'CLOSER_ONLY_CREATED_BUSINESS_OBJECTS'
 echo 'WOS_V1_QA_CLOSER_ONLY_INSTALL=PASS'
 echo 'WOS_V1_QA_CLOSER_ONLY_NO_BUSINESS_OBJECTS=PASS'
+
+psql_db "$DB" -q <<'SQL'
+INSERT INTO wos_v1_qa_closer.close_receipts(
+  execution_id,closer_kind,authorization_id,project_ref,code_sha256,
+  request_id,closed_at,cleanup_deadline_at,timely,reason
+) VALUES(
+  '92929292-9292-4292-8292-929292929292',
+  'DB',
+  'WOS-V1-PRODUCTION-M2-QA-UAT-002',
+  'xulmpqaknlwqqculbsek',
+  repeat('c',64),
+  '94949494-9494-4494-8494-949494949491',
+  clock_timestamp()-interval '100 minutes',
+  clock_timestamp()-interval '2 hours'+interval '540 seconds',
+  true,
+  'HISTORICAL_AUDIT_ONLY'
+),(
+  '92929292-9292-4292-8292-929292929292',
+  'EDGE',
+  'WOS-V1-PRODUCTION-M2-QA-UAT-002',
+  'xulmpqaknlwqqculbsek',
+  repeat('c',64),
+  '94949494-9494-4494-8494-949494949492',
+  clock_timestamp()-interval '99 minutes',
+  clock_timestamp()-interval '2 hours'+interval '840 seconds',
+  true,
+  'HISTORICAL_AUDIT_ONLY'
+);
+SQL
+
+[[ "$(psql_db "$DB" -qAt -c "
+  SELECT count(*)=1
+    AND min(authorization_id)='WOS-V1-PRODUCTION-M2-QA-UAT-002'
+    AND min(db_state)='CLOSED'
+    AND min(edge_state)='CLOSED'
+  FROM wos_v1_qa_closer.controls
+  WHERE execution_id='92929292-9292-4292-8292-929292929292'::uuid;
+")" = 't' ]] || fail 'CLOSER_ONLY_HISTORICAL_AUDIT_ROW_CHANGED'
+echo 'WOS_V1_QA_CLOSER_ONLY_HISTORICAL_AUDIT_RETAINED=PASS'
+
+AUTH_CONSTRAINT_DEF="$(psql_db "$DB" -qAt -c "
+  SELECT pg_get_constraintdef(constraint_row.oid)
+  FROM pg_constraint constraint_row
+  WHERE constraint_row.conrelid=
+      'wos_v1_qa_closer.controls'::regclass
+    AND constraint_row.conname=
+      'wos_v1_qa_closer_controls_authorization_id_check';
+")"
+[[ "$AUTH_CONSTRAINT_DEF" == *authorization_id*WOS-V1-PRODUCTION-M2-QA-UAT-* ]] \
+  || fail 'CLOSER_ONLY_AUTHORIZATION_CONSTRAINT_MIGRATION_FAILED'
+echo 'WOS_V1_QA_CLOSER_ONLY_AUTH_CONSTRAINT_MIGRATED=PASS'
 
 [[ "$(psql_db "$DB" -qAt -c "
   SELECT NOT has_function_privilege(
@@ -434,8 +556,16 @@ WOS_V1_QA_EDGE_CLOSER_STATE_PATH="$EDGE_RECEIPT_PATH" \
     recover-closer-only
 
 [[ "$(psql_db "$DB" -qAt -c "
-  SELECT (SELECT count(*) FROM wos_v1_qa_closer.controls)=1
-    AND (SELECT count(*) FROM wos_v1_qa_closer.close_receipts)=2
+  SELECT (SELECT count(*) FROM wos_v1_qa_closer.controls)=2
+    AND (SELECT count(*) FROM wos_v1_qa_closer.close_receipts)=4
+    AND EXISTS(
+      SELECT 1
+      FROM wos_v1_qa_closer.controls
+      WHERE execution_id='92929292-9292-4292-8292-929292929292'::uuid
+        AND authorization_id='WOS-V1-PRODUCTION-M2-QA-UAT-002'
+        AND db_state='CLOSED'
+        AND edge_state='CLOSED'
+    )
     AND to_regprocedure(
       'public.wos_v1_qa_uat_edge_probe(uuid,uuid)'
     ) IS NULL
@@ -502,7 +632,7 @@ BEGIN
     edge_process_nonce,db_cron_job_id
   ) VALUES(
     '$TICK_EXECUTION_ID',
-    'WOS-V1-PRODUCTION-M2-QA-UAT-002',
+    'WOS-V1-PRODUCTION-M2-QA-UAT-003',
     'xulmpqaknlwqqculbsek',
     repeat('b',64),
     '$ARM_TOKEN',

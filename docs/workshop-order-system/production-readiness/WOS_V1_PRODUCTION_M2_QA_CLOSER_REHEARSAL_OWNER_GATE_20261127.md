@@ -1,7 +1,14 @@
 # WOS V1 QA Closer-Only Remote Rehearsal Owner Gate
 
 Status:
-`PREPARED_FOR_OWNER_DECISION / NOT_AUTHORIZED`
+`CONSUMED_FAIL_CLOSED / NO_ARM / HISTORICAL_ONLY`
+
+This `...-002` execution record was consumed on
+`c20728f984458c2ab109a74c33f5cb2eb5ac6846`. The dedicated Edge probe secret
+was unavailable because the reserved project secret value did not match the
+current legacy API key and could not be overwritten. No DB/Edge ARM occurred.
+See `WOS_V1_QA_CLOSER_REMOTE_FAIL_CLOSED_20261127.json`. A new authorized
+source and execution record are required.
 
 Owner execution record:
 `WOS-V1-PRODUCTION-M2-QA-CLOSER-REHEARSAL-20261127-02`

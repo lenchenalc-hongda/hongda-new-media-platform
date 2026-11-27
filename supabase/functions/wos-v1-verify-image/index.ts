@@ -26,7 +26,7 @@ const MAX_REQUEST_BYTES = 4096;
 const BODY_READ_TIMEOUT_MS = 5000;
 const MAX_EXECUTION_MS = 20000;
 const QA_UAT_PROJECT_REF = 'xulmpqaknlwqqculbsek';
-const QA_UAT_AUTHORIZATION_ID = 'WOS-V1-PRODUCTION-M2-QA-UAT-002';
+const QA_UAT_AUTHORIZATION_ID = 'WOS-V1-PRODUCTION-M2-QA-UAT-003';
 const baseHeaders = {
   'Cache-Control': 'no-store, private',
   'Content-Type': 'application/json; charset=utf-8',
@@ -73,6 +73,11 @@ function secretKey(): string {
     Deno.env.get('SUPABASE_SECRET_KEYS'),
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY'),
   );
+}
+
+function closerProbeLegacyJwt(): string | undefined {
+  return Deno.env.get('WOS_V1_QA_EDGE_CLOSER_SERVICE_ROLE_KEY')
+    || Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
 }
 
 async function withTimeout<T>(promise: Promise<T>): Promise<T> {
@@ -213,7 +218,7 @@ export async function handleWosV1VerifyImageRequest(
       processNonce: qaCloserNonce,
       authorization: request.headers.get('authorization'),
       adminKey: service,
-      legacyServiceRoleJwt: Deno.env.get('SUPABASE_SERVICE_ROLE_KEY'),
+      legacyServiceRoleJwt: closerProbeLegacyJwt(),
     });
     if (!authDecision.allowed) {
       return output(

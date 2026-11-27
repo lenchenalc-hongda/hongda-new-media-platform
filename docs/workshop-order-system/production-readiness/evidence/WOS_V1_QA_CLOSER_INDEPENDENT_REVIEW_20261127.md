@@ -55,5 +55,40 @@ Review findings fixed before final approval:
    `WOS_V1_QA_DB_CLOSER_ARM_TOKEN`.
 5. The Deno harness was pinned to `deno@2.9.6`.
 
+## Remote Fail-Closed Re-review
+
+The first remote attempt on `c20728f` stopped before ARM because the reserved
+Supabase project secret `SUPABASE_SERVICE_ROLE_KEY` did not equal the current
+legacy API key and cannot be overwritten. Recovery restored Hosted v36 bytes,
+removed temporary public RPCs and left no control, Cron or LaunchAgent.
+
+The replacement source adds a dedicated non-reserved
+`WOS_V1_QA_EDGE_CLOSER_SERVICE_ROLE_KEY` precedence for closer probe equality,
+retains the reserved value only as a compatibility fallback, and advances the
+active authorization to `...-003`.
+
+The independent reviewer also identified and rechecked:
+
+1. A preserved closer table created with the old `...-002` CHECK had to migrate
+   to an audit-preserving `WOS-V1-PRODUCTION-M2-QA-UAT-%` table constraint.
+2. Function entry points still require the exact current `...-003`;
+   the table-level pattern cannot activate an old authorization.
+3. Constraint discovery targets only the single `authorization_id` column.
+4. PG17 seeds and preserves a closed historical `...-002` row plus close
+   receipts through install, current ARM, close and Recovery.
+
+Final remote-fix review:
+
+```ini
+P0_FINDINGS=0
+P1_FINDINGS=0
+P2_FINDINGS=0
+SOURCE_SECURITY_REVIEW=PASS
+MIGRATION_SAFETY=PASS
+HISTORICAL_AUDIT_PRESERVATION=PASS
+AUTHORIZATION_PATTERN_SECURITY=PASS
+DEDICATED_EDGE_SECRET_REQUIRED=PASS
+```
+
 This review is independent source evidence. It is not Owner approval, a remote
 ARM result, a Hosted timer proof or permission to merge/deploy Production.
