@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "authorizationId": "WOS-V1-PRODUCTION-M2-QA-UAT-004",
-  "sourceParentHead": "61db9cc8fb386aea47a81bd768a0ae61b5d7b3ed",
+  "sourceParentHead": "7bbeeeccd58f23f10cf2fa9ec040b8f56bdb924c",
   "pr": 283,
   "qaProject": "xulmpqaknlwqqculbsek",
   "qaOrganizationId": "0ff53d93-2b9e-48b9-8113-a4768c39cdd2",
@@ -149,7 +149,7 @@
   },
   "edgeEnvironment": {
     "WOS_SUPABASE_ALLOWED_REFS": "xulmpqaknlwqqculbsek",
-    "WOS_V1_EDGE_ALLOWED_ORIGINS": "https://hongda-wos-p00202-qa-preview-git-32498d-lens-projects-3fc386bd.vercel.app",
+    "WOS_V1_EDGE_ALLOWED_ORIGINS": "https://hongda-wos-p00202-qa-preview-git-0f95f1-lens-projects-3fc386bd.vercel.app",
     "WOS_V1_EDGE_WRITES_ENABLED_BEFORE_ARM": false,
     "WOS_V1_EDGE_WRITES_ENABLED_DURING_AUTHORIZED_GATE": true,
     "WOS_V1_QA_REVISION_IMAGES_ENABLED": true,

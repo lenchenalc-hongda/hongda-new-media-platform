@@ -261,7 +261,7 @@ Deno.test('Edge entry dual-key and fail-closed matrix', async () => {
   Deno.env.set('WOS_SUPABASE_ALLOWED_REFS', qaProjectRef);
   Deno.env.set(
     'WOS_V1_EDGE_ALLOWED_ORIGINS',
-    'https://hongda-wos-p00202-qa-preview-git-32498d-lens-projects-3fc386bd.vercel.app',
+    'https://hongda-wos-p00202-qa-preview-git-0f95f1-lens-projects-3fc386bd.vercel.app',
   );
   Deno.env.set('SUPABASE_URL', qaRuntimeUrl);
   Deno.env.set(

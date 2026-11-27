@@ -278,7 +278,7 @@ for (const document of [closerRehearsalOwnerGate, JSON.stringify(inputs)]) {
   assert(document.includes(processNonce));
   assert(document.includes('xulmpqaknlwqqculbsek'));
   assert(document.includes(
-    'https://hongda-wos-p00202-qa-preview-git-32498d-lens-projects-3fc386bd.vercel.app',
+    'https://hongda-wos-p00202-qa-preview-git-0f95f1-lens-projects-3fc386bd.vercel.app',
   ));
   assert(document.includes('verify_jwt=true')
     || document.includes('"verify_jwt":true'));
