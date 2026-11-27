@@ -151,6 +151,30 @@ export function evaluateWosV1ImageAccess(input: WosV1ImageAccessInput): {
   return { allowed: false, code: 'STATUS_DENIED' };
 }
 
+// The platform verifies the caller's legacy JWT with verify_jwt=true.
+// Supabase's sb_secret_* Admin key is distinct and must never serve as a JWT.
+export function selectWosV1AdminApiKey(
+  secretKeysJson: string | undefined,
+  legacyServiceRoleJwt: string | undefined,
+): string {
+  try {
+    const keys = JSON.parse(secretKeysJson || '{}');
+    if (typeof keys.default === 'string' && keys.default) return keys.default;
+  } catch {
+    // Legacy-only project fallback.
+  }
+  return legacyServiceRoleJwt || '';
+}
+
+export function matchesLegacyQaCloserJwt(
+  authorization: string | null,
+  legacyServiceRoleJwt: string | undefined,
+): boolean {
+  return typeof legacyServiceRoleJwt === 'string'
+    && /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(legacyServiceRoleJwt)
+    && authorization === `Bearer ${legacyServiceRoleJwt}`;
+}
+
 export function parseAllowedSupabaseRefs(value: string | undefined): readonly string[] {
   if (!value) return [];
   const refs = value.split(',').map(ref => ref.trim()).filter(Boolean);

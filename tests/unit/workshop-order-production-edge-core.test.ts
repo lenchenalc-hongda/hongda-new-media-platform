@@ -9,6 +9,8 @@ import {
   deterministicProofRequestId,
   evaluateWosV1ImageAccess,
   isWosV1ProofResult,
+  matchesLegacyQaCloserJwt,
+  selectWosV1AdminApiKey,
   objectSnapshotStable,
   parseAllowedOrigins,
   parseAllowedSupabaseRefs,
@@ -87,6 +89,31 @@ assert.equal(approvedSupabaseRuntimeUrl(
   'http://amqpvxrurenevniilhtl.supabase.co',
   ['amqpvxrurenevniilhtl'],
 ), false);
+
+// Regression: sb_secret_* Admin RPC access and legacy closer JWT are separate.
+const legacyCloserJwt = 'header.payload.signature';
+const newAdminKey = 'sb_secret_test_only_admin';
+assert.equal(selectWosV1AdminApiKey(
+  JSON.stringify({ default: newAdminKey }), legacyCloserJwt,
+), newAdminKey);
+assert.equal(selectWosV1AdminApiKey('{}', legacyCloserJwt), legacyCloserJwt);
+assert.equal(selectWosV1AdminApiKey('{invalid', legacyCloserJwt), legacyCloserJwt);
+assert.equal(selectWosV1AdminApiKey('{}', undefined), '');
+assert.equal(matchesLegacyQaCloserJwt(
+  `Bearer ${legacyCloserJwt}`, legacyCloserJwt,
+), true);
+for (const header of [
+  null, '', `Bearer ${newAdminKey}`, 'Bearer header.user.signature',
+  `Bearer ${legacyCloserJwt}extra`, `bearer ${legacyCloserJwt}`,
+]) {
+  assert.equal(matchesLegacyQaCloserJwt(header, legacyCloserJwt), false);
+}
+assert.equal(matchesLegacyQaCloserJwt(
+  `Bearer ${legacyCloserJwt}`, newAdminKey,
+), false, 'sb_secret is not a legacy JWT');
+assert.equal(matchesLegacyQaCloserJwt(
+  `Bearer ${legacyCloserJwt}`, undefined,
+), false, 'missing legacy key must fail closed');
 
 const profile = {
   id: profileId,
@@ -272,6 +299,8 @@ assert(edgeIndex.includes('wos_v1_qa_uat_edge_probe'));
 assert(!edgeIndex.includes('wos_v1_qa_uat_edge_renew_proof'));
 assert(edgeIndex.includes('wos_v1_qa_uat_edge_record_proof'));
 assert(edgeIndex.includes('WOS_V1_QA_EDGE_CLOSED'));
+assert(edgeIndex.includes('matchesLegacyQaCloserJwt('));
+assert(!edgeIndex.includes("request.headers.get('authorization') !== `Bearer ${service}`"));
 assert(edgeIndex.includes('WOS_V1_QA_EDGE_GATE_UNAVAILABLE'));
 
 console.log('workshop-order-production-edge-core.test.ts: PASS');

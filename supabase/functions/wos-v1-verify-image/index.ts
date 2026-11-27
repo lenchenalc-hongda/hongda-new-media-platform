@@ -8,6 +8,8 @@ import {
   evaluateWosV1ImageAccess,
   isWosV1ProofResult,
   objectSnapshotStable,
+  matchesLegacyQaCloserJwt,
+  selectWosV1AdminApiKey,
   parseAllowedSupabaseRefs,
   parseAllowedOrigins,
   parseWosV1ImageVerificationBody,
@@ -64,13 +66,10 @@ function publicKey(): string {
 }
 
 function secretKey(): string {
-  try {
-    const keys = JSON.parse(Deno.env.get('SUPABASE_SECRET_KEYS') || '{}');
-    if (typeof keys.default === 'string' && keys.default) return keys.default;
-  } catch {
-    // Older isolated project fallback.
-  }
-  return Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
+  return selectWosV1AdminApiKey(
+    Deno.env.get('SUPABASE_SECRET_KEYS'),
+    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY'),
+  );
 }
 
 async function withTimeout<T>(promise: Promise<T>): Promise<T> {
@@ -197,8 +196,10 @@ Deno.serve(async request => {
   }
   if (qaUatRuntime
     && request.headers.get('x-wos-qa-closer-probe') === '1') {
-    if (!service
-      || request.headers.get('authorization') !== `Bearer ${service}`) {
+    if (!service || !matchesLegacyQaCloserJwt(
+      request.headers.get('authorization'),
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY'),
+    )) {
       return output(request, 'WOS_V1_EDGE_SERVER_CONFIG_INCOMPLETE', 503);
     }
     try {
