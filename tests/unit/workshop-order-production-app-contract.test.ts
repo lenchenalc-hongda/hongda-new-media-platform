@@ -78,7 +78,7 @@ const qaM2 = resolveWosV1QaM2Runtime({
   qaEnabled: 'true',
   qaUatM2Enabled: 'true',
   qaUatM2WritesEnabled: 'true',
-  qaUatAuthorizationId: 'WOS-V1-PRODUCTION-M2-QA-UAT-003',
+  qaUatAuthorizationId: 'WOS-V1-PRODUCTION-M2-QA-UAT-004',
 });
 assert.equal(qaM2.enabled, true);
 assert.equal(qaM2.writesEnabled, true);
@@ -91,7 +91,7 @@ assert.equal(resolveWosV1QaAppRuntime({
   qaWritesEnabled: 'false',
   qaUatM2Enabled: 'true',
   qaUatM2WritesEnabled: 'true',
-  qaUatAuthorizationId: 'WOS-V1-PRODUCTION-M2-QA-UAT-003',
+  qaUatAuthorizationId: 'WOS-V1-PRODUCTION-M2-QA-UAT-004',
 }).m2WritesEnabled, true);
 assert.equal(resolveWosV1QaAppRuntime({
   vercelEnv: 'preview',
@@ -100,7 +100,7 @@ assert.equal(resolveWosV1QaAppRuntime({
   qaEnabled: 'true',
   qaUatM2Enabled: 'true',
   qaUatM2WritesEnabled: 'false',
-  qaUatAuthorizationId: 'WOS-V1-PRODUCTION-M2-QA-UAT-003',
+  qaUatAuthorizationId: 'WOS-V1-PRODUCTION-M2-QA-UAT-004',
 }).m2WritesEnabled, false);
 for (const rejected of [
   resolveWosV1QaM2Runtime({
@@ -110,7 +110,7 @@ for (const rejected of [
     qaEnabled: 'true',
     qaUatM2Enabled: 'true',
     qaUatM2WritesEnabled: 'true',
-    qaUatAuthorizationId: 'WOS-V1-PRODUCTION-M2-QA-UAT-003',
+    qaUatAuthorizationId: 'WOS-V1-PRODUCTION-M2-QA-UAT-004',
   }),
   resolveWosV1QaM2Runtime({
     vercelEnv: 'preview',
@@ -119,7 +119,7 @@ for (const rejected of [
     qaEnabled: 'true',
     qaUatM2Enabled: 'true',
     qaUatM2WritesEnabled: 'true',
-    qaUatAuthorizationId: 'WOS-V1-PRODUCTION-M2-QA-UAT-003',
+    qaUatAuthorizationId: 'WOS-V1-PRODUCTION-M2-QA-UAT-004',
   }),
   resolveWosV1QaM2Runtime({
     vercelEnv: 'preview',
@@ -128,7 +128,7 @@ for (const rejected of [
     qaEnabled: 'true',
     qaUatM2Enabled: 'true',
     qaUatM2WritesEnabled: 'true',
-    qaUatAuthorizationId: 'WOS-V1-PRODUCTION-M2-QA-UAT-003',
+    qaUatAuthorizationId: 'WOS-V1-PRODUCTION-M2-QA-UAT-004',
   }),
   resolveWosV1QaM2Runtime({
     vercelEnv: 'preview',
@@ -137,7 +137,7 @@ for (const rejected of [
     qaEnabled: 'true',
     qaUatM2Enabled: 'false',
     qaUatM2WritesEnabled: 'true',
-    qaUatAuthorizationId: 'WOS-V1-PRODUCTION-M2-QA-UAT-003',
+    qaUatAuthorizationId: 'WOS-V1-PRODUCTION-M2-QA-UAT-004',
   }),
   resolveWosV1QaM2Runtime({
     vercelEnv: 'preview',
@@ -159,7 +159,7 @@ const qaM2ReadOnly = resolveWosV1QaM2Runtime({
   qaEnabled: 'true',
   qaUatM2Enabled: 'true',
   qaUatM2WritesEnabled: 'false',
-  qaUatAuthorizationId: 'WOS-V1-PRODUCTION-M2-QA-UAT-003',
+  qaUatAuthorizationId: 'WOS-V1-PRODUCTION-M2-QA-UAT-004',
 });
 assert.equal(qaM2ReadOnly.enabled, true);
 assert.equal(qaM2ReadOnly.writesEnabled, false);

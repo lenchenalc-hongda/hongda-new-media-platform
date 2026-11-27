@@ -66,6 +66,8 @@ files=(
   tests/integration/wos-v1-qa-edge-entry-http.deno.test.ts
   tests/integration/wos-v1-qa-edge-entry-http.test.ts
   tests/live/wos-v1-qa-edge-closer-process-kill.mjs
+  tests/live/wos-v1-qa-edge-finalizer.mjs
+  tests/live/wos-v1-qa-edge-finalizer.test.ts
   tests/sql/run-wos-v1-production-m2-pg17.sh
   tests/sql/run-wos-v1-production-m2-concurrency-pg17.sh
   tests/sql/run-wos-v1-production-m2-qa-uat-pg17.sh
@@ -117,6 +119,7 @@ files=(
   docs/workshop-order-system/production-readiness/WOS_V1_PRODUCTION_M2_QA_UAT_OWNER_GATE_20261126.md
   docs/workshop-order-system/production-readiness/WOS_V1_PRODUCTION_M2_QA_CLOSER_REHEARSAL_OWNER_GATE_20261127.md
   docs/workshop-order-system/production-readiness/WOS_V1_PRODUCTION_M2_QA_CLOSER_REHEARSAL_OWNER_GATE_20261127_R2.md
+  docs/workshop-order-system/production-readiness/WOS_V1_PRODUCTION_M2_QA_BUSINESS_UAT_OWNER_GATE_20261127.md
   docs/workshop-order-system/production-readiness/WOS_V1_QA_UAT_CLOSER_IMPLEMENTATION_20261126.md
   docs/workshop-order-system/production-readiness/evidence/WOS_V1_PRODUCTION_READONLY_20261126.json
   docs/workshop-order-system/production-readiness/evidence/WOS_V1_PRODUCTION_M2_QA_UAT_PREFLIGHT_20261126.json
@@ -124,6 +127,7 @@ files=(
   docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_CLOSER_ONLY_LOCAL_EVIDENCE_20261127.json
   docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_CLOSER_INDEPENDENT_REVIEW_20261127.md
   docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_CLOSER_REMOTE_FAIL_CLOSED_20261127.json
+  docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_CLOSER_REMOTE_R2_EVIDENCE_20261127.json
   docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_EDGE_V34_PRESERVATION_20261127.json
   docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_EDGE_V36_PRESERVATION_20261127.json
   docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_EDGE_V34_SOURCE_20261127/index.ts

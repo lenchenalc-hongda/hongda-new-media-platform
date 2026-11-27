@@ -26,7 +26,7 @@ const ownerGate = readFileSync(
   'utf8',
 );
 const closerRehearsalOwnerGate = readFileSync(
-  'docs/workshop-order-system/production-readiness/WOS_V1_PRODUCTION_M2_QA_CLOSER_REHEARSAL_OWNER_GATE_20261127_R2.md',
+  'docs/workshop-order-system/production-readiness/WOS_V1_PRODUCTION_M2_QA_BUSINESS_UAT_OWNER_GATE_20261127.md',
   'utf8',
 );
 const inputs = JSON.parse(readFileSync(
@@ -208,6 +208,7 @@ for (const marker of [
 
 for (const marker of [
   "command === 'arm'",
+  "command === 'finalize'",
   "command === 'watch'",
   "command === 'status'",
   "command === 'close'",
@@ -227,6 +228,9 @@ for (const marker of [
   'WOS_V1_QA_EDGE_TEST_MODE_CANNOT_LOAD_LAUNCHD',
   'WOS_V1_QA_EDGE_LOCAL_TEST_SCOPE_REQUIRED',
   'WOS_V1_QA_EDGE_CLOSER_LAUNCHD_UNLOAD_FAILED',
+  'spawnFinalizer(path)',
+  'SCHEDULED_EDGE_CLOSE_PRE_FINALIZER',
+  'SCHEDULED_EDGE_CLOSE_FINALIZER',
   'launchAgentUnloaded',
   'EnvironmentVariables',
   'WOS_V1_QA_EDGE_LAUNCHD',
@@ -265,8 +269,8 @@ assert(
 
 const historicalExecutionId = 'efddb60c-4a70-4b46-bf18-46629a4397d2';
 const historicalNonce = '77ac7769-25a2-495a-8892-467d16abb00e';
-const executionId = '9d375980-42f3-4f94-85cf-f45652d1501b';
-const processNonce = '6aa2c612-0e33-4918-b156-9b1bb3fee1d1';
+const executionId = '812aebd9-75d5-427a-9047-5c84a5d6fe42';
+const processNonce = '6fb2ea13-f37f-48c4-b8ef-8a2ef51847b5';
 assert(ownerGate.includes(historicalExecutionId));
 assert(ownerGate.includes(historicalNonce));
 for (const document of [closerRehearsalOwnerGate, JSON.stringify(inputs)]) {
@@ -288,13 +292,12 @@ assert.equal(
   processNonce,
 );
 for (const marker of [
-  'WOS-V1-PRODUCTION-M2-QA-UAT-003',
-  'WOS-V1-PRODUCTION-M2-QA-CLOSER-REHEARSAL-20261127-03',
-  '9d375980-42f3-4f94-85cf-f45652d1501b',
-  '6aa2c612-0e33-4918-b156-9b1bb3fee1d1',
-  'HOSTED_VERSION_BEFORE=38',
+  'WOS-V1-PRODUCTION-M2-QA-UAT-004',
+  'WOS-V1-PRODUCTION-M2-QA-BUSINESS-UAT-20261127-01',
+  '812aebd9-75d5-427a-9047-5c84a5d6fe42',
+  '6fb2ea13-f37f-48c4-b8ef-8a2ef51847b5',
+  'HOSTED_VERSION_AFTER_RECOVERY=41',
   'WOS_V1_QA_EDGE_CLOSER_SERVICE_ROLE_KEY',
-  'QA_ORDER_CREATE=FORBIDDEN',
   'PR283_MERGE=FORBIDDEN',
 ]) {
   assert(closerRehearsalOwnerGate.includes(marker),

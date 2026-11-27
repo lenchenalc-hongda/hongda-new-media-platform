@@ -113,7 +113,10 @@ RETURNS boolean LANGUAGE plpgsql
 AS $cron_unschedule$
 BEGIN
   DELETE FROM cron.job WHERE jobid=$1;
-  RETURN FOUND;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'cron job % does not exist',$1 USING ERRCODE='22023';
+  END IF;
+  RETURN true;
 END;
 $cron_unschedule$;
 SQL
@@ -415,6 +418,18 @@ DB_CLOSE="$(
   || fail 'CLOSER_ONLY_DB_CLOSE_FAILED'
 [[ "$(printf '%s' "$DB_CLOSE" | jq -r '.cronUnscheduled')" = 'true' ]] \
   || fail 'CLOSER_ONLY_DB_CRON_NOT_UNSCHEDULED'
+DB_CLOSE_REPLAY="$(
+  WOS_QA_PSQL_DOCKER_CONTAINER="$CONTAINER" \
+  WOS_QA_DATABASE="$DB" \
+  WOS_V1_QA_EXECUTION_ID="$EXECUTION_ID" \
+  WOS_V1_QA_CLOSE_REQUEST_ID="96000000-0000-4000-8000-000000000002" \
+    node "$ROOT/scripts/wos-production-readiness/wos-v1-qa-uat-db-closer.mjs" \
+      close-closer-only
+)"
+[[ "$(printf '%s' "$DB_CLOSE_REPLAY" | jq -r '.status')" = 'REPLAYED' ]] \
+  || fail 'CLOSER_ONLY_DB_CLOSE_REPLAY_STATUS_INVALID'
+[[ "$(printf '%s' "$DB_CLOSE_REPLAY" | jq -r '.cronUnscheduled')" = 'true' ]] \
+  || fail 'CLOSER_ONLY_DB_CLOSE_REPLAY_CRON_INVALID'
 echo 'WOS_V1_QA_CLOSER_ONLY_DB_CLOSE_AND_CRON_DELETE=PASS'
 
 if WOS_QA_PSQL_DOCKER_CONTAINER="$CONTAINER" \
@@ -632,7 +647,7 @@ BEGIN
     edge_process_nonce,db_cron_job_id
   ) VALUES(
     '$TICK_EXECUTION_ID',
-    'WOS-V1-PRODUCTION-M2-QA-UAT-003',
+    'WOS-V1-PRODUCTION-M2-QA-UAT-004',
     'xulmpqaknlwqqculbsek',
     repeat('b',64),
     '$ARM_TOKEN',

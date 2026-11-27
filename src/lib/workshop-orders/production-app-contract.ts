@@ -6,7 +6,7 @@ import {
 } from './production-runtime-contract';
 
 export const WOS_V1_PRODUCTION_M2_QA_UAT_AUTHORIZATION_ID =
-  'WOS-V1-PRODUCTION-M2-QA-UAT-003' as const;
+  'WOS-V1-PRODUCTION-M2-QA-UAT-004' as const;
 
 export const WOS_V1_APP_OPERATIONS = [
   'CREATE_ORDER',

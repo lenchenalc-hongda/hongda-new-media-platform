@@ -40,6 +40,7 @@ import './workshop-order-production-app-http.test';
 import './workshop-order-production-office-correction.test';
 import './workshop-order-production-m2-contract.test';
 import './wos-v1-qa-closers.test';
+import '../live/wos-v1-qa-edge-finalizer.test';
 import '../integration/wos-v1-qa-edge-entry-http.test';
 import './workshop-order-qa-readonly-byte-verifier.test';
 import './workshop-order-qa-readonly-request-order.test';

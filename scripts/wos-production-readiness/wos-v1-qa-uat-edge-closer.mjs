@@ -7,6 +7,7 @@ import {
   existsSync,
   mkdirSync,
   readFileSync,
+  renameSync,
   writeFileSync,
 } from 'node:fs';
 import { homedir } from 'node:os';
@@ -15,7 +16,7 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '../..');
 const SCRIPT = fileURLToPath(import.meta.url);
-const AUTH_ID = 'WOS-V1-PRODUCTION-M2-QA-UAT-003';
+const AUTH_ID = 'WOS-V1-PRODUCTION-M2-QA-UAT-004';
 const PROJECT_REF = 'xulmpqaknlwqqculbsek';
 const ARM_KEYCHAIN = 'WOS_V1_QA_DB_CLOSER_ARM_TOKEN';
 const SERVICE_KEYCHAIN = 'WOS_V1_QA_EDGE_CLOSER_SERVICE_ROLE_KEY';
@@ -30,6 +31,14 @@ const DEFAULT_PLIST_DIR = join(homedir(), 'Library/LaunchAgents');
 
 function fail(code) {
   throw new Error(code);
+}
+
+function writePrivateJson(path, value) {
+  const temporary = `${path}.${process.pid}.${randomUUID()}.tmp`;
+  writeFileSync(temporary, `${JSON.stringify(value, null, 2)}\n`, {
+    mode: 0o600,
+  });
+  renameSync(temporary, path);
 }
 
 function validateUuid(value, code) {
@@ -432,6 +441,7 @@ async function arm() {
   writeFileSync(path, `${JSON.stringify({ ...armed, receiptSha256: digest }, null, 2)}\n`, {
     mode: 0o600,
   });
+  if (load) spawnFinalizer(path);
   process.stdout.write(`${JSON.stringify({
     status: 'ARMED',
     executionId: id,
@@ -512,13 +522,87 @@ function unloadLaunchAgent(state) {
   const bootout = spawnSync('launchctl', ['bootout', domainLabel], {
     encoding: 'utf8',
   });
+  if (bootout.error) fail('WOS_V1_QA_EDGE_CLOSER_LAUNCHD_UNLOAD_FAILED');
   const check = spawnSync('launchctl', ['print', domainLabel], {
     encoding: 'utf8',
   });
+  if (check.error) fail('WOS_V1_QA_EDGE_CLOSER_LAUNCHD_UNLOAD_FAILED');
   if (check.status === 0) {
     fail('WOS_V1_QA_EDGE_CLOSER_LAUNCHD_UNLOAD_FAILED');
   }
+  const checkOutput = `${check.stdout || ''}\n${check.stderr || ''}`;
+  if (!/could not find service|no such process|service.*not found/i.test(checkOutput)) {
+    fail('WOS_V1_QA_EDGE_CLOSER_LAUNCHD_UNLOAD_FAILED');
+  }
   return { required: true, verified: true };
+}
+
+function sealCloseReceipt(state, result, probe, launchAgentUnloaded, source) {
+  const sealedReceipt = {
+    authorizationId: AUTH_ID,
+    projectRef: PROJECT_REF,
+    executionId: state.executionId,
+    codeSha256: state.codeSha256,
+    processNonce: state.processNonce,
+    launchAgentUnloaded,
+    result,
+    probe,
+  };
+  return {
+    ...sealedReceipt,
+    receiptSha256: createHash('sha256')
+      .update(JSON.stringify(sealedReceipt))
+      .digest('hex'),
+    receiptSource: source,
+  };
+}
+
+function writeClosedState(stateFile, state, receipt) {
+  writePrivateJson(`${stateFile}.close.json`, receipt);
+  writePrivateJson(stateFile, {
+    ...state,
+    status: 'CLOSED',
+    launchdLoaded: receipt.launchAgentUnloaded === true
+      ? false
+      : state.launchdLoaded === true,
+    closeReceipt: receipt,
+  });
+}
+
+function spawnFinalizer(stateFile) {
+  const child = spawn(
+    process.execPath,
+    [SCRIPT, 'finalize', '--state', stateFile],
+    {
+      detached: true,
+      stdio: 'ignore',
+      env: process.env,
+    },
+  );
+  child.unref();
+}
+
+async function finalizeClose(stateFile) {
+  const state = readState(stateFile);
+  const timeout = Date.parse(state.edgeCleanupDeadlineAt || '') + 60_000;
+  while (Date.now() <= timeout) {
+    const current = readState(stateFile);
+    if (current.status === 'CLOSED' && current.closeReceipt) {
+      const launchAgent = unloadLaunchAgent(current);
+      const receipt = sealCloseReceipt(
+        current,
+        current.closeReceipt.result,
+        current.closeReceipt.probe,
+        launchAgent.required ? launchAgent.verified : false,
+        'SCHEDULED_EDGE_CLOSE_FINALIZER',
+      );
+      writeClosedState(stateFile, current, receipt);
+      process.stdout.write(`${JSON.stringify(receipt)}\n`);
+      return;
+    }
+    await new Promise(resolve => setTimeout(resolve, 1000));
+  }
+  fail('WOS_V1_QA_EDGE_CLOSER_FINALIZER_TIMEOUT');
 }
 
 async function watch(stateFile, once) {
@@ -541,32 +625,14 @@ async function watch(stateFile, once) {
   }
   const result = await closeEdge(state, 'SCHEDULED_EDGE_CLOSE');
   const probe = await probeClosed(state);
-  const launchAgent = unloadLaunchAgent(state);
-  const sealedReceipt = {
-    authorizationId: AUTH_ID,
-    projectRef: PROJECT_REF,
-    executionId: state.executionId,
-    codeSha256: state.codeSha256,
-    processNonce: state.processNonce,
-    launchAgentUnloaded: launchAgent.required
-      ? launchAgent.verified
-      : false,
+  const receipt = sealCloseReceipt(
+    state,
     result,
     probe,
-  };
-  const receipt = {
-    ...sealedReceipt,
-    receiptSha256: createHash('sha256')
-      .update(JSON.stringify(sealedReceipt))
-      .digest('hex'),
-  };
-  writeFileSync(`${stateFile}.close.json`, `${JSON.stringify(receipt, null, 2)}\n`, {
-    mode: 0o600,
-  });
-  const closedState = { ...state, status: 'CLOSED', closeReceipt: receipt };
-  writeFileSync(stateFile, `${JSON.stringify(closedState, null, 2)}\n`, {
-    mode: 0o600,
-  });
+    false,
+    'SCHEDULED_EDGE_CLOSE_PRE_FINALIZER',
+  );
+  writeClosedState(stateFile, state, receipt);
   process.stdout.write(`${JSON.stringify(receipt)}\n`);
   if (result.timely !== true) fail('WOS_V1_QA_EDGE_CLOSER_DEADLINE_MISSED');
   if (!probe.ok) fail('WOS_V1_QA_EDGE_CLOSED_PROBE_FAILED');
@@ -673,6 +739,10 @@ const stateIndex = process.argv.indexOf('--state');
 try {
   assertLocalTestScope();
   if (command === 'arm') await arm();
+  else if (command === 'finalize') {
+    const stateFile = process.argv[stateIndex + 1];
+    await finalizeClose(stateFile);
+  }
   else if (command === 'watch') {
     const stateFile = process.argv[stateIndex + 1];
     if (process.argv.includes('--loop')) await watchLoop(stateFile);

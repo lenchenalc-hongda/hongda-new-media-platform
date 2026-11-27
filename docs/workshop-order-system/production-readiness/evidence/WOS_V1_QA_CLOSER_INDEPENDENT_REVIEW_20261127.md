@@ -92,3 +92,38 @@ DEDICATED_EDGE_SECRET_REQUIRED=PASS
 
 This review is independent source evidence. It is not Owner approval, a remote
 ARM result, a Hosted timer proof or permission to merge/deploy Production.
+
+## Final R2 Hardening Re-review
+
+The independent reviewer rechecked the post-R2 hardening delta before source
+freeze:
+
+```ini
+P0_FINDINGS=0
+P1_FINDINGS=0
+P2_FINDINGS=0
+FINAL_SOURCE_REVIEW=PASS
+AUTHORIZATION_REBIND_003_TO_004=PASS
+PREVIEW_REBIND_ENFORCED=BLOCKED_UNTIL_NEW_EXACT_HEAD_READY
+```
+
+Review findings fixed before this verdict:
+
+1. The old exact-HEAD Preview deployment is no longer bound to the business
+   Gate. A new Preview must be created and verified after the final HEAD exists.
+2. `launchctl` startup errors and ambiguous non-zero `print` results now fail
+   closed instead of producing `launchAgentUnloaded=true`.
+3. The finalizer harness now proves that a detached child can finish the close
+   receipt after its short-lived parent exits, and covers missing/rejected
+   `launchctl`.
+4. PG17 Cron stubs now raise when the job is already absent, so the production
+   replay exception path is actually exercised.
+5. CLOSED state files are replaced by atomic rename, avoiding partial JSON reads
+   by the detached finalizer.
+6. Documentation now uses active business authorization `...-004`, identifies
+   Hosted version 41 as the current holder of the restored v38 source bytes, and
+   retains `...-003` only as historical closer-only evidence.
+
+The remaining external prerequisite is a new QA Preview deployment for the
+final exact HEAD. This review does not authorize that deployment, business
+writes, merged code or any Production action.

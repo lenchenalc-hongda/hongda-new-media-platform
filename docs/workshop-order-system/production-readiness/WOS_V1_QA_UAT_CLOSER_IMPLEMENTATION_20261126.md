@@ -1,19 +1,20 @@
 # WOS V1 QA UAT Independent Closer Implementation
 
 Status:
-`SOURCE_AND_LOCAL_HARNESS_PASS / INDEPENDENT_SOURCE_REVIEW_PASS / REMOTE_ARM_NOT_AUTHORIZED`
+`REMOTE_R2_PASS / LOCAL_HARDENING_PASS / FINAL_PREVIEW_REBIND_PENDING / BUSINESS_UAT_NOT_AUTHORIZED`
 
 This document defines the final two-closer design for:
 
-`WOS-V1-PRODUCTION-M2-QA-UAT-003`
+`WOS-V1-PRODUCTION-M2-QA-UAT-004`
 
 It does not authorize any remote SQL, Cron job, Edge deployment, environment
 change, Gate opening, order creation or Production operation.
 
-The prior `...-001` and failed-Closed `...-002` executions are consumed and
-remain historical evidence only. The active source is bound to `003`; reuse of
-an old positive control row is rejected by the immutable control identity,
-audit-preserving authorization pattern and closed-state guards.
+The prior `...-001`, failed-Closed `...-002`, and completed closer-only
+`...-003` executions are consumed and remain historical evidence only. The
+active business source is bound to `004`; reuse of an old positive control row
+is rejected by the immutable control identity, audit-preserving authorization
+pattern and closed-state guards.
 
 ## Security Model
 
@@ -205,8 +206,8 @@ If the Mac is off or offline, the server clock still rejects every Edge write
 at `write_deadline_at`. The LaunchAgent improves cleanup timing but is not the
 security boundary.
 
-The current Hosted QA `wos-v1-verify-image` is version 38 after v36 bytes were
-restored, bundle
+The current Hosted QA `wos-v1-verify-image` is version 41 after v36 bytes were
+restored again, bundle
 `21fd1a8d31508662c6c0790e9304b793e864ffb321de5b77bcc8145e91f18450`.
 Version 36 contains the restored source bytes previously preserved from v34
 under
@@ -274,6 +275,44 @@ prefix. The probe failed before ARM with
 created. Hosted v36 source bytes were restored as a new version with writes
 disabled. The source fix prefers the dedicated secret above and retains the
 reserved value only as a legacy fallback.
+
+## Remote R2 Rehearsal
+
+The authorized `...-003` run on exact HEAD `94f1fb9` successfully armed both
+independent closers and let them trigger without a manual close:
+
+```ini
+DB_CRON_JOB_ID=3
+DB_OPENED_AT=2026-11-27T08:04:35.410816Z
+DB_CLOSED_AT=2026-11-27T08:12:36.967945Z
+DB_ELAPSED_SECONDS=481.557
+DB_WITHIN_540S=PASS
+DB_WITHIN_480_TARGET=NO
+
+EDGE_CLOSED_AT=2026-11-27T08:12:40.741624Z
+EDGE_ELAPSED_SECONDS=485.331
+EDGE_WITHIN_840S=PASS
+EDGE_HTTP_503_PROBE=PASS
+```
+
+Both Cron and LaunchAgent were independently triggered. The DB Cron was removed
+automatically. The LaunchAgent was unloaded. No business Gate or order was
+created.
+
+Two non-security evidence defects were found and fixed:
+
+1. LaunchAgent `bootout` terminated the watcher before it could write its local
+   close receipt. The scheduled close and HTTP probe had already succeeded. A
+   detached finalizer now waits for the CLOSED state, unloads the LaunchAgent
+   and reseals the receipt with `launchAgentUnloaded=true`.
+2. Replaying an already closed DB receipt returned
+   `cronUnscheduled=false` when the Cron was already absent. The function now
+   verifies absence after an unschedule exception and returns true
+   idempotently.
+
+The R2 local receipt was reconstructed from the immutable DB close receipt and a
+fresh Hosted HTTP `503 / WOS_V1_QA_EDGE_CLOSED` probe. The reconstruction is
+recorded as evidence, not represented as automatic local-file success.
 
 ## Local Evidence
 
