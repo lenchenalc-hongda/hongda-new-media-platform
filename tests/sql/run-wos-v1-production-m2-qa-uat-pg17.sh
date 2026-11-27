@@ -382,6 +382,39 @@ psql_db "$DB" -q -c "
 psql_db "$DB" -q -1 \
   < "$ROOT/supabase/migrations/20261126090000_wos_v1_production_m2_signoff.sql"
 psql_db "$DB" -q -c "
+  CREATE FUNCTION public.wos_create_production_order(uuid,jsonb)
+  RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=''
+  AS \$stub\$ BEGIN RAISE EXCEPTION 'PG17_APP_RPC_STUB'; END; \$stub\$;
+  CREATE FUNCTION public.wos_register_uploaded_reference_image(
+    uuid,uuid,text,text
+  ) RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=''
+  AS \$stub\$ BEGIN RAISE EXCEPTION 'PG17_APP_RPC_STUB'; END; \$stub\$;
+  CREATE FUNCTION public.wos_confirm_office_completeness(
+    uuid,integer,text,text
+  ) RETURNS uuid LANGUAGE plpgsql SECURITY DEFINER SET search_path=''
+  AS \$stub\$ BEGIN RAISE EXCEPTION 'PG17_APP_RPC_STUB'; END; \$stub\$;
+  CREATE FUNCTION public.wos_submit_production_order(
+    uuid,integer,text,uuid
+  ) RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=''
+  AS \$stub\$ BEGIN RAISE EXCEPTION 'PG17_APP_RPC_STUB'; END; \$stub\$;
+  CREATE FUNCTION public.wos_operator_order_action(
+    uuid,integer,uuid,text,text
+  ) RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=''
+  AS \$stub\$ BEGIN RAISE EXCEPTION 'PG17_APP_RPC_STUB'; END; \$stub\$;
+  CREATE FUNCTION public.wos_office_save_correction(
+    uuid,integer,uuid,jsonb,text
+  ) RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=''
+  AS \$stub\$ BEGIN RAISE EXCEPTION 'PG17_APP_RPC_STUB'; END; \$stub\$;
+  CREATE FUNCTION public.wos_office_resubmit_order(
+    uuid,integer,uuid,text
+  ) RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=''
+  AS \$stub\$ BEGIN RAISE EXCEPTION 'PG17_APP_RPC_STUB'; END; \$stub\$;
+  CREATE FUNCTION public.wos_operator_review_correction(
+    uuid,integer,uuid,text
+  ) RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=''
+  AS \$stub\$ BEGIN RAISE EXCEPTION 'PG17_APP_RPC_STUB'; END; \$stub\$;
+" >/dev/null
+psql_db "$DB" -q -c "
   INSERT INTO public.wos_order_create_receipts(
     request_id,organization_id,order_id,actor_profile_id,
     payload_fingerprint,response_json
@@ -733,6 +766,138 @@ psql_db "$DB" -qAt -c "
 " >/dev/null
 echo 'WOS_V1_QA_UAT_DUAL_CLOSERS_ARMED=PASS'
 psql_db "$DB" -q -c "
+  REVOKE ALL ON FUNCTION
+    public.wos_create_production_order(uuid,jsonb)
+  FROM PUBLIC, anon, authenticated;
+  REVOKE ALL ON FUNCTION
+    public.wos_register_uploaded_reference_image(uuid,uuid,text,text)
+  FROM PUBLIC, anon, authenticated;
+  REVOKE ALL ON FUNCTION
+    public.wos_confirm_office_completeness(uuid,integer,text,text)
+  FROM PUBLIC, anon, authenticated;
+  REVOKE ALL ON FUNCTION
+    public.wos_submit_production_order(uuid,integer,text,uuid)
+  FROM PUBLIC, anon, authenticated;
+  REVOKE ALL ON FUNCTION
+    public.wos_operator_order_action(uuid,integer,uuid,text,text)
+  FROM PUBLIC, anon, authenticated;
+  REVOKE ALL ON FUNCTION
+    public.wos_office_save_correction(uuid,integer,uuid,jsonb,text)
+  FROM PUBLIC, anon, authenticated;
+  REVOKE ALL ON FUNCTION
+    public.wos_office_resubmit_order(uuid,integer,uuid,text)
+  FROM PUBLIC, anon, authenticated;
+  REVOKE ALL ON FUNCTION
+    public.wos_operator_review_correction(uuid,integer,uuid,text)
+  FROM PUBLIC, anon, authenticated;
+  DO \$private_acl\$
+  BEGIN
+    IF to_regprocedure(
+      'public.wos_v1_assert_current_image_set(uuid,uuid,text)'
+    ) IS NOT NULL THEN
+      EXECUTE 'REVOKE ALL ON FUNCTION '
+        'public.wos_v1_assert_current_image_set(uuid,uuid,text) '
+        'FROM PUBLIC, anon, authenticated';
+    END IF;
+  END;
+  \$private_acl\$;
+  CREATE TABLE IF NOT EXISTS
+    public.wos_office_revisions(id uuid PRIMARY KEY);
+  GRANT EXECUTE ON FUNCTION public.wos_create_production_order(uuid,jsonb)
+  TO anon;
+  GRANT EXECUTE ON FUNCTION
+    public.wos_register_uploaded_reference_image(uuid,uuid,text,text)
+  TO anon;
+  GRANT EXECUTE ON FUNCTION
+    public.wos_confirm_office_completeness(uuid,integer,text,text)
+  TO anon;
+  GRANT EXECUTE ON FUNCTION
+    public.wos_submit_production_order(uuid,integer,text,uuid)
+  TO anon;
+  GRANT EXECUTE ON FUNCTION
+    public.wos_operator_order_action(uuid,integer,uuid,text,text)
+  TO anon;
+  GRANT EXECUTE ON FUNCTION
+    public.wos_office_save_correction(uuid,integer,uuid,jsonb,text)
+  TO anon;
+  GRANT EXECUTE ON FUNCTION
+    public.wos_office_resubmit_order(uuid,integer,uuid,text)
+  TO anon;
+  GRANT EXECUTE ON FUNCTION
+    public.wos_operator_review_correction(uuid,integer,uuid,text)
+  TO anon;
+  GRANT INSERT,UPDATE,DELETE ON public.wos_production_orders
+  TO authenticated;
+  GRANT SELECT,INSERT,UPDATE,DELETE ON public.wos_office_revisions
+  TO authenticated;
+" >/dev/null
+APP_ACTIVATE_OUTPUT="$(
+  WOS_QA_PSQL_DOCKER_CONTAINER="$CONTAINER" \
+  WOS_QA_DATABASE="$DB" \
+  WOS_V1_QA_EXECUTION_ID="$UAT_CLOSER_EXECUTION_ID" \
+    node "$ROOT/scripts/wos-production-readiness/wos-v1-qa-uat-db-closer.mjs" \
+      activate-qa-app
+)"
+[[ "$(printf '%s' "$APP_ACTIVATE_OUTPUT" | tail -n 1)" \
+  = 'WOS_V1_QA_DB_CLOSER_APP_ACTIVATE=PASS' ]] \
+  || fail 'QA_APP_ACTIVATION_FAILED'
+[[ "$(psql_db "$DB" -qAt -c "
+  SELECT NOT EXISTS (
+      SELECT 1
+      FROM (VALUES
+        ('public.wos_create_production_order(uuid,jsonb)'::regprocedure),
+        ('public.wos_register_uploaded_reference_image(uuid,uuid,text,text)'::regprocedure),
+        ('public.wos_confirm_office_completeness(uuid,integer,text,text)'::regprocedure),
+        ('public.wos_submit_production_order(uuid,integer,text,uuid)'::regprocedure),
+        ('public.wos_operator_order_action(uuid,integer,uuid,text,text)'::regprocedure),
+        ('public.wos_office_save_correction(uuid,integer,uuid,jsonb,text)'::regprocedure),
+        ('public.wos_office_resubmit_order(uuid,integer,uuid,text)'::regprocedure),
+        ('public.wos_operator_review_correction(uuid,integer,uuid,text)'::regprocedure)
+      ) functions(procedure)
+      WHERE has_function_privilege('anon',procedure,'EXECUTE')
+        OR NOT has_function_privilege(
+          'authenticated',procedure,'EXECUTE'
+        )
+    )
+    AND NOT has_function_privilege(
+      'authenticated',
+      'public.wos_v1_m2_action(uuid,integer,uuid,text,jsonb)',
+      'EXECUTE'
+    )
+    AND (
+      to_regprocedure(
+        'public.wos_v1_assert_current_image_set(uuid,uuid,text)'
+      ) IS NULL
+      OR NOT has_function_privilege(
+        'authenticated',
+        'public.wos_v1_assert_current_image_set(uuid,uuid,text)',
+        'EXECUTE'
+      )
+    )
+    AND NOT has_table_privilege(
+      'authenticated', 'public.wos_production_orders', 'INSERT'
+    )
+    AND NOT has_table_privilege(
+      'authenticated', 'public.wos_production_orders', 'UPDATE'
+    )
+    AND NOT has_table_privilege(
+      'authenticated', 'public.wos_production_orders', 'DELETE'
+    )
+    AND NOT has_table_privilege(
+      'authenticated', 'public.wos_office_revisions', 'SELECT'
+    )
+    AND NOT has_table_privilege(
+      'authenticated', 'public.wos_office_revisions', 'INSERT'
+    )
+    AND NOT has_table_privilege(
+      'authenticated', 'public.wos_office_revisions', 'UPDATE'
+    )
+    AND NOT has_table_privilege(
+      'authenticated', 'public.wos_office_revisions', 'DELETE'
+    );
+")" = 't' ]] || fail 'QA_APP_ACTIVATION_ACL_INVALID'
+echo 'WOS_V1_QA_UAT_APP_ACTIVATION=PASS'
+psql_db "$DB" -q -c "
   UPDATE public.wos_production_orders
   SET customer_id=NULL
   WHERE id='33333333-3333-4333-8333-333333333333';
@@ -1080,6 +1245,36 @@ WOS_QA_DATABASE="$DB" \
 WOS_V1_QA_EXECUTION_ID="$UAT_CLOSER_EXECUTION_ID" \
   node "$ROOT/scripts/wos-production-readiness/wos-v1-qa-uat-db-closer.mjs" recover \
   || fail 'DB_CLOSER_DATA_RETAINING_RECOVERY_FAILED'
+[[ "$(psql_db "$DB" -qAt -c "
+  SELECT NOT EXISTS (
+      SELECT 1
+      FROM (VALUES
+        ('public.wos_create_production_order(uuid,jsonb)'::regprocedure),
+        ('public.wos_register_uploaded_reference_image(uuid,uuid,text,text)'::regprocedure),
+        ('public.wos_confirm_office_completeness(uuid,integer,text,text)'::regprocedure),
+        ('public.wos_submit_production_order(uuid,integer,text,uuid)'::regprocedure),
+        ('public.wos_operator_order_action(uuid,integer,uuid,text,text)'::regprocedure),
+        ('public.wos_office_save_correction(uuid,integer,uuid,jsonb,text)'::regprocedure),
+        ('public.wos_office_resubmit_order(uuid,integer,uuid,text)'::regprocedure),
+        ('public.wos_operator_review_correction(uuid,integer,uuid,text)'::regprocedure)
+      ) functions(procedure)
+      WHERE has_function_privilege('anon',procedure,'EXECUTE')
+        OR has_function_privilege('authenticated',procedure,'EXECUTE')
+    )
+    AND NOT has_table_privilege(
+      'authenticated', 'public.wos_office_revisions', 'SELECT'
+    )
+    AND NOT has_table_privilege(
+      'authenticated', 'public.wos_office_revisions', 'INSERT'
+    )
+    AND NOT has_table_privilege(
+      'authenticated', 'public.wos_office_revisions', 'UPDATE'
+    )
+    AND NOT has_table_privilege(
+      'authenticated', 'public.wos_office_revisions', 'DELETE'
+    );
+")" = 't' ]] || fail 'QA_APP_PERMISSIONS_NOT_REVOKED'
+echo 'WOS_V1_QA_UAT_APP_DEACTIVATION=PASS'
 
 [[ "$(psql_db "$DB" -qAt -c "
   SELECT (SELECT count(*) FROM wos_v1_qa_uat.write_gates)=4

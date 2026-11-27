@@ -294,6 +294,75 @@ assert(!qaActivate.includes(
   'GRANT EXECUTE ON FUNCTION public.wos_v1_m2_action',
 ));
 
+const qaAppActivate = readFileSync(
+  'docs/workshop-order-system/production-readiness/sql/WOS_V1_QA_UAT_APP_ACTIVATE_NOT_AUTHORIZED.sql',
+  'utf8',
+);
+assert(qaAppActivate.includes(
+  'WOS_V1_QA_UAT_APP_ACTIVATION_NOT_AUTHORIZED',
+));
+assert(qaAppActivate.includes('WOS_V1_QA_UAT_APP_REQUIRES_ARMED_CLOSERS'));
+assert(qaAppActivate.includes(
+  "clock_timestamp() + interval '4 minutes'",
+));
+assert(qaAppActivate.includes(
+  "db_last_heartbeat_at >=",
+));
+assert(qaAppActivate.includes('WOS_V1_QA_UAT_APP_EXECUTION_MISMATCH'));
+assert(qaAppActivate.includes(
+  "'812aebd9-75d5-427a-9047-5c84a5d6fe42'",
+));
+assert(qaAppActivate.includes('WOS_V1_QA_UAT_APP_RPC_NOT_INSTALLED'));
+assert(qaAppActivate.includes('WOS_V1_QA_UAT_APP_BROAD_TABLE_ACCESS'));
+assert(qaAppActivate.includes(
+  'REVOKE INSERT, UPDATE, DELETE ON public.wos_production_orders',
+));
+assert(qaAppActivate.includes(
+  'ON public.wos_office_revisions FROM PUBLIC, authenticated',
+));
+assert(qaAppActivate.includes(
+  'FROM PUBLIC, anon;',
+));
+assert(qaAppActivate.includes('WOS_V1_QA_UAT_APP_RPC_ACL_VIOLATION'));
+assert(qaAppActivate.includes(
+  'current_setting(\'wos_v1.qa_execution_id\', true)::uuid',
+));
+assert(qaAppActivate.includes(
+  'GRANT EXECUTE ON FUNCTION public.wos_create_production_order(uuid,jsonb)',
+));
+assert(qaAppActivate.includes(
+  'GRANT EXECUTE ON FUNCTION public.wos_operator_review_correction(',
+));
+assert(!qaAppActivate.includes(
+  'GRANT EXECUTE ON FUNCTION public.wos_v1_m2_action',
+));
+assert(!qaAppActivate.includes(
+  'GRANT EXECUTE ON FUNCTION public.wos_v1_qa_uat_m2_action',
+));
+assert(qaAppActivate.includes(
+  'public.wos_v1_assert_current_image_set(uuid,uuid,text)',
+));
+
+const qaAppDeactivate = readFileSync(
+  'docs/workshop-order-system/production-readiness/sql/WOS_V1_QA_UAT_APP_DEACTIVATE_NOT_AUTHORIZED.sql',
+  'utf8',
+);
+assert(qaAppDeactivate.includes(
+  'WOS_V1_QA_UAT_APP_DEACTIVATION_NOT_AUTHORIZED',
+));
+assert(qaAppDeactivate.includes(
+  'REVOKE EXECUTE ON FUNCTION public.wos_create_production_order(uuid,jsonb)',
+));
+assert(qaAppDeactivate.includes(
+  'REVOKE EXECUTE ON FUNCTION public.wos_operator_review_correction(',
+));
+assert(qaAppDeactivate.includes(
+  'WOS_V1_QA_UAT_APP_DEACTIVATION_INCOMPLETE',
+));
+assert(qaAppDeactivate.includes(
+  "has_function_privilege('anon', business_function, 'EXECUTE')",
+));
+
 const qaClose = readFileSync(
   'docs/workshop-order-system/production-readiness/sql/WOS_V1_QA_UAT_M2_DEACTIVATE_NOT_AUTHORIZED.sql',
   'utf8',

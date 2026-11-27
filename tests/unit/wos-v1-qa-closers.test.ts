@@ -148,6 +148,12 @@ for (const marker of [
   'WOS_V1_QA_EDGE_CLOSE_RECEIPT_INVALID',
   'WOS_V1_QA_EDGE_CLOSE_RECEIPT_HASH_MISMATCH',
   'WOS_V1_QA_EDGE_CLOSE_RECEIPT_MISSING',
+  "const QA_APP_EXECUTION_ID = '812aebd9-75d5-427a-9047-5c84a5d6fe42'",
+  'WOS_V1_QA_APP_EXECUTION_ID_MISMATCH',
+  'WOS_V1_QA_APP_LOCAL_TEST_SCOPE_REQUIRED',
+  "wos_v1.qa_local_test",
+  'activate-qa-app',
+  'deactivate-qa-app',
 ]) {
   assert(dbCloser.includes(marker), `DB closer runner missing ${marker}`);
 }
@@ -158,6 +164,15 @@ const installCloserOnlySource = dbCloser.slice(
 assert(!dbCloser.includes("command === 'install'"));
 assert(!installCloserOnlySource.includes('ACTIVATE_NOT_AUTHORIZED'));
 assert(!installCloserOnlySource.includes('qa_uat_activation_authorized'));
+const recoverSource = dbCloser.slice(
+  dbCloser.indexOf('function recover()'),
+  dbCloser.indexOf('function recoverCloserOnly()'),
+);
+assert(recoverSource.indexOf('deactivateQaApp()')
+  < recoverSource.indexOf(
+    'WOS_V1_QA_UAT_M2_DEACTIVATE_NOT_AUTHORIZED.sql',
+  ));
+assert(recoverSource.includes('recoveryError ??= error'));
 
 for (const marker of [
   'wos_v1_qa_closer.controls',

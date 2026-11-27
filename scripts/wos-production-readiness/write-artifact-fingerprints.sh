@@ -23,6 +23,8 @@ files=(
   docs/workshop-order-system/production-readiness/sql/WOS_V1_QA_UAT_M2_ACTIVATE_NOT_AUTHORIZED.sql
   docs/workshop-order-system/production-readiness/sql/WOS_V1_QA_UAT_M2_DEACTIVATE_NOT_AUTHORIZED.sql
   docs/workshop-order-system/production-readiness/sql/WOS_V1_QA_UAT_M2_ROLLBACK_NOT_AUTHORIZED.sql
+  docs/workshop-order-system/production-readiness/sql/WOS_V1_QA_UAT_APP_ACTIVATE_NOT_AUTHORIZED.sql
+  docs/workshop-order-system/production-readiness/sql/WOS_V1_QA_UAT_APP_DEACTIVATE_NOT_AUTHORIZED.sql
   docs/workshop-order-system/production-readiness/sql/WOS_V1_QA_CLOSER_ONLY_INSTALL_NOT_AUTHORIZED.sql
   docs/workshop-order-system/production-readiness/sql/WOS_V1_QA_CLOSER_ONLY_ROLLBACK_NOT_AUTHORIZED.sql
   docs/workshop-order-system/production-readiness/sql/WOS_V1_PRODUCTION_RPC_ACTIVATION_TEMPLATE_NOT_AUTHORIZED.sql
@@ -130,6 +132,7 @@ files=(
   docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_CLOSER_INDEPENDENT_REVIEW_20261127.md
   docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_CLOSER_REMOTE_FAIL_CLOSED_20261127.json
   docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_CLOSER_REMOTE_R2_EVIDENCE_20261127.json
+  docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_UAT_APP_ACTIVATION_INDEPENDENT_REVIEW_20261127.md
   docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_EDGE_V34_PRESERVATION_20261127.json
   docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_EDGE_V36_PRESERVATION_20261127.json
   docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_EDGE_V34_SOURCE_20261127/index.ts

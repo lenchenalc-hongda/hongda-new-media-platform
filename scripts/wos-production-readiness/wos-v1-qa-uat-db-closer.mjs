@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '../..');
 const AUTH_ID = 'WOS-V1-PRODUCTION-M2-QA-UAT-004';
+const QA_APP_EXECUTION_ID = '812aebd9-75d5-427a-9047-5c84a5d6fe42';
 const PROJECT_REF = 'xulmpqaknlwqqculbsek';
 const ARM_KEYCHAIN = 'WOS_V1_QA_DB_CLOSER_ARM_TOKEN';
 const OWNED_TEST_CONTAINER =
@@ -22,6 +23,14 @@ const CLOSER_ONLY_INSTALL = join(
 const CLOSER_ONLY_ROLLBACK = join(
   ROOT,
   'docs/workshop-order-system/production-readiness/sql/WOS_V1_QA_CLOSER_ONLY_ROLLBACK_NOT_AUTHORIZED.sql',
+);
+const APP_ACTIVATE = join(
+  ROOT,
+  'docs/workshop-order-system/production-readiness/sql/WOS_V1_QA_UAT_APP_ACTIVATE_NOT_AUTHORIZED.sql',
+);
+const APP_DEACTIVATE = join(
+  ROOT,
+  'docs/workshop-order-system/production-readiness/sql/WOS_V1_QA_UAT_APP_DEACTIVATE_NOT_AUTHORIZED.sql',
 );
 
 function fail(code) {
@@ -192,6 +201,31 @@ function executionId() {
   );
 }
 
+function qaAppLocalTest() {
+  const container = process.env.WOS_QA_PSQL_DOCKER_CONTAINER || '';
+  if (!container) return false;
+  if (!OWNED_TEST_CONTAINER.test(container)
+    || !(process.env.WOS_QA_DATABASE || '').endsWith('_ci')) {
+    fail('WOS_V1_QA_APP_LOCAL_TEST_SCOPE_REQUIRED');
+  }
+  return true;
+}
+
+function qaAppExecutionId() {
+  const localTest = qaAppLocalTest();
+  const supplied = process.env.WOS_V1_QA_EXECUTION_ID;
+  if (localTest) {
+    return validateUuid(
+      supplied || QA_APP_EXECUTION_ID,
+      'WOS_V1_QA_APP_EXECUTION_ID_INVALID',
+    );
+  }
+  if (supplied && supplied.toLowerCase() !== QA_APP_EXECUTION_ID) {
+    fail('WOS_V1_QA_APP_EXECUTION_ID_MISMATCH');
+  }
+  return QA_APP_EXECUTION_ID;
+}
+
 function armToken(id) {
   const supplied = process.env.WOS_V1_QA_ARM_TOKEN;
   if (supplied) {
@@ -247,6 +281,31 @@ function activateFullM2() {
   ].join('\n');
   runSql(sql);
   process.stdout.write('WOS_V1_QA_DB_CLOSER_FULL_M2_ACTIVATE=PASS\n');
+}
+
+function activateQaApp() {
+  const id = qaAppExecutionId();
+  const localTest = qaAppLocalTest();
+  const sql = [
+    projectSettingsSql(),
+    `SET wos_v1.qa_authorization_id=${sqlLiteral(AUTH_ID)};`,
+    `SET wos_v1.qa_execution_id=${sqlLiteral(id)};`,
+    `SET wos_v1.qa_local_test=${sqlLiteral(localTest ? 'yes' : 'no')};`,
+    "SET wos_v1.qa_uat_app_activation_authorized='yes';",
+    readFileSync(APP_ACTIVATE, 'utf8'),
+  ].join('\n');
+  runSql(sql);
+  process.stdout.write('WOS_V1_QA_DB_CLOSER_APP_ACTIVATE=PASS\n');
+}
+
+function deactivateQaApp() {
+  const sql = [
+    projectSettingsSql(),
+    "SET wos_v1.qa_uat_app_deactivation_authorized='yes';",
+    readFileSync(APP_DEACTIVATE, 'utf8'),
+  ].join('\n');
+  runSql(sql);
+  process.stdout.write('WOS_V1_QA_DB_CLOSER_APP_DEACTIVATE=PASS\n');
 }
 
 function installCloserOnly() {
@@ -486,27 +545,42 @@ function close(closerOnly = false) {
 }
 
 function recover() {
-  close(false);
-  const sql = [
-    projectSettingsSql(),
-    "SET wos_v1.qa_uat_close_authorized='yes';",
-    "SET wos_v1.qa_uat_rollback_authorized='yes';",
-    readFileSync(
-      join(
-        ROOT,
-        'docs/workshop-order-system/production-readiness/sql/WOS_V1_QA_UAT_M2_DEACTIVATE_NOT_AUTHORIZED.sql',
+  let recoveryError;
+  try {
+    close(false);
+  } catch (error) {
+    recoveryError = error;
+  }
+  try {
+    deactivateQaApp();
+  } catch (error) {
+    recoveryError ??= error;
+  }
+  try {
+    const sql = [
+      projectSettingsSql(),
+      "SET wos_v1.qa_uat_close_authorized='yes';",
+      "SET wos_v1.qa_uat_rollback_authorized='yes';",
+      readFileSync(
+        join(
+          ROOT,
+          'docs/workshop-order-system/production-readiness/sql/WOS_V1_QA_UAT_M2_DEACTIVATE_NOT_AUTHORIZED.sql',
+        ),
+        'utf8',
       ),
-      'utf8',
-    ),
-    readFileSync(
-      join(
-        ROOT,
-        'docs/workshop-order-system/production-readiness/sql/WOS_V1_QA_UAT_M2_ROLLBACK_NOT_AUTHORIZED.sql',
+      readFileSync(
+        join(
+          ROOT,
+          'docs/workshop-order-system/production-readiness/sql/WOS_V1_QA_UAT_M2_ROLLBACK_NOT_AUTHORIZED.sql',
+        ),
+        'utf8',
       ),
-      'utf8',
-    ),
-  ].join('\n');
-  runSql(sql);
+    ].join('\n');
+    runSql(sql);
+  } catch (error) {
+    recoveryError ??= error;
+  }
+  if (recoveryError) throw recoveryError;
   process.stdout.write('WOS_V1_QA_DB_CLOSER_DATA_RETAINING_RECOVERY=PASS\n');
 }
 
@@ -555,6 +629,8 @@ try {
   if (command === 'install-closer-only') installCloserOnly();
   else if (command === 'install-full-m2') installFullM2();
   else if (command === 'activate-full-m2') activateFullM2();
+  else if (command === 'activate-qa-app') activateQaApp();
+  else if (command === 'deactivate-qa-app') deactivateQaApp();
   else if (command === 'arm') await arm(false);
   else if (command === 'arm-closer-only') await arm(true);
   else if (command === 'status') status(false);
