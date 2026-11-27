@@ -91,13 +91,17 @@ export default function WorkshopProductionOrderNewPage() {
       </section>
 
       {returnedReadEnabled && !qaRuntime.readsEnabled && <LiveQaReturnedOrders />}
-      {businessLive && <ProductionOfficeOrders />}
       {qaLive && !qaRuntime.readsEnabled && <LiveQaM2OfficeBaseline />}
       <ProductionOrderForm
         qaLive={qaLive && !qaRuntime.readsEnabled}
         productionLive={businessLive}
         productionWritesEnabled={businessWritesEnabled}
       />
+      {businessLive && (
+        <div className="mt-6">
+          <ProductionOfficeOrders />
+        </div>
+      )}
     </AppLayout>
   );
 }

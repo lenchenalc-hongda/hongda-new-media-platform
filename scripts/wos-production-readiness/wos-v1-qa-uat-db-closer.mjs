@@ -115,6 +115,7 @@ function runSql(sql) {
         { cwd: ROOT, input: sql, encoding: 'utf8' },
       ));
   }
+  const remoteEnv = databaseEnv();
   const localPsql = spawnSync('psql', ['--version'], {
     encoding: 'utf8',
     stdio: 'ignore',
@@ -123,7 +124,7 @@ function runSql(sql) {
     return failProcessResult(spawnSync(
         'psql',
         ['-X', '-v', 'ON_ERROR_STOP=1', '-At', '-f', '-'],
-        { cwd: ROOT, env: databaseEnv(), input: sql, encoding: 'utf8' },
+      { cwd: ROOT, env: remoteEnv, input: sql, encoding: 'utf8' },
       ));
   }
   const dockerImage = spawnSync(
