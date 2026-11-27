@@ -148,7 +148,7 @@ for (const marker of [
   'WOS_V1_QA_EDGE_CLOSE_RECEIPT_INVALID',
   'WOS_V1_QA_EDGE_CLOSE_RECEIPT_HASH_MISMATCH',
   'WOS_V1_QA_EDGE_CLOSE_RECEIPT_MISSING',
-  "const QA_APP_EXECUTION_ID = '812aebd9-75d5-427a-9047-5c84a5d6fe42'",
+  "const QA_APP_EXECUTION_ID = '791577cc-23bb-4b8d-93dd-e90b6630abe2'",
   'WOS_V1_QA_APP_EXECUTION_ID_MISMATCH',
   'WOS_V1_QA_APP_LOCAL_TEST_SCOPE_REQUIRED',
   "wos_v1.qa_local_test",
@@ -284,8 +284,8 @@ assert(
 
 const historicalExecutionId = 'efddb60c-4a70-4b46-bf18-46629a4397d2';
 const historicalNonce = '77ac7769-25a2-495a-8892-467d16abb00e';
-const executionId = '812aebd9-75d5-427a-9047-5c84a5d6fe42';
-const processNonce = '6fb2ea13-f37f-48c4-b8ef-8a2ef51847b5';
+const executionId = '791577cc-23bb-4b8d-93dd-e90b6630abe2';
+const processNonce = '97f12512-70fe-4e9f-b81a-574b48ed7fad';
 assert(ownerGate.includes(historicalExecutionId));
 assert(ownerGate.includes(historicalNonce));
 for (const document of [closerRehearsalOwnerGate, JSON.stringify(inputs)]) {
@@ -307,10 +307,10 @@ assert.equal(
   processNonce,
 );
 for (const marker of [
-  'WOS-V1-PRODUCTION-M2-QA-UAT-004',
+  'WOS-V1-PRODUCTION-M2-QA-UAT-005',
   'WOS-V1-PRODUCTION-M2-QA-BUSINESS-UAT-20261127-01',
-  '812aebd9-75d5-427a-9047-5c84a5d6fe42',
-  '6fb2ea13-f37f-48c4-b8ef-8a2ef51847b5',
+  '791577cc-23bb-4b8d-93dd-e90b6630abe2',
+  '97f12512-70fe-4e9f-b81a-574b48ed7fad',
   'HOSTED_VERSION_AFTER_RECOVERY=41',
   'WOS_V1_QA_EDGE_CLOSER_SERVICE_ROLE_KEY',
   'PR283_MERGE=FORBIDDEN',

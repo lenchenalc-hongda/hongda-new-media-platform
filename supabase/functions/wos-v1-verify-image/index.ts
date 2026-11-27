@@ -26,7 +26,7 @@ const MAX_REQUEST_BYTES = 4096;
 const BODY_READ_TIMEOUT_MS = 5000;
 const MAX_EXECUTION_MS = 20000;
 const QA_UAT_PROJECT_REF = 'xulmpqaknlwqqculbsek';
-const QA_UAT_AUTHORIZATION_ID = 'WOS-V1-PRODUCTION-M2-QA-UAT-004';
+const QA_UAT_AUTHORIZATION_ID = 'WOS-V1-PRODUCTION-M2-QA-UAT-005';
 const baseHeaders = {
   'Cache-Control': 'no-store, private',
   'Content-Type': 'application/json; charset=utf-8',

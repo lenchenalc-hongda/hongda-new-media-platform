@@ -310,7 +310,7 @@ assert(qaAppActivate.includes(
 ));
 assert(qaAppActivate.includes('WOS_V1_QA_UAT_APP_EXECUTION_MISMATCH'));
 assert(qaAppActivate.includes(
-  "'812aebd9-75d5-427a-9047-5c84a5d6fe42'",
+  "'791577cc-23bb-4b8d-93dd-e90b6630abe2'",
 ));
 assert(qaAppActivate.includes('WOS_V1_QA_UAT_APP_RPC_NOT_INSTALLED'));
 assert(qaAppActivate.includes('WOS_V1_QA_UAT_APP_BROAD_TABLE_ACCESS'));
@@ -510,7 +510,7 @@ assert(uatRunner.includes(
   '9164ac91-a50c-4023-836c-5c0887b619fb',
 ));
 assert(
-  /SELECT public\.wos_v1_qa_uat_open_gate\(\s*'WOS-V1-PRODUCTION-M2-QA-UAT-004'[\s\S]*?'\$UAT_MANAGER_PROFILE'[\s\S]*?ARRAY\['START_RELEASE'\]/
+  /SELECT public\.wos_v1_qa_uat_open_gate\(\s*'WOS-V1-PRODUCTION-M2-QA-UAT-005'[\s\S]*?'\$UAT_MANAGER_PROFILE'[\s\S]*?ARRAY\['START_RELEASE'\]/
     .test(uatRunner),
 );
 for (const stale of [
@@ -530,7 +530,7 @@ assert.equal(uat.environment.WOS_V1_QA_UAT_M2_ENABLED, 'true');
 assert.equal(uat.environment.WOS_V1_QA_UAT_M2_WRITES_ENABLED, 'true');
 assert.equal(
   uat.environment.WOS_V1_QA_UAT_AUTHORIZATION_ID,
-  'WOS-V1-PRODUCTION-M2-QA-UAT-004',
+  'WOS-V1-PRODUCTION-M2-QA-UAT-005',
 );
 for (const version of ['v1', 'v2']) {
   const images = uat.images[version];

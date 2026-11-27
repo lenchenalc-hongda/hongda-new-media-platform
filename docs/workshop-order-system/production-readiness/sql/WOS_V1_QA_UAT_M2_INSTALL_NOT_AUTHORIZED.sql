@@ -419,7 +419,7 @@ DECLARE
   v_control wos_v1_qa_uat.closeout_controls%ROWTYPE;
   v_now timestamptz:=clock_timestamp();
 BEGIN
-  IF p_authorization_id<>'WOS-V1-PRODUCTION-M2-QA-UAT-004'
+  IF p_authorization_id<>'WOS-V1-PRODUCTION-M2-QA-UAT-005'
     OR p_project_ref<>'xulmpqaknlwqqculbsek'
   THEN
     RAISE EXCEPTION 'QA_UAT_CLOSER_SCOPE_MISMATCH';
@@ -1026,7 +1026,7 @@ AS $edge_allowed$
 DECLARE
   v_control wos_v1_qa_uat.closeout_controls%ROWTYPE;
 BEGIN
-  IF p_authorization_id<>'WOS-V1-PRODUCTION-M2-QA-UAT-004'
+  IF p_authorization_id<>'WOS-V1-PRODUCTION-M2-QA-UAT-005'
     OR p_project_ref<>'xulmpqaknlwqqculbsek'
   THEN
     RAISE EXCEPTION 'QA_UAT_EDGE_SCOPE_MISMATCH' USING ERRCODE='42501';
@@ -1149,7 +1149,7 @@ DECLARE
   v_control wos_v1_qa_uat.closeout_controls%ROWTYPE;
   v_status text;
 BEGIN
-  IF p_authorization_id<>'WOS-V1-PRODUCTION-M2-QA-UAT-004'
+  IF p_authorization_id<>'WOS-V1-PRODUCTION-M2-QA-UAT-005'
     OR p_project_ref<>'xulmpqaknlwqqculbsek'
   THEN
     RAISE EXCEPTION 'QA_UAT_EDGE_SCOPE_MISMATCH' USING ERRCODE='42501';
@@ -1407,7 +1407,7 @@ BEGIN
   WHERE profile.user_id=p_actor_user_id
     AND profile.is_active=true;
   RETURN public.wos_v1_qa_uat_edge_write_allowed(
-    'WOS-V1-PRODUCTION-M2-QA-UAT-004',
+    'WOS-V1-PRODUCTION-M2-QA-UAT-005',
     'xulmpqaknlwqqculbsek',
     p_execution_id,
     p_process_nonce,
@@ -1535,7 +1535,7 @@ DECLARE
   v_actor public.profiles%ROWTYPE;
   v_order public.wos_production_orders%ROWTYPE;
 BEGIN
-  IF btrim(p_authorization_id)<>'WOS-V1-PRODUCTION-M2-QA-UAT-004' THEN
+  IF btrim(p_authorization_id)<>'WOS-V1-PRODUCTION-M2-QA-UAT-005' THEN
     RAISE EXCEPTION 'QA_UAT_AUTHORIZATION_ID_MISMATCH' USING ERRCODE='42501';
   END IF;
   PERFORM wos_v1_qa_uat.assert_write_open(
@@ -1605,7 +1605,7 @@ DECLARE
   v_actor public.profiles%ROWTYPE;
   v_order public.wos_production_orders%ROWTYPE;
 BEGIN
-  IF btrim(p_authorization_id)<>'WOS-V1-PRODUCTION-M2-QA-UAT-004' THEN
+  IF btrim(p_authorization_id)<>'WOS-V1-PRODUCTION-M2-QA-UAT-005' THEN
     RAISE EXCEPTION 'QA_UAT_AUTHORIZATION_ID_MISMATCH' USING ERRCODE='42501';
   END IF;
   PERFORM wos_v1_qa_uat.assert_write_open(

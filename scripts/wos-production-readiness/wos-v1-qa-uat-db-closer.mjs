@@ -8,8 +8,8 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '../..');
-const AUTH_ID = 'WOS-V1-PRODUCTION-M2-QA-UAT-004';
-const QA_APP_EXECUTION_ID = '812aebd9-75d5-427a-9047-5c84a5d6fe42';
+const AUTH_ID = 'WOS-V1-PRODUCTION-M2-QA-UAT-005';
+const QA_APP_EXECUTION_ID = '791577cc-23bb-4b8d-93dd-e90b6630abe2';
 const PROJECT_REF = 'xulmpqaknlwqqculbsek';
 const ARM_KEYCHAIN = 'WOS_V1_QA_DB_CLOSER_ARM_TOKEN';
 const OWNED_TEST_CONTAINER =
