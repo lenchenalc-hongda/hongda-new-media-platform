@@ -151,6 +151,7 @@ files=(
   docs/workshop-order-system/production-readiness/WOS_V1_GO_NO_GO_20261126.md
   docs/workshop-order-system/production-readiness/WOS_V1_PRODUCTION_RELEASE_PACKAGE_20261128.md
   docs/workshop-order-system/production-readiness/WOS_V1_PRODUCTION_OPERATOR_AND_OFFICE_PILOT_20261128.md
+  docs/workshop-order-system/production-readiness/WOS_V1_OFFICE_PILOT_EMPLOYEE_GUIDE_20261128.md
   docs/workshop-order-system/production-readiness/WOS_V1_PRODUCTION_M2_RELEASE_READINESS_20261128.md
   docs/workshop-order-system/production-readiness/evidence/WOS_V1_PRODUCTION_PROOF_LIFECYCLE_EVIDENCE_20261128.md
   docs/workshop-order-system/production-readiness/evidence/WOS_V1_PRODUCTION_PROOF_LIFECYCLE_INDEPENDENT_REVIEW_20261128.md
