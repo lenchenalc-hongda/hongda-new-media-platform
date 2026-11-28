@@ -1,7 +1,7 @@
 # WOS V1 QA UAT 014 Technical Review
 
 Status:
-`TECHNICAL_REVIEW_PASS / INDEPENDENT_REVIEW_PENDING`
+`TECHNICAL_REVIEW_PASS / INDEPENDENT_REVIEW_PASS`
 
 ```ini
 REVIEW_SCOPE=UAT013_FAIL_CLOSED_REGISTER_IMAGE_COMPAT_AND_UAT014_REBIND
@@ -47,5 +47,7 @@ EDGE_FINALIZER_INDEPENDENT_PROCESS_TEST=PASS
 GIT_DIFF_CHECK=PASS
 ```
 
-An independent reviewer and an exact-HEAD QA Preview with the UAT-014 execution
-ID/nonce environment remain required before execution.
+The independent review is recorded in
+`WOS_V1_QA_UAT_014_FINAL_INDEPENDENT_REVIEW_20261128.md`. An exact-HEAD QA
+Preview with the UAT-014 execution ID/nonce environment remains required before
+execution.

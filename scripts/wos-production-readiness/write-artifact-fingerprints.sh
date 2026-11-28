@@ -189,6 +189,7 @@ files=(
   docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_UAT_012_FINAL_INDEPENDENT_REVIEW_20261128.md
   docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_UAT_013_FINAL_INDEPENDENT_REVIEW_20261128.md
   docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_UAT_014_TECHNICAL_REVIEW_20261128.md
+  docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_UAT_014_FINAL_INDEPENDENT_REVIEW_20261128.md
   docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_STORAGE_POLICY_LIVE_SNAPSHOT_20261128.json
   docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_EDGE_V34_PRESERVATION_20261127.json
   docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_EDGE_V36_PRESERVATION_20261127.json

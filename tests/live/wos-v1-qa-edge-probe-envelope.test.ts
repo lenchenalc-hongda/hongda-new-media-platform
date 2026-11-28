@@ -5,7 +5,7 @@ import http from 'node:http';
 const SCRIPT =
   'scripts/wos-production-readiness/wos-v1-qa-uat-edge-closer.mjs';
 const EXECUTION_ID = 'e646bb29-0fb2-47e5-ad4e-d59428d3ca22';
-const NONCE = '6a95f3bb-4513-4cae-84d9-10656b861589';
+const NONCE = 'c11f5f16-4bc0-4d43-94f2-1c8b6a2d5ff7';
 const CODE_SHA =
   'c7c9c37a657fa6457baac095e6adcdeea222b36d1aa4542f7130bc870e45cc24';
 

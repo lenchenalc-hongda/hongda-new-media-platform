@@ -411,7 +411,7 @@ psql_db "$UAT006_CONTINUITY_DB" -q \
   -v authorization_id='WOS-V1-PRODUCTION-M2-QA-UAT-014' \
   -v execution_id='e646bb29-0fb2-47e5-ad4e-d59428d3ca22' \
   -v arm_token='92929292-9292-4292-8292-929292929292' \
-  -v process_nonce='6a95f3bb-4513-4cae-84d9-10656b861589' \
+  -v process_nonce='c11f5f16-4bc0-4d43-94f2-1c8b6a2d5ff7' \
   -v code_sha256="$(printf 'd%.0s' {1..64})" \
   -v manager_profile='11111111-1111-4111-8111-111111111112' \
   < "$ROOT/tests/sql/wos-v1-uat006-continuity-pg17.sql"
