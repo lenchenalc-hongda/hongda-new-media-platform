@@ -10,10 +10,10 @@ import { fileURLToPath } from 'node:url';
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '../..');
 const AUTH_ID =
   process.env.WOS_V1_QA_AUTHORIZATION_ID
-  || 'WOS-V1-PRODUCTION-M2-QA-UAT-013';
+  || 'WOS-V1-PRODUCTION-M2-QA-UAT-014';
 const QA_APP_EXECUTION_ID =
   process.env.WOS_V1_QA_APP_EXECUTION_ID
-  || 'd9627b1e-5a75-454a-9489-4fbb602c8b46';
+  || 'e646bb29-0fb2-47e5-ad4e-d59428d3ca22';
 const PROJECT_REF = 'xulmpqaknlwqqculbsek';
 const ARM_KEYCHAIN = 'WOS_V1_QA_DB_CLOSER_ARM_TOKEN';
 const OWNED_TEST_CONTAINER =
@@ -51,6 +51,14 @@ const V2_PROOF_GUARD_COMPAT_INSTALL = join(
 const V2_PROOF_GUARD_COMPAT_ROLLBACK = join(
   ROOT,
   'docs/workshop-order-system/production-readiness/sql/WOS_V1_QA_UAT_V2_PROOF_GUARD_COMPAT_ROLLBACK_NOT_AUTHORIZED.sql',
+);
+const V2_IMAGE_REGISTER_COMPAT_INSTALL = join(
+  ROOT,
+  'docs/workshop-order-system/production-readiness/sql/WOS_V1_QA_UAT_V2_IMAGE_REGISTER_COMPAT_INSTALL_NOT_AUTHORIZED.sql',
+);
+const V2_IMAGE_REGISTER_COMPAT_ROLLBACK = join(
+  ROOT,
+  'docs/workshop-order-system/production-readiness/sql/WOS_V1_QA_UAT_V2_IMAGE_REGISTER_COMPAT_ROLLBACK_NOT_AUTHORIZED.sql',
 );
 
 function fail(code) {
@@ -383,6 +391,41 @@ function rollbackV2ProofGuardCompat() {
   );
 }
 
+function installV2ImageRegisterCompat() {
+  const sql = [
+    projectSettingsSql(),
+    "SET wos_v1.qa_v2_image_register_install_authorized='yes';",
+    readFileSync(V2_IMAGE_REGISTER_COMPAT_INSTALL, 'utf8'),
+  ].join('\n');
+  runSql(sql);
+  process.stdout.write(
+    'WOS_V1_QA_DB_CLOSER_V2_IMAGE_REGISTER_INSTALL=PASS\n',
+  );
+}
+
+function rollbackV2ImageRegisterCompat() {
+  const installed = runSql(`
+    SELECT to_regclass(
+      'wos_v1_qa_v2_image_register_compat.definition_backup'
+    ) IS NOT NULL;
+  `).split('\n').filter(Boolean).at(-1);
+  if (installed !== 't') {
+    process.stdout.write(
+      'WOS_V1_QA_DB_CLOSER_V2_IMAGE_REGISTER_ROLLBACK=SKIPPED_NOT_INSTALLED\n',
+    );
+    return;
+  }
+  const sql = [
+    projectSettingsSql(),
+    "SET wos_v1.qa_v2_image_register_rollback_authorized='yes';",
+    readFileSync(V2_IMAGE_REGISTER_COMPAT_ROLLBACK, 'utf8'),
+  ].join('\n');
+  runSql(sql);
+  process.stdout.write(
+    'WOS_V1_QA_DB_CLOSER_V2_IMAGE_REGISTER_ROLLBACK=PASS\n',
+  );
+}
+
 function installCloserOnly() {
   const sql = [
     projectSettingsSql(),
@@ -632,6 +675,11 @@ function recover() {
     recoveryError ??= error;
   }
   try {
+    rollbackV2ImageRegisterCompat();
+  } catch (error) {
+    recoveryError ??= error;
+  }
+  try {
     rollbackV2ProofGuardCompat();
   } catch (error) {
     recoveryError ??= error;
@@ -717,6 +765,10 @@ try {
     installV2ProofGuardCompat();
   } else if (command === 'rollback-v2-proof-guard-compat') {
     rollbackV2ProofGuardCompat();
+  } else if (command === 'install-v2-image-register-compat') {
+    installV2ImageRegisterCompat();
+  } else if (command === 'rollback-v2-image-register-compat') {
+    rollbackV2ImageRegisterCompat();
   }
   else if (command === 'arm') await arm(false);
   else if (command === 'arm-closer-only') await arm(true);

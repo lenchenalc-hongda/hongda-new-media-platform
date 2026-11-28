@@ -12,22 +12,22 @@ const ANON_KEY = process.env.WOS_QA_ANON_KEY || '';
 const DIRECT_RPC = process.env.WOS_UAT_DIRECT_RPC === 'true';
 const AUTHORIZATION_ID =
   process.env.WOS_V1_QA_AUTHORIZATION_ID
-  || 'WOS-V1-PRODUCTION-M2-QA-UAT-013';
+  || 'WOS-V1-PRODUCTION-M2-QA-UAT-014';
 const EXECUTION_ID =
   process.env.WOS_V1_QA_EXECUTION_ID
-  || 'd9627b1e-5a75-454a-9489-4fbb602c8b46';
+  || 'e646bb29-0fb2-47e5-ad4e-d59428d3ca22';
 const EDGE_NONCE =
   process.env.WOS_V1_QA_EDGE_PROCESS_NONCE
-  || '6a95f3bb-4513-4cae-84d9-10656b861589';
+  || 'c11f5f16-4bc0-4d43-94f2-1c8b6a2d5ff7';
 const RESUME_ORDER_ID = process.env.WOS_UAT_RESUME_ORDER_ID || '';
 const PROJECT_REF = 'xulmpqaknlwqqculbsek';
 const SUPABASE_URL = `https://${PROJECT_REF}.supabase.co`;
 const INPUT_PATH =
   process.env.WOS_UAT_INPUT_PATH
-  || 'docs/workshop-order-system/qa-fixture/production-m2-uat-20261126/inputs-uat013.json';
+  || 'docs/workshop-order-system/qa-fixture/production-m2-uat-20261126/inputs-uat014.json';
 const EVIDENCE_PATH =
   process.env.WOS_UAT_EVIDENCE_PATH
-  || 'output/uat/WOS_V1_PRODUCTION_M2_QA_BUSINESS_UAT_013_20261128.json';
+  || 'output/uat/WOS_V1_PRODUCTION_M2_QA_BUSINESS_UAT_014_20261128.json';
 const PSQL_IMAGE =
   'postgres@sha256:f9cf3e1f0066f0eb0c48707d864f0ac5941e9ff454a072077d97a4d278d07d73';
 

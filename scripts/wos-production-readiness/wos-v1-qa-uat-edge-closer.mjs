@@ -19,7 +19,7 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '../..');
 const SCRIPT = fileURLToPath(import.meta.url);
 const AUTH_ID =
   process.env.WOS_V1_QA_AUTHORIZATION_ID
-  || 'WOS-V1-PRODUCTION-M2-QA-UAT-013';
+  || 'WOS-V1-PRODUCTION-M2-QA-UAT-014';
 const PROJECT_REF = 'xulmpqaknlwqqculbsek';
 const ARM_KEYCHAIN = 'WOS_V1_QA_DB_CLOSER_ARM_TOKEN';
 const SERVICE_KEYCHAIN = 'WOS_V1_QA_EDGE_CLOSER_SERVICE_ROLE_KEY';
@@ -186,7 +186,7 @@ function xml(value) {
     .replaceAll("'", '&apos;');
 }
 
-function plistContent(id, path) {
+function plistContent(id, path, scriptPath = SCRIPT) {
   const output = join(stateDir(), `${id}.log`);
   const error = join(stateDir(), `${id}.error.log`);
   const proxy = configuredEdgeProxy();
@@ -201,7 +201,7 @@ function plistContent(id, path) {
   <key>ProgramArguments</key>
   <array>
     <string>${xml(process.execPath)}</string>
-    <string>${xml(SCRIPT)}</string>
+    <string>${xml(scriptPath)}</string>
     <string>watch</string>
     <string>--state</string>
     <string>${xml(path)}</string>
@@ -422,6 +422,13 @@ async function arm() {
     || '';
   mkdirSync(stateDir(), { recursive: true, mode: 0o700 });
   mkdirSync(plistDir(), { recursive: true });
+  const frozenScriptPath = join(stateDir(), `${id}.closer.mjs`);
+  const frozenScriptSource = readFileSync(SCRIPT, 'utf8');
+  const frozenScriptSha256 = createHash('sha256')
+    .update(frozenScriptSource)
+    .digest('hex');
+  writeFileSync(frozenScriptPath, frozenScriptSource, { mode: 0o500 });
+  chmodSync(frozenScriptPath, 0o500);
   const pending = {
     schemaVersion: 1,
     status: 'PENDING',
@@ -432,6 +439,8 @@ async function arm() {
     functionUrl: functionUrl(),
     keychainArmTokenAccount: id,
     keychainServiceRoleAccount: PROJECT_REF,
+    frozenScriptPath,
+    frozenScriptSha256,
     processNonce,
     writeDeadlineAt: control?.writeDeadlineAt ?? null,
     edgeCleanupDeadlineAt: control?.edgeCleanupDeadlineAt ?? null,
@@ -440,7 +449,11 @@ async function arm() {
     armedAt: new Date().toISOString(),
   };
   writeFileSync(path, `${JSON.stringify(pending, null, 2)}\n`, { mode: 0o600 });
-  writeFileSync(plist, plistContent(id, path), { mode: 0o600 });
+  writeFileSync(
+    plist,
+    plistContent(id, path, frozenScriptPath),
+    { mode: 0o600 },
+  );
   chmodSync(path, 0o600);
 
   if (preflightOnly) {
@@ -563,6 +576,14 @@ function readState(path) {
   const state = JSON.parse(readFileSync(path, 'utf8'));
   if (state.authorizationId !== AUTH_ID || state.projectRef !== PROJECT_REF) {
     fail('WOS_V1_QA_EDGE_CLOSER_STATE_SCOPE_MISMATCH');
+  }
+  if (state.frozenScriptPath && state.frozenScriptSha256) {
+    const actual = createHash('sha256')
+      .update(readFileSync(state.frozenScriptPath))
+      .digest('hex');
+    if (actual !== state.frozenScriptSha256) {
+      fail('WOS_V1_QA_EDGE_CLOSER_FROZEN_SCRIPT_TAMPERED');
+    }
   }
   validateFunctionUrl(state.functionUrl, localTestMode());
   return state;

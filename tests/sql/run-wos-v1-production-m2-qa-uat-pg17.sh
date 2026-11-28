@@ -408,8 +408,8 @@ psql_db postgres -q -c \
 psql_db postgres -q -c \
   "CREATE DATABASE \"$UAT006_CONTINUITY_DB\" TEMPLATE \"$QA_SHAPE_DB\""
 psql_db "$UAT006_CONTINUITY_DB" -q \
-  -v authorization_id='WOS-V1-PRODUCTION-M2-QA-UAT-013' \
-  -v execution_id='d9627b1e-5a75-454a-9489-4fbb602c8b46' \
+  -v authorization_id='WOS-V1-PRODUCTION-M2-QA-UAT-014' \
+  -v execution_id='e646bb29-0fb2-47e5-ad4e-d59428d3ca22' \
   -v arm_token='92929292-9292-4292-8292-929292929292' \
   -v process_nonce='6a95f3bb-4513-4cae-84d9-10656b861589' \
   -v code_sha256="$(printf 'd%.0s' {1..64})" \
@@ -753,7 +753,7 @@ WITH control AS (
     db_last_heartbeat_at,edge_last_heartbeat_at,edge_process_nonce
   ) VALUES(
     '93939393-9393-4393-8393-939393939393',
-    'WOS-V1-PRODUCTION-M2-QA-UAT-013',
+    'WOS-V1-PRODUCTION-M2-QA-UAT-014',
     'xulmpqaknlwqqculbsek',
     repeat('b',64),
     '94949494-9494-4494-8494-949494949494',
@@ -788,7 +788,7 @@ DO \$deadline\$
 BEGIN
   BEGIN
     PERFORM wos_v1_qa_uat.assert_write_open(
-      'WOS-V1-PRODUCTION-M2-QA-UAT-013',
+      'WOS-V1-PRODUCTION-M2-QA-UAT-014',
       '33333333-3333-4333-8333-333333333333'
     );
     RAISE EXCEPTION 'QA_UAT_EXPIRED_WRITE_WAS_ALLOWED';
@@ -802,7 +802,7 @@ DO \$edge_deadline\$
 BEGIN
   BEGIN
     PERFORM public.wos_v1_qa_uat_edge_write_allowed(
-      'WOS-V1-PRODUCTION-M2-QA-UAT-013',
+      'WOS-V1-PRODUCTION-M2-QA-UAT-014',
       'xulmpqaknlwqqculbsek',
       '93939393-9393-4393-8393-939393939393',
       '95959595-9595-4595-8595-959595959595',
@@ -914,7 +914,7 @@ psql_db "$DB" -q -c "
   BEGIN
     BEGIN
       PERFORM public.wos_v1_qa_uat_open_gate(
-        'WOS-V1-PRODUCTION-M2-QA-UAT-013',
+        'WOS-V1-PRODUCTION-M2-QA-UAT-014',
         '33333333-3333-4333-8333-333333333333',
         'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
         '11111111-1111-4111-8111-111111111111',
@@ -942,7 +942,7 @@ psql_db "$DB" -qAt -c "
 " >/dev/null
 EDGE_STATUS_OPEN="$(psql_db "$DB" -qAt -c "
   SELECT public.wos_v1_qa_uat_edge_control_status(
-    'WOS-V1-PRODUCTION-M2-QA-UAT-013',
+    'WOS-V1-PRODUCTION-M2-QA-UAT-014',
     'xulmpqaknlwqqculbsek'
   )::text;
 ")"
@@ -957,7 +957,7 @@ EDGE_STATUS_STALE="$(psql_db "$DB" -qAt -c "
   SET db_last_heartbeat_at=clock_timestamp()-interval '31 seconds'
   WHERE execution_id='$UAT_CLOSER_EXECUTION_ID'::uuid;
   SELECT public.wos_v1_qa_uat_edge_control_status(
-    'WOS-V1-PRODUCTION-M2-QA-UAT-013',
+    'WOS-V1-PRODUCTION-M2-QA-UAT-014',
     'xulmpqaknlwqqculbsek'
   )::text;
   ROLLBACK;
@@ -1146,7 +1146,7 @@ psql_db "$DB" -q -c "
   BEGIN
     BEGIN
       PERFORM public.wos_v1_qa_uat_edge_write_allowed(
-        'WOS-V1-PRODUCTION-M2-QA-UAT-013',
+        'WOS-V1-PRODUCTION-M2-QA-UAT-014',
         'xulmpqaknlwqqculbsek',
         '$UAT_CLOSER_EXECUTION_ID',
         '$UAT_EDGE_PROCESS_NONCE',
@@ -1169,7 +1169,7 @@ echo 'WOS_V1_QA_UAT_CREATE_RECEIPT_BINDING_DRIFT_DENIED=PASS'
 psql_db "$DB" -q -c "
   SET ROLE service_role;
   SELECT public.wos_v1_qa_uat_edge_write_allowed(
-    'WOS-V1-PRODUCTION-M2-QA-UAT-013',
+    'WOS-V1-PRODUCTION-M2-QA-UAT-014',
     'xulmpqaknlwqqculbsek',
     '$UAT_CLOSER_EXECUTION_ID',
     '$UAT_EDGE_PROCESS_NONCE',
@@ -1181,7 +1181,7 @@ psql_db "$DB" -q -c "
   BEGIN
     BEGIN
       PERFORM public.wos_v1_qa_uat_edge_write_allowed(
-        'WOS-V1-PRODUCTION-M2-QA-UAT-013',
+        'WOS-V1-PRODUCTION-M2-QA-UAT-014',
         'xulmpqaknlwqqculbsek',
         '$UAT_CLOSER_EXECUTION_ID',
         '$UAT_EDGE_PROCESS_NONCE',
@@ -1199,7 +1199,7 @@ psql_db "$DB" -q -c "
   BEGIN
     BEGIN
       PERFORM public.wos_v1_qa_uat_edge_write_allowed(
-        'WOS-V1-PRODUCTION-M2-QA-UAT-013',
+        'WOS-V1-PRODUCTION-M2-QA-UAT-014',
         'xulmpqaknlwqqculbsek',
         '$UAT_CLOSER_EXECUTION_ID',
         '$UAT_EDGE_PROCESS_NONCE',
@@ -1222,7 +1222,7 @@ psql_db "$DB" -q -c "
     authorization_id,project_ref,organization_id,order_id,actor_profile_id,
     allowed_actions,opened_at,expires_at
   ) VALUES(
-    'WOS-V1-PRODUCTION-M2-QA-UAT-013-EXPIRED',
+    'WOS-V1-PRODUCTION-M2-QA-UAT-014-EXPIRED',
     'xulmpqaknlwqqculbsek',
     'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
     '33333333-3333-4333-8333-333333333333',
@@ -1234,7 +1234,7 @@ psql_db "$DB" -q -c "
   SET wos_v1.qa_uat_gate_open_authorized='yes';
   SET wos_v1.qa_project='xulmpqaknlwqqculbsek';
   SELECT public.wos_v1_qa_uat_open_gate(
-    'WOS-V1-PRODUCTION-M2-QA-UAT-013',
+    'WOS-V1-PRODUCTION-M2-QA-UAT-014',
     '33333333-3333-4333-8333-333333333333',
     'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
     '11111111-1111-4111-8111-111111111111',
@@ -1242,7 +1242,7 @@ psql_db "$DB" -q -c "
     clock_timestamp()+interval '7 minutes'
   );
   SELECT public.wos_v1_qa_uat_open_gate(
-    'WOS-V1-PRODUCTION-M2-QA-UAT-013',
+    'WOS-V1-PRODUCTION-M2-QA-UAT-014',
     '33333333-3333-4333-8333-333333333333',
     'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
     '22222222-2222-4222-8222-222222222222',
@@ -1250,7 +1250,7 @@ psql_db "$DB" -q -c "
     clock_timestamp()+interval '7 minutes'
   );
   SELECT public.wos_v1_qa_uat_open_gate(
-    'WOS-V1-PRODUCTION-M2-QA-UAT-013',
+    'WOS-V1-PRODUCTION-M2-QA-UAT-014',
     '33333333-3333-4333-8333-333333333333',
     'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
     '$UAT_MANAGER_PROFILE',
@@ -1435,7 +1435,7 @@ EDGE_PROBE_CLOSED="$(psql_db "$DB" -qAt -c "
   || fail 'FULL_M2_EDGE_PROBE_CLOSED_NONCE_MISMATCH'
 [[ "$(psql_db "$DB" -qAt -c "
   SELECT public.wos_v1_qa_uat_edge_control_status(
-    'WOS-V1-PRODUCTION-M2-QA-UAT-013',
+    'WOS-V1-PRODUCTION-M2-QA-UAT-014',
     'xulmpqaknlwqqculbsek'
   )->>'status';
 ")" = 'CLOSED' ]] || fail 'EDGE_CONTROL_NOT_CLOSED'
@@ -1445,7 +1445,7 @@ psql_db "$DB" -q -c "
   BEGIN
     BEGIN
       PERFORM public.wos_v1_qa_uat_edge_write_allowed(
-        'WOS-V1-PRODUCTION-M2-QA-UAT-013',
+        'WOS-V1-PRODUCTION-M2-QA-UAT-014',
         'xulmpqaknlwqqculbsek',
         '$UAT_CLOSER_EXECUTION_ID',
         '$UAT_EDGE_PROCESS_NONCE',
