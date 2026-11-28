@@ -39,6 +39,7 @@ files=(
   docs/workshop-order-system/production-readiness/sql/WOS_V1_QA_CLOSER_ONLY_ROLLBACK_NOT_AUTHORIZED.sql
   docs/workshop-order-system/production-readiness/sql/WOS_V1_PRODUCTION_P7_INSTALL.sql
   docs/workshop-order-system/production-readiness/sql/WOS_V1_PRODUCTION_P7_SERVICE_PROOF_SQL.sql
+  docs/workshop-order-system/production-readiness/sql/WOS_V1_PRODUCTION_OPERATOR_PROFILE_BIND_NOT_AUTHORIZED.sql
   docs/workshop-order-system/production-readiness/sql/WOS_V1_PRODUCTION_RPC_ACTIVATION_TEMPLATE_NOT_AUTHORIZED.sql
   docs/workshop-order-system/production-readiness/sql/WOS_V1_PRODUCTION_RPC_DEACTIVATE_NOT_AUTHORIZED.sql
   docs/workshop-order-system/production-readiness/sql/WOS_V1_PRODUCTION_FOUNDATION_CONTAINMENT_NOT_AUTHORIZED.sql
@@ -149,6 +150,9 @@ files=(
   docs/workshop-order-system/production-readiness/WOS_V1_BUSINESS_UAT_CHECKLISTS_20261126.md
   docs/workshop-order-system/production-readiness/WOS_V1_GO_NO_GO_20261126.md
   docs/workshop-order-system/production-readiness/WOS_V1_PRODUCTION_RELEASE_PACKAGE_20261128.md
+  docs/workshop-order-system/production-readiness/WOS_V1_PRODUCTION_OPERATOR_AND_OFFICE_PILOT_20261128.md
+  docs/workshop-order-system/production-readiness/WOS_V1_OFFICE_PILOT_EMPLOYEE_GUIDE_20261128.md
+  docs/workshop-order-system/production-readiness/WOS_V1_PRODUCTION_M2_RELEASE_READINESS_20261128.md
   docs/workshop-order-system/production-readiness/evidence/WOS_V1_PRODUCTION_PROOF_LIFECYCLE_EVIDENCE_20261128.md
   docs/workshop-order-system/production-readiness/evidence/WOS_V1_PRODUCTION_PROOF_LIFECYCLE_INDEPENDENT_REVIEW_20261128.md
   docs/workshop-order-system/production-readiness/WOS_V1_PRODUCTION_M2_QA_UAT_OWNER_GATE_20261126.md
