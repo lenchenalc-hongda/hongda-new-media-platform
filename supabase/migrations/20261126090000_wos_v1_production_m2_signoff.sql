@@ -124,8 +124,7 @@ BEGIN
       'imageId',image_id,'category',category,'productionVersion',version_label,
       'bucket',storage_bucket,'path',storage_path,
       'objectId',storage_object_id,'objectVersion',storage_object_version,
-      'objectUpdatedAt',storage_object_updated_at,'sha256',verified_sha256,
-      'proofVerifiedAt',verified_at,'proofExpiresAt',expires_at
+      'objectUpdatedAt',storage_object_updated_at,'sha256',verified_sha256
     ) ORDER BY image_id),max(verified_at)
  INTO v_count,v_categories,v_images,v_verified FROM locked_proofs;
  IF v_count<>v_total OR NOT COALESCE(
@@ -181,8 +180,7 @@ AS $fn$
       'version',im.version_label,'bucket',im.storage_bucket,
       'path',im.storage_path,'proofSha',pf.verified_sha256,
       'objectId',pf.storage_object_id,'objectVersion',pf.storage_object_version,
-      'objectUpdatedAt',pf.storage_object_updated_at,
-      'proofVerifiedAt',pf.verified_at,'proofExpiresAt',pf.expires_at)
+      'objectUpdatedAt',pf.storage_object_updated_at)
     ORDER BY im.id
    ) AS image_proof_set
    FROM public.wos_visual_baselines vb
@@ -314,6 +312,17 @@ BEGIN
    PERFORM public.wos_v1_m2_invalidate_signoff(
      OLD.order_id,OLD.organization_id,OLD.image_id);
    RETURN OLD;
+ END IF;
+ IF NEW.organization_id IS NOT DISTINCT FROM OLD.organization_id
+   AND NEW.order_id IS NOT DISTINCT FROM OLD.order_id
+   AND NEW.storage_bucket IS NOT DISTINCT FROM OLD.storage_bucket
+   AND NEW.storage_path IS NOT DISTINCT FROM OLD.storage_path
+   AND NEW.storage_object_id IS NOT DISTINCT FROM OLD.storage_object_id
+   AND NEW.storage_object_version IS NOT DISTINCT FROM OLD.storage_object_version
+   AND NEW.storage_object_updated_at IS NOT DISTINCT FROM OLD.storage_object_updated_at
+   AND NEW.verified_sha256 IS NOT DISTINCT FROM OLD.verified_sha256
+ THEN
+   RETURN NEW;
  END IF;
  PERFORM pg_catalog.set_config(
    'wos.v1.actor_user_id',NEW.actor_user_id::text,true);
@@ -595,7 +604,6 @@ BEGIN
     FROM public.wos_v1_m2_checked_proof_set(
       p_order_id,v_actor.org_id,v_baseline_id,v_label);
   IF v_proof_digest IS DISTINCT FROM v_office_digest
-     OR v_proof_verified_at>v_office_time
      OR v_proof_verified_at>=pg_catalog.clock_timestamp()
   THEN RAISE EXCEPTION 'WORKSHOP_PROOF_CHANGED' USING ERRCODE='PT409'; END IF;
   UPDATE public.wos_visual_baselines SET
@@ -672,7 +680,6 @@ BEGIN
   IF v_proof_digest IS NULL
     OR v_proof_digest IS DISTINCT FROM v_office_digest
     OR v_proof_digest IS DISTINCT FROM v_workshop_digest
-    OR v_proof_verified_at>v_office_time
   THEN RAISE EXCEPTION 'VERIFIED_IMAGE_PROOF_CHANGED' USING ERRCODE='PT409'; END IF;
   IF EXISTS (
     SELECT 1 FROM public.wos_blockers b
@@ -790,7 +797,6 @@ DECLARE
  v_prior public.wos_v1_start_releases%ROWTYPE;
  v_hash text;
  v_proof_digest text;
- v_proof_verified_at timestamptz;
  v_current_spec text;
  v_resource_count integer;
  v_response jsonb;
@@ -948,8 +954,8 @@ BEGIN
    RAISE EXCEPTION 'FINAL_READINESS_RECEIPT_REQUIRED' USING ERRCODE='PT409';
  END IF;
 
- SELECT proof_digest,last_verified_at
- INTO v_proof_digest,v_proof_verified_at
+ SELECT proof_digest
+ INTO v_proof_digest
  FROM public.wos_v1_m2_checked_proof_set(
    p_order_id,v_actor.org_id,p_baseline_id,v_order.version_label);
  IF v_proof_digest IS NULL
@@ -957,7 +963,6 @@ BEGIN
       v_baseline.office_proof_set_digest
    OR v_proof_digest IS DISTINCT FROM
       v_baseline.workshop_proof_set_digest
-   OR v_proof_verified_at>v_baseline.office_confirmed_at
  THEN RAISE EXCEPTION 'CURRENT_PROOF_SET_REQUIRED' USING ERRCODE='PT409'; END IF;
 
  UPDATE public.wos_production_orders

@@ -101,6 +101,7 @@ for (const marker of [
   'public.wos_v1_qa_uat_close_edge',
   'public.wos_v1_qa_uat_edge_probe',
   'public.wos_v1_qa_uat_edge_record_proof',
+  'public.wos_v1_qa_uat_edge_renew_proof',
   'QA_UAT_CLOSER_HEARTBEAT_STALE',
   'QA_UAT_ORDER_NOT_BOUND',
   'QA_UAT_ORDER_BINDING_DRIFT',
@@ -110,7 +111,6 @@ for (const marker of [
 ]) {
   assert(install.includes(marker), `closer SQL missing ${marker}`);
 }
-assert(!install.includes('public.wos_v1_qa_uat_edge_renew_proof'));
 assert(!/GRANT EXECUTE[\s\S]{0,160}TO authenticated/.test(
   install.slice(
     install.indexOf('wos_v1_qa_uat_edge_write_allowed'),
@@ -118,6 +118,10 @@ assert(!/GRANT EXECUTE[\s\S]{0,160}TO authenticated/.test(
   ),
 ));
 assert(!dbCloser.includes('WOS_V1_QA_OPENED_AT'));
+assert(dbCloser.includes('V1_APP_01_PROOF_RENEWAL_NOT_AUTHORIZED.sql'));
+assert(dbCloser.includes(
+  "SET wos_v1.production_migration_authorized='yes';",
+));
 
 for (const marker of [
   "command === 'install-closer-only'",

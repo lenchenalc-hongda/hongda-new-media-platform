@@ -461,6 +461,7 @@ for (const marker of [
   'wos_v1_qa_uat_edge_write_allowed',
   'wos_v1_qa_uat_edge_probe',
   'wos_v1_qa_uat_edge_record_proof',
+  'wos_v1_qa_uat_edge_renew_proof',
   'x-wos-qa-uat-execution-id',
   'x-wos-qa-uat-closer-nonce',
   'readBoundedText(request, MAX_REQUEST_BYTES)',
@@ -471,7 +472,6 @@ for (const marker of [
   'OBJECT_CHANGED_DURING_VERIFICATION',
   'WOS_V1_TRUSTED_IMAGE_PROOF_ISSUED',
 ]) assert(edge.includes(marker), 'production Edge missing ' + marker);
-assert(!edge.includes('wos_v1_qa_uat_edge_renew_proof'));
 assert(edge.includes('QA_UAT_PROJECT_REF'));
 assert(edge.includes('QA_UAT_AUTHORIZATION_ID'));
 assert(edge.includes('qaUatRuntime'));

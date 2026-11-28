@@ -23,6 +23,11 @@ const appActivate = readFileSync(
     + 'WOS_V1_QA_UAT_APP_ACTIVATE_NOT_AUTHORIZED.sql',
   'utf8',
 );
+const qaM2Install = readFileSync(
+  'docs/workshop-order-system/production-readiness/sql/'
+    + 'WOS_V1_QA_UAT_M2_INSTALL_NOT_AUTHORIZED.sql',
+  'utf8',
+);
 const closerOnlyInstall = readFileSync(
   'docs/workshop-order-system/production-readiness/sql/'
     + 'WOS_V1_QA_CLOSER_ONLY_INSTALL_NOT_AUTHORIZED.sql',
@@ -187,7 +192,11 @@ assert(
   ),
 );
 assert(appActivate.includes(
-  'WOS_V1_QA_UAT_CURRENT_ORDER_PROOF_COMPAT_REQUIRED',
+  'WOS_V1_QA_UAT_CURRENT_ORDER_RENEWAL_REQUIRED',
+));
+assert(appActivate.includes('wos_v1_qa_uat_edge_renew_proof'));
+assert(appActivate.includes(
+  '2725b8fec3727fd810b2ad2d407780b0635c32db02254aa888088c791c449e1f',
 ));
 assert(
   appActivate.includes(
@@ -252,6 +261,9 @@ assert(proofMirrorInstall.includes(
 assert(proofMirrorInstall.includes(
   'QA_VERIFIED_PROOF_MIRROR_WRITE_ONLY',
 ));
+assert(proofMirrorInstall.includes(
+  "current_setting('wos_v1.qa_mirror_from_formal', true) = 'yes'",
+));
 assert(proofMirrorInstall.includes('(trigger_row.tgtype & 16) <> 0'));
 assert(
   proofMirrorInstall.includes(
@@ -263,6 +275,15 @@ assert(
     'WOS_V1_QA_UAT_VERIFIED_PROOF_MIRROR_TAMPERED',
   ),
 );
+assert(qaM2Install.includes(
+  'CREATE OR REPLACE FUNCTION public.wos_v1_qa_uat_edge_renew_proof',
+));
+assert(qaM2Install.includes(
+  'UPDATE public.wos_qa_verified_image_proofs proof',
+));
+assert(qaM2Install.includes(
+  "set_config(\n      'wos_v1.qa_mirror_from_formal','yes',true\n    )",
+));
 assert(currentOrderProofInstall.includes(
   "'wos_v1.qa_current_order_proof'",
 ));

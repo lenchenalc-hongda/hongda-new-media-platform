@@ -34,6 +34,9 @@ DROP FUNCTION IF EXISTS public.wos_v1_qa_uat_open_gate(
 DROP FUNCTION IF EXISTS public.wos_v1_qa_uat_edge_record_proof(
   uuid,uuid,uuid,uuid,uuid,text,uuid,text,timestamptz,text
 );
+DROP FUNCTION IF EXISTS public.wos_v1_qa_uat_edge_renew_proof(
+  uuid,uuid,uuid,uuid,uuid,text,uuid,text,timestamptz,text
+);
 DROP FUNCTION IF EXISTS public.wos_v1_qa_uat_edge_probe(uuid,uuid);
 DROP FUNCTION IF EXISTS public.wos_v1_qa_uat_close_edge(uuid,uuid,text);
 DROP FUNCTION IF EXISTS public.wos_v1_qa_uat_bind_order(

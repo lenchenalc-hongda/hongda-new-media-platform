@@ -41,6 +41,11 @@ cleanup() {
     printf 'WOS_V1_PRODUCTION_M2_QA_SHAPE_DB_RETAINED=%s\n' "$QA_SHAPE_DB"
     exit "$status"
   fi
+  if [[ "$status" -ne 0 && "${WOS_PG_QA_UAT_KEEP_ON_FAILURE:-0}" = '1' ]]; then
+    printf 'WOS_V1_PRODUCTION_M2_QA_UAT_DB_RETAINED_ON_FAILURE=%s\n' "$DB"
+    printf 'WOS_V1_PRODUCTION_M2_QA_SHAPE_DB_RETAINED_ON_FAILURE=%s\n' "$QA_SHAPE_DB"
+    exit "$status"
+  fi
   psql_db postgres -q -c "DROP DATABASE IF EXISTS \"$QA_SHAPE_DB\" WITH (FORCE)" \
     >/dev/null 2>&1 || true
   psql_db postgres -q -c \
@@ -731,6 +736,15 @@ flow_proof_fingerprint() {
   "
 }
 
+psql_db "$DB" -q \
+  < "$ROOT/tests/sql/wos-v1-production-proof-renewal-test-prerequisites.sql"
+{
+  printf "SET wos_v1.production_migration_authorized='yes';\n"
+  printf "SET wos_v1.qa_project='xulmpqaknlwqqculbsek';\n"
+  cat "$ROOT/docs/workshop-order-system/production-readiness/sql/V1_APP_01_PROOF_RENEWAL_NOT_AUTHORIZED.sql"
+} | psql_db "$DB" -q
+echo 'WOS_V1_QA_UAT_PRODUCTION_PROOF_RENEWAL_INSTALL=PASS'
+
 {
   printf "SET wos_v1.qa_uat_install_authorized='yes';\n"
   printf "SET wos_v1.qa_project='xulmpqaknlwqqculbsek';\n"
@@ -996,6 +1010,17 @@ psql_db "$DB" -qAt -c "
   )::text;
 " >/dev/null
 echo 'WOS_V1_QA_UAT_DUAL_CLOSERS_ARMED=PASS'
+MIRROR_INSTALL_OUTPUT="$(
+  WOS_QA_PSQL_DOCKER_CONTAINER="$CONTAINER" \
+  WOS_QA_DATABASE="$DB" \
+  WOS_V1_QA_EXECUTION_ID="$UAT_CLOSER_EXECUTION_ID" \
+    node "$ROOT/scripts/wos-production-readiness/wos-v1-qa-uat-db-closer.mjs" \
+      install-verified-proof-mirror
+)"
+[[ "$(printf '%s' "$MIRROR_INSTALL_OUTPUT" | tail -n 1)" \
+  = 'WOS_V1_QA_DB_CLOSER_VERIFIED_PROOF_MIRROR_INSTALL=PASS' ]] \
+  || fail 'VERIFIED_PROOF_MIRROR_INSTALL_FAILED'
+echo 'WOS_V1_QA_UAT_VERIFIED_PROOF_MIRROR_INSTALL=PASS'
 psql_db "$DB" -q -c "
   REVOKE ALL ON FUNCTION
     public.wos_create_production_order(uuid,jsonb)
@@ -1258,6 +1283,109 @@ psql_db "$DB" -q -c "
     clock_timestamp()+interval '7 minutes'
   );
 " >/dev/null
+
+EDGE_RENEWAL_RESULT="$(psql_db "$DB" -qAt <<SQL
+  CREATE TEMP TABLE qa_edge_renewal_probe AS
+  SELECT image.id AS image_id,
+    image.entity_id AS order_id,
+    image.storage_path,
+    object.id AS storage_object_id,
+    object.version AS storage_object_version,
+    object.updated_at AS storage_object_updated_at,
+    proof.verified_sha256
+  FROM public.wos_reference_images image
+  JOIN public.wos_verified_image_proofs proof
+    ON proof.image_id=image.id
+    AND proof.order_id=image.entity_id
+    AND proof.storage_path=image.storage_path
+  JOIN storage.objects object
+    ON object.id=proof.storage_object_id
+    AND object.name=image.storage_path
+  WHERE image.entity_id='33333333-3333-4333-8333-333333333333'
+    AND image.entity_type='PRODUCTION_ORDER'
+    AND image.version_label='V2'
+    AND image.image_status='READY'
+    AND image.superseded_at IS NULL
+  ORDER BY image.category
+  LIMIT 1;
+  SELECT set_config('wos_v1.qa_mirror_from_formal','yes',true);
+  INSERT INTO public.wos_qa_verified_image_proofs(
+    image_id,organization_id,order_id,actor_user_id,storage_bucket,
+    storage_path,storage_object_id,storage_object_version,
+    storage_object_updated_at,verified_sha256,verified_at,expires_at
+  )
+  SELECT probe.image_id,image.organization_id,image.entity_id,uploader.user_id,
+    'wos-private',probe.storage_path,probe.storage_object_id,
+    probe.storage_object_version,
+    probe.storage_object_updated_at,probe.verified_sha256,
+    clock_timestamp()-interval '11 minutes',
+    clock_timestamp()-interval '1 minute'
+  FROM qa_edge_renewal_probe probe
+  JOIN public.wos_reference_images image ON image.id=probe.image_id
+  JOIN public.profiles uploader
+    ON uploader.id=image.uploaded_by_profile_id
+  ON CONFLICT(image_id) DO UPDATE SET
+    actor_user_id=EXCLUDED.actor_user_id,
+    storage_object_updated_at=EXCLUDED.storage_object_updated_at,
+    verified_sha256=EXCLUDED.verified_sha256,
+    verified_at=EXCLUDED.verified_at,
+    expires_at=EXCLUDED.expires_at;
+  SELECT set_config('wos_v1.qa_mirror_from_formal','no',true);
+  UPDATE public.wos_verified_image_proofs
+  SET verified_at=clock_timestamp()-interval '11 minutes',
+      expires_at=clock_timestamp()-interval '1 minute'
+  WHERE image_id=(SELECT image_id FROM qa_edge_renewal_probe);
+  GRANT SELECT ON qa_edge_renewal_probe TO service_role;
+  SET request.jwt.claims='{"role":"service_role"}';
+  SET ROLE service_role;
+  SELECT public.wos_v1_qa_uat_edge_renew_proof(
+    '$UAT_CLOSER_EXECUTION_ID'::uuid,
+    '$UAT_EDGE_PROCESS_NONCE'::uuid,
+    image_id,
+    order_id,
+    '$UAT_MANAGER_AUTH_USER'::uuid,
+    storage_path,
+    storage_object_id,
+    storage_object_version,
+    storage_object_updated_at,
+    verified_sha256
+  )::text
+  FROM qa_edge_renewal_probe;
+SQL
+)"
+EDGE_RENEWAL_JSON="$(printf '%s\n' "$EDGE_RENEWAL_RESULT" \
+  | rg '^\{' | tail -n 1)"
+[[ -n "$EDGE_RENEWAL_JSON" \
+  && "$(printf '%s' "$EDGE_RENEWAL_JSON" | jq -r '.status')" = 'RENEWED' ]] \
+  || fail 'QA_EDGE_NON_UPLOADER_RENEWAL_FAILED'
+[[ "$(psql_db "$DB" -qAt -c "
+  SELECT EXISTS(
+    SELECT 1
+    FROM public.wos_verified_image_proofs proof
+    JOIN public.wos_reference_images image ON image.id=proof.image_id
+    JOIN public.wos_qa_verified_image_proofs qa
+      ON qa.image_id=proof.image_id
+      AND qa.organization_id=proof.organization_id
+      AND qa.order_id=proof.order_id
+      AND qa.storage_object_id=proof.storage_object_id
+      AND qa.storage_object_version IS NOT DISTINCT FROM
+        proof.storage_object_version
+      AND qa.storage_object_updated_at IS NOT DISTINCT FROM
+        proof.storage_object_updated_at
+      AND qa.verified_sha256=proof.verified_sha256
+      AND qa.actor_user_id=proof.actor_user_id
+      AND qa.verified_at=proof.verified_at
+      AND qa.expires_at=proof.expires_at
+    WHERE image.entity_id='33333333-3333-4333-8333-333333333333'
+      AND image.version_label='V2'
+      AND image.image_status='READY'
+      AND image.superseded_at IS NULL
+      AND proof.expires_at>clock_timestamp()
+      AND proof.actor_user_id='$UAT_MANAGER_AUTH_USER'::uuid
+  );
+")" = 't' ]] || fail 'QA_EDGE_NON_UPLOADER_RENEWAL_NOT_PERSISTED'
+echo 'WOS_V1_QA_UAT_EDGE_RENEWAL_NON_UPLOADER_PG17=PASS'
+echo 'WOS_V1_QA_UAT_PROOF_MIRROR_SYNC=PASS'
 
 {
   printf "SET wos.qa_uat.manager_auth_user='%s';\n" "$UAT_MANAGER_AUTH_USER"

@@ -76,6 +76,10 @@ const VERIFIED_PROOF_MIRROR_ROLLBACK = join(
   ROOT,
   'docs/workshop-order-system/production-readiness/sql/WOS_V1_QA_UAT_VERIFIED_PROOF_MIRROR_ROLLBACK_NOT_AUTHORIZED.sql',
 );
+const PROOF_RENEWAL_INSTALL = join(
+  ROOT,
+  'docs/workshop-order-system/production-readiness/sql/V1_APP_01_PROOF_RENEWAL_NOT_AUTHORIZED.sql',
+);
 
 function fail(code) {
   throw new Error(code);
@@ -298,6 +302,8 @@ function projectSettingsSql() {
 function installFullM2() {
   const sql = [
     projectSettingsSql(),
+    "SET wos_v1.production_migration_authorized='yes';",
+    readFileSync(PROOF_RENEWAL_INSTALL, 'utf8'),
     "SET wos_v1.qa_uat_install_authorized='yes';",
     readFileSync(
       join(

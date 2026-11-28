@@ -602,6 +602,27 @@ WHERE image_id='41111111-1111-4111-8111-111111111111';
 DO $$
 BEGIN
   IF (SELECT workflow_status FROM public.wos_production_orders
+      WHERE id='33333333-3333-4333-8333-333333333333')<>'READY_TO_START'
+    OR (SELECT version FROM public.wos_production_orders
+      WHERE id='33333333-3333-4333-8333-333333333333')<>22
+    OR NOT EXISTS(
+      SELECT 1 FROM public.wos_visual_baselines
+      WHERE entity_id='33333333-3333-4333-8333-333333333333'
+        AND status='CURRENT'
+        AND confirmed_by_office_profile_id IS NOT NULL
+        AND confirmed_by_workshop_profile_id IS NOT NULL
+        AND office_proof_set_digest=workshop_proof_set_digest
+    )
+  THEN RAISE EXCEPTION 'QA_UAT_TIME_ONLY_PROOF_CHANGE_CLEARED_SIGNOFF'; END IF;
+END $$;
+
+UPDATE public.wos_verified_image_proofs
+SET verified_sha256=repeat('f',64)
+WHERE image_id='41111111-1111-4111-8111-111111111111';
+
+DO $$
+BEGIN
+  IF (SELECT workflow_status FROM public.wos_production_orders
       WHERE id='33333333-3333-4333-8333-333333333333')<>'WAITING_MATERIAL'
     OR (SELECT version FROM public.wos_production_orders
       WHERE id='33333333-3333-4333-8333-333333333333')<>23

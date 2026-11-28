@@ -107,36 +107,36 @@ BEGIN
   IF current_setting('wos_v1.qa_local_test', true)
       IS DISTINCT FROM 'yes'
     AND (
-      to_regclass(
-        'wos_v1_qa_current_order_proof_compat.definition_backup'
+      to_regprocedure(
+        'public.wos_v1_renew_expired_image_proof(uuid,uuid,uuid,text,uuid,text,timestamptz,text)'
       ) IS NULL
-      OR NOT EXISTS (
-        SELECT 1
-        FROM
-          wos_v1_qa_current_order_proof_compat.definition_backup backup
-        WHERE backup.singleton=true
-          AND backup.source_sha256=
-            '0f1dcb8da6ae26da22150e0bed35e025e9618824d64993d0af5eec0a92cb7216'
-          AND backup.patched_sha256=encode(
-            sha256(convert_to(
-              pg_get_functiondef(
-                'public.wos_p7_record_trusted_image_proof(uuid,uuid,uuid,text,uuid,text,timestamptz,text)'::regprocedure
-              ),
-              'UTF8'
-            )),
-            'hex'
-          )
-          AND position(
-            'wos_v1.qa_current_order_proof'
-            IN pg_get_functiondef(
-              'public.wos_p7_record_trusted_image_proof(uuid,uuid,uuid,text,uuid,text,timestamptz,text)'::regprocedure
-            )
-          )>0
+      OR encode(
+        sha256(convert_to(
+          pg_get_functiondef(
+            'public.wos_v1_renew_expired_image_proof(uuid,uuid,uuid,text,uuid,text,timestamptz,text)'::regprocedure
+          ),
+          'UTF8'
+        )),
+        'hex'
+      ) IS DISTINCT FROM
+        '2725b8fec3727fd810b2ad2d407780b0635c32db02254aa888088c791c449e1f'
+      OR has_function_privilege(
+        'authenticated',
+        'public.wos_v1_renew_expired_image_proof(uuid,uuid,uuid,text,uuid,text,timestamptz,text)',
+        'EXECUTE'
       )
+      OR has_function_privilege(
+        'authenticated',
+        'public.wos_v1_qa_uat_edge_renew_proof(uuid,uuid,uuid,uuid,uuid,text,uuid,text,timestamptz,text)',
+        'EXECUTE'
+      )
+      OR to_regprocedure(
+        'public.wos_v1_qa_uat_edge_renew_proof(uuid,uuid,uuid,uuid,uuid,text,uuid,text,timestamptz,text)'
+      ) IS NULL
     )
   THEN
     RAISE EXCEPTION
-      'WOS_V1_QA_UAT_CURRENT_ORDER_PROOF_COMPAT_REQUIRED';
+      'WOS_V1_QA_UAT_CURRENT_ORDER_RENEWAL_REQUIRED';
   END IF;
   IF NOT EXISTS (
     SELECT 1

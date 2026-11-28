@@ -93,6 +93,9 @@ files=(
   tests/sql/run-wos-v1-qa-proof-mirror-pg17.sh
   tests/sql/run-wos-v1-qa-current-order-proof-pg17.sh
   tests/sql/wos-v1-live-proof-function-postguard-20261128.sql
+  tests/sql/run-wos-v1-production-proof-lifecycle-pg17.sh
+  tests/sql/wos-v1-production-proof-lifecycle-pg17.sql
+  tests/sql/wos-v1-production-proof-renewal-test-prerequisites.sql
   tests/sql/run-wos-v1-qa-closer-only-pg17.sh
   tests/sql/wos-qa-existing-v2-image-register-fixture.sql
   tests/sql/wos-v1-production-m2-pg17-fixture.sql
@@ -143,6 +146,9 @@ files=(
   docs/workshop-order-system/production-readiness/WOS_V1_PRODUCTION_BUSINESS_CONTRACT_AUDIT_20261126.md
   docs/workshop-order-system/production-readiness/WOS_V1_BUSINESS_UAT_CHECKLISTS_20261126.md
   docs/workshop-order-system/production-readiness/WOS_V1_GO_NO_GO_20261126.md
+  docs/workshop-order-system/production-readiness/WOS_V1_PRODUCTION_RELEASE_PACKAGE_20261128.md
+  docs/workshop-order-system/production-readiness/evidence/WOS_V1_PRODUCTION_PROOF_LIFECYCLE_EVIDENCE_20261128.md
+  docs/workshop-order-system/production-readiness/evidence/WOS_V1_PRODUCTION_PROOF_LIFECYCLE_INDEPENDENT_REVIEW_20261128.md
   docs/workshop-order-system/production-readiness/WOS_V1_PRODUCTION_M2_QA_UAT_OWNER_GATE_20261126.md
   docs/workshop-order-system/production-readiness/WOS_V1_PRODUCTION_M2_QA_CLOSER_REHEARSAL_OWNER_GATE_20261127.md
   docs/workshop-order-system/production-readiness/WOS_V1_PRODUCTION_M2_QA_CLOSER_REHEARSAL_OWNER_GATE_20261127_R2.md
@@ -219,6 +225,7 @@ files=(
   docs/workshop-order-system/qa-fixture/production-m2-uat-20261126/inputs-uat014.json
   docs/workshop-order-system/qa-fixture/production-m2-uat-20261126/inputs-uat015.json
   docs/workshop-order-system/qa-fixture/production-m2-uat-20261126/inputs-uat017.json
+  docs/workshop-order-system/qa-fixture/WOS_V1_RC05_POST_RECOVERY_RUNTIME_REACTIVATE_NOT_AUTHORIZED.sql
   docs/workshop-order-system/qa-fixture/production-m2-uat-20261126/v1/product.png
   docs/workshop-order-system/qa-fixture/production-m2-uat-20261126/v1/film-pattern.png
   docs/workshop-order-system/qa-fixture/production-m2-uat-20261126/v1/customer-approved-sample.png

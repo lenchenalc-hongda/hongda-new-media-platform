@@ -179,6 +179,13 @@ assert(sql.includes('BEFORE INSERT OR UPDATE OR DELETE'));
 assert(sql.includes('AFTER UPDATE OR DELETE'));
 assert(sql.includes("'productionStarted',false"));
 assert(sql.includes("'canStart',false"));
+assert(!sql.includes("'proofVerifiedAt',verified_at"));
+assert(!sql.includes("'proofExpiresAt',expires_at"));
+assert(sql.includes('NEW.verified_sha256 IS NOT DISTINCT FROM OLD.verified_sha256'));
+assert(!sql.includes('v_proof_verified_at>v_office_time'));
+assert(!sql.includes(
+  'v_proof_verified_at>v_baseline.office_confirmed_at',
+));
 assert(!sql.includes('wos_qa_p2_m2_gate'));
 assert(!sql.includes('QA-NONPROD'));
 assert(!sql.includes(
@@ -318,8 +325,9 @@ assert(qaAppActivate.includes(
   'WOS_V1_QA_UAT_APP_REQUIRES_WRAPPER_ACTIVATION',
 ));
 assert(qaAppActivate.includes(
-  'WOS_V1_QA_UAT_CURRENT_ORDER_PROOF_COMPAT_REQUIRED',
+  'WOS_V1_QA_UAT_CURRENT_ORDER_RENEWAL_REQUIRED',
 ));
+assert(qaAppActivate.includes('wos_v1_qa_uat_edge_renew_proof'));
 assert(qaAppActivate.includes('(trigger_row.tgtype & 16) <> 0'));
 assert(qaAppActivate.includes(
   'REVOKE INSERT, UPDATE, DELETE ON public.wos_production_orders',

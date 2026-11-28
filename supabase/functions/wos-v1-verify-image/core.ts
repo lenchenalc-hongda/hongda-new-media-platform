@@ -24,7 +24,6 @@ export interface WosV1ImageAccessInput {
   readonly runtimeAuthorized: boolean;
   readonly writesEnabled: boolean;
   readonly qaRevisionAuthorized?: boolean;
-  readonly qaUatCurrentOrderAuthorized?: boolean;
   readonly profile: WosV1ImageProfile | null | undefined;
   readonly order: WosV1ImageOrder | null | undefined;
 }
@@ -142,8 +141,7 @@ export function evaluateWosV1ImageAccess(input: WosV1ImageAccessInput): {
   }
   if (order.workflow_status === 'WAITING_MATERIAL'
     || order.workflow_status === 'READINESS_CHECK') {
-    if (input.qaUatCurrentOrderAuthorized === true
-      && /^V[2-9][0-9]{0,20}$/.test(order.version_label)) {
+    if (/^V[2-9][0-9]{0,20}$/.test(order.version_label)) {
       return { allowed: true, code: 'ALLOWED' };
     }
     if (input.qaRevisionAuthorized !== true) {
@@ -404,8 +402,9 @@ export function snapshotMatchesUpload(
   snapshot: WosV1ObjectSnapshot,
   userId: string,
   fileSize: number,
+  requireOwner = true,
 ): boolean {
-  return snapshot.ownerId === userId
+  return (!requireOwner || snapshot.ownerId === userId)
     && snapshot.mimeType === 'image/png'
     && uuid.test(snapshot.id)
     && typeof snapshot.version === 'string'
@@ -443,9 +442,14 @@ export function isWosV1ProofResult(
 ): boolean {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
   const row = value as Record<string, unknown>;
-  return ['VERIFIED', 'REPLAYED'].includes(String(row.status))
+  const expectedCategory = input.category.toUpperCase().replaceAll('-', '_');
+  const actualCategory = String(row.category || '')
+    .toUpperCase()
+    .replaceAll('-', '_');
+  return ['VERIFIED', 'REPLAYED', 'RENEWED', 'UNCHANGED'].includes(
+    String(row.status),
+  )
     && row.imageId === input.imageId
-    && row.category === input.category.toLowerCase().replaceAll('_', '-')
-      .replaceAll('-', '_')
+    && actualCategory === expectedCategory
     && row.sha256 === input.sha256;
 }

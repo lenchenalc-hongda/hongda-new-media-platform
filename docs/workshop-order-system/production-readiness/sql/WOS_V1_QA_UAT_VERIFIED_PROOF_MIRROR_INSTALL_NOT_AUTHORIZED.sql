@@ -86,6 +86,9 @@ BEGIN
     RAISE EXCEPTION 'QA_VERIFIED_PROOF_MIRROR_WRITE_ONLY'
       USING ERRCODE='42501';
   END IF;
+  IF current_setting('wos_v1.qa_mirror_from_formal', true) = 'yes' THEN
+    RETURN NEW;
+  END IF;
 
   SELECT control.* INTO v_control
   FROM wos_v1_qa_uat.closeout_controls control

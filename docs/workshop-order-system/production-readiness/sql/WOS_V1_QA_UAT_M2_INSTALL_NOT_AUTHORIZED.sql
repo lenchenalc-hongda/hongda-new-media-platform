@@ -1537,6 +1537,89 @@ GRANT EXECUTE ON FUNCTION public.wos_v1_qa_uat_edge_record_proof(
   uuid,uuid,uuid,uuid,uuid,text,uuid,text,timestamptz,text
 ) TO service_role;
 
+CREATE OR REPLACE FUNCTION public.wos_v1_qa_uat_edge_renew_proof(
+  p_execution_id uuid,
+  p_process_nonce uuid,
+  p_image_id uuid,
+  p_order_id uuid,
+  p_actor_user_id uuid,
+  p_storage_path text,
+  p_storage_object_id uuid,
+  p_storage_object_version text,
+  p_storage_object_updated_at timestamptz,
+  p_sha256 text
+) RETURNS jsonb
+LANGUAGE plpgsql SECURITY DEFINER SET search_path=''
+AS $edge_renew$
+DECLARE
+  v_result jsonb;
+  v_proof public.wos_verified_image_proofs%ROWTYPE;
+  v_rows integer;
+BEGIN
+  PERFORM wos_v1_qa_uat.assert_edge_write_transaction(
+    p_execution_id,p_process_nonce,p_actor_user_id,p_order_id
+  );
+  v_result:=public.wos_v1_renew_expired_image_proof(
+    p_image_id,p_order_id,p_actor_user_id,p_storage_path,
+    p_storage_object_id,p_storage_object_version,
+    p_storage_object_updated_at,p_sha256
+  );
+  IF v_result->>'status' IN ('RENEWED','UNCHANGED') THEN
+    SELECT proof.* INTO STRICT v_proof
+    FROM public.wos_verified_image_proofs proof
+    WHERE proof.image_id=p_image_id
+      AND proof.organization_id IN (
+        SELECT profile.org_id
+        FROM public.profiles profile
+        WHERE profile.user_id=p_actor_user_id
+          AND profile.is_active=true
+      )
+      AND proof.order_id=p_order_id
+      AND proof.storage_bucket='wos-private'
+      AND proof.storage_path=p_storage_path
+      AND proof.storage_object_id=p_storage_object_id
+      AND proof.storage_object_version IS NOT DISTINCT FROM
+        p_storage_object_version
+      AND proof.storage_object_updated_at IS NOT DISTINCT FROM
+        p_storage_object_updated_at
+      AND proof.verified_sha256=p_sha256;
+    PERFORM pg_catalog.set_config(
+      'wos_v1.qa_mirror_from_formal','yes',true
+    );
+    UPDATE public.wos_qa_verified_image_proofs proof
+    SET actor_user_id=v_proof.actor_user_id,
+        verified_at=v_proof.verified_at,
+        expires_at=v_proof.expires_at
+    WHERE proof.image_id=p_image_id
+      AND proof.organization_id=v_proof.organization_id
+      AND proof.order_id=p_order_id
+      AND proof.storage_bucket=v_proof.storage_bucket
+      AND proof.storage_path=p_storage_path
+      AND proof.storage_object_id=p_storage_object_id
+      AND proof.storage_object_version IS NOT DISTINCT FROM
+        p_storage_object_version
+      AND proof.storage_object_updated_at IS NOT DISTINCT FROM
+        p_storage_object_updated_at
+      AND proof.verified_sha256=p_sha256;
+    GET DIAGNOSTICS v_rows=ROW_COUNT;
+    IF v_rows<>1 THEN
+      RAISE EXCEPTION 'QA_EDGE_MIRROR_PROOF_MISSING'
+        USING ERRCODE='PT409';
+    END IF;
+    PERFORM pg_catalog.set_config(
+      'wos_v1.qa_mirror_from_formal','no',true
+    );
+  END IF;
+  RETURN v_result;
+END;
+$edge_renew$;
+REVOKE ALL ON FUNCTION public.wos_v1_qa_uat_edge_renew_proof(
+  uuid,uuid,uuid,uuid,uuid,text,uuid,text,timestamptz,text
+) FROM PUBLIC,anon,authenticated;
+GRANT EXECUTE ON FUNCTION public.wos_v1_qa_uat_edge_renew_proof(
+  uuid,uuid,uuid,uuid,uuid,text,uuid,text,timestamptz,text
+) TO service_role;
+
 CREATE FUNCTION public.wos_v1_qa_uat_open_gate(
   p_authorization_id text,
   p_order_id uuid,

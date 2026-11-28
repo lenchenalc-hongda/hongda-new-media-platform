@@ -474,3 +474,362 @@ Deno.test('Edge entry dual-key and fail-closed matrix', async () => {
 
   console.log('WOS_V1_EDGE_ENTRY_HTTP_DENO_HARNESS=PASS');
 });
+
+Deno.test('Production current-order Proof renewal uses real HTTP and skips writer', async () => {
+  const productionRef = 'amqpvxrurenevniilhtl';
+  const productionRuntime = `https://${productionRef}.supabase.co`;
+  const userId = '10101010-1010-4010-8010-101010101010';
+  const profileId = '11111111-1111-4111-8111-111111111111';
+  const orgId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+  const orderId = '33333333-3333-4333-8333-333333333333';
+  const imageId = '41111111-1111-4111-8111-111111111111';
+  const objectId = '51111111-1111-4111-8111-111111111111';
+  const storagePath =
+    `organizations/${orgId}/wos/production-order/${orderId}`
+    + `/images/product/versions/V2/${imageId}/source.png`;
+  const png = Uint8Array.from(
+    atob(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII=',
+    ),
+    value => value.charCodeAt(0),
+  );
+  const digest = Array.from(
+    new Uint8Array(
+      await crypto.subtle.digest('SHA-256', png),
+    ),
+  ).map(value => value.toString(16).padStart(2, '0')).join('');
+  let writerCalls = 0;
+  let renewalCalls = 0;
+  const rpcNames: string[] = [];
+
+  let resolvePort: (port: number) => void;
+  const portReady = new Promise<number>(resolve => {
+    resolvePort = resolve;
+  });
+  const supabase = Deno.serve({
+    hostname: '127.0.0.1',
+    port: 0,
+    onListen: ({ port }) => resolvePort(port),
+  }, async request => {
+    const url = new URL(request.url);
+    if (url.pathname === '/auth/v1/user') {
+      return Response.json({ id: userId, email: 'office@example.test' });
+    }
+    if (url.pathname === '/rest/v1/profiles') {
+      return Response.json([{
+        id: profileId,
+        user_id: userId,
+        org_id: orgId,
+        role: 'sales',
+        is_active: true,
+      }]);
+    }
+    if (url.pathname === '/rest/v1/wos_production_orders') {
+      return Response.json([{
+        id: orderId,
+        organization_id: orgId,
+        created_by_profile_id: profileId,
+        sales_owner_profile_id: profileId,
+        version: 9,
+        version_label: 'V2',
+        workflow_status: 'WAITING_MATERIAL',
+      }]);
+    }
+    if (url.pathname.startsWith('/rest/v1/rpc/')) {
+      const rpcName = url.pathname.split('/').at(-1) || '';
+      rpcNames.push(rpcName);
+      if (rpcName === 'wos_p7_service_storage_snapshot') {
+        return Response.json({
+          id: objectId,
+          ownerId: '99999999-9999-4999-8999-999999999999',
+          version: 'object-version-1',
+          updatedAt: '2026-11-28T10:00:00.123456Z',
+          mimeType: 'image/png',
+          byteSize: String(png.length),
+        });
+      }
+      if (rpcName === 'wos_v1_renew_expired_image_proof') {
+        renewalCalls += 1;
+        return Response.json({
+          status: 'RENEWED',
+          imageId,
+          category: 'PRODUCT',
+          sha256: digest,
+          canStart: false,
+        });
+      }
+      if (rpcName === 'wos_p7_record_trusted_image_proof') {
+        writerCalls += 1;
+        return Response.json({ status: 'UNEXPECTED_WRITER_CALL' });
+      }
+    }
+    if (url.pathname.startsWith('/storage/v1/object/wos-private/')) {
+      return new Response(png, {
+        status: 200,
+        headers: { 'content-type': 'image/png' },
+      });
+    }
+    return Response.json({ message: 'unexpected_request' }, { status: 404 });
+  });
+  const mockPort = await portReady;
+  const mockUrl = `http://127.0.0.1:${mockPort}`;
+
+  Deno.env.set('SUPABASE_URL', productionRuntime);
+  Deno.env.set('WOS_SUPABASE_ALLOWED_REFS', productionRef);
+  Deno.env.set('WOS_V1_EDGE_ALLOWED_ORIGINS', '');
+  Deno.env.set(
+    'SUPABASE_PUBLISHABLE_KEYS',
+    JSON.stringify({ default: 'sb_publishable_synthetic' }),
+  );
+  Deno.env.set(
+    'SUPABASE_SECRET_KEYS',
+    JSON.stringify({ default: 'sb_secret_synthetic_admin' }),
+  );
+  Deno.env.set('WOS_V1_EDGE_WRITES_ENABLED', 'true');
+
+  const redirect = ((_url: string, key: string, options: unknown) =>
+    createClient(mockUrl, key, options as never)) as unknown as NonNullable<
+      WosV1VerifyImageHandlerOptions['createAdminClient']
+    >;
+  let resolveEdgePort: (port: number) => void;
+  const edgePortReady = new Promise<number>(resolve => {
+    resolveEdgePort = resolve;
+  });
+  const edge = Deno.serve({
+    hostname: '127.0.0.1',
+    port: 0,
+    onListen: ({ port }) => resolveEdgePort(port),
+  }, request => handleWosV1VerifyImageRequest(request, {
+    createAdminClient: redirect,
+    createUserClient: redirect,
+  }));
+  const edgePort = await edgePortReady;
+  try {
+    const response = await fetch(`http://127.0.0.1:${edgePort}/`, {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${syntheticJwt({
+          role: 'authenticated',
+          ref: productionRef,
+        })}`,
+        apikey: 'sb_publishable_synthetic',
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        category: 'PRODUCT',
+        imageId,
+        orderId,
+        sha256: digest,
+        storagePath,
+      }),
+    });
+    const body = await response.json();
+    if (response.status !== 200
+      || body.code !== 'WOS_V1_TRUSTED_IMAGE_PROOF_ISSUED'
+      || body.data?.proofStatus !== 'REPLAYED'
+      || body.data?.renewalStatus !== 'RENEWED'
+      || body.data?.sha256 !== digest
+      || renewalCalls !== 1
+      || writerCalls !== 0
+      || rpcNames.filter(name =>
+        name === 'wos_p7_service_storage_snapshot').length !== 2) {
+      throw new Error(
+        `production_proof_renewal_failed:${response.status}:`
+        + `${JSON.stringify({ body, renewalCalls, writerCalls, rpcNames })}`,
+      );
+    }
+    console.log('WOS_V1_PRODUCTION_PROOF_REFRESH_HTTP=PASS');
+    console.log('WOS_V1_PRODUCTION_PROOF_RENEWAL_SKIPS_WRITER=PASS');
+  } finally {
+    await edge.shutdown();
+    await supabase.shutdown();
+  }
+});
+
+Deno.test('QA current-order Proof uses the renewal wrapper for a non-uploader reviewer', async () => {
+  const userId = '30303030-3030-4030-8030-303030303030';
+  const uploaderId = '99999999-9999-4999-8999-999999999999';
+  const profileId = '33333333-3333-4333-8333-333333333333';
+  const orgId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+  const orderId = '77777777-7777-4777-8777-777777777777';
+  const imageId = '41111111-1111-4111-8111-111111111111';
+  const objectId = '51111111-1111-4111-8111-111111111111';
+  const storagePath =
+    `organizations/${orgId}/wos/production-order/${orderId}`
+    + `/images/product/versions/V2/${imageId}/source.png`;
+  const png = Uint8Array.from(
+    atob(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII=',
+    ),
+    value => value.charCodeAt(0),
+  );
+  const digest = Array.from(
+    new Uint8Array(
+      await crypto.subtle.digest('SHA-256', png),
+    ),
+  ).map(value => value.toString(16).padStart(2, '0')).join('');
+  let gateCalls = 0;
+  let snapshotCalls = 0;
+  let writerCalls = 0;
+  let renewalCalls = 0;
+
+  let resolvePort: (port: number) => void;
+  const portReady = new Promise<number>(resolve => {
+    resolvePort = resolve;
+  });
+  const supabase = Deno.serve({
+    hostname: '127.0.0.1',
+    port: 0,
+    onListen: ({ port }) => resolvePort(port),
+  }, async request => {
+    const url = new URL(request.url);
+    if (url.pathname === '/auth/v1/user') {
+      return Response.json({ id: userId, email: 'manager@example.test' });
+    }
+    if (url.pathname === '/rest/v1/profiles') {
+      return Response.json([{
+        id: profileId,
+        user_id: userId,
+        org_id: orgId,
+        role: 'manager',
+        is_active: true,
+      }]);
+    }
+    if (url.pathname === '/rest/v1/wos_production_orders') {
+      return Response.json([{
+        id: orderId,
+        organization_id: orgId,
+        created_by_profile_id: '11111111-1111-4111-8111-111111111111',
+        sales_owner_profile_id: '11111111-1111-4111-8111-111111111111',
+        version: 7,
+        version_label: 'V2',
+        workflow_status: 'WAITING_MATERIAL',
+      }]);
+    }
+    if (url.pathname.startsWith('/rest/v1/rpc/')) {
+      const rpcName = url.pathname.split('/').at(-1) || '';
+      if (rpcName === 'wos_v1_qa_uat_edge_write_allowed') {
+        gateCalls += 1;
+        return Response.json(true);
+      }
+      if (rpcName === 'wos_p7_service_storage_snapshot') {
+        snapshotCalls += 1;
+        return Response.json({
+          id: objectId,
+          ownerId: uploaderId,
+          version: 'object-version-1',
+          updatedAt: '2026-11-28T10:00:00.123456Z',
+          mimeType: 'image/png',
+          byteSize: String(png.length),
+        });
+      }
+      if (rpcName === 'wos_v1_qa_uat_edge_renew_proof') {
+        renewalCalls += 1;
+        return Response.json({
+          status: 'RENEWED',
+          imageId,
+          category: 'PRODUCT',
+          sha256: digest,
+          canStart: false,
+        });
+      }
+      if (rpcName === 'wos_v1_qa_uat_edge_record_proof') {
+        writerCalls += 1;
+        return Response.json({
+          status: 'UNEXPECTED_WRITER_CALL',
+        });
+      }
+    }
+    if (url.pathname.startsWith('/storage/v1/object/wos-private/')) {
+      return new Response(png, {
+        status: 200,
+        headers: { 'content-type': 'image/png' },
+      });
+    }
+    return Response.json({ message: 'unexpected_request' }, { status: 404 });
+  });
+  const mockPort = await portReady;
+  const mockUrl = `http://127.0.0.1:${mockPort}`;
+
+  Deno.env.set('SUPABASE_URL', qaRuntimeUrl);
+  Deno.env.set('WOS_SUPABASE_ALLOWED_REFS', qaProjectRef);
+  Deno.env.set('WOS_V1_EDGE_ALLOWED_ORIGINS', '');
+  Deno.env.set(
+    'SUPABASE_PUBLISHABLE_KEYS',
+    JSON.stringify({ default: 'sb_publishable_synthetic' }),
+  );
+  Deno.env.set(
+    'SUPABASE_SECRET_KEYS',
+    JSON.stringify({ default: 'sb_secret_synthetic_admin' }),
+  );
+  Deno.env.set('WOS_V1_EDGE_WRITES_ENABLED', 'true');
+  Deno.env.set('WOS_V1_QA_UAT_AUTHORIZATION_ID', authId);
+
+  const redirect = ((_url: string, key: string, options: unknown) =>
+    createClient(mockUrl, key, options as never)) as unknown as NonNullable<
+      WosV1VerifyImageHandlerOptions['createAdminClient']
+    >;
+  let resolveEdgePort: (port: number) => void;
+  const edgePortReady = new Promise<number>(resolve => {
+    resolveEdgePort = resolve;
+  });
+  const edge = Deno.serve({
+    hostname: '127.0.0.1',
+    port: 0,
+    onListen: ({ port }) => resolveEdgePort(port),
+  }, request => handleWosV1VerifyImageRequest(request, {
+    createAdminClient: redirect,
+    createUserClient: redirect,
+  }));
+  const edgePort = await edgePortReady;
+  try {
+    const response = await fetch(`http://127.0.0.1:${edgePort}/`, {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${syntheticJwt({
+          role: 'authenticated',
+          ref: qaProjectRef,
+        })}`,
+        apikey: 'sb_publishable_synthetic',
+        'content-type': 'application/json',
+        'x-wos-qa-uat-authorization-id': authId,
+        'x-wos-qa-uat-execution-id': executionId,
+        'x-wos-qa-uat-closer-nonce': processNonce,
+      },
+      body: JSON.stringify({
+        category: 'PRODUCT',
+        imageId,
+        orderId,
+        sha256: digest,
+        storagePath,
+      }),
+    });
+    const body = await response.json();
+    if (response.status !== 200
+      || body.code !== 'WOS_V1_TRUSTED_IMAGE_PROOF_ISSUED'
+      || body.data?.proofStatus !== 'REPLAYED'
+      || body.data?.renewalStatus !== 'RENEWED'
+      || body.data?.sha256 !== digest
+      || gateCalls !== 1
+      || snapshotCalls !== 2
+      || writerCalls !== 0
+      || renewalCalls !== 1) {
+      throw new Error(
+        `qa_current_order_proof_failed:${response.status}:`
+        + `${JSON.stringify({
+          body,
+          gateCalls,
+          snapshotCalls,
+          writerCalls,
+          renewalCalls,
+        })}`,
+      );
+    }
+    console.log('WOS_V1_QA_CURRENT_ORDER_PROOF_HTTP=PASS');
+    console.log('WOS_V1_QA_CURRENT_ORDER_NON_UPLOADER_REVIEW=PASS');
+    console.log('WOS_V1_QA_CURRENT_ORDER_RENEWAL_SKIPS_WRITER=PASS');
+  } finally {
+    await edge.shutdown();
+    await supabase.shutdown();
+  }
+});

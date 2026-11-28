@@ -182,21 +182,18 @@ assert.equal(evaluateWosV1ImageAccess({
 assert.equal(evaluateWosV1ImageAccess({
   runtimeAuthorized: true,
   writesEnabled: true,
-  qaUatCurrentOrderAuthorized: true,
   profile,
   order: { ...order, workflow_status: 'WAITING_MATERIAL', version_label: 'V2' },
 }).code, 'ALLOWED');
 assert.equal(evaluateWosV1ImageAccess({
   runtimeAuthorized: true,
   writesEnabled: true,
-  qaUatCurrentOrderAuthorized: true,
   profile,
   order: { ...order, workflow_status: 'READINESS_CHECK', version_label: 'V2' },
 }).code, 'ALLOWED');
 assert.equal(evaluateWosV1ImageAccess({
   runtimeAuthorized: true,
   writesEnabled: true,
-  qaUatCurrentOrderAuthorized: true,
   profile,
   order: { ...order, workflow_status: 'WAITING_MATERIAL', version_label: 'V1' },
 }).code, 'STATUS_DENIED');
@@ -204,7 +201,6 @@ assert.equal(evaluateWosV1ImageAccess({
   runtimeAuthorized: true,
   writesEnabled: true,
   qaRevisionAuthorized: true,
-  qaUatCurrentOrderAuthorized: true,
   profile,
   order: { ...order, workflow_status: 'WAITING_MATERIAL', version_label: 'QA-R6' },
 }).code, 'ALLOWED');
@@ -264,6 +260,14 @@ const first = {
 assert.equal(snapshotMatchesUpload(first, userId, png.length), true);
 assert.equal(snapshotMatchesUpload({
   ...first,
+  ownerId: '99999999-9999-4999-8999-999999999999',
+}, userId, png.length), false);
+assert.equal(snapshotMatchesUpload({
+  ...first,
+  ownerId: '99999999-9999-4999-8999-999999999999',
+}, userId, png.length, false), true);
+assert.equal(snapshotMatchesUpload({
+  ...first,
   version: null,
 }, userId, png.length), false, 'unknown object version must fail closed');
 assert.equal(snapshotMatchesUpload({
@@ -310,6 +314,18 @@ assert.equal(isWosV1ProofResult({
   category: 'PRODUCT',
   sha256: hash(png),
 }), false);
+for (const status of ['RENEWED', 'UNCHANGED']) {
+  assert.equal(isWosV1ProofResult({
+    status,
+    imageId,
+    category: 'product',
+    sha256: hash(png),
+  }, {
+    imageId,
+    category: 'PRODUCT',
+    sha256: hash(png),
+  }), true);
+}
 
 const candidate = readFileSync(
   'tests/sql/wos_p8_p7_production_compatible_candidate.sql',
@@ -377,8 +393,16 @@ assert(edgeIndex.includes('x-wos-qa-uat-execution-id'));
 assert(edgeIndex.includes('x-wos-qa-uat-closer-nonce'));
 assert(edgeIndex.includes('wos_v1_qa_uat_edge_write_allowed'));
 assert(edgeIndex.includes('wos_v1_qa_uat_edge_probe'));
-assert(!edgeIndex.includes('wos_v1_qa_uat_edge_renew_proof'));
 assert(edgeIndex.includes('wos_v1_qa_uat_edge_record_proof'));
+assert(edgeIndex.includes("'wos_v1_renew_expired_image_proof'"));
+assert(edgeIndex.includes("'wos_v1_qa_uat_edge_renew_proof'"));
+assert(edgeIndex.includes("renewalStatus === 'ABSENT' ? null : renewal.data"));
+assert(edgeIndex.includes("const proofStatus = ['VERIFIED', 'REPLAYED']"));
+assert(edgeIndex.includes('if (proofData === null)'));
+assert(edgeIndex.includes('!currentOrderReverification'));
+assert(!edgeIndex.includes(
+  "if (!qaUatRuntime) {\n        const renewal",
+));
 assert(edgeCore.includes('WOS_V1_QA_EDGE_CLOSED'));
 assert(edgeCore.includes('matchesLegacyQaCloserJwt('));
 assert(!edgeIndex.includes("request.headers.get('authorization') !== `Bearer ${service}`"));
@@ -421,6 +445,9 @@ assert(edgeIndex.includes('x-wos-qa-closer-credential-preflight'));
 assert(edgeIndex.includes('WOS_V1_QA_EDGE_CREDENTIAL_VERIFIED'));
 assert(edgeCore.includes('WOS_V1_QA_EDGE_CLOSER_CREDENTIAL_MISSING'));
 assert(edgeCore.includes('WOS_V1_QA_EDGE_CLOSER_CREDENTIAL_MISMATCH'));
+assert(edgeCore.includes('/^V[2-9][0-9]{0,20}$/'));
+assert(!edgeCore.includes('qaUatCurrentOrderAuthorized'));
+assert(!edgeIndex.includes('qaUatCurrentOrderAuthorized'));
 
 console.log('workshop-order-production-edge-core.test.ts: PASS');
 console.log('WOS_V1_EDGE_FOUR_CATEGORY_ACCESS=PASS');

@@ -156,6 +156,7 @@ async function readBoundedText(
 
 export type WosV1VerifyImageHandlerOptions = {
   createAdminClient?: typeof createClient;
+  createUserClient?: typeof createClient;
 };
 
 export async function handleWosV1VerifyImageRequest(
@@ -163,6 +164,7 @@ export async function handleWosV1VerifyImageRequest(
   options: WosV1VerifyImageHandlerOptions = {},
 ): Promise<Response> {
   const adminClientFactory = options.createAdminClient ?? createClient;
+  const userClientFactory = options.createUserClient ?? createClient;
   const origin = request.headers.get('origin');
   const allowedOrigins = parseAllowedOrigins(
     Deno.env.get('WOS_V1_EDGE_ALLOWED_ORIGINS'),
@@ -321,7 +323,7 @@ export async function handleWosV1VerifyImageRequest(
   try {
     return await withTimeout((async () => {
       const token = authorization.substring(7);
-      const userDb = createClient(runtimeUrl!, publishable, {
+      const userDb = userClientFactory(runtimeUrl!, publishable, {
         global: { headers: { Authorization: authorization } },
         auth: { autoRefreshToken: false, persistSession: false },
       });
@@ -350,7 +352,6 @@ export async function handleWosV1VerifyImageRequest(
         writesEnabled: true,
         qaRevisionAuthorized:
           Deno.env.get('WOS_V1_QA_REVISION_IMAGES_ENABLED') === 'true',
-        qaUatCurrentOrderAuthorized: qaUatRuntime,
         profile,
         order,
       });
@@ -361,7 +362,7 @@ export async function handleWosV1VerifyImageRequest(
           access.code === 'ORDER_NOT_FOUND' ? 404 : 403,
         );
       }
-      const admin = createClient(runtimeUrl!, service, {
+      const admin = adminClientFactory(runtimeUrl!, service, {
         auth: { autoRefreshToken: false, persistSession: false },
       });
       if (qaUatRuntime) {
@@ -400,13 +401,23 @@ export async function handleWosV1VerifyImageRequest(
       };
       const first = await snapshot();
       const declaredSize = first ? Number(first.byteSize) : Number.NaN;
+      const currentOrderReverification =
+        (order.workflow_status === 'WAITING_MATERIAL'
+          || order.workflow_status === 'READINESS_CHECK')
+        && /^V[2-9][0-9]{0,20}$/.test(order.version_label);
       if (!first
-        || !snapshotMatchesUpload(first, auth.data.user.id, declaredSize)) {
+        || !snapshotMatchesUpload(
+          first,
+          auth.data.user.id,
+          declaredSize,
+          !currentOrderReverification,
+        )) {
         return output(request, 'PRIVATE_OBJECT_NOT_VERIFIED', 409);
       }
-      // The canonical-path, actor, Gate and immutable object snapshot checks
-      // above authorize the server-side byte read. User-side Storage SELECT
-      // remains proof-bound and cannot read the object before this proof exists.
+      // Canonical path, current-order scope, Gate, and immutable object
+      // snapshot checks authorize the byte read. A same-organization reviewer
+      // may re-verify an uploader's object; new Proof creation still requires
+      // the upstream object owner binding.
       const downloaded = await admin.storage.from('wos-private').download(path);
       if (downloaded.error || !downloaded.data
         || downloaded.data.size !== declaredSize) {
@@ -450,39 +461,54 @@ export async function handleWosV1VerifyImageRequest(
         p_storage_object_updated_at: first.updatedAt,
         p_sha256: body.sha256,
       };
-      if (!qaUatRuntime) {
-        const renewal = await admin.rpc(
-          'wos_v1_renew_expired_image_proof',
-          renewalArgs,
-        );
-        if (renewal.error
-          || !renewal.data
-          || typeof renewal.data !== 'object'
-          || Array.isArray(renewal.data)
-          || !['ABSENT', 'UNCHANGED', 'RENEWED'].includes(
-            String((renewal.data as Record<string, unknown>).status),
-          )) {
-          return output(request, 'WOS_V1_PROOF_RENEWAL_UNAVAILABLE', 503);
-        }
-      }
-      const proof = await admin.rpc(
+      let proofData: unknown;
+      let renewalStatus: string | null = null;
+      const renewal = await admin.rpc(
         qaUatRuntime
-          ? 'wos_v1_qa_uat_edge_record_proof'
-          : 'wos_p7_record_trusted_image_proof',
+          ? 'wos_v1_qa_uat_edge_renew_proof'
+          : 'wos_v1_renew_expired_image_proof',
         renewalArgs,
       );
-      if (proof.error
-        || !isWosV1ProofResult(proof.data, {
+      if (renewal.error
+        || !renewal.data
+        || typeof renewal.data !== 'object'
+        || Array.isArray(renewal.data)
+        || !['ABSENT', 'UNCHANGED', 'RENEWED'].includes(
+          String((renewal.data as Record<string, unknown>).status),
+        )) {
+        return output(request, 'WOS_V1_PROOF_RENEWAL_UNAVAILABLE', 503);
+      }
+      renewalStatus = String(
+        (renewal.data as Record<string, unknown>).status,
+      );
+      proofData = renewalStatus === 'ABSENT' ? null : renewal.data;
+      if (proofData === null) {
+        const proof = await admin.rpc(
+          qaUatRuntime
+            ? 'wos_v1_qa_uat_edge_record_proof'
+            : 'wos_p7_record_trusted_image_proof',
+          renewalArgs,
+        );
+        if (proof.error) {
+          return output(request, 'WOS_V1_PROOF_WRITE_UNAVAILABLE', 503);
+        }
+        proofData = proof.data;
+      }
+      if (!isWosV1ProofResult(proofData, {
           imageId: body.imageId,
           category: body.category,
           sha256: body.sha256,
         })) {
         return output(request, 'WOS_V1_PROOF_WRITE_UNAVAILABLE', 503);
       }
-      const result = proof.data as { status: string };
+      const result = proofData as { status: string };
+      const proofStatus = ['VERIFIED', 'REPLAYED'].includes(result.status)
+        ? result.status
+        : 'REPLAYED';
       return output(request, 'WOS_V1_TRUSTED_IMAGE_PROOF_ISSUED', 200, {
         sha256: body.sha256,
-        proofStatus: result.status,
+        proofStatus,
+        renewalStatus,
       });
     })());
   } catch (error) {
