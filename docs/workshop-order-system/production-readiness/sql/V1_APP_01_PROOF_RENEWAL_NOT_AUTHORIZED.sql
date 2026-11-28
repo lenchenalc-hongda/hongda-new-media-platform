@@ -89,7 +89,7 @@ BEGIN
     )
     OR (
       v_order.workflow_status IN ('WAITING_MATERIAL', 'READINESS_CHECK')
-      AND v_order.version_label !~ '^V[2-9][0-9]{0,20}$'
+      AND v_order.version_label !~ '^V(?:[2-9]|[1-9][0-9]{1,20})$'
     )
     OR (v_profile.role = 'sales' AND v_profile.id NOT IN (
       v_order.created_by_profile_id, v_order.sales_owner_profile_id

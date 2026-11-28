@@ -60,7 +60,7 @@ for (const marker of [
   "control.edge_last_heartbeat_at >",
   "v_order.version_label = 'V1'",
   "v_order.workflow_status = 'DRAFT'",
-  "v_order.version_label ~ '^V[2-9][0-9]{0,20}$'",
+  "v_order.version_label ~ '^V(?:[2-9]|[1-9][0-9]{1,20})$'",
   "v_order.workflow_status = 'NEEDS_INFORMATION'",
   "v_order.workflow_status NOT IN (",
   "proof.proof_status = 'VERIFIED'",

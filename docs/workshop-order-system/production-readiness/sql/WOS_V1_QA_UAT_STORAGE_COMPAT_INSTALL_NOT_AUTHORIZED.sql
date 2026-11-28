@@ -333,7 +333,7 @@ BEGIN
         AND v_order.workflow_status = 'DRAFT'
       )
       OR (
-        v_order.version_label ~ '^V[2-9][0-9]{0,20}$'
+        v_order.version_label ~ '^V(?:[2-9]|[1-9][0-9]{1,20})$'
         AND v_order.workflow_status = 'NEEDS_INFORMATION'
       )
     )

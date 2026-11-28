@@ -10,6 +10,13 @@ import {
 const WOS_V1_HTTP_PATH = process.env.NEXT_PUBLIC_WOS_V1_QA_PREVIEW === 'true'
   ? '/api/workshop-orders/v1-qa'
   : '/api/workshop-orders/v1';
+export type WosV1ImageCategory = (typeof WOS_V1_IMAGE_CATEGORIES)[number];
+
+export interface WosV1ProofRenewalItem {
+  readonly category: WosV1ImageCategory;
+  readonly ok: boolean;
+  readonly code?: string;
+}
 
 export interface WosV1HttpResult {
   readonly status: number;
@@ -196,9 +203,20 @@ export async function renewWosV1CurrentImageProofs(input: {
   readonly client: SupabaseClient;
   readonly orderId: string;
   readonly versionLabel: string;
+  readonly categories?: readonly WosV1ImageCategory[];
 }): Promise<
-  | { readonly ok: true; readonly verifiedCount: number }
-  | { readonly ok: false; readonly code: string }
+  | {
+      readonly ok: true;
+      readonly verifiedCount: number;
+      readonly results: readonly WosV1ProofRenewalItem[];
+      readonly failedCategories: readonly [];
+    }
+  | {
+      readonly ok: false;
+      readonly code: string;
+      readonly results: readonly WosV1ProofRenewalItem[];
+      readonly failedCategories: readonly WosV1ImageCategory[];
+    }
 > {
   const images = await input.client.from('wos_reference_images')
     .select('id,category,storage_bucket,storage_path,image_status,version_label')
@@ -208,10 +226,20 @@ export async function renewWosV1CurrentImageProofs(input: {
     .eq('version_label', input.versionLabel)
     .is('superseded_at', null);
   if (images.error || !Array.isArray(images.data)) {
-    return { ok: false, code: 'CURRENT_IMAGES_UNAVAILABLE' };
+    return {
+      ok: false,
+      code: 'CURRENT_IMAGES_UNAVAILABLE',
+      results: [],
+      failedCategories: [],
+    };
   }
   if (images.data.length !== WOS_V1_IMAGE_CATEGORIES.length) {
-    return { ok: false, code: 'CURRENT_FOUR_IMAGE_SET_INCOMPLETE' };
+    return {
+      ok: false,
+      code: 'CURRENT_FOUR_IMAGE_SET_INCOMPLETE',
+      results: [],
+      failedCategories: [],
+    };
   }
 
   const byCategory = new Map<string, Record<string, unknown>>();
@@ -221,10 +249,30 @@ export async function renewWosV1CurrentImageProofs(input: {
     if (typeof row.category === 'string') byCategory.set(row.category, row);
   }
   if (byCategory.size !== WOS_V1_IMAGE_CATEGORIES.length) {
-    return { ok: false, code: 'CURRENT_FOUR_IMAGE_SET_INCOMPLETE' };
+    return {
+      ok: false,
+      code: 'CURRENT_FOUR_IMAGE_SET_INCOMPLETE',
+      results: [],
+      failedCategories: [],
+    };
   }
 
-  for (const category of WOS_V1_IMAGE_CATEGORIES) {
+  const requested = input.categories ?? WOS_V1_IMAGE_CATEGORIES;
+  if (requested.length === 0
+    || new Set(requested).size !== requested.length
+    || requested.some(category =>
+      !(WOS_V1_IMAGE_CATEGORIES as readonly string[]).includes(category))) {
+    return {
+      ok: false,
+      code: 'CURRENT_IMAGE_CATEGORY_INVALID',
+      results: [],
+      failedCategories: [],
+    };
+  }
+
+  const results: WosV1ProofRenewalItem[] = [];
+  let firstFailureCode: string | null = null;
+  for (const category of requested) {
     const row = byCategory.get(category);
     if (!row
       || typeof row.id !== 'string'
@@ -237,7 +285,13 @@ export async function renewWosV1CurrentImageProofs(input: {
       || row.storage_path.length === 0
       || row.storage_path.length > 600
       || row.storage_path.includes('..')) {
-      return { ok: false, code: 'CURRENT_IMAGE_IDENTITY_INVALID' };
+      results.push({
+        category,
+        ok: false,
+        code: 'CURRENT_IMAGE_IDENTITY_INVALID',
+      });
+      firstFailureCode ??= 'CURRENT_IMAGE_IDENTITY_INVALID';
+      continue;
     }
     const invoked = await input.client.functions.invoke(
       'wos-v1-verify-image',
@@ -273,13 +327,32 @@ export async function renewWosV1CurrentImageProofs(input: {
       || !/^[a-f0-9]{64}$/.test(proof.sha256)
       || proof.reverifiedExistingProof !== true
       || !['VERIFIED', 'REPLAYED'].includes(String(proof.proofStatus))) {
-      return {
-        ok: false,
-        code: typeof edge?.code === 'string'
-          ? edge.code
-          : 'TRUSTED_IMAGE_REVERIFICATION_UNAVAILABLE',
-      };
+      const code = typeof edge?.code === 'string'
+        ? edge.code
+        : 'TRUSTED_IMAGE_REVERIFICATION_UNAVAILABLE';
+      results.push({ category, ok: false, code });
+      firstFailureCode ??= code;
+      continue;
     }
+    results.push({ category, ok: true });
   }
-  return { ok: true, verifiedCount: WOS_V1_IMAGE_CATEGORIES.length };
+  if (firstFailureCode) {
+    return {
+      ok: false,
+      code: firstFailureCode,
+      results,
+      failedCategories: results
+        .filter((item): item is WosV1ProofRenewalItem & {
+          readonly ok: false;
+          readonly code: string;
+        } => !item.ok && typeof item.code === 'string')
+        .map(item => item.category),
+    };
+  }
+  return {
+    ok: true,
+    verifiedCount: requested.length,
+    results,
+    failedCategories: [],
+  };
 }

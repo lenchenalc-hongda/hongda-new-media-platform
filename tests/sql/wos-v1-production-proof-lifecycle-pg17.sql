@@ -1,3 +1,9 @@
+SELECT set_config(
+  'wos_v1.test_version_label',
+  :'version_label',
+  false
+);
+
 CREATE TEMP TABLE proof_lifecycle_state(
   state text PRIMARY KEY,
   office_digest text,
@@ -138,7 +144,7 @@ SELECT public.wos_v1_m2_action(
   '81111111-1111-4111-8111-111111111111',
   'BASELINE_SELECT',
   jsonb_build_object(
-    'productionVersionLabel','V2',
+    'productionVersionLabel',current_setting('wos_v1.test_version_label'),
     'note','Office selects the current four-image V2 baseline.',
     'imageIds',jsonb_build_array(
       '41111111-1111-4111-8111-111111111111',
@@ -154,12 +160,12 @@ SELECT public.wos_v1_m2_action(
   '82222222-2222-4222-8222-222222222222',
   'BASELINE_OFFICE_CONFIRM',
   jsonb_build_object(
-    'productionVersionLabel','V2',
+    'productionVersionLabel',current_setting('wos_v1.test_version_label'),
     'note','Office signs the stable V2 image identity digest.',
     'baselineId',(
       SELECT id FROM public.wos_visual_baselines
       WHERE entity_id='33333333-3333-4333-8333-333333333333'
-        AND version_label='V2' AND status='DRAFT'
+        AND version_label=current_setting('wos_v1.test_version_label') AND status='DRAFT'
     )
   )
 );
@@ -174,7 +180,7 @@ SELECT 'after_office',office_proof_set_digest,NULL,
    WHERE id='33333333-3333-4333-8333-333333333333')
 FROM public.wos_visual_baselines
 WHERE entity_id='33333333-3333-4333-8333-333333333333'
-  AND version_label='V2' AND status='CURRENT';
+  AND version_label=current_setting('wos_v1.test_version_label') AND status='CURRENT';
 
 -- Expire all Proofs past the normal 10-minute TTL. The stable identity is
 -- unchanged, so signatures must survive and re-verification must renew them.
@@ -191,7 +197,7 @@ BEGIN
   SELECT * INTO v_saved FROM proof_lifecycle_state WHERE state='after_office';
   SELECT * INTO v_baseline FROM public.wos_visual_baselines
   WHERE entity_id='33333333-3333-4333-8333-333333333333'
-    AND version_label='V2' AND status='CURRENT';
+    AND version_label=current_setting('wos_v1.test_version_label') AND status='CURRENT';
   IF v_baseline.office_proof_set_digest IS DISTINCT FROM v_saved.office_digest
     OR v_baseline.confirmed_by_office_profile_id IS DISTINCT FROM
       v_saved.office_profile
@@ -220,7 +226,7 @@ BEGIN
   SELECT * INTO v_saved FROM proof_lifecycle_state WHERE state='after_office';
   SELECT * INTO v_baseline FROM public.wos_visual_baselines
   WHERE entity_id='33333333-3333-4333-8333-333333333333'
-    AND version_label='V2' AND status='CURRENT';
+    AND version_label=current_setting('wos_v1.test_version_label') AND status='CURRENT';
   IF v_baseline.office_proof_set_digest IS DISTINCT FROM v_saved.office_digest
   THEN RAISE EXCEPTION 'TWENTY_FOUR_HOUR_EXPIRY_CLEARED_OFFICE_SIGNATURE'; END IF;
 END;
@@ -245,12 +251,12 @@ SELECT public.wos_v1_m2_action(
   '83333333-3333-4333-8333-333333333333',
   'BASELINE_WORKSHOP_CONFIRM',
   jsonb_build_object(
-    'productionVersionLabel','V2',
+    'productionVersionLabel',current_setting('wos_v1.test_version_label'),
     'note','Workshop signs the same stable V2 identity digest.',
     'baselineId',(
       SELECT id FROM public.wos_visual_baselines
       WHERE entity_id='33333333-3333-4333-8333-333333333333'
-        AND version_label='V2' AND status='CURRENT'
+        AND version_label=current_setting('wos_v1.test_version_label') AND status='CURRENT'
     )
   )
 );
@@ -265,7 +271,7 @@ SELECT 'after_workshop',office_proof_set_digest,workshop_proof_set_digest,
    WHERE id='33333333-3333-4333-8333-333333333333')
 FROM public.wos_visual_baselines
 WHERE entity_id='33333333-3333-4333-8333-333333333333'
-  AND version_label='V2' AND status='CURRENT';
+  AND version_label=current_setting('wos_v1.test_version_label') AND status='CURRENT';
 
 UPDATE public.wos_verified_image_proofs
 SET verified_at=clock_timestamp()-interval '11 minutes',
@@ -287,7 +293,7 @@ BEGIN
   SELECT * INTO v_saved FROM proof_lifecycle_state WHERE state='after_workshop';
   SELECT * INTO v_baseline FROM public.wos_visual_baselines
   WHERE entity_id='33333333-3333-4333-8333-333333333333'
-    AND version_label='V2' AND status='CURRENT';
+    AND version_label=current_setting('wos_v1.test_version_label') AND status='CURRENT';
   IF v_baseline.office_proof_set_digest IS DISTINCT FROM v_saved.office_digest
     OR v_baseline.workshop_proof_set_digest IS DISTINCT FROM
       v_saved.workshop_digest
@@ -306,12 +312,12 @@ SELECT public.wos_v1_m2_action(
   '84444444-4444-4444-8444-444444444444',
   'FINAL_READINESS_CONFIRM',
   jsonb_build_object(
-    'productionVersionLabel','V2',
+    'productionVersionLabel',current_setting('wos_v1.test_version_label'),
     'note','All four physical materials are complete and verified.',
     'baselineId',(
       SELECT id FROM public.wos_visual_baselines
       WHERE entity_id='33333333-3333-4333-8333-333333333333'
-        AND version_label='V2' AND status='CURRENT'
+        AND version_label=current_setting('wos_v1.test_version_label') AND status='CURRENT'
     ),
     'physicalCheckAttested',true,
     'filmArrivedAt',clock_timestamp()-interval '2 hours',
@@ -349,7 +355,7 @@ SELECT public.wos_v1_authorize_production_start(
   (
     SELECT id FROM public.wos_visual_baselines
     WHERE entity_id='33333333-3333-4333-8333-333333333333'
-      AND version_label='V2' AND status='CURRENT'
+      AND version_label=current_setting('wos_v1.test_version_label') AND status='CURRENT'
   ),
   'Independent manager release after stable identity renewal.'
 );
@@ -390,7 +396,7 @@ BEGIN
       '86666666-6666-4666-8666-666666666666',
       'MATERIAL_RECORD',
       jsonb_build_object(
-        'productionVersionLabel','V2',
+        'productionVersionLabel',current_setting('wos_v1.test_version_label'),
         'note','Viewer must not write production evidence.',
         'resourceType','FILM',
         'resourceStatus','ARRIVED',
@@ -417,7 +423,7 @@ BEGIN
       '87777777-7777-4777-8777-777777777777',
       'MATERIAL_RECORD',
       jsonb_build_object(
-        'productionVersionLabel','V2',
+        'productionVersionLabel',current_setting('wos_v1.test_version_label'),
         'note','Cross-organization actor must not write.',
         'resourceType','FILM',
         'resourceStatus','ARRIVED',
@@ -449,7 +455,7 @@ BEGIN
   SELECT * INTO v_order FROM public.wos_production_orders
   WHERE id='33333333-3333-4333-8333-333333333333';
   SELECT * INTO v_baseline FROM public.wos_visual_baselines
-  WHERE entity_id=v_order.id AND version_label='V2' AND status='CURRENT';
+  WHERE entity_id=v_order.id AND version_label=current_setting('wos_v1.test_version_label') AND status='CURRENT';
   IF v_order.workflow_status<>'WAITING_MATERIAL' OR v_order.version<>13
     OR v_baseline.office_proof_set_digest IS NOT NULL
     OR v_baseline.workshop_proof_set_digest IS NOT NULL
@@ -470,7 +476,7 @@ BEGIN
   SELECT * INTO v_order FROM public.wos_production_orders
   WHERE id='33333333-3333-4333-8333-333333333333';
   SELECT * INTO v_baseline FROM public.wos_visual_baselines
-  WHERE entity_id=v_order.id AND version_label='V2' AND status='CURRENT';
+  WHERE entity_id=v_order.id AND version_label=current_setting('wos_v1.test_version_label') AND status='CURRENT';
   IF v_positive.workflow_status<>'READY_TO_START'
     OR v_positive.order_version<>12
     OR v_order.workflow_status<>'WAITING_MATERIAL'
@@ -480,3 +486,60 @@ BEGIN
   THEN RAISE EXCEPTION 'PROOF_LIFECYCLE_FINAL_STATE_INVALID'; END IF;
 END;
 $final_state$;
+
+CREATE OR REPLACE FUNCTION public.wos_test_set_version_label(p_label text)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path=''
+AS $set_version_label$
+BEGIN
+  UPDATE public.wos_production_orders
+  SET version_label=p_label
+  WHERE id='33333333-3333-4333-8333-333333333333';
+  UPDATE public.wos_reference_images
+  SET version_label=p_label
+  WHERE entity_id='33333333-3333-4333-8333-333333333333';
+END;
+$set_version_label$;
+
+SET request.jwt.claims='{"role":"service_role"}';
+SET ROLE service_role;
+DO $invalid_revision_labels$
+DECLARE
+  v_label text;
+  v_message text;
+  v_object_id uuid;
+  v_object_version text;
+  v_object_updated_at timestamptz;
+  v_sha256 text;
+BEGIN
+  FOREACH v_label IN ARRAY ARRAY['V1','V0','V01','V1x','V'] LOOP
+    PERFORM public.wos_test_set_version_label(v_label);
+    SELECT proof.storage_object_id,proof.storage_object_version,
+      proof.storage_object_updated_at,proof.verified_sha256
+    INTO v_object_id,v_object_version,v_object_updated_at,v_sha256
+    FROM public.wos_verified_image_proofs proof
+    WHERE proof.image_id='41111111-1111-4111-8111-111111111111';
+    BEGIN
+      PERFORM public.wos_v1_renew_expired_image_proof(
+        '41111111-1111-4111-8111-111111111111',
+        '33333333-3333-4333-8333-333333333333',
+        '10101010-1010-4010-8010-101010101010',
+        'organizations/qa/product.png',
+        v_object_id,
+        v_object_version,
+        v_object_updated_at,
+        v_sha256
+      );
+      RAISE EXCEPTION 'INVALID_VERSION_LABEL_ALLOWED:%',v_label;
+    EXCEPTION WHEN SQLSTATE '42501' THEN
+      GET STACKED DIAGNOSTICS v_message=MESSAGE_TEXT;
+      IF v_message<>'RENEWAL_ORDER_NOT_EDITABLE' THEN
+        RAISE EXCEPTION 'INVALID_VERSION_WRONG_REJECTION:%:%',v_label,v_message;
+      END IF;
+    END;
+  END LOOP;
+END;
+$invalid_revision_labels$;
+RESET ROLE;

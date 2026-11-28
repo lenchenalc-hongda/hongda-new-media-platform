@@ -8,6 +8,7 @@ import {
   canonicalWosV1ImagePath,
   deterministicProofRequestId,
   evaluateWosV1ImageAccess,
+  isWosV1RevisionLabel,
   isWosV1ProofResult,
   matchesLegacyQaCloserJwt,
   selectWosV1AdminApiKey,
@@ -51,6 +52,12 @@ assert.equal(parseWosV1ImageVerificationBody({
   ...body,
   orgId: organizationId,
 }), null);
+for (const valid of ['V2', 'V9', 'V10', 'V11', 'V19', 'V20', 'V99']) {
+  assert.equal(isWosV1RevisionLabel(valid), true, valid);
+}
+for (const invalid of ['V1', 'V0', 'V01', 'V-1', 'V1x', '', 'V']) {
+  assert.equal(isWosV1RevisionLabel(invalid), false, invalid);
+}
 assert.equal(parseWosV1ImageVerificationBody({
   ...body,
   storagePath: body.storagePath.replace('product', 'other'),
@@ -392,7 +399,7 @@ assert(qaDependencies.includes(
   "v_order.workflow_status = 'NEEDS_INFORMATION'",
 ));
 assert(qaDependencies.includes(
-  "v_order.version_label ~ '^V[2-9][0-9]{0,20}$'",
+  "v_order.version_label ~ '^V(?:[2-9]|[1-9][0-9]{1,20})$'",
 ));
 assert(qaDependencies.includes(
   "v_order.workflow_status NOT IN ('DRAFT', 'NEEDS_INFORMATION')",
@@ -493,7 +500,7 @@ assert(edgeIndex.includes('x-wos-qa-closer-credential-preflight'));
 assert(edgeIndex.includes('WOS_V1_QA_EDGE_CREDENTIAL_VERIFIED'));
 assert(edgeCore.includes('WOS_V1_QA_EDGE_CLOSER_CREDENTIAL_MISSING'));
 assert(edgeCore.includes('WOS_V1_QA_EDGE_CLOSER_CREDENTIAL_MISMATCH'));
-assert(edgeCore.includes('/^V[2-9][0-9]{0,20}$/'));
+assert(edgeCore.includes('isWosV1RevisionLabel'));
 assert(!edgeCore.includes('qaUatCurrentOrderAuthorized'));
 assert(!edgeIndex.includes('qaUatCurrentOrderAuthorized'));
 

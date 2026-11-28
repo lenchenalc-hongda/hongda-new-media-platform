@@ -8,6 +8,8 @@ import {
 } from '@/lib/workshop-orders/production-m2-client';
 import {
   renewWosV1CurrentImageProofs,
+  type WosV1ImageCategory,
+  type WosV1ProofRenewalItem,
 } from '@/lib/workshop-orders/production-app-client';
 import {
   isWosP2M2Result,
@@ -99,6 +101,10 @@ export default function ProductionM2Workbench({
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
+  const [proofResults, setProofResults] =
+    useState<readonly WosV1ProofRenewalItem[]>([]);
+  const [failedProofCategories, setFailedProofCategories] =
+    useState<readonly WosV1ImageCategory[]>([]);
   const [selectedBaselineId, setSelectedBaselineId] = useState<string | null>(
     detail.baselines.find(value =>
         value.status === 'DRAFT'
@@ -142,6 +148,24 @@ export default function ProductionM2Workbench({
     return () => { active = false; };
   }, []);
 
+  useEffect(() => {
+    const draft = detail.baselines.find(value =>
+      value.status === 'DRAFT'
+      && value.version_label === order.version_label);
+    const current = detail.baselines.find(value =>
+      value.status === 'CURRENT'
+      && value.version_label === order.version_label);
+    setSelectedBaselineId(draft?.id ?? current?.id ?? null);
+    setProofResults([]);
+    setFailedProofCategories([]);
+  }, [
+    detail.baselines,
+    order.id,
+    order.version,
+    order.version_label,
+    order.workflow_status,
+  ]);
+
   const currentVersionImages = detail.images.filter(image =>
     image.image_status === 'READY'
     && image.version_label === order.version_label);
@@ -158,9 +182,6 @@ export default function ProductionM2Workbench({
   const currentBaseline = detail.baselines.find(value =>
     value.id === selectedBaselineId
     && value.version_label === order.version_label)
-    ?? detail.baselines.find(value =>
-      value.status === 'CURRENT'
-      && value.version_label === order.version_label)
     ?? null;
   const currentResources = detail.resources.filter(resource =>
     resource.version_label === order.version_label);
@@ -323,14 +344,28 @@ export default function ProductionM2Workbench({
         client,
         orderId: order.id,
         versionLabel: order.version_label,
+        categories: failedProofCategories.length > 0
+          ? failedProofCategories
+          : undefined,
+      });
+      setProofResults(current => {
+        const merged = new Map(current.map(item => [item.category, item]));
+        for (const item of result.results) merged.set(item.category, item);
+        return Array.from(merged.values());
       });
       if (!result.ok) {
-        setMessage('当前四图重新核验未通过：' + result.code);
+        setFailedProofCategories(result.failedCategories);
+        setMessage(
+          '当前图片重新核验未通过：'
+          + (result.failedCategories[0] ?? result.code),
+        );
         return;
       }
+      setFailedProofCategories([]);
       setMessage(
         `当前 ${result.verifiedCount} 张图片已重新核验并续期 Proof，可继续选择 Baseline。`,
       );
+      onSuccess();
     } catch {
       setMessage('当前四图重新核验失败，未放宽任何写入条件。');
     } finally {
@@ -365,8 +400,22 @@ export default function ProductionM2Workbench({
           onClick={() => { void revalidateCurrentProofs(); }}
           className="min-h-11 rounded-md border border-blue-700 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-950 disabled:opacity-40"
         >
-          重新核验当前四图 Proof
+          {failedProofCategories.length > 0
+            ? `重试失败图片（${failedProofCategories.length}）`
+            : '重新核验当前四图 Proof'}
         </button>
+      )}
+      {proofResults.length > 0 && (
+        <ul className="space-y-1 text-xs">
+          {proofResults.map(item => (
+            <li
+              key={item.category}
+              className={item.ok ? 'text-emerald-800' : 'text-red-800'}
+            >
+              {item.category}：{item.ok ? '已核验' : `失败（${item.code ?? 'UNKNOWN'}）`}
+            </li>
+          ))}
+        </ul>
       )}
 
       {surface === 'office' && (

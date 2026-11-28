@@ -107,7 +107,7 @@ BEGIN
       OR (
         v_order.workflow_status IN ('WAITING_MATERIAL', 'READINESS_CHECK')
         AND current_setting('wos_v1.qa_current_order_proof', true) = 'yes'
-        AND v_order.version_label ~ '^V[2-9][0-9]{0,20}$'
+        AND v_order.version_label ~ '^V(?:[2-9]|[1-9][0-9]{1,20})$'
       )$new$;
 
   IF (
@@ -140,7 +140,7 @@ BEGIN
       OR (
         v_order.workflow_status IN ('WAITING_MATERIAL', 'READINESS_CHECK')
         AND current_setting('wos_v1.qa_current_order_proof', true) = 'yes'
-        AND v_order.version_label ~ '^V[2-9][0-9]{0,20}$'
+        AND v_order.version_label ~ '^V(?:[2-9]|[1-9][0-9]{1,20})$'
       )$new$;
   IF (
     length(v_proof_definition) - length(replace(

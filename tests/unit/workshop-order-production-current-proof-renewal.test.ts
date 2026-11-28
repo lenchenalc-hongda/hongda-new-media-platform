@@ -37,6 +37,7 @@ function queryResult(data: readonly unknown[]) {
 function client(input: {
   readonly data: readonly unknown[];
   readonly edgeCode?: string;
+  readonly edgeCodeByCategory?: Partial<Record<string, string>>;
   readonly edgeProofStatus?: string;
 }) {
   const invocations: {
@@ -53,12 +54,14 @@ function client(input: {
           options: { readonly body: Record<string, unknown> },
         ) => {
           invocations.push({ name, body: options.body });
+          const code = input.edgeCodeByCategory?.[
+            String(options.body.category)
+          ] ?? input.edgeCode ?? 'WOS_V1_TRUSTED_IMAGE_PROOF_ISSUED';
           return {
             error: null,
             data: {
-              ok: input.edgeCode === undefined
-                || input.edgeCode === 'WOS_V1_TRUSTED_IMAGE_PROOF_ISSUED',
-              code: input.edgeCode ?? 'WOS_V1_TRUSTED_IMAGE_PROOF_ISSUED',
+              ok: code === 'WOS_V1_TRUSTED_IMAGE_PROOF_ISSUED',
+              code,
               data: {
                 sha256: 'a'.repeat(64),
                 proofStatus: input.edgeProofStatus ?? 'REPLAYED',
@@ -79,7 +82,12 @@ assert.deepEqual(
     orderId: '11111111-1111-4111-8111-111111111111',
     versionLabel: 'V2',
   }),
-  { ok: true, verifiedCount: 4 },
+  {
+    ok: true,
+    verifiedCount: 4,
+    results: categories.map(category => ({ category, ok: true })),
+    failedCategories: [],
+  },
 );
 assert.equal(happy.invocations.length, 4);
 assert.deepEqual(
@@ -98,7 +106,12 @@ assert.deepEqual(
     orderId: '11111111-1111-4111-8111-111111111111',
     versionLabel: 'V2',
   }),
-  { ok: false, code: 'CURRENT_FOUR_IMAGE_SET_INCOMPLETE' },
+  {
+    ok: false,
+    code: 'CURRENT_FOUR_IMAGE_SET_INCOMPLETE',
+    results: [],
+    failedCategories: [],
+  },
 );
 assert.equal(incomplete.invocations.length, 0);
 
@@ -111,7 +124,16 @@ assert.deepEqual(
     orderId: '11111111-1111-4111-8111-111111111111',
     versionLabel: 'V2',
   }),
-  { ok: false, code: 'CURRENT_IMAGE_IDENTITY_INVALID' },
+  {
+    ok: false,
+    code: 'CURRENT_IMAGE_IDENTITY_INVALID',
+    results: categories.map(category => ({
+      category,
+      ok: false,
+      code: 'CURRENT_IMAGE_IDENTITY_INVALID',
+    })),
+    failedCategories: categories,
+  },
 );
 assert.equal(wrongBucket.invocations.length, 0);
 
@@ -125,8 +147,67 @@ assert.deepEqual(
     orderId: '11111111-1111-4111-8111-111111111111',
     versionLabel: 'V2',
   }),
-  { ok: false, code: 'WOS_V1_EDGE_WRITES_DISABLED' },
+  {
+    ok: false,
+    code: 'WOS_V1_EDGE_WRITES_DISABLED',
+    results: categories.map(category => ({
+      category,
+      ok: false,
+      code: 'WOS_V1_EDGE_WRITES_DISABLED',
+    })),
+    failedCategories: categories,
+  },
 );
-assert.equal(denied.invocations.length, 1);
+assert.equal(denied.invocations.length, 4);
+
+const partial = client({
+  data: rows(),
+  edgeCodeByCategory: {
+    FILM_PATTERN: 'CURRENT_IMAGE_BYTES_UNAVAILABLE',
+  },
+});
+assert.deepEqual(
+  await renewWosV1CurrentImageProofs({
+    client: partial.value as never,
+    orderId: '11111111-1111-4111-8111-111111111111',
+    versionLabel: 'V2',
+  }),
+  {
+    ok: false,
+    code: 'CURRENT_IMAGE_BYTES_UNAVAILABLE',
+    results: categories.map(category => category === 'FILM_PATTERN'
+      ? {
+          category,
+          ok: false,
+          code: 'CURRENT_IMAGE_BYTES_UNAVAILABLE',
+        }
+      : { category, ok: true }),
+    failedCategories: ['FILM_PATTERN'],
+  },
+);
+assert.deepEqual(
+  partial.invocations.map(value => value.body.category),
+  categories,
+);
+
+const retry = client({ data: rows() });
+assert.deepEqual(
+  await renewWosV1CurrentImageProofs({
+    client: retry.value as never,
+    orderId: '11111111-1111-4111-8111-111111111111',
+    versionLabel: 'V2',
+    categories: ['FILM_PATTERN'],
+  }),
+  {
+    ok: true,
+    verifiedCount: 1,
+    results: [{ category: 'FILM_PATTERN', ok: true }],
+    failedCategories: [],
+  },
+);
+assert.deepEqual(
+  retry.invocations.map(value => value.body.category),
+  ['FILM_PATTERN'],
+);
 
 console.log('workshop-order-production-current-proof-renewal.test.ts: PASS');
