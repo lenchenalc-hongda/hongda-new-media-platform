@@ -285,7 +285,7 @@ async function readOrderDetail(
           .eq('entity_type', 'PRODUCTION_ORDER')
           .eq('entity_id', order.id)),
       queryRows(client, 'wos_visual_baselines',
-        'id,organization_id,entity_type,entity_id,version_label,status,confirmed_by_office_profile_id,confirmed_by_workshop_profile_id,office_confirmed_at,workshop_confirmed_at,created_at,superseded_at,office_proof_set_digest,office_post_order_version,workshop_proof_set_digest,workshop_post_order_version',
+        '*',
         query => query.eq('organization_id', actor.organizationId)
           .eq('entity_type', 'PRODUCTION_ORDER')
           .eq('entity_id', order.id)),
