@@ -379,15 +379,77 @@ export async function handleWosV1VerifyImageRequest(
           return output(request, 'WOS_V1_QA_EDGE_GATE_CLOSED', 503);
         }
       }
-      const path = canonicalWosV1ImagePath({
+      const canonicalPath = canonicalWosV1ImagePath({
         organizationId: profile.org_id,
         orderId: order.id,
         versionLabel: order.version_label,
         imageId: body.imageId,
         category: body.category,
       });
-      if (path !== body.storagePath) {
-        return output(request, 'INVALID_IMAGE_PATH', 400);
+      let path = canonicalPath;
+      let expectedSha256: string;
+      let existingProofObject: {
+        readonly id: string;
+        readonly version: string | null;
+        readonly updatedAt: string;
+      } | null = null;
+      if ('reverifyExistingProof' in body) {
+        const currentOrderReverification =
+          (order.workflow_status === 'WAITING_MATERIAL'
+            || order.workflow_status === 'READINESS_CHECK')
+          && /^V[2-9][0-9]{0,20}$/.test(order.version_label);
+        if (!currentOrderReverification) {
+          return output(request, 'REVERIFY_CURRENT_ORDER_REQUIRED', 409);
+        }
+        const imageResult = await admin.from('wos_reference_images')
+          .select('storage_bucket,storage_path,image_status,version_label,superseded_at')
+          .eq('id', body.imageId)
+          .eq('organization_id', profile.org_id)
+          .eq('entity_type', 'PRODUCTION_ORDER')
+          .eq('entity_id', order.id)
+          .eq('version_label', order.version_label)
+          .eq('image_status', 'READY')
+          .is('superseded_at', null)
+          .maybeSingle();
+        const image = imageResult.data as Record<string, unknown> | null;
+        if (imageResult.error || !image
+          || image.storage_bucket !== 'wos-private'
+          || image.storage_path !== canonicalPath) {
+          return output(request, 'REVERIFY_CURRENT_IMAGE_NOT_FOUND', 409);
+        }
+        const proofResult = await admin.from('wos_verified_image_proofs')
+          .select(
+            'storage_bucket,storage_path,verified_sha256,storage_object_id,' +
+            'storage_object_version,storage_object_updated_at',
+          )
+          .eq('image_id', body.imageId)
+          .eq('order_id', order.id)
+          .eq('organization_id', profile.org_id)
+          .maybeSingle();
+        const proof = proofResult.data as Record<string, unknown> | null;
+        if (proofResult.error || !proof
+          || proof.storage_bucket !== 'wos-private'
+          || proof.storage_path !== canonicalPath
+          || typeof proof.verified_sha256 !== 'string'
+          || !/^[a-f0-9]{64}$/.test(proof.verified_sha256)
+          || typeof proof.storage_object_id !== 'string'
+          || typeof proof.storage_object_updated_at !== 'string') {
+          return output(request, 'REVERIFY_PROOF_NOT_FOUND', 409);
+        }
+        path = canonicalPath;
+        expectedSha256 = proof.verified_sha256;
+        existingProofObject = {
+          id: proof.storage_object_id,
+          version: typeof proof.storage_object_version === 'string'
+            ? proof.storage_object_version
+            : null,
+          updatedAt: proof.storage_object_updated_at,
+        };
+      } else {
+        if (body.storagePath !== canonicalPath) {
+          return output(request, 'INVALID_IMAGE_PATH', 400);
+        }
+        expectedSha256 = body.sha256;
       }
 
       const snapshot = async (): Promise<WosV1ObjectSnapshot | null> => {
@@ -414,6 +476,12 @@ export async function handleWosV1VerifyImageRequest(
         )) {
         return output(request, 'PRIVATE_OBJECT_NOT_VERIFIED', 409);
       }
+      if (existingProofObject
+        && (first.id !== existingProofObject.id
+          || (first.version ?? '') !== (existingProofObject.version ?? '')
+          || first.updatedAt !== existingProofObject.updatedAt)) {
+        return output(request, 'REVERIFY_PROOF_OBJECT_CHANGED', 409);
+      }
       // Canonical path, current-order scope, Gate, and immutable object
       // snapshot checks authorize the byte read. A same-organization reviewer
       // may re-verify an uploader's object; new Proof creation still requires
@@ -427,7 +495,7 @@ export async function handleWosV1VerifyImageRequest(
       if (bytes.length !== declaredSize) {
         return output(request, 'PRIVATE_BINARY_SIZE_MISMATCH', 409);
       }
-      if (!await pngValid(bytes, body.sha256)) {
+      if (!await pngValid(bytes, expectedSha256)) {
         return output(request, 'PNG_OR_SHA256_VERIFICATION_FAILED', 422);
       }
       const second = await snapshot();
@@ -445,7 +513,7 @@ export async function handleWosV1VerifyImageRequest(
         first.id,
         first.version ?? '',
         first.updatedAt,
-        body.sha256,
+        expectedSha256,
       ].join('\n'));
       const renewalArgs = {
         ...(qaUatRuntime ? {
@@ -459,7 +527,7 @@ export async function handleWosV1VerifyImageRequest(
         p_storage_object_id: first.id,
         p_storage_object_version: first.version,
         p_storage_object_updated_at: first.updatedAt,
-        p_sha256: body.sha256,
+        p_sha256: expectedSha256,
       };
       let proofData: unknown;
       let renewalStatus: string | null = null;
@@ -482,6 +550,10 @@ export async function handleWosV1VerifyImageRequest(
         (renewal.data as Record<string, unknown>).status,
       );
       proofData = renewalStatus === 'ABSENT' ? null : renewal.data;
+      if (renewalStatus === 'ABSENT'
+        && 'reverifyExistingProof' in body) {
+        return output(request, 'REVERIFY_PROOF_NOT_FOUND', 409);
+      }
       if (proofData === null) {
         const proof = await admin.rpc(
           qaUatRuntime
@@ -497,7 +569,7 @@ export async function handleWosV1VerifyImageRequest(
       if (!isWosV1ProofResult(proofData, {
           imageId: body.imageId,
           category: body.category,
-          sha256: body.sha256,
+          sha256: expectedSha256,
         })) {
         return output(request, 'WOS_V1_PROOF_WRITE_UNAVAILABLE', 503);
       }
@@ -506,9 +578,10 @@ export async function handleWosV1VerifyImageRequest(
         ? result.status
         : 'REPLAYED';
       return output(request, 'WOS_V1_TRUSTED_IMAGE_PROOF_ISSUED', 200, {
-        sha256: body.sha256,
+        sha256: expectedSha256,
         proofStatus,
         renewalStatus,
+        reverifiedExistingProof: 'reverifyExistingProof' in body,
       });
     })());
   } catch (error) {

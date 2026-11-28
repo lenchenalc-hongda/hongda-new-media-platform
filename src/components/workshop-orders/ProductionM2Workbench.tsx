@@ -7,6 +7,9 @@ import {
   type WosV1M2Adapter,
 } from '@/lib/workshop-orders/production-m2-client';
 import {
+  renewWosV1CurrentImageProofs,
+} from '@/lib/workshop-orders/production-app-client';
+import {
   isWosP2M2Result,
   isWosV1StartReleaseResult,
   type WosP2M2Action,
@@ -98,10 +101,10 @@ export default function ProductionM2Workbench({
   const [message, setMessage] = useState('');
   const [selectedBaselineId, setSelectedBaselineId] = useState<string | null>(
     detail.baselines.find(value =>
-      value.status === 'CURRENT'
-      && value.version_label === order.version_label)?.id
-      ?? detail.baselines.find(value =>
         value.status === 'DRAFT'
+        && value.version_label === order.version_label)?.id
+      ?? detail.baselines.find(value =>
+        value.status === 'CURRENT'
         && value.version_label === order.version_label)?.id
       ?? null,
   );
@@ -146,14 +149,18 @@ export default function ProductionM2Workbench({
     && ['admin', 'manager', 'sales'].includes(role);
   const workshopRoleAllowed = role !== null
     && ['admin', 'manager', 'operator'].includes(role);
+  const proofRenewalRoleAllowed = role !== null
+    && ['admin', 'manager', 'sales'].includes(role);
   const m2Editable = order.workflow_status === 'WAITING_MATERIAL';
   const selectedImages = REQUIRED_CATEGORIES.map(category =>
     currentVersionImages.find(image => image.category === category));
   const completeImageSet = selectedImages.every(Boolean);
   const currentBaseline = detail.baselines.find(value =>
-    value.status === 'CURRENT'
+    value.id === selectedBaselineId
     && value.version_label === order.version_label)
-    ?? detail.baselines.find(value => value.id === selectedBaselineId)
+    ?? detail.baselines.find(value =>
+      value.status === 'CURRENT'
+      && value.version_label === order.version_label)
     ?? null;
   const currentResources = detail.resources.filter(resource =>
     resource.version_label === order.version_label);
@@ -304,6 +311,33 @@ export default function ProductionM2Workbench({
     }
   }
 
+  async function revalidateCurrentProofs(): Promise<void> {
+    if (busy || !writeEnabled || !proofRenewalRoleAllowed
+      || !completeImageSet) return;
+    setBusy(true);
+    setMessage('正在逐张下载当前四图，并核验真实字节、SHA-256 与对象身份。');
+    try {
+      const client = createClient();
+      if (!client) throw new Error('DATABASE_UNAVAILABLE');
+      const result = await renewWosV1CurrentImageProofs({
+        client,
+        orderId: order.id,
+        versionLabel: order.version_label,
+      });
+      if (!result.ok) {
+        setMessage('当前四图重新核验未通过：' + result.code);
+        return;
+      }
+      setMessage(
+        `当前 ${result.verifiedCount} 张图片已重新核验并续期 Proof，可继续选择 Baseline。`,
+      );
+    } catch {
+      setMessage('当前四图重新核验失败，未放宽任何写入条件。');
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <section className="mt-3 space-y-3 border-t border-slate-300 pt-3">
       <div className="grid gap-2 text-xs sm:grid-cols-2 lg:grid-cols-4">
@@ -320,6 +354,20 @@ export default function ProductionM2Workbench({
           最终齐套：{finalResourceTypes.size} / 4
         </p>
       </div>
+
+      {proofRenewalRoleAllowed
+        && ['WAITING_MATERIAL', 'READINESS_CHECK'].includes(
+          order.workflow_status,
+        ) && (
+        <button
+          type="button"
+          disabled={busy || !writeEnabled || !completeImageSet}
+          onClick={() => { void revalidateCurrentProofs(); }}
+          className="min-h-11 rounded-md border border-blue-700 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-950 disabled:opacity-40"
+        >
+          重新核验当前四图 Proof
+        </button>
+      )}
 
       {surface === 'office' && (
         <div className="space-y-2">

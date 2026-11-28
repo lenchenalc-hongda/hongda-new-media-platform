@@ -468,9 +468,12 @@ for (const marker of [
   'wos_p7_service_storage_snapshot',
   'wos_v1_renew_expired_image_proof',
   'wos_p7_record_trusted_image_proof',
-  'pngValid(bytes, body.sha256)',
+  'pngValid(bytes, expectedSha256)',
   'OBJECT_CHANGED_DURING_VERIFICATION',
   'WOS_V1_TRUSTED_IMAGE_PROOF_ISSUED',
+  'reverifyExistingProof',
+  'REVERIFY_PROOF_NOT_FOUND',
+  'REVERIFY_PROOF_OBJECT_CHANGED',
 ]) assert(edge.includes(marker), 'production Edge missing ' + marker);
 assert(edge.includes('QA_UAT_PROJECT_REF'));
 assert(edge.includes('QA_UAT_AUTHORIZATION_ID'));
@@ -494,6 +497,12 @@ assert(appClient.includes('WOS_V1_PRODUCTION_M2_QA_UAT_AUTHORIZATION_ID'));
 assert(appClient.includes('NEXT_PUBLIC_WOS_V1_QA_UAT_EXECUTION_ID'));
 assert(appClient.includes('NEXT_PUBLIC_WOS_V1_QA_UAT_CLOSER_NONCE'));
 assert(appClient.includes('/api/workshop-orders/v1-qa'));
+assert(appClient.includes('renewWosV1CurrentImageProofs'));
+assert(appClient.includes('CURRENT_FOUR_IMAGE_SET_INCOMPLETE'));
+assert(appClient.includes('CURRENT_IMAGE_IDENTITY_INVALID'));
+assert(appClient.includes('reverifyExistingProof: true'));
+assert(appClient.includes(".is('superseded_at', null)"));
+assert(appClient.includes('TRUSTED_IMAGE_REVERIFICATION_UNAVAILABLE'));
 for (const page of [officePage, workshopPage]) {
   assert(page.includes('resolveWosV1QaAppRuntime'));
   assert(page.includes('WOS_V1_QA_APP_ENABLED'));

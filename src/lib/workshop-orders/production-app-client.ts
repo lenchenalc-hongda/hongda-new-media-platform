@@ -2,9 +2,9 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import {
   canonicalWosV1ImagePath,
   WOS_V1_PRODUCTION_M2_QA_UAT_AUTHORIZATION_ID,
+  WOS_V1_IMAGE_CATEGORIES,
   type WosV1AppRequest,
   type WosV1AppOperation,
-  type WOS_V1_IMAGE_CATEGORIES,
 } from './production-app-contract';
 
 const WOS_V1_HTTP_PATH = process.env.NEXT_PUBLIC_WOS_V1_QA_PREVIEW === 'true'
@@ -190,4 +190,96 @@ export async function uploadAndVerifyWosV1Image(input: {
     sha256,
     proofStatus: String(proof.proofStatus),
   };
+}
+
+export async function renewWosV1CurrentImageProofs(input: {
+  readonly client: SupabaseClient;
+  readonly orderId: string;
+  readonly versionLabel: string;
+}): Promise<
+  | { readonly ok: true; readonly verifiedCount: number }
+  | { readonly ok: false; readonly code: string }
+> {
+  const images = await input.client.from('wos_reference_images')
+    .select('id,category,storage_bucket,storage_path,image_status,version_label')
+    .eq('entity_type', 'PRODUCTION_ORDER')
+    .eq('entity_id', input.orderId)
+    .eq('image_status', 'READY')
+    .eq('version_label', input.versionLabel)
+    .is('superseded_at', null);
+  if (images.error || !Array.isArray(images.data)) {
+    return { ok: false, code: 'CURRENT_IMAGES_UNAVAILABLE' };
+  }
+  if (images.data.length !== WOS_V1_IMAGE_CATEGORIES.length) {
+    return { ok: false, code: 'CURRENT_FOUR_IMAGE_SET_INCOMPLETE' };
+  }
+
+  const byCategory = new Map<string, Record<string, unknown>>();
+  for (const value of images.data) {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) continue;
+    const row = value as Record<string, unknown>;
+    if (typeof row.category === 'string') byCategory.set(row.category, row);
+  }
+  if (byCategory.size !== WOS_V1_IMAGE_CATEGORIES.length) {
+    return { ok: false, code: 'CURRENT_FOUR_IMAGE_SET_INCOMPLETE' };
+  }
+
+  for (const category of WOS_V1_IMAGE_CATEGORIES) {
+    const row = byCategory.get(category);
+    if (!row
+      || typeof row.id !== 'string'
+      || !/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i
+        .test(row.id)
+      || row.image_status !== 'READY'
+      || row.version_label !== input.versionLabel
+      || row.storage_bucket !== 'wos-private'
+      || typeof row.storage_path !== 'string'
+      || row.storage_path.length === 0
+      || row.storage_path.length > 600
+      || row.storage_path.includes('..')) {
+      return { ok: false, code: 'CURRENT_IMAGE_IDENTITY_INVALID' };
+    }
+    const invoked = await input.client.functions.invoke(
+      'wos-v1-verify-image',
+      {
+        headers: process.env.NEXT_PUBLIC_WOS_V1_QA_PREVIEW === 'true'
+          ? {
+              'x-wos-qa-uat-authorization-id':
+                WOS_V1_PRODUCTION_M2_QA_UAT_AUTHORIZATION_ID,
+              'x-wos-qa-uat-execution-id':
+                process.env.NEXT_PUBLIC_WOS_V1_QA_UAT_EXECUTION_ID || '',
+              'x-wos-qa-uat-closer-nonce':
+                process.env.NEXT_PUBLIC_WOS_V1_QA_UAT_CLOSER_NONCE || '',
+            }
+          : {},
+        body: {
+          orderId: input.orderId,
+          imageId: row.id,
+          category,
+          reverifyExistingProof: true,
+        },
+      },
+    );
+    const edge = invoked.data && typeof invoked.data === 'object'
+      ? invoked.data as Record<string, unknown>
+      : null;
+    const proof = edge?.data && typeof edge.data === 'object'
+      ? edge.data as Record<string, unknown>
+      : null;
+    if (invoked.error
+      || edge?.ok !== true
+      || edge.code !== 'WOS_V1_TRUSTED_IMAGE_PROOF_ISSUED'
+      || typeof proof?.sha256 !== 'string'
+      || !/^[a-f0-9]{64}$/.test(proof.sha256)
+      || proof.reverifiedExistingProof !== true
+      || !['VERIFIED', 'REPLAYED'].includes(String(proof.proofStatus))) {
+      return {
+        ok: false,
+        code: typeof edge?.code === 'string'
+          ? edge.code
+          : 'TRUSTED_IMAGE_REVERIFICATION_UNAVAILABLE',
+      };
+    }
+  }
+  return { ok: true, verifiedCount: WOS_V1_IMAGE_CATEGORIES.length };
 }
