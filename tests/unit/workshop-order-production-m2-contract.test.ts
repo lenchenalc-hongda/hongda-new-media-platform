@@ -310,7 +310,7 @@ assert(qaAppActivate.includes(
 ));
 assert(qaAppActivate.includes('WOS_V1_QA_UAT_APP_EXECUTION_MISMATCH'));
 assert(qaAppActivate.includes(
-  "'0e5e6ac1-cf10-4c2c-ba79-6e1619b2e632'",
+  "'a36e5a05-8403-45ef-a700-1440046949ba'",
 ));
 assert(qaAppActivate.includes('WOS_V1_QA_UAT_APP_RPC_NOT_INSTALLED'));
 assert(qaAppActivate.includes('WOS_V1_QA_UAT_APP_BROAD_TABLE_ACCESS'));
@@ -379,7 +379,7 @@ assert(qaClose.includes('REVOKE EXECUTE ON FUNCTION public.wos_v1_qa_uat_m2_acti
 const uatRoot =
   'docs/workshop-order-system/qa-fixture/production-m2-uat-20261126';
 const uat = JSON.parse(
-  readFileSync(`${uatRoot}/inputs-uat006.json`, 'utf8'),
+  readFileSync(`${uatRoot}/inputs-uat007.json`, 'utf8'),
 ) as {
   readonly requestId: string;
   readonly orderNumber: string;
@@ -537,7 +537,7 @@ assert(uatRunner.includes(
   '9164ac91-a50c-4023-836c-5c0887b619fb',
 ));
 assert(
-  /SELECT public\.wos_v1_qa_uat_open_gate\(\s*'WOS-V1-PRODUCTION-M2-QA-UAT-006'[\s\S]*?'\$UAT_MANAGER_PROFILE'[\s\S]*?ARRAY\['START_RELEASE'\]/
+  /SELECT public\.wos_v1_qa_uat_open_gate\(\s*'WOS-V1-PRODUCTION-M2-QA-UAT-007'[\s\S]*?'\$UAT_MANAGER_PROFILE'[\s\S]*?ARRAY\['START_RELEASE'\]/
     .test(uatRunner),
 );
 for (const stale of [
@@ -557,7 +557,7 @@ assert.equal(uat.environment.WOS_V1_QA_UAT_M2_ENABLED, 'true');
 assert.equal(uat.environment.WOS_V1_QA_UAT_M2_WRITES_ENABLED, 'false');
 assert.equal(
   uat.environment.WOS_V1_QA_UAT_AUTHORIZATION_ID,
-  'WOS-V1-PRODUCTION-M2-QA-UAT-006',
+  'WOS-V1-PRODUCTION-M2-QA-UAT-007',
 );
 for (const version of ['v1', 'v2']) {
   const images = uat.images[version];

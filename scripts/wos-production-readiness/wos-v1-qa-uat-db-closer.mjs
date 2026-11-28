@@ -10,10 +10,10 @@ import { fileURLToPath } from 'node:url';
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '../..');
 const AUTH_ID =
   process.env.WOS_V1_QA_AUTHORIZATION_ID
-  || 'WOS-V1-PRODUCTION-M2-QA-UAT-006';
+  || 'WOS-V1-PRODUCTION-M2-QA-UAT-007';
 const QA_APP_EXECUTION_ID =
   process.env.WOS_V1_QA_APP_EXECUTION_ID
-  || '0e5e6ac1-cf10-4c2c-ba79-6e1619b2e632';
+  || 'a36e5a05-8403-45ef-a700-1440046949ba';
 const PROJECT_REF = 'xulmpqaknlwqqculbsek';
 const ARM_KEYCHAIN = 'WOS_V1_QA_DB_CLOSER_ARM_TOKEN';
 const OWNED_TEST_CONTAINER =

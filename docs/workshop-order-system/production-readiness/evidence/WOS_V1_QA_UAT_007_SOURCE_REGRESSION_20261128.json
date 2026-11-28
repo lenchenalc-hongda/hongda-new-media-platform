@@ -1,0 +1,44 @@
+{
+  "schemaVersion": 1,
+  "capturedAt": "2026-11-28T00:51:55Z",
+  "status": "SOURCE_REGRESSION_PASS",
+  "validation": {
+    "wosSuite": "PASS",
+    "typecheck": "PASS",
+    "build": "PASS",
+    "pg17StorageAndBusiness": "PASS",
+    "pg17StorageAndBusinessLogSha256": "42ad0e03f67ba230defa889395bee377d31cffef89582c7ec86b37083b020606",
+    "closerOnlyPg17": "PASS",
+    "closerOnlyPg17LogSha256": "080e212641df32ba1f0e808c7a5bccbe137b27617cfc994c452d29ac87cf59a2",
+    "storageLivePolicyFingerprints": "PASS",
+    "independentReview": "PASS",
+    "independentReviewP0": 0,
+    "independentReviewP1": 0,
+    "independentReviewP2": 0
+  },
+  "storageLivePolicyProof": {
+    "snapshotPath": "docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_STORAGE_POLICY_LIVE_SNAPSHOT_20261128.json",
+    "snapshotSha256": "b111ad2ee9af0e97b4338d91182bfd6427fc47fa7014e56c5758dce494c82805",
+    "wosPolicyMd5": "f9759e0644e82ff4264efa42ac54e57c",
+    "nonWosPolicyMd5": "f64fe08ac8669875ee9f7f3d4bbbc60f",
+    "pg17Recomputed": true
+  },
+  "uat007": {
+    "mode": "RESUME_EXISTING_ORDER",
+    "authorizationId": "WOS-V1-PRODUCTION-M2-QA-UAT-007",
+    "executionId": "a36e5a05-8403-45ef-a700-1440046949ba",
+    "edgeProcessNonce": "7b33278a-d694-4275-a537-05552f8d8c84",
+    "orderId": "3ade0180-e6bf-49da-b80b-fd00cd1948a8",
+    "expectedStartVersion": 5,
+    "expectedStartLabel": "V2",
+    "expectedStartStatus": "NEEDS_INFORMATION",
+    "maxNewOrders": 0,
+    "maxCreateCalls": 0
+  },
+  "remoteState": {
+    "uat007SqlInstalled": false,
+    "uat007EdgeDeployed": false,
+    "uat007ArmPerformed": false,
+    "uat007BusinessWrites": false
+  }
+}

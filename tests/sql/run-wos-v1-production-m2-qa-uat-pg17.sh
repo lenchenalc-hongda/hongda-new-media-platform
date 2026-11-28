@@ -278,6 +278,41 @@ fi
 psql_db postgres -q -c \
   "DROP DATABASE IF EXISTS \"$STORAGE_GUARD_DB\" WITH (FORCE)"
 echo 'WOS_V1_QA_UAT_STORAGE_UNKNOWN_POLICY_DENIED=PASS'
+STORAGE_LIVE_SNAPSHOT="$ROOT/docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_STORAGE_POLICY_LIVE_SNAPSHOT_20261128.json"
+STORAGE_LIVE_FINGERPRINTS="$(
+  psql_db postgres -qAt \
+    -v snapshot="$(cat "$STORAGE_LIVE_SNAPSHOT")" <<'SQL'
+WITH snapshot AS (
+  SELECT :'snapshot'::jsonb AS value
+), policies AS (
+  SELECT policy
+  FROM snapshot
+  CROSS JOIN LATERAL jsonb_array_elements(snapshot.value->'policies') policy
+)
+SELECT concat_ws('|',
+  md5(jsonb_build_object(
+    'policies',
+    (
+      SELECT jsonb_agg(policy ORDER BY policy->>'name')
+      FROM policies
+      WHERE policy->>'name' LIKE 'wos\_%' ESCAPE '\'
+    )
+  )::text),
+  md5(jsonb_build_object(
+    'policies',
+    (
+      SELECT jsonb_agg(policy ORDER BY policy->>'name')
+      FROM policies
+      WHERE policy->>'name' NOT LIKE 'wos\_%' ESCAPE '\'
+    )
+  )::text)
+);
+SQL
+)"
+[[ "$STORAGE_LIVE_FINGERPRINTS" = \
+  'f9759e0644e82ff4264efa42ac54e57c|f64fe08ac8669875ee9f7f3d4bbbc60f' ]] \
+  || fail 'QA_STORAGE_COMPAT_LIVE_POLICY_FINGERPRINT_MISMATCH'
+echo 'WOS_V1_QA_UAT_STORAGE_LIVE_POLICY_FINGERPRINTS=PASS'
 QA_SHAPE_WOS_POLICY_FP="$(db_policy_fingerprint \
   "$QA_SHAPE_DB" "LIKE 'wos\\_%' ESCAPE '\\'")"
 QA_SHAPE_NON_WOS_POLICY_FP="$(db_policy_fingerprint \
@@ -373,10 +408,10 @@ psql_db postgres -q -c \
 psql_db postgres -q -c \
   "CREATE DATABASE \"$UAT006_CONTINUITY_DB\" TEMPLATE \"$QA_SHAPE_DB\""
 psql_db "$UAT006_CONTINUITY_DB" -q \
-  -v authorization_id='WOS-V1-PRODUCTION-M2-QA-UAT-006' \
-  -v execution_id='0e5e6ac1-cf10-4c2c-ba79-6e1619b2e632' \
+  -v authorization_id='WOS-V1-PRODUCTION-M2-QA-UAT-007' \
+  -v execution_id='a36e5a05-8403-45ef-a700-1440046949ba' \
   -v arm_token='92929292-9292-4292-8292-929292929292' \
-  -v process_nonce='6b6ea151-7114-47df-9f9b-039f3fed5def' \
+  -v process_nonce='7b33278a-d694-4275-a537-05552f8d8c84' \
   -v code_sha256="$(printf 'd%.0s' {1..64})" \
   -v manager_profile='11111111-1111-4111-8111-111111111112' \
   < "$ROOT/tests/sql/wos-v1-uat006-continuity-pg17.sql"
@@ -457,7 +492,7 @@ psql_db "$DB" -q -c "
 "
 
 UAT_INPUTS_005="$ROOT/docs/workshop-order-system/qa-fixture/production-m2-uat-20261126/inputs.json"
-UAT_INPUTS="$ROOT/docs/workshop-order-system/qa-fixture/production-m2-uat-20261126/inputs-uat006.json"
+UAT_INPUTS="$ROOT/docs/workshop-order-system/qa-fixture/production-m2-uat-20261126/inputs-uat007.json"
 CREATE_PAYLOAD_JSON="$(jq -c '.createPayload' "$UAT_INPUTS_005")"
 EXPECTED_CREATE_FP="$(jq -r '.createPayloadFingerprint' "$UAT_INPUTS_005")"
 UAT_REQUEST_ID="$(jq -r '.requestId' "$UAT_INPUTS")"
@@ -718,7 +753,7 @@ WITH control AS (
     db_last_heartbeat_at,edge_last_heartbeat_at,edge_process_nonce
   ) VALUES(
     '93939393-9393-4393-8393-939393939393',
-    'WOS-V1-PRODUCTION-M2-QA-UAT-006',
+    'WOS-V1-PRODUCTION-M2-QA-UAT-007',
     'xulmpqaknlwqqculbsek',
     repeat('b',64),
     '94949494-9494-4494-8494-949494949494',
@@ -753,7 +788,7 @@ DO \$deadline\$
 BEGIN
   BEGIN
     PERFORM wos_v1_qa_uat.assert_write_open(
-      'WOS-V1-PRODUCTION-M2-QA-UAT-006',
+      'WOS-V1-PRODUCTION-M2-QA-UAT-007',
       '33333333-3333-4333-8333-333333333333'
     );
     RAISE EXCEPTION 'QA_UAT_EXPIRED_WRITE_WAS_ALLOWED';
@@ -767,7 +802,7 @@ DO \$edge_deadline\$
 BEGIN
   BEGIN
     PERFORM public.wos_v1_qa_uat_edge_write_allowed(
-      'WOS-V1-PRODUCTION-M2-QA-UAT-006',
+      'WOS-V1-PRODUCTION-M2-QA-UAT-007',
       'xulmpqaknlwqqculbsek',
       '93939393-9393-4393-8393-939393939393',
       '95959595-9595-4595-8595-959595959595',
@@ -879,7 +914,7 @@ psql_db "$DB" -q -c "
   BEGIN
     BEGIN
       PERFORM public.wos_v1_qa_uat_open_gate(
-        'WOS-V1-PRODUCTION-M2-QA-UAT-006',
+        'WOS-V1-PRODUCTION-M2-QA-UAT-007',
         '33333333-3333-4333-8333-333333333333',
         'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
         '11111111-1111-4111-8111-111111111111',
@@ -907,7 +942,7 @@ psql_db "$DB" -qAt -c "
 " >/dev/null
 EDGE_STATUS_OPEN="$(psql_db "$DB" -qAt -c "
   SELECT public.wos_v1_qa_uat_edge_control_status(
-    'WOS-V1-PRODUCTION-M2-QA-UAT-006',
+    'WOS-V1-PRODUCTION-M2-QA-UAT-007',
     'xulmpqaknlwqqculbsek'
   )::text;
 ")"
@@ -922,7 +957,7 @@ EDGE_STATUS_STALE="$(psql_db "$DB" -qAt -c "
   SET db_last_heartbeat_at=clock_timestamp()-interval '31 seconds'
   WHERE execution_id='$UAT_CLOSER_EXECUTION_ID'::uuid;
   SELECT public.wos_v1_qa_uat_edge_control_status(
-    'WOS-V1-PRODUCTION-M2-QA-UAT-006',
+    'WOS-V1-PRODUCTION-M2-QA-UAT-007',
     'xulmpqaknlwqqculbsek'
   )::text;
   ROLLBACK;
@@ -1111,7 +1146,7 @@ psql_db "$DB" -q -c "
   BEGIN
     BEGIN
       PERFORM public.wos_v1_qa_uat_edge_write_allowed(
-        'WOS-V1-PRODUCTION-M2-QA-UAT-006',
+        'WOS-V1-PRODUCTION-M2-QA-UAT-007',
         'xulmpqaknlwqqculbsek',
         '$UAT_CLOSER_EXECUTION_ID',
         '$UAT_EDGE_PROCESS_NONCE',
@@ -1134,7 +1169,7 @@ echo 'WOS_V1_QA_UAT_CREATE_RECEIPT_BINDING_DRIFT_DENIED=PASS'
 psql_db "$DB" -q -c "
   SET ROLE service_role;
   SELECT public.wos_v1_qa_uat_edge_write_allowed(
-    'WOS-V1-PRODUCTION-M2-QA-UAT-006',
+    'WOS-V1-PRODUCTION-M2-QA-UAT-007',
     'xulmpqaknlwqqculbsek',
     '$UAT_CLOSER_EXECUTION_ID',
     '$UAT_EDGE_PROCESS_NONCE',
@@ -1146,7 +1181,7 @@ psql_db "$DB" -q -c "
   BEGIN
     BEGIN
       PERFORM public.wos_v1_qa_uat_edge_write_allowed(
-        'WOS-V1-PRODUCTION-M2-QA-UAT-006',
+        'WOS-V1-PRODUCTION-M2-QA-UAT-007',
         'xulmpqaknlwqqculbsek',
         '$UAT_CLOSER_EXECUTION_ID',
         '$UAT_EDGE_PROCESS_NONCE',
@@ -1164,7 +1199,7 @@ psql_db "$DB" -q -c "
   BEGIN
     BEGIN
       PERFORM public.wos_v1_qa_uat_edge_write_allowed(
-        'WOS-V1-PRODUCTION-M2-QA-UAT-006',
+        'WOS-V1-PRODUCTION-M2-QA-UAT-007',
         'xulmpqaknlwqqculbsek',
         '$UAT_CLOSER_EXECUTION_ID',
         '$UAT_EDGE_PROCESS_NONCE',
@@ -1187,7 +1222,7 @@ psql_db "$DB" -q -c "
     authorization_id,project_ref,organization_id,order_id,actor_profile_id,
     allowed_actions,opened_at,expires_at
   ) VALUES(
-    'WOS-V1-PRODUCTION-M2-QA-UAT-006-EXPIRED',
+    'WOS-V1-PRODUCTION-M2-QA-UAT-007-EXPIRED',
     'xulmpqaknlwqqculbsek',
     'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
     '33333333-3333-4333-8333-333333333333',
@@ -1199,7 +1234,7 @@ psql_db "$DB" -q -c "
   SET wos_v1.qa_uat_gate_open_authorized='yes';
   SET wos_v1.qa_project='xulmpqaknlwqqculbsek';
   SELECT public.wos_v1_qa_uat_open_gate(
-    'WOS-V1-PRODUCTION-M2-QA-UAT-006',
+    'WOS-V1-PRODUCTION-M2-QA-UAT-007',
     '33333333-3333-4333-8333-333333333333',
     'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
     '11111111-1111-4111-8111-111111111111',
@@ -1207,7 +1242,7 @@ psql_db "$DB" -q -c "
     clock_timestamp()+interval '7 minutes'
   );
   SELECT public.wos_v1_qa_uat_open_gate(
-    'WOS-V1-PRODUCTION-M2-QA-UAT-006',
+    'WOS-V1-PRODUCTION-M2-QA-UAT-007',
     '33333333-3333-4333-8333-333333333333',
     'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
     '22222222-2222-4222-8222-222222222222',
@@ -1215,7 +1250,7 @@ psql_db "$DB" -q -c "
     clock_timestamp()+interval '7 minutes'
   );
   SELECT public.wos_v1_qa_uat_open_gate(
-    'WOS-V1-PRODUCTION-M2-QA-UAT-006',
+    'WOS-V1-PRODUCTION-M2-QA-UAT-007',
     '33333333-3333-4333-8333-333333333333',
     'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
     '$UAT_MANAGER_PROFILE',
@@ -1400,7 +1435,7 @@ EDGE_PROBE_CLOSED="$(psql_db "$DB" -qAt -c "
   || fail 'FULL_M2_EDGE_PROBE_CLOSED_NONCE_MISMATCH'
 [[ "$(psql_db "$DB" -qAt -c "
   SELECT public.wos_v1_qa_uat_edge_control_status(
-    'WOS-V1-PRODUCTION-M2-QA-UAT-006',
+    'WOS-V1-PRODUCTION-M2-QA-UAT-007',
     'xulmpqaknlwqqculbsek'
   )->>'status';
 ")" = 'CLOSED' ]] || fail 'EDGE_CONTROL_NOT_CLOSED'
@@ -1410,7 +1445,7 @@ psql_db "$DB" -q -c "
   BEGIN
     BEGIN
       PERFORM public.wos_v1_qa_uat_edge_write_allowed(
-        'WOS-V1-PRODUCTION-M2-QA-UAT-006',
+        'WOS-V1-PRODUCTION-M2-QA-UAT-007',
         'xulmpqaknlwqqculbsek',
         '$UAT_CLOSER_EXECUTION_ID',
         '$UAT_EDGE_PROCESS_NONCE',

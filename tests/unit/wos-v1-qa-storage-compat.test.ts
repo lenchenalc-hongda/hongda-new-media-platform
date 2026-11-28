@@ -19,11 +19,26 @@ const pg17 = readFileSync(
   'tests/sql/run-wos-v1-production-m2-qa-uat-pg17.sh',
   'utf8',
 );
+const livePolicySnapshot = JSON.parse(readFileSync(
+  'docs/workshop-order-system/production-readiness/evidence/'
+    + 'WOS_V1_QA_STORAGE_POLICY_LIVE_SNAPSHOT_20261128.json',
+  'utf8',
+));
+
+assert.equal(
+  livePolicySnapshot.wosFingerprint,
+  'f9759e0644e82ff4264efa42ac54e57c',
+);
+assert.equal(
+  livePolicySnapshot.nonWosFingerprint,
+  'f64fe08ac8669875ee9f7f3d4bbbc60f',
+);
+assert.equal(livePolicySnapshot.policies.length, 6);
 
 for (const marker of [
   "wos_v1.qa_storage_compat_install_authorized",
   "'xulmpqaknlwqqculbsek'",
-  "WOS-V1-PRODUCTION-M2-QA-UAT-006",
+  "WOS-V1-PRODUCTION-M2-QA-UAT-007",
   'wos_v1_qa_storage_compat.policy_backup',
   'wos_v1_qa_storage_compat.install_state',
   'wos_p7_private_object_insert',
@@ -31,8 +46,8 @@ for (const marker of [
   'wos_p7_storage_reader_roles',
   'wos_qa_revision_object_insert',
   'WOS_V1_QA_UAT_STORAGE_SOURCE_POLICY_FINGERPRINT_MISMATCH',
-  'a37821a034962478c744062b12b2b433',
-  '25fa14a4cd8000016cfd61fa3e35bc6a',
+  'f9759e0644e82ff4264efa42ac54e57c',
+  'f64fe08ac8669875ee9f7f3d4bbbc60f',
   "current_setting('wos_v1.qa_storage_local_test', true) = 'yes'",
   "current_database() LIKE '%\\_ci' ESCAPE '\\'",
   'public.wos_v1_qa_storage_write_allowed',
