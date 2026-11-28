@@ -514,7 +514,9 @@ async function arm() {
   }
   let openProbe;
   try {
-    openProbe = await probeOpen(armedControl);
+    // Use the pinned HTTP envelope, not the control-status RPC receipt.
+    // armedControl has edgeProcessNonce but lacks functionUrl/processNonce.
+    openProbe = await probeOpen(pending);
   } catch {
     await closeArmFailure(id, 'WOS_V1_QA_EDGE_OPEN_PROBE_EXCEPTION');
     fail('WOS_V1_QA_EDGE_OPEN_PROBE_EXCEPTION');
@@ -567,6 +569,13 @@ function readState(path) {
 }
 
 async function probeEdgeOnce(state, mode) {
+  // The PostgREST control receipt is not an HTTP probe envelope.
+  // Reject incomplete envelopes before attempting a network request.
+  if (typeof state?.functionUrl !== 'string'
+    || typeof state?.executionId !== 'string'
+    || typeof state?.processNonce !== 'string') {
+    fail('WOS_V1_QA_EDGE_PROBE_ENVELOPE_INVALID');
+  }
   const service = serviceKey();
   const credentialPreflight = mode === 'CREDENTIAL';
   const quote = value => `"${String(value)

@@ -303,6 +303,12 @@ assert(edgeArmSource.includes('bootstrapHeartbeat'));
 assert(edgeArmSource.includes('await spawnFinalizer(path)'));
 assert(edgeArmSource.includes('heartbeatAt !== priorHeartbeatAt'));
 assert(edgeArmSource.includes('armedHeartbeatAt === priorHeartbeatAt'));
+// UAT-010 regression: the SQL control status is NOT an HTTP probe envelope.
+assert(edgeArmSource.includes('openProbe = await probeOpen(pending);'));
+assert(!edgeArmSource.includes('probeOpen(armedControl)'));
+assert(edgeArmSource.includes('functionUrl: functionUrl(),'));
+assert(edgeArmSource.includes('processNonce,'));
+assert(edgeCloser.includes('WOS_V1_QA_EDGE_PROBE_ENVELOPE_INVALID'));
 assert(
   edgeArmSource.indexOf('wos_v1_qa_uat_close_edge')
     < edgeArmSource.indexOf('WOS_V1_QA_EDGE_CREDENTIAL_PREFLIGHT_FAILED_'),
