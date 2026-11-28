@@ -118,8 +118,8 @@ install_wos_baseline() {
     "$database" \
     supabase/migrations/20261014102000_workshop_order_system_foundation.sql \
     "$FOUNDATION_CONTAINMENT"
-  apply_file "$database" tests/sql/wos_p8_p7_production_compatible_candidate.sql
-  apply_file "$database" tests/sql/wos_p8_p7_service_proof_and_cleanup.sql
+  apply_file "$database" docs/workshop-order-system/production-readiness/sql/WOS_V1_PRODUCTION_P7_INSTALL.sql
+  apply_file "$database" docs/workshop-order-system/production-readiness/sql/WOS_V1_PRODUCTION_P7_SERVICE_PROOF_SQL.sql
 }
 
 apply_authorized_activation() {
@@ -289,8 +289,8 @@ apply_files_transaction \
 ")" = 'false' ]] \
   || fail 'FOUNDATION_CONTAINMENT_NOT_FAIL_CLOSED'
 
-apply_file "$BOOTSTRAP_DB" tests/sql/wos_p8_p7_production_compatible_candidate.sql
-apply_file "$BOOTSTRAP_DB" tests/sql/wos_p8_p7_service_proof_and_cleanup.sql
+apply_file "$BOOTSTRAP_DB" docs/workshop-order-system/production-readiness/sql/WOS_V1_PRODUCTION_P7_INSTALL.sql
+apply_file "$BOOTSTRAP_DB" docs/workshop-order-system/production-readiness/sql/WOS_V1_PRODUCTION_P7_SERVICE_PROOF_SQL.sql
 
 [[ "$(query_value "$BOOTSTRAP_DB" "
   SELECT (

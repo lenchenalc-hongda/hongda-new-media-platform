@@ -286,6 +286,14 @@ const modelSource = fs.readFileSync(
 );
 
 assert(pageSource.includes('ProductionOrderForm'));
+const productionOrderFormIndex = pageSource.indexOf('<ProductionOrderForm');
+const productionOfficeOrdersIndex = pageSource.indexOf('<ProductionOfficeOrders');
+assert(productionOrderFormIndex >= 0, 'Production order form JSX must be present.');
+assert(productionOfficeOrdersIndex >= 0, 'Historical office order list JSX must be present.');
+assert(
+  productionOrderFormIndex < productionOfficeOrdersIndex,
+  'The create form must appear before the historical office order list.',
+);
 assert(pageSource.includes('生产下单'));
 assert(componentSource.includes('validateProductionOrderDraft'));
 assert(componentSource.includes('检查资料完整性'));

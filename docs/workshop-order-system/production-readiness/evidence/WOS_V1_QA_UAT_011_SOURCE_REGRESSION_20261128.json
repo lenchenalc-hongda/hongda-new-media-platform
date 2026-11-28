@@ -1,0 +1,82 @@
+{
+  "schemaVersion": 1,
+  "capturedAt": "2026-11-28T04:58:00Z",
+  "status": "SOURCE_REGRESSION_PASS",
+  "sourceParentHead": "6b6c929428a7ded4fdcb45dae05f0112026b5fb1",
+  "validation": {
+    "wosSuite": "PASS",
+    "typecheck": "PASS",
+    "build": "PASS",
+    "buildLogSha256": "55d77ce6a313a414afad038dde982b69dfd5e4541fd6eeb4b6e931bb50de8a66",
+    "pg17StorageAndBusiness": "PASS",
+    "pg17StorageAndBusinessLogSha256": "e3fb2f94744d34ae070c79a88820763b236683c2a48ed5d7d9bfe5e5c2020d3d",
+    "closerOnlyPg17": "PASS",
+    "closerOnlyPg17LogSha256": "634fc1e6dad1bb96e552b118e7846c78e0f079e87848a4486a9e50d545ecb8c4",
+    "productionPg17Rehearsal": "PASS",
+    "productionPg17RehearsalLogSha256": "a41e0116f9d87059759d8b3f6ffc767ecc91cfe230148d9014e9752619f98e8c",
+    "productionM2Pg17": "PASS",
+    "productionM2Pg17LogSha256": "705831299e139811c3814af6438151767cc5b02dcc937d8ad4ebba34189bdbcd",
+    "productionM2ConcurrencyPg17": "PASS",
+    "productionM2ConcurrencyLogSha256": "8ba0c02ad58891de08756fcf579abefbd7095e9bfdad8dad6a21cdea8729eaab",
+    "edgeProbeCurlUserConfigDisabled": "PASS",
+    "openClosedHttpProbe": "PASS",
+    "openClosedHttpProbeLogSha256": "97ac275c96202480052bfa4022137db80b12876d2d10c66562bbdc59ba88b8b5",
+    "independentReview": "PASS",
+    "independentReviewP0": 0,
+    "independentReviewP1": 0,
+    "independentReviewP2": 0
+  },
+  "edgeProbe": {
+    "transport": "curl --config -",
+    "openProbeEnvelope": "pending",
+    "completeEnvelopePassed": true,
+    "missingNonceFailClosed": true,
+    "badUrlFailClosed": true,
+    "closedProbeHttpStatus": 503,
+    "closedProbeCode": "WOS_V1_QA_EDGE_CLOSED",
+    "attempts": 3,
+    "perAttemptTimeoutSeconds": 30,
+    "credentialsInStdinOnly": true,
+    "userCurlConfigDisabled": true
+  },
+  "uat011": {
+    "mode": "RESUME_EXISTING_ORDER",
+    "authorizationId": "WOS-V1-PRODUCTION-M2-QA-UAT-011",
+    "executionId": "f5149801-df08-4ce7-b336-df6d449c9aec",
+    "edgeProcessNonce": "f45beece-2a4a-4c3b-ae7b-d262347a4091",
+    "orderId": "3ade0180-e6bf-49da-b80b-fd00cd1948a8",
+    "expectedStartVersion": 5,
+    "expectedStartLabel": "V2",
+    "expectedStartStatus": "NEEDS_INFORMATION",
+    "maxNewOrders": 0,
+    "maxCreateCalls": 0
+  },
+  "preflight": {
+    "capturedAt": "2026-11-28T04:57:36.847224Z",
+    "counts": {
+      "runtime_proofs": 36,
+      "orphan_claims": 0,
+      "create_receipts": 6,
+      "operator_action_receipts": 10,
+      "operator_review_receipts": 4,
+      "office_revisions": 9
+    },
+    "historicalDataSha256": "ee71ed883953449043dfaa0e788906454349902fec2af164f9d290a83555fca8",
+    "openWriteGates": 0,
+    "uat011CronCount": 0,
+    "imageCollisions": 0,
+    "v1Superseded": 4,
+    "v2Images": 0,
+    "v2StorageObjects": 0,
+    "storageCompatSchemaPresent": false,
+    "qaWrappersPresent": false,
+    "authenticatedBusinessWrites": false
+  },
+  "remoteState": {
+    "uat011SqlInstalled": false,
+    "uat011EdgeDeployed": false,
+    "uat011ArmPerformed": false,
+    "uat011BusinessWrites": false,
+    "productionChanged": false
+  }
+}

@@ -10,9 +10,14 @@ import {
   WOS_V1_IMAGE_CATEGORIES,
 } from '@/lib/workshop-orders/production-app-contract';
 import {
+  parseWosV1M2Capability,
+  type WosV1M2Capability,
+} from '@/lib/workshop-orders/production-m2-client';
+import {
   inspectWosOfficeCorrectionImages,
 } from '@/lib/workshop-orders/production-office-correction';
 import { createClient } from '@/lib/supabase/client';
+import ProductionM2Workbench from './ProductionM2Workbench';
 
 type WosV1ImageCategory = (typeof WOS_V1_IMAGE_CATEGORIES)[number];
 
@@ -47,6 +52,31 @@ interface OfficeDetail {
     readonly openedAt: string;
   }[];
   readonly images: readonly OfficeImage[];
+  readonly resources: readonly {
+    readonly resource_type: string;
+    readonly status: string;
+    readonly version_label: string | null;
+    readonly quantity_expected: number | null;
+    readonly quantity_arrived: number | null;
+    readonly arrived_at: string | null;
+    readonly confirmed_at: string | null;
+  }[];
+  readonly baselines: readonly {
+    readonly id: string;
+    readonly version_label: string;
+    readonly status: string;
+    readonly confirmed_by_office_profile_id?: string | null;
+    readonly confirmed_by_workshop_profile_id?: string | null;
+    readonly office_confirmed_at?: string | null;
+    readonly workshop_confirmed_at?: string | null;
+  }[];
+  readonly history: readonly {
+    readonly previous_status: string | null;
+    readonly next_status: string;
+    readonly reason_code: string;
+    readonly created_at: string;
+    readonly metadata: Record<string, unknown>;
+  }[];
   readonly currentPrivateProofState: 'UNVERIFIED';
   readonly canStart: false;
 }
@@ -324,6 +354,7 @@ export default function ProductionOfficeOrders() {
   const [items, setItems] = useState<readonly OfficeOrder[]>([]);
   const [details, setDetails] = useState<Record<string, OfficeDetail>>({});
   const [writeEnabled, setWriteEnabled] = useState(false);
+  const [m2, setM2] = useState<WosV1M2Capability | null>(null);
   const [loading, setLoading] = useState(true);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [message, setMessage] = useState('');
@@ -361,6 +392,7 @@ export default function ProductionOfficeOrders() {
         || typeof (data.capabilities as Record<string, unknown>).writeEnabled !== 'boolean') {
         setItems([]);
         setWriteEnabled(false);
+        setM2(null);
         setMessage('正式订单读取失败或无权限，不能显示旧数据。');
         return;
       }
@@ -369,10 +401,12 @@ export default function ProductionOfficeOrders() {
       setWriteEnabled(Boolean(
         (data.capabilities as Record<string, unknown>).writeEnabled,
       ));
+      setM2(parseWosV1M2Capability(data.capabilities));
     } catch {
       if (!controller.signal.aborted && nextGeneration === generation.current) {
         setItems([]);
         setWriteEnabled(false);
+        setM2(null);
         setMessage('正式订单网络读取失败，不能显示缓存。');
       }
     } finally {
@@ -521,6 +555,18 @@ export default function ProductionOfficeOrders() {
                     当前私有图片 Proof：{detail.currentPrivateProofState}；
                     当前图片记录 {detail.images.length} 条；canStart=false。
                   </p>
+                  {m2 && ['WAITING_MATERIAL', 'READINESS_CHECK'].includes(
+                    order.workflow_status,
+                  ) && (
+                    <ProductionM2Workbench
+                      surface="office"
+                      order={order}
+                      detail={detail}
+                      writeEnabled={writeEnabled && m2.writesEnabled}
+                      adapter={m2.adapter}
+                      onSuccess={() => { void refresh(); }}
+                    />
+                  )}
                   {order.workflow_status === 'NEEDS_INFORMATION' && (
                     <CorrectionEditor
                       order={order}

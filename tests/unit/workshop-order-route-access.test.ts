@@ -68,14 +68,32 @@ assert.equal(canAccessWorkshopOrdersPage({
 }), true);
 
 const layout = readFileSync('src/app/workshop-orders/layout.tsx', 'utf8');
+const appLayout = readFileSync('src/components/layout/AppLayout.tsx', 'utf8');
+const sidebar = readFileSync('src/components/layout/Sidebar.tsx', 'utf8');
 assert(layout.includes("export const dynamic = 'force-dynamic'"));
 assert(layout.includes('getCurrentUserReadOnly'));
 assert(layout.includes('notFound()'));
 assert(!layout.includes('useEffect'));
 assert(!layout.includes('localStorage'));
+assert(appLayout.includes('min-w-0 flex-1'));
+assert(appLayout.includes('p-4 pt-20'));
+assert(appLayout.includes('md:p-6'));
+assert(sidebar.includes('aria-label="打开主导航"'));
+assert(sidebar.includes('aria-label="关闭主导航"'));
+assert(sidebar.includes('md:static'));
+assert(sidebar.includes('md:translate-x-0'));
+assert(sidebar.includes('md:visible'));
+assert(sidebar.includes("matchMedia('(max-width: 767px)')"));
+assert(sidebar.includes('(!isMobileViewport || mobileOpen)'));
+assert(sidebar.includes("event.key === 'Escape'"));
+assert(sidebar.includes("event.key !== 'Tab'"));
+assert(sidebar.includes('closeButtonRef.current?.focus()'));
+assert(sidebar.includes('previouslyFocusedRef.current'));
+assert(sidebar.includes('aria-modal={isMobileViewport && mobileOpen ? true : undefined}'));
 
 console.log(`WOS_ROUTE_ACCESS_PATHS=${routes.length}`);
 console.log(`WOS_ROUTE_ACCESS_ALLOWED_ROLES=${WORKSHOP_ORDERS_PAGE_ROLES.length}`);
 console.log('WOS_ROUTE_ACCESS_FLAG_FAIL_CLOSED=PASS');
 console.log('WOS_ROUTE_ACCESS_SERVER_LAYOUT=PASS');
+console.log('WOS_ROUTE_ACCESS_MOBILE_NAV=PASS');
 console.log('workshop-order-route-access.test.ts: PASS');

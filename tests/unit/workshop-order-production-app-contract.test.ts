@@ -9,6 +9,7 @@ import {
   parseWosV1ReadQuery,
   resolveWosV1AppRuntime,
   resolveWosV1QaAppRuntime,
+  resolveWosV1QaM2Runtime,
   wosV1OperationRoleAllowed,
   wosV1RpcInvocation,
 } from '../../src/lib/workshop-orders/production-app-contract';
@@ -60,6 +61,8 @@ const qaPreview = resolveWosV1QaAppRuntime({
 assert.equal(qaPreview.project, 'qa');
 assert.equal(qaPreview.readsEnabled, true);
 assert.equal(qaPreview.writesEnabled, false);
+assert.equal(qaPreview.m2Adapter, undefined);
+assert.equal(qaPreview.m2WritesEnabled, false);
 assert.equal(qaPreview.adapter, 'qa-preview');
 assert.equal(resolveWosV1QaAppRuntime({
   vercelEnv: 'preview',
@@ -68,6 +71,98 @@ assert.equal(resolveWosV1QaAppRuntime({
   qaEnabled: 'true',
   qaWritesEnabled: 'true',
 }).writesEnabled, true, 'QA writes are available only with the fixed QA runtime');
+const qaM2 = resolveWosV1QaM2Runtime({
+  vercelEnv: 'preview',
+  authMode: 'supabase',
+  supabaseUrl: 'https://xulmpqaknlwqqculbsek.supabase.co',
+  qaEnabled: 'true',
+  qaUatM2Enabled: 'true',
+  qaUatM2WritesEnabled: 'true',
+  qaUatAuthorizationId: 'WOS-V1-PRODUCTION-M2-QA-UAT-017',
+});
+assert.equal(qaM2.enabled, true);
+assert.equal(qaM2.writesEnabled, true);
+assert.equal(qaM2.adapter, 'qa-uat');
+assert.equal(resolveWosV1QaAppRuntime({
+  vercelEnv: 'preview',
+  authMode: 'supabase',
+  supabaseUrl: 'https://xulmpqaknlwqqculbsek.supabase.co',
+  qaEnabled: 'true',
+  qaWritesEnabled: 'false',
+  qaUatM2Enabled: 'true',
+  qaUatM2WritesEnabled: 'true',
+  qaUatAuthorizationId: 'WOS-V1-PRODUCTION-M2-QA-UAT-017',
+}).m2WritesEnabled, true);
+assert.equal(resolveWosV1QaAppRuntime({
+  vercelEnv: 'preview',
+  authMode: 'supabase',
+  supabaseUrl: 'https://xulmpqaknlwqqculbsek.supabase.co',
+  qaEnabled: 'true',
+  qaUatM2Enabled: 'true',
+  qaUatM2WritesEnabled: 'false',
+  qaUatAuthorizationId: 'WOS-V1-PRODUCTION-M2-QA-UAT-017',
+}).m2WritesEnabled, false);
+for (const rejected of [
+  resolveWosV1QaM2Runtime({
+    vercelEnv: 'production',
+    authMode: 'supabase',
+    supabaseUrl: 'https://xulmpqaknlwqqculbsek.supabase.co',
+    qaEnabled: 'true',
+    qaUatM2Enabled: 'true',
+    qaUatM2WritesEnabled: 'true',
+    qaUatAuthorizationId: 'WOS-V1-PRODUCTION-M2-QA-UAT-017',
+  }),
+  resolveWosV1QaM2Runtime({
+    vercelEnv: 'preview',
+    authMode: 'supabase',
+    supabaseUrl: 'https://amqpvxrurenevniilhtl.supabase.co',
+    qaEnabled: 'true',
+    qaUatM2Enabled: 'true',
+    qaUatM2WritesEnabled: 'true',
+    qaUatAuthorizationId: 'WOS-V1-PRODUCTION-M2-QA-UAT-017',
+  }),
+  resolveWosV1QaM2Runtime({
+    vercelEnv: 'preview',
+    authMode: 'not-supabase',
+    supabaseUrl: 'https://xulmpqaknlwqqculbsek.supabase.co',
+    qaEnabled: 'true',
+    qaUatM2Enabled: 'true',
+    qaUatM2WritesEnabled: 'true',
+    qaUatAuthorizationId: 'WOS-V1-PRODUCTION-M2-QA-UAT-017',
+  }),
+  resolveWosV1QaM2Runtime({
+    vercelEnv: 'preview',
+    authMode: 'supabase',
+    supabaseUrl: 'https://xulmpqaknlwqqculbsek.supabase.co',
+    qaEnabled: 'true',
+    qaUatM2Enabled: 'false',
+    qaUatM2WritesEnabled: 'true',
+    qaUatAuthorizationId: 'WOS-V1-PRODUCTION-M2-QA-UAT-017',
+  }),
+  resolveWosV1QaM2Runtime({
+    vercelEnv: 'preview',
+    authMode: 'supabase',
+    supabaseUrl: 'https://xulmpqaknlwqqculbsek.supabase.co',
+    qaEnabled: 'true',
+    qaUatM2Enabled: 'true',
+    qaUatM2WritesEnabled: 'true',
+    qaUatAuthorizationId: 'WOS-V1-STALE-AUTHORIZATION',
+  }),
+]) {
+  assert.equal(rejected.enabled, false);
+  assert.equal(rejected.writesEnabled, false);
+}
+const qaM2ReadOnly = resolveWosV1QaM2Runtime({
+  vercelEnv: 'preview',
+  authMode: 'supabase',
+  supabaseUrl: 'https://xulmpqaknlwqqculbsek.supabase.co',
+  qaEnabled: 'true',
+  qaUatM2Enabled: 'true',
+  qaUatM2WritesEnabled: 'false',
+  qaUatAuthorizationId: 'WOS-V1-PRODUCTION-M2-QA-UAT-017',
+});
+assert.equal(qaM2ReadOnly.enabled, true);
+assert.equal(qaM2ReadOnly.writesEnabled, false);
 for (const rejected of [
   resolveWosV1QaAppRuntime({
     vercelEnv: 'production',
@@ -362,6 +457,13 @@ for (const marker of [
 for (const marker of [
   'WOS_SUPABASE_ALLOWED_REFS',
   'WOS_V1_EDGE_WRITES_ENABLED',
+  'WOS_V1_QA_EDGE_AUTHORIZATION_REQUIRED',
+  'wos_v1_qa_uat_edge_write_allowed',
+  'wos_v1_qa_uat_edge_probe',
+  'wos_v1_qa_uat_edge_record_proof',
+  'wos_v1_qa_uat_edge_renew_proof',
+  'x-wos-qa-uat-execution-id',
+  'x-wos-qa-uat-closer-nonce',
   'readBoundedText(request, MAX_REQUEST_BYTES)',
   'wos_p7_service_storage_snapshot',
   'wos_v1_renew_expired_image_proof',
@@ -370,8 +472,9 @@ for (const marker of [
   'OBJECT_CHANGED_DURING_VERIFICATION',
   'WOS_V1_TRUSTED_IMAGE_PROOF_ISSUED',
 ]) assert(edge.includes(marker), 'production Edge missing ' + marker);
-assert(!edge.includes('xulmpqaknlwqqculbsek'));
-assert(!edge.includes('wos_qa_'));
+assert(edge.includes('QA_UAT_PROJECT_REF'));
+assert(edge.includes('QA_UAT_AUTHORIZATION_ID'));
+assert(edge.includes('qaUatRuntime'));
 assert(!edge.includes('storagePath: body.storagePath'));
 for (const marker of [
   'WOS_V1_IMAGE_CATEGORIES',
@@ -386,6 +489,10 @@ for (const marker of [
 ]) assert(officeWorkflow.includes(marker), 'Office production UI missing ' + marker);
 assert(appClient.includes("functions.invoke('wos-v1-verify-image'"));
 assert(appClient.includes('NEXT_PUBLIC_WOS_V1_QA_PREVIEW'));
+assert(appClient.includes('x-wos-qa-uat-authorization-id'));
+assert(appClient.includes('WOS_V1_PRODUCTION_M2_QA_UAT_AUTHORIZATION_ID'));
+assert(appClient.includes('NEXT_PUBLIC_WOS_V1_QA_UAT_EXECUTION_ID'));
+assert(appClient.includes('NEXT_PUBLIC_WOS_V1_QA_UAT_CLOSER_NONCE'));
 assert(appClient.includes('/api/workshop-orders/v1-qa'));
 for (const page of [officePage, workshopPage]) {
   assert(page.includes('resolveWosV1QaAppRuntime'));
@@ -413,4 +520,5 @@ console.log('workshop-order-production-app-contract.test.ts: PASS');
 console.log('WOS_V1_APP_PRODUCTION_ONLY_RUNTIME=PASS');
 console.log('WOS_V1_APP_ROLE_AND_RESULT_CONTRACTS=PASS');
 console.log('WOS_V1_PROJECT_NEUTRAL_EDGE_SOURCE=PASS');
+console.log('WOS_V1_EDGE_QA_HARD_LEASE_BRANCH=PASS');
 console.log('WOS_V1_QA_ADAPTER_DEFAULT_DENY=PASS');

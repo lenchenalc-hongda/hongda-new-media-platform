@@ -1,0 +1,44 @@
+{
+  "qaM2": false,
+  "order": {
+    "id": "3ade0180-e6bf-49da-b80b-fd00cd1948a8",
+    "version": 5,
+    "projectId": "1ad314a0-f44f-49f3-b099-685ff0c2eaab",
+    "customerId": "11f47ff8-a4de-4a9a-ae00-1f036c682f6f",
+    "orderNumber": "QA-NONPROD-ccd975a6-1516-4833-afd1-902077e70ed8",
+    "versionLabel": "V2",
+    "organizationId": "0ff53d93-2b9e-48b9-8113-a4768c39cdd2",
+    "workflowStatus": "NEEDS_INFORMATION"
+  },
+  "counts": {
+    "orphan_claims": 0,
+    "runtime_proofs": 36,
+    "create_receipts": 6,
+    "office_revisions": 9,
+    "operator_action_receipts": 10,
+    "operator_review_receipts": 4
+  },
+  "qaStart": false,
+  "v1Images": 4,
+  "v2Images": 0,
+  "openGates": 0,
+  "v1Storage": 4,
+  "v2Storage": 0,
+  "capturedAt": "2026-11-28T04:57:36.847224+00:00",
+  "uat011Cron": 0,
+  "v1Superseded": 4,
+  "createReceipt": {
+    "orderId": "3ade0180-e6bf-49da-b80b-fd00cd1948a8",
+    "requestId": "ccd975a6-1516-4833-afd1-902077e70ed8",
+    "actorProfileId": "f8adf44a-f04e-44b4-9c82-8b96508097bb",
+    "organizationId": "0ff53d93-2b9e-48b9-8113-a4768c39cdd2",
+    "payloadFingerprint": "d9ac15360649430b3787ed24e5d26c7269ba770e22264f03e1c4088d4292ac05"
+  },
+  "storageCompat": false,
+  "uat011Control": 0,
+  "imageCollisions": 0,
+  "createAuthenticated": false,
+  "ordersInsertAuthenticated": false,
+  "productionM2Authenticated": false,
+  "productionStartAuthenticated": false
+}

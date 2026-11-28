@@ -2,7 +2,7 @@
   "schema_version": 1,
   "phase": "activated",
   "row_count": 65,
-  "aggregate_sha256": "27b81d95512edb82fef2b950f0f1eeb091574d3f499ef38a2d725ff6bb147d40",
+  "aggregate_sha256": "c487872236614ff9f7930819979c4aef4eda0e12eb3eedb50a2dac23ac814f8e",
   "rows": [
     {
       "acl": [
@@ -475,7 +475,7 @@
       "config": [
         "search_path=\"\""
       ],
-      "definition_md5": "6aa9b9443b454e8d6ed69925066cd460",
+      "definition_md5": "0a76379c5e36bba7f855a506e9b19287",
       "security_definer": true
     },
     {

@@ -107,6 +107,24 @@ INSERT INTO public.wos_production_orders (
   id, organization_id, order_number, workflow_status, version, version_label,
   customer_name_snapshot, product_name, product_material, requested_quantity,
   current_batch_quantity
+) VALUES (
+  'adadadad-adad-4dad-8dad-adadadadadad',
+  'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+  'QA-NONPROD-V1-EDGE-V2-REVISION-001',
+  'NEEDS_INFORMATION',
+  5,
+  'V2',
+  'QA V2 Revision Customer',
+  'QA V2 Revision Product',
+  'QA V2 Revision Material',
+  100,
+  100
+);
+
+INSERT INTO public.wos_production_orders (
+  id, organization_id, order_number, workflow_status, version, version_label,
+  customer_name_snapshot, product_name, product_material, requested_quantity,
+  current_batch_quantity
 ) VALUES
 (
   '88888888-8888-4888-8888-888888888888',
@@ -178,6 +196,20 @@ INSERT INTO storage.objects (
 INSERT INTO storage.objects (
   id, bucket_id, name, version, updated_at, owner_id, metadata
 ) VALUES (
+  '71000000-0000-4000-8000-000000000022',
+  'wos-private',
+  'organizations/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/wos/production-order/'
+    || 'adadadad-adad-4dad-8dad-adadadadadad/images/product/versions/V2/'
+    || '72000000-0000-4000-8000-000000000022/source.png',
+  'qa-v2-revision-version-1',
+  '2026-11-23 00:30:00+00',
+  '10101010-1010-4010-8010-101010101010',
+  '{"mimetype":"image/png","size":"100"}'::jsonb
+);
+
+INSERT INTO storage.objects (
+  id, bucket_id, name, version, updated_at, owner_id, metadata
+) VALUES (
   '71000000-0000-4000-8000-000000000031',
   'wos-private',
   'organizations/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/wos/production-order/'
@@ -240,6 +272,21 @@ BEGIN
   );
   IF replay->>'status' <> 'REPLAYED' THEN
     RAISE EXCEPTION 'QA_PROOF_IDEMPOTENCY_FAILED';
+  END IF;
+  result := public.wos_p7_record_trusted_image_proof(
+    '72000000-0000-4000-8000-000000000022',
+    'adadadad-adad-4dad-8dad-adadadadadad',
+    '10101010-1010-4010-8010-101010101010',
+    'organizations/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/wos/production-order/'
+      || 'adadadad-adad-4dad-8dad-adadadadadad/images/product/versions/V2/'
+      || '72000000-0000-4000-8000-000000000022/source.png',
+    '71000000-0000-4000-8000-000000000022',
+    'qa-v2-revision-version-1',
+    '2026-11-23 00:30:00+00',
+    repeat('b', 64)
+  );
+  IF result->>'status' <> 'VERIFIED' THEN
+    RAISE EXCEPTION 'QA_V2_NEEDS_INFORMATION_PROOF_REJECTED';
   END IF;
 
   PERFORM set_config('wos.qa.actor_user_id',

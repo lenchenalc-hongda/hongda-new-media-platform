@@ -9,6 +9,8 @@ import {
   deterministicProofRequestId,
   evaluateWosV1ImageAccess,
   isWosV1ProofResult,
+  matchesLegacyQaCloserJwt,
+  selectWosV1AdminApiKey,
   objectSnapshotStable,
   parseAllowedOrigins,
   parseAllowedSupabaseRefs,
@@ -88,6 +90,53 @@ assert.equal(approvedSupabaseRuntimeUrl(
   ['amqpvxrurenevniilhtl'],
 ), false);
 
+// Regression: sb_secret_* Admin RPC access and legacy closer JWT are separate.
+const syntheticJwt = (payload: Record<string, unknown>) => {
+  const encode = (value: Record<string, unknown>) =>
+    Buffer.from(JSON.stringify(value)).toString('base64url');
+  return `${encode({ alg: 'HS256', typ: 'JWT' })}.${encode(payload)}.synthetic`;
+};
+const legacyCloserJwt = syntheticJwt({
+  role: 'service_role',
+  ref: 'xulmpqaknlwqqculbsek',
+});
+const ordinaryUserJwt = syntheticJwt({
+  role: 'authenticated',
+  ref: 'xulmpqaknlwqqculbsek',
+});
+const wrongProjectServiceJwt = syntheticJwt({
+  role: 'service_role',
+  ref: 'wrongprojectrefvalue',
+});
+const newAdminKey = 'sb_secret_test_only_admin';
+assert.equal(selectWosV1AdminApiKey(
+  JSON.stringify({ default: newAdminKey }), legacyCloserJwt,
+), newAdminKey);
+assert.equal(selectWosV1AdminApiKey('{}', legacyCloserJwt), legacyCloserJwt);
+assert.equal(selectWosV1AdminApiKey('{invalid', legacyCloserJwt), legacyCloserJwt);
+assert.equal(selectWosV1AdminApiKey('{}', undefined), '');
+assert.equal(matchesLegacyQaCloserJwt(
+  `Bearer ${legacyCloserJwt}`, legacyCloserJwt,
+), true);
+for (const header of [
+  null, '', `Bearer ${newAdminKey}`, 'Bearer header.user.signature',
+  `Bearer ${legacyCloserJwt}extra`, `bearer ${legacyCloserJwt}`,
+]) {
+  assert.equal(matchesLegacyQaCloserJwt(header, legacyCloserJwt), false);
+}
+assert.equal(matchesLegacyQaCloserJwt(
+  `Bearer ${legacyCloserJwt}`, newAdminKey,
+), false, 'sb_secret is not a legacy JWT');
+assert.equal(matchesLegacyQaCloserJwt(
+  `Bearer ${legacyCloserJwt}`, undefined,
+), false, 'missing legacy key must fail closed');
+assert.equal(matchesLegacyQaCloserJwt(
+  `Bearer ${ordinaryUserJwt}`, ordinaryUserJwt,
+), false, 'ordinary user claims cannot become service_role');
+assert.equal(matchesLegacyQaCloserJwt(
+  `Bearer ${wrongProjectServiceJwt}`, wrongProjectServiceJwt,
+), false, 'service-role JWT must be bound to the QA project');
+
 const profile = {
   id: profileId,
   user_id: userId,
@@ -122,6 +171,31 @@ assert.equal(evaluateWosV1ImageAccess({
   qaRevisionAuthorized: false,
   profile,
   order: { ...order, workflow_status: 'WAITING_MATERIAL', version_label: 'QA-R6' },
+}).code, 'STATUS_DENIED');
+assert.equal(evaluateWosV1ImageAccess({
+  runtimeAuthorized: true,
+  writesEnabled: true,
+  qaRevisionAuthorized: true,
+  profile,
+  order: { ...order, workflow_status: 'WAITING_MATERIAL', version_label: 'QA-R6' },
+}).code, 'ALLOWED');
+assert.equal(evaluateWosV1ImageAccess({
+  runtimeAuthorized: true,
+  writesEnabled: true,
+  profile,
+  order: { ...order, workflow_status: 'WAITING_MATERIAL', version_label: 'V2' },
+}).code, 'ALLOWED');
+assert.equal(evaluateWosV1ImageAccess({
+  runtimeAuthorized: true,
+  writesEnabled: true,
+  profile,
+  order: { ...order, workflow_status: 'READINESS_CHECK', version_label: 'V2' },
+}).code, 'ALLOWED');
+assert.equal(evaluateWosV1ImageAccess({
+  runtimeAuthorized: true,
+  writesEnabled: true,
+  profile,
+  order: { ...order, workflow_status: 'WAITING_MATERIAL', version_label: 'V1' },
 }).code, 'STATUS_DENIED');
 assert.equal(evaluateWosV1ImageAccess({
   runtimeAuthorized: true,
@@ -186,6 +260,14 @@ const first = {
 assert.equal(snapshotMatchesUpload(first, userId, png.length), true);
 assert.equal(snapshotMatchesUpload({
   ...first,
+  ownerId: '99999999-9999-4999-8999-999999999999',
+}, userId, png.length), false);
+assert.equal(snapshotMatchesUpload({
+  ...first,
+  ownerId: '99999999-9999-4999-8999-999999999999',
+}, userId, png.length, false), true);
+assert.equal(snapshotMatchesUpload({
+  ...first,
   version: null,
 }, userId, png.length), false, 'unknown object version must fail closed');
 assert.equal(snapshotMatchesUpload({
@@ -232,9 +314,21 @@ assert.equal(isWosV1ProofResult({
   category: 'PRODUCT',
   sha256: hash(png),
 }), false);
+for (const status of ['RENEWED', 'UNCHANGED']) {
+  assert.equal(isWosV1ProofResult({
+    status,
+    imageId,
+    category: 'product',
+    sha256: hash(png),
+  }, {
+    imageId,
+    category: 'PRODUCT',
+    sha256: hash(png),
+  }), true);
+}
 
 const candidate = readFileSync(
-  'tests/sql/wos_p8_p7_production_compatible_candidate.sql',
+  'docs/workshop-order-system/production-readiness/sql/WOS_V1_PRODUCTION_P7_INSTALL.sql',
   'utf8',
 );
 const runtime = readFileSync(
@@ -245,8 +339,16 @@ const qaDependencies = readFileSync(
   'docs/workshop-order-system/production-readiness/sql/WOS_V1_HOSTED_QA_DEPENDENCIES_NOT_AUTHORIZED.sql',
   'utf8',
 );
+const v2ProofGuardCompat = readFileSync(
+  'docs/workshop-order-system/production-readiness/sql/WOS_V1_QA_UAT_V2_PROOF_GUARD_COMPAT_INSTALL_NOT_AUTHORIZED.sql',
+  'utf8',
+);
 const edgeIndex = readFileSync(
   'supabase/functions/wos-v1-verify-image/index.ts',
+  'utf8',
+);
+const edgeCore = readFileSync(
+  'supabase/functions/wos-v1-verify-image/core.ts',
   'utf8',
 );
 assert(candidate.includes('TRUSTED_BINARY_PROOF_REQUIRED'));
@@ -261,9 +363,91 @@ assert(!runtime.includes(
 assert(qaDependencies.indexOf('pg_advisory_xact_lock') <
   qaDependencies.indexOf('SELECT * INTO v_order'));
 assert(qaDependencies.includes("'wos-qa-m2:' || p_order_id::text"));
+assert(qaDependencies.includes(
+  "v_order.workflow_status = 'NEEDS_INFORMATION'",
+));
+assert(qaDependencies.includes(
+  "v_order.version_label ~ '^V[2-9][0-9]{0,20}$'",
+));
+assert(qaDependencies.includes(
+  "v_order.workflow_status NOT IN ('DRAFT', 'NEEDS_INFORMATION')",
+));
+for (const sourceHash of [
+  '1433bdd5244077b1a34a2e7e58b37e5b665c7b5b59a1605544bb5e6854d87772',
+  '2c1c1d46469159bc71a1ce17ab40a86eed854816cc2b6a69496f43148faab1e2',
+  'b8af269c21de84bb490591ce5c71f379baef9e51e422a7978064eee3b0fefdde',
+  '0f1dcb8da6ae26da22150e0bed35e025e9618824d64993d0af5eec0a92cb7216',
+  '9a91e8e6441e0beee2c4fa3d4d410582784d3d310939c99007ac65f06d7a63fd',
+  'f0944a6afc0ebc0017849274aa3e88b27f81cab6d5fee3e0aa7b0dc5d964c0db',
+]) {
+  assert(
+    v2ProofGuardCompat.includes(sourceHash),
+    `V2 proof guard compatibility missing source hash ${sourceHash}`,
+  );
+}
 assert(edgeIndex.includes("request.method === 'OPTIONS'"));
 assert(edgeIndex.includes('WOS_V1_EDGE_ALLOWED_ORIGINS'));
 assert(edgeIndex.includes("'Access-Control-Allow-Methods'"));
+assert(edgeIndex.includes('x-wos-qa-uat-authorization-id'));
+assert(edgeIndex.includes('x-wos-qa-uat-execution-id'));
+assert(edgeIndex.includes('x-wos-qa-uat-closer-nonce'));
+assert(edgeIndex.includes('wos_v1_qa_uat_edge_write_allowed'));
+assert(edgeIndex.includes('wos_v1_qa_uat_edge_probe'));
+assert(edgeIndex.includes('wos_v1_qa_uat_edge_record_proof'));
+assert(edgeIndex.includes("'wos_v1_renew_expired_image_proof'"));
+assert(edgeIndex.includes("'wos_v1_qa_uat_edge_renew_proof'"));
+assert(edgeIndex.includes("renewalStatus === 'ABSENT' ? null : renewal.data"));
+assert(edgeIndex.includes("const proofStatus = ['VERIFIED', 'REPLAYED']"));
+assert(edgeIndex.includes('if (proofData === null)'));
+assert(edgeIndex.includes('!currentOrderReverification'));
+assert(!edgeIndex.includes(
+  "if (!qaUatRuntime) {\n        const renewal",
+));
+assert(edgeCore.includes('WOS_V1_QA_EDGE_CLOSED'));
+assert(edgeCore.includes('matchesLegacyQaCloserJwt('));
+assert(!edgeIndex.includes("request.headers.get('authorization') !== `Bearer ${service}`"));
+assert(edgeCore.includes('WOS_V1_QA_EDGE_GATE_UNAVAILABLE'));
+assert(edgeIndex.includes('evaluateWosV1QaCloserProbeAuth('));
+assert(edgeIndex.includes('evaluateWosV1QaCloserProbeGate('));
+assert(edgeIndex.includes('WOS_V1_QA_EDGE_CLOSER_SERVICE_ROLE_KEY'));
+const adminDownload = edgeIndex.indexOf(
+  "const downloaded = await admin.storage.from('wos-private').download(path);",
+);
+assert(adminDownload >= 0);
+assert(!edgeIndex.includes(
+  "const downloaded = await userDb.storage.from('wos-private').download(path);",
+));
+for (const priorGuard of [
+  'const auth = await userDb.auth.getUser(token);',
+  'const access = evaluateWosV1ImageAccess({',
+  "const gate = await admin.rpc('wos_v1_qa_uat_edge_write_allowed'",
+  'const path = canonicalWosV1ImagePath({',
+  "return output(request, 'PRIVATE_OBJECT_NOT_VERIFIED', 409);",
+]) {
+  const guardIndex = edgeIndex.indexOf(priorGuard);
+  assert(guardIndex >= 0, `missing guard before admin download: ${priorGuard}`);
+  assert(
+    guardIndex < adminDownload,
+    `admin download precedes guard: ${priorGuard}`,
+  );
+}
+assert(
+  /function closerProbeDedicatedJwt\(\)[\s\S]{0,180}WOS_V1_QA_EDGE_CLOSER_SERVICE_ROLE_KEY/.test(
+    edgeIndex,
+  ),
+);
+assert(!edgeIndex.includes(
+  'return Deno.env.get(\'WOS_V1_QA_EDGE_CLOSER_SERVICE_ROLE_KEY\')\n'
+    + '    || Deno.env.get(\'SUPABASE_SERVICE_ROLE_KEY\')',
+));
+assert(edgeIndex.includes('WOS_V1_QA_UAT_AUTHORIZATION_ID'));
+assert(edgeIndex.includes('x-wos-qa-closer-credential-preflight'));
+assert(edgeIndex.includes('WOS_V1_QA_EDGE_CREDENTIAL_VERIFIED'));
+assert(edgeCore.includes('WOS_V1_QA_EDGE_CLOSER_CREDENTIAL_MISSING'));
+assert(edgeCore.includes('WOS_V1_QA_EDGE_CLOSER_CREDENTIAL_MISMATCH'));
+assert(edgeCore.includes('/^V[2-9][0-9]{0,20}$/'));
+assert(!edgeCore.includes('qaUatCurrentOrderAuthorized'));
+assert(!edgeIndex.includes('qaUatCurrentOrderAuthorized'));
 
 console.log('workshop-order-production-edge-core.test.ts: PASS');
 console.log('WOS_V1_EDGE_FOUR_CATEGORY_ACCESS=PASS');
@@ -271,3 +455,4 @@ console.log('WOS_V1_EDGE_REAL_SHA256_AND_OBJECT_STABILITY=PASS');
 console.log('WOS_V1_DIRECT_REGISTER_REQUIRES_TRUSTED_PROOF=PASS');
 console.log('WOS_V1_EDGE_CORS_ORIGIN_ALLOWLIST=PASS');
 console.log('WOS_V1_QA_REVISION_STATE_CONTRACT=PASS');
+console.log('WOS_V1_QA_EDGE_HARD_GATE=PASS');

@@ -1,0 +1,500 @@
+NOTICE:  database "wos_v1_rollback_ci" does not exist, skipping
+                        check_name
+----------------------------------------------------------
+ WOS_PRODUCTION_BOOTSTRAP_SYNTHETIC_SUPABASE_FIXTURE=PASS
+(1 row)
+
+ set_config
+------------
+
+(1 row)
+
+NOTICE:  trigger "wos_qa_trusted_proof_guard" for relation "public.wos_qa_verified_image_proofs" does not exist, skipping
+NOTICE:  database "wos_v1_rc03_pre_runtime_ci" does not exist, skipping
+WOS_V1_RC05_PRE_RUNTIME_FAIL_CLOSED_RECOVERY=PASS
+NOTICE:  trigger "rc02_order_insert_guard" for relation "public.wos_production_orders" does not exist, skipping
+NOTICE:  trigger "rc02_order_bind_grant" for relation "public.wos_production_orders" does not exist, skipping
+NOTICE:  trigger "rc02_order_update_guard" for relation "public.wos_production_orders" does not exist, skipping
+NOTICE:  trigger "rc02_reference_image_guard" for relation "public.wos_reference_images" does not exist, skipping
+NOTICE:  trigger "rc02_readiness_receipt_guard" for relation "public.wos_office_readiness_receipts" does not exist, skipping
+NOTICE:  trigger "rc02_submission_receipt_guard" for relation "public.wos_submission_receipts" does not exist, skipping
+NOTICE:  trigger "rc02_workshop_inbox_guard" for relation "public.wos_workshop_inbox" does not exist, skipping
+NOTICE:  trigger "rc02_office_revision_guard" for relation "public.wos_office_revisions" does not exist, skipping
+NOTICE:  trigger "rc02_operator_action_receipt_guard" for relation "public.wos_operator_action_receipts" does not exist, skipping
+NOTICE:  trigger "rc02_operator_review_receipt_guard" for relation "public.wos_operator_review_receipts" does not exist, skipping
+NOTICE:  trigger "rc02_order_create_receipt_guard" for relation "public.wos_order_create_receipts" does not exist, skipping
+NOTICE:  trigger "rc02_verified_proof_guard" for relation "public.wos_verified_image_proofs" does not exist, skipping
+NOTICE:  trigger "rc02_verified_proof_guard" for relation "public.wos_qa_verified_image_proofs" does not exist, skipping
+NOTICE:  trigger "rc02_resource_guard" for relation "public.wos_resource_readiness" does not exist, skipping
+NOTICE:  trigger "rc02_visual_baseline_guard" for relation "public.wos_visual_baselines" does not exist, skipping
+NOTICE:  trigger "rc02_visual_baseline_item_guard" for relation "public.wos_visual_baseline_items" does not exist, skipping
+NOTICE:  trigger "rc02_confirmation_guard" for relation "public.wos_confirmations" does not exist, skipping
+NOTICE:  trigger "rc02_status_history_guard" for relation "public.wos_status_history" does not exist, skipping
+NOTICE:  trigger "rc02_storage_no_upsert" for relation "storage.objects" does not exist, skipping
+NOTICE:  trigger "rc02_storage_gate_guard" for relation "storage.objects" does not exist, skipping
+                                                                       wos_p7_record_trusted_image_proof
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ {"sha256": "1111111111111111111111111111111111111111111111111111111111111111", "status": "VERIFIED", "imageId": "73100000-0000-4000-8000-000000000001", "category": "product"}
+(1 row)
+
+                                                                          wos_p7_record_trusted_image_proof
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ {"sha256": "2222222222222222222222222222222222222222222222222222222222222222", "status": "VERIFIED", "imageId": "73100000-0000-4000-8000-000000000002", "category": "film_pattern"}
+(1 row)
+
+                                                                                wos_p7_record_trusted_image_proof
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ {"sha256": "3333333333333333333333333333333333333333333333333333333333333333", "status": "VERIFIED", "imageId": "73100000-0000-4000-8000-000000000003", "category": "customer_approved_sample"}
+(1 row)
+
+                                                                          wos_p7_record_trusted_image_proof
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ {"sha256": "4444444444444444444444444444444444444444444444444444444444444444", "status": "VERIFIED", "imageId": "73100000-0000-4000-8000-000000000004", "category": "signed_sample"}
+(1 row)
+
+                               wos_register_uploaded_reference_image
+---------------------------------------------------------------------------------------------------
+ {"bucket": "wos-private", "status": "CREATED", "imageId": "73100000-0000-4000-8000-000000000001"}
+(1 row)
+
+                               wos_register_uploaded_reference_image
+---------------------------------------------------------------------------------------------------
+ {"bucket": "wos-private", "status": "CREATED", "imageId": "73100000-0000-4000-8000-000000000002"}
+(1 row)
+
+                               wos_register_uploaded_reference_image
+---------------------------------------------------------------------------------------------------
+ {"bucket": "wos-private", "status": "CREATED", "imageId": "73100000-0000-4000-8000-000000000003"}
+(1 row)
+
+                               wos_register_uploaded_reference_image
+---------------------------------------------------------------------------------------------------
+ {"bucket": "wos-private", "status": "CREATED", "imageId": "73100000-0000-4000-8000-000000000004"}
+(1 row)
+
+   wos_confirm_office_completeness
+--------------------------------------
+ 76fb71fc-3727-4eeb-a54c-4d92fabc24ae
+(1 row)
+
+                                                                                                                           wos_submit_production_order
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ {"status": "CREATED", "orderId": "d9411719-b4e7-4c2b-8fd1-712abcd64459", "canStart": false, "receiptId": "096441dd-f6ee-4c4f-b282-51fa5feb15fb", "inboxTaskId": "dca588bb-3e65-412f-a44b-adea554daaca", "submittedAt": "2026-11-28T03:32:23.282361+00:00", "sourceRevision": 1}
+(1 row)
+
+                                                                                                             wos_operator_order_action
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ {"status": "APPLIED", "orderId": "d9411719-b4e7-4c2b-8fd1-712abcd64459", "version": 3, "canStart": false, "requestId": "71000000-0000-4000-8000-000000000004", "versionLabel": "V1", "workflowStatus": "NEEDS_INFORMATION", "expectedVersion": 2}
+(1 row)
+
+                                                                                                wos_office_save_correction
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ {"status": "SAVED", "orderId": "d9411719-b4e7-4c2b-8fd1-712abcd64459", "version": 4, "canStart": false, "requestId": "71000000-0000-4000-8000-000000000005", "versionLabel": "V2", "workflowStatus": "NEEDS_INFORMATION"}
+(1 row)
+
+                                                                       wos_p7_record_trusted_image_proof
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ {"sha256": "5555555555555555555555555555555555555555555555555555555555555555", "status": "VERIFIED", "imageId": "73200000-0000-4000-8000-000000000001", "category": "product"}
+(1 row)
+
+                                                                          wos_p7_record_trusted_image_proof
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ {"sha256": "6666666666666666666666666666666666666666666666666666666666666666", "status": "VERIFIED", "imageId": "73200000-0000-4000-8000-000000000002", "category": "film_pattern"}
+(1 row)
+
+                                                                                wos_p7_record_trusted_image_proof
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ {"sha256": "7777777777777777777777777777777777777777777777777777777777777777", "status": "VERIFIED", "imageId": "73200000-0000-4000-8000-000000000003", "category": "customer_approved_sample"}
+(1 row)
+
+                                                                          wos_p7_record_trusted_image_proof
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ {"sha256": "8888888888888888888888888888888888888888888888888888888888888888", "status": "VERIFIED", "imageId": "73200000-0000-4000-8000-000000000004", "category": "signed_sample"}
+(1 row)
+
+              set_config
+--------------------------------------
+ d9411719-b4e7-4c2b-8fd1-712abcd64459
+(1 row)
+
+                                                                                       set_config
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ organizations/0ff53d93-2b9e-48b9-8113-a4768c39cdd2/wos/production-order/d9411719-b4e7-4c2b-8fd1-712abcd64459/images/product/versions/V2/73200000-0000-4000-8000-000000000001/source.png
+(1 row)
+
+                  evidence
+--------------------------------------------
+ WOS_V1_RC04_PROOF_RENEWAL_FAIL_CLOSED=PASS
+(1 row)
+
+                               wos_register_uploaded_reference_image
+---------------------------------------------------------------------------------------------------
+ {"bucket": "wos-private", "status": "CREATED", "imageId": "73200000-0000-4000-8000-000000000001"}
+(1 row)
+
+                               wos_register_uploaded_reference_image
+---------------------------------------------------------------------------------------------------
+ {"bucket": "wos-private", "status": "CREATED", "imageId": "73200000-0000-4000-8000-000000000002"}
+(1 row)
+
+                               wos_register_uploaded_reference_image
+---------------------------------------------------------------------------------------------------
+ {"bucket": "wos-private", "status": "CREATED", "imageId": "73200000-0000-4000-8000-000000000003"}
+(1 row)
+
+                               wos_register_uploaded_reference_image
+---------------------------------------------------------------------------------------------------
+ {"bucket": "wos-private", "status": "CREATED", "imageId": "73200000-0000-4000-8000-000000000004"}
+(1 row)
+
+                                                                                                   wos_office_resubmit_order
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ {"status": "RESUBMITTED", "orderId": "d9411719-b4e7-4c2b-8fd1-712abcd64459", "version": 5, "canStart": false, "requestId": "71000000-0000-4000-8000-000000000006", "versionLabel": "V2", "workflowStatus": "WORKSHOP_REVIEW"}
+(1 row)
+
+                                                                                                                      wos_operator_review_correction
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ {"status": "REVIEWED", "orderId": "d9411719-b4e7-4c2b-8fd1-712abcd64459", "version": 6, "canStart": false, "requestId": "71000000-0000-4000-8000-000000000007", "versionLabel": "V2", "workflowStatus": "WAITING_MATERIAL", "expectedVersion": 5, "resolvedBlockers": 1}
+(1 row)
+
+              evidence
+-------------------------------------
+ WOS_V1_RC02_CREATE_ATOMIC_BIND=PASS
+(1 row)
+
+               evidence
+---------------------------------------
+ WOS_V1_RC02_EIGHT_RPC_ORDER_GATE=PASS
+(1 row)
+
+                   evidence
+-----------------------------------------------
+ WOS_V1_RC02_CURRENT_VERSION_RECORRECTION=PASS
+(1 row)
+
+                  evidence
+---------------------------------------------
+ WOS_V1_RC02_DIRECT_TABLE_BYPASS_DENIED=PASS
+(1 row)
+
+               evidence
+---------------------------------------
+ WOS_V1_RC02_ACL_AND_ACTIVE_INDEX=PASS
+(1 row)
+
+               evidence
+--------------------------------------
+ WOS_V1_RC04_LEGACY_PROOF_MIRROR=PASS
+(1 row)
+
+              evidence
+-------------------------------------
+ WOS_V1_RC04_EDGE_V8_PROJECTION=PASS
+(1 row)
+
+               evidence
+--------------------------------------
+ WOS_V1_RC04_M2_PROOF_SET_DIGEST=PASS
+(1 row)
+
+                 evidence
+------------------------------------------
+ WOS_V1_RC04_PROOF_VALIDITY_BOUNDARY=PASS
+(1 row)
+
+                   evidence
+----------------------------------------------
+ WOS_V1_RC04_EXPIRED_EDGE_M2_CONSISTENCY=PASS
+(1 row)
+
+                   evidence
+-----------------------------------------------
+ WOS_V1_RC04_HISTORICAL_PROOF_FINGERPRINT=PASS
+(1 row)
+
+                     evidence
+--------------------------------------------------
+ WOS_V1_RC04_MIRROR_NEGATIVE_GATE_AND_UPDATE=PASS
+(1 row)
+
+NOTICE:  database "wos_v1_rc04_storage_ci" does not exist, skipping
+WOS_V1_RC04_STORAGE_API_START=PASS
+WOS_V1_RC04_OPERATOR_STORAGE_RLS_COMPOSITION=PASS
+WOS_V1_RC04_STORAGE_BYTE_DOWNLOADS=PASS
+WOS_V1_RC04_STORAGE_NEGATIVE_MATRIX=PASS
+WOS_V1_RC04_OFFICE_PRIVATE_STORAGE_ACCESS=PASS
+WOS_V1_RC04_NON_WOS_STORAGE_SCOPE=PASS
+WOS_V1_RC02_POSTGREST_DIRECT_ORDER_DENIED=PASS
+WOS_V1_RC02_POSTGREST_CLOSED_RPC_DENIED=PASS
+WOS_V1_RC02_POSTGREST_SERVICE_JWT_TABLE_DENIED=PASS
+WOS_V1_RC04_POSTGREST_SERVICE_ROLE_GUARD=PASS
+WOS_V1_RC04_POSTGREST_NEGATIVE_ROLE_MATRIX=PASS
+WOS_V1_RC02_POSTGREST_BUSINESS_WRITES=0
+ pg_sleep
+----------
+
+(1 row)
+
+NOTICE:  column "office_proof_set_digest" of relation "wos_visual_baselines" already exists, skipping
+NOTICE:  column "office_post_order_version" of relation "wos_visual_baselines" already exists, skipping
+NOTICE:  column "workshop_proof_set_digest" of relation "wos_visual_baselines" already exists, skipping
+NOTICE:  column "workshop_post_order_version" of relation "wos_visual_baselines" already exists, skipping
+NOTICE:  trigger "wos_qa_p2_m2_reference_image_guard" for relation "public.wos_reference_images" does not exist, skipping
+WOS_V1_RC05_POST_RECOVERY_PRE_RUNTIME_ROLLBACK=PASS
+NOTICE:  database "wos_v1_rc05_m2_negative_ci" does not exist, skipping
+NOTICE:  trigger "rc02_order_insert_guard" for relation "public.wos_production_orders" does not exist, skipping
+NOTICE:  trigger "rc02_order_bind_grant" for relation "public.wos_production_orders" does not exist, skipping
+NOTICE:  trigger "rc02_order_update_guard" for relation "public.wos_production_orders" does not exist, skipping
+NOTICE:  trigger "rc02_reference_image_guard" for relation "public.wos_reference_images" does not exist, skipping
+NOTICE:  trigger "rc02_readiness_receipt_guard" for relation "public.wos_office_readiness_receipts" does not exist, skipping
+NOTICE:  trigger "rc02_submission_receipt_guard" for relation "public.wos_submission_receipts" does not exist, skipping
+NOTICE:  trigger "rc02_workshop_inbox_guard" for relation "public.wos_workshop_inbox" does not exist, skipping
+NOTICE:  trigger "rc02_office_revision_guard" for relation "public.wos_office_revisions" does not exist, skipping
+NOTICE:  trigger "rc02_operator_action_receipt_guard" for relation "public.wos_operator_action_receipts" does not exist, skipping
+NOTICE:  trigger "rc02_operator_review_receipt_guard" for relation "public.wos_operator_review_receipts" does not exist, skipping
+NOTICE:  trigger "rc02_order_create_receipt_guard" for relation "public.wos_order_create_receipts" does not exist, skipping
+NOTICE:  trigger "rc02_verified_proof_guard" for relation "public.wos_verified_image_proofs" does not exist, skipping
+NOTICE:  trigger "rc02_verified_proof_guard" for relation "public.wos_qa_verified_image_proofs" does not exist, skipping
+NOTICE:  trigger "rc02_resource_guard" for relation "public.wos_resource_readiness" does not exist, skipping
+NOTICE:  trigger "rc02_visual_baseline_guard" for relation "public.wos_visual_baselines" does not exist, skipping
+NOTICE:  trigger "rc02_visual_baseline_item_guard" for relation "public.wos_visual_baseline_items" does not exist, skipping
+NOTICE:  trigger "rc02_confirmation_guard" for relation "public.wos_confirmations" does not exist, skipping
+NOTICE:  trigger "rc02_status_history_guard" for relation "public.wos_status_history" does not exist, skipping
+NOTICE:  trigger "rc02_storage_no_upsert" for relation "storage.objects" does not exist, skipping
+NOTICE:  trigger "rc02_storage_gate_guard" for relation "storage.objects" does not exist, skipping
+WOS_V1_RC05_POST_RECOVERY_REACTIVATION_RECOVERY=PASS
+WOS_V1_RC04_P7_RECOVERY_INTERFACES=PASS
+WOS_V1_RC02_GATE_PG17=PASS
+WOS_V1_RC02_CONCURRENT_AUTHORIZE=PASS
+WOS_V1_RC02_CONCURRENT_CREATE_REPLAY=PASS
+WOS_V1_RC02_RECOVERY_ACTIVE_REFUSAL=PASS
+WOS_V1_RC02_RECOVERY_RESTORES_POLICY=PASS
+WOS_V1_RC05_FOUNDATION_PUBLIC_POLICIES_RESTORED=PASS
+WOS_V1_RC03_COMPAT_FORWARD_AND_RECOVERY=PASS
+WOS_V1_RC03_LEGACY_SAFETY_FINGERPRINT=PASS
+WOS_V1_RC03_COMPAT_RECOVERY_DEACTIVATED_RUNTIME=PASS
+WOS_V1_RC02_NO_CLOUD_QA_CONNECTION=PASS
+WOS_V1_RC02_GATE_DB_RETAINED_ON_SUCCESS=wos_v1_rollback_ci
+WARNING:  there is already a transaction in progress
+NOTICE:  column "office_proof_set_digest" of relation "wos_visual_baselines" already exists, skipping
+NOTICE:  column "office_post_order_version" of relation "wos_visual_baselines" already exists, skipping
+NOTICE:  column "workshop_proof_set_digest" of relation "wos_visual_baselines" already exists, skipping
+NOTICE:  column "workshop_post_order_version" of relation "wos_visual_baselines" already exists, skipping
+NOTICE:  trigger "wos_v1_m2_reference_image_guard" for relation "public.wos_reference_images" does not exist, skipping
+NOTICE:  trigger "wos_v1_m2_proof_change_guard" for relation "public.wos_verified_image_proofs" does not exist, skipping
+WARNING:  there is no transaction in progress
+NOTICE:  column "authorized_create_request_id" of relation "closeout_controls" already exists, skipping
+NOTICE:  column "authorized_actor_profile_id" of relation "closeout_controls" already exists, skipping
+NOTICE:  column "authorized_payload_fingerprint" of relation "closeout_controls" already exists, skipping
+NOTICE:  column "authorized_order_number" of relation "closeout_controls" already exists, skipping
+NOTICE:  column "authorized_customer_id" of relation "closeout_controls" already exists, skipping
+NOTICE:  column "authorized_project_id" of relation "closeout_controls" already exists, skipping
+NOTICE:  trigger "wos_v1_qa_uat_closeout_control_guard" for relation "wos_v1_qa_uat.closeout_controls" does not exist, skipping
+NOTICE:  database "wos_v1_qa_storage_guard_ci" does not exist, skipping
+WOS_V1_QA_UAT_STORAGE_UNKNOWN_POLICY_DENIED=PASS
+WOS_V1_QA_UAT_STORAGE_LIVE_POLICY_FINGERPRINTS=PASS
+WOS_V1_QA_UAT_STORAGE_COMPAT_INSTALL=PASS
+WOS_V1_QA_UAT_STORAGE_RESTRICTIVE_OR_GUARD=PASS
+NOTICE:  database "wos_v1_qa_storage_compat_ci" does not exist, skipping
+WOS_V1_QA_UAT_STORAGE_OFFICE_V2_UPLOAD=PASS
+WOS_V1_QA_UAT_STORAGE_OPERATOR_WAITING_MATERIAL=PASS
+WOS_V1_QA_UAT_STORAGE_OLD_VERSION_AND_PROOF_EXPIRY=PASS
+WOS_V1_QA_UAT_STORAGE_GATE_CLOSED_DENIAL=PASS
+WOS_V1_QA_UAT_STORAGE_POLICY_COMPOSITION=PASS
+WOS_V1_QA_UAT_STORAGE_COMPAT_ROLLBACK=PASS
+NOTICE:  database "wos_v1_uat006_continuity_ci" does not exist, skipping
+           set_config
+---------------------------------
+ WOS-V1-PRODUCTION-M2-QA-UAT-010
+(1 row)
+
+              set_config
+--------------------------------------
+ 54d03da8-79a2-42b1-af64-11cb2608517c
+(1 row)
+
+              set_config
+--------------------------------------
+ 92929292-9292-4292-8292-929292929292
+(1 row)
+
+              set_config
+--------------------------------------
+ 83fd8e6a-fee4-4e69-841c-648ea7eeeba4
+(1 row)
+
+                            set_config
+------------------------------------------------------------------
+ dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd
+(1 row)
+
+              set_config
+--------------------------------------
+ 11111111-1111-4111-8111-111111111112
+(1 row)
+
+                evidence
+----------------------------------------
+ WOS_V1_UAT006_CONTINUITY_TO_READY=PASS
+(1 row)
+
+WOS_V1_UAT006_CONTINUITY_TO_READY=PASS
+NOTICE:  function wos_v1_qa_uat.gate_allowed(uuid,uuid,uuid,text) does not exist, skipping
+WOS_V1_PRODUCTION_M2_QA_SHAPE_COMPAT=PASS
+WOS_V1_PRODUCTION_M2_QA_SHAPE_ACL_STORAGE_RETENTION=PASS
+NOTICE:  database "wos_v1_production_m2_qa_uat_ci" does not exist, skipping
+WOS_V1_QA_UAT_MANAGER_BINDING=PASS
+WARNING:  there is already a transaction in progress
+NOTICE:  trigger "wos_v1_m2_reference_image_guard" for relation "public.wos_reference_images" does not exist, skipping
+NOTICE:  trigger "wos_v1_m2_proof_change_guard" for relation "public.wos_verified_image_proofs" does not exist, skipping
+WARNING:  there is no transaction in progress
+             evidence
+-----------------------------------
+ WOS_V1_UAT006_RETAINED_STATE=PASS
+(1 row)
+
+NOTICE:  column "authorized_create_request_id" of relation "closeout_controls" already exists, skipping
+NOTICE:  column "authorized_actor_profile_id" of relation "closeout_controls" already exists, skipping
+NOTICE:  column "authorized_payload_fingerprint" of relation "closeout_controls" already exists, skipping
+NOTICE:  column "authorized_order_number" of relation "closeout_controls" already exists, skipping
+NOTICE:  column "authorized_customer_id" of relation "closeout_controls" already exists, skipping
+NOTICE:  column "authorized_project_id" of relation "closeout_controls" already exists, skipping
+NOTICE:  trigger "wos_v1_qa_uat_closeout_control_guard" for relation "wos_v1_qa_uat.closeout_controls" does not exist, skipping
+WOS_V1_QA_UAT_HARD_WRITE_DEADLINE=PASS
+WOS_V1_QA_UAT_EDGE_HARD_WRITE_DEADLINE=PASS
+WOS_V1_QA_UAT_DB_CLOSER_CRON_REQUIRED=PASS
+WOS_V1_QA_UAT_DB_CLOSER_ARM=PASS
+WOS_V1_QA_UAT_DUAL_ARM_REQUIRED=PASS
+WOS_V1_QA_UAT_EDGE_OPEN_AND_STALE_STATUS=PASS
+WOS_V1_QA_UAT_DUAL_CLOSERS_ARMED=PASS
+WOS_V1_QA_UAT_APP_ACTIVATION=PASS
+WOS_V1_QA_UAT_CREATE_RECEIPT_BINDING_DRIFT_DENIED=PASS
+WOS_V1_QA_UAT_EDGE_POSITIVE_AND_NEGATIVE_GATE=PASS
+              set_config
+--------------------------------------
+ 20202020-2020-4020-8020-202020202020
+(1 row)
+
+              set_config
+--------------------------------------
+ 10101010-1010-4010-8010-101010101010
+(1 row)
+
+              set_config
+--------------------------------------
+ 10101010-1010-4010-8010-101010101010
+(1 row)
+
+              set_config
+--------------------------------------
+ 30303030-3030-4030-8030-303030303030
+(1 row)
+
+              set_config
+--------------------------------------
+ 50505050-5050-4050-8050-505050505050
+(1 row)
+
+              set_config
+--------------------------------------
+ 20202020-2020-4020-8020-202020202020
+(1 row)
+
+              set_config
+--------------------------------------
+ 10101010-1010-4010-8010-101010101010
+(1 row)
+
+              set_config
+--------------------------------------
+ 10101010-1010-4010-8010-101010101010
+(1 row)
+
+              set_config
+--------------------------------------
+ 20202020-2020-4020-8020-202020202020
+(1 row)
+
+              set_config
+--------------------------------------
+ 20202020-2020-4020-8020-202020202020
+(1 row)
+
+              set_config
+--------------------------------------
+ b55ccc94-6352-4cad-8600-fad32955d014
+(1 row)
+
+              set_config
+--------------------------------------
+ 10101010-1010-4010-8010-101010101010
+(1 row)
+
+              set_config
+--------------------------------------
+ 10101010-1010-4010-8010-101010101010
+(1 row)
+
+              set_config
+--------------------------------------
+ 10101010-1010-4010-8010-101010101010
+(1 row)
+
+              set_config
+--------------------------------------
+ 20202020-2020-4020-8020-202020202020
+(1 row)
+
+              set_config
+--------------------------------------
+ 20202020-2020-4020-8020-202020202020
+(1 row)
+
+              set_config
+--------------------------------------
+ b55ccc94-6352-4cad-8600-fad32955d014
+(1 row)
+
+                  ?column?
+---------------------------------------------
+ WOS_V1_PRODUCTION_M2_QA_UAT_ASSERTIONS=PASS
+(1 row)
+
+FATAL:  terminating connection due to administrator command
+server closed the connection unexpectedly
+	This probably means the server terminated abnormally
+	before or while processing the request.
+connection to server was lost
+WOS_V1_QA_UAT_MAIN_PROCESS_KILL_DB_CLOSER=PASS
+WOS_V1_QA_UAT_CONCURRENT_DB_CLOSE_IDEMPOTENT=PASS
+WOS_V1_QA_UAT_CLOSED_GATE_REARM_DENIED=PASS
+WOS_V1_QA_UAT_DB_CRON_UNSCHEDULED=PASS
+WOS_V1_QA_UAT_DB_CLOSER_CLI_CLOSE_AND_REVOKE=PASS
+WOS_V1_QA_EDGE_CLOSER_MAIN_PROCESS_EXIT=PASS
+WOS_V1_QA_EDGE_CLOSER_DETACHED_PROCESS=PASS
+WOS_V1_QA_EDGE_CLOSER_PROCESS_HEARTBEAT=PASS
+WOS_V1_QA_EDGE_CLOSER_HTTP_CLOSED_PROBE=PASS
+WOS_V1_QA_UAT_INDEPENDENT_EDGE_CLOSE=PASS
+WOS_V1_QA_UAT_EDGE_SERVER_SIDE_HARD_STOP=PASS
+WOS_V1_QA_UAT_CLOSER_ACL_AND_GATE_CLOSE=PASS
+              set_config
+--------------------------------------
+ 20202020-2020-4020-8020-202020202020
+(1 row)
+
+                      ?column?
+-----------------------------------------------------
+ WOS_V1_PRODUCTION_M2_QA_UAT_CLOSED_GATE_DENIED=PASS
+(1 row)
+
+{"status":"REPLAYED","timely":true,"closedAt":"2026-11-28T03:33:25.464986+00:00","deadlineAt":"2026-11-28T03:42:22.183521+00:00","executionId":"91919191-9191-4191-8191-919191919191","cronUnscheduled":true}
+WOS_V1_QA_DB_CLOSER_APP_DEACTIVATE=PASS
+WOS_V1_QA_DB_CLOSER_DATA_RETAINING_RECOVERY=PASS
+WOS_V1_QA_UAT_APP_DEACTIVATION=PASS
+WOS_V1_PRODUCTION_M2_QA_UAT_WRAPPER=PASS
+WOS_V1_PRODUCTION_M2_QA_UAT_NEGATIVE_GATES=PASS
+WOS_V1_PRODUCTION_M2_QA_UAT_FULL_FLOW=PASS
+WOS_V1_PRODUCTION_M2_QA_UAT_INVALIDATION=PASS
+WOS_V1_PRODUCTION_M2_QA_UAT_INDEPENDENT_CLOSE_LOCK=PASS
+WOS_V1_PRODUCTION_M2_QA_UAT_DATA_RETAINING_RECOVERY=PASS
+WOS_V1_PRODUCTION_M2_QA_UAT_NO_CLOUD_CONNECTION=PASS

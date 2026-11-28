@@ -99,7 +99,11 @@ const runtimeRollbackSql = readFileSync(resolve(
   'WOS_V1_PRODUCTION_RUNTIME_ROLLBACK_NOT_AUTHORIZED.sql',
 ), 'utf8');
 const p7CandidateSql = readFileSync(resolve(
-  'tests/sql/wos_p8_p7_production_compatible_candidate.sql',
+  'docs/workshop-order-system/production-readiness/sql/WOS_V1_PRODUCTION_P7_INSTALL.sql',
+), 'utf8');
+const proofRenewalSql = readFileSync(resolve(
+  'docs/workshop-order-system/production-readiness/sql/',
+  'V1_APP_01_PROOF_RENEWAL_NOT_AUTHORIZED.sql',
 ), 'utf8');
 
 assert.match(
@@ -118,6 +122,24 @@ assert.match(
   runtimeRollbackSql,
   /FOREACH v_table IN ARRAY ARRAY\[[\s\S]*wos_order_create_receipts/,
 );
+for (const marker of [
+  "'WAITING_MATERIAL', 'READINESS_CHECK'",
+  'RENEWAL_IMAGE_NOT_CURRENT',
+  'RENEWAL_CURRENT_IMAGE_SET_INVALID',
+  'RENEWAL_IMAGE_NOT_IN_CURRENT_BASELINE',
+  'RENEWAL_STORAGE_OBJECT_CHANGED',
+  "v_object.metadata->>'mimetype' <> 'image/png'",
+  "v_object.version IS DISTINCT FROM p_storage_object_version",
+  'WHEN v_requires_current_images THEN v_image.category',
+  "ELSE replace(v_category_slug, '-', '_')",
+  "'sha256', p_sha256",
+]) assert(proofRenewalSql.includes(marker), `renewal missing ${marker}`);
+assert(!proofRenewalSql.includes(
+  "v_order.workflow_status NOT IN ('DRAFT', 'NEEDS_INFORMATION')",
+));
+assert(!proofRenewalSql.includes(
+  'object.owner_id = p_actor_user_id::text',
+), 'renewal must bind the immutable object, not the current actor, as uploader');
 
 console.log('workshop-order-production-runtime-contract.test.ts: PASS');
 console.log('WOS_V1_PRODUCTION_PROJECT_PIN=PASS');

@@ -41,6 +41,9 @@ export async function createWosV1QaHandlerDependencies(): Promise<WosV1HandlerDe
     authMode: process.env.AUTH_MODE,
     qaEnabled: process.env.WOS_V1_QA_APP_ENABLED,
     qaWritesEnabled: process.env.WOS_V1_QA_APP_WRITES_ENABLED,
+    qaUatM2Enabled: process.env.WOS_V1_QA_UAT_M2_ENABLED,
+    qaUatM2WritesEnabled: process.env.WOS_V1_QA_UAT_M2_WRITES_ENABLED,
+    qaUatAuthorizationId: process.env.WOS_V1_QA_UAT_AUTHORIZATION_ID,
   });
   const client = runtime.readsEnabled ? await createClient() : null;
   return {

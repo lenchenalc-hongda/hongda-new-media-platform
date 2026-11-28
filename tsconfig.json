@@ -19,5 +19,11 @@
     }
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
-  "exclude": ["node_modules", "supabase/functions/**"]
+  "exclude": [
+    "node_modules",
+    "output/**",
+    "supabase/functions/**",
+    "tests/integration/*.deno.test.ts",
+    "docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_EDGE_V34_SOURCE_20261127/**"
+  ]
 }

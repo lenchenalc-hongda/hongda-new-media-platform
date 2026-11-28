@@ -168,7 +168,7 @@ BEGIN
       ('public.wos_office_save_correction(uuid,integer,uuid,jsonb,text)', 'd1a0478dbe12c9d28cd2a1a897fcfde7182c6189c81d772e86763e361e68190f'),
       ('public.wos_office_resubmit_order(uuid,integer,uuid,text)', '0ae618b3ecb693edbd3eaaad1f8fb74cff89f643f15c554696fd6d50878de674'),
       ('public.wos_operator_review_correction(uuid,integer,uuid,text)', '5376f1d028ea9034e619c963a707a2814b1ea4daaaec6895f43fa00b3e14a0bc'),
-      ('public.wos_v1_renew_expired_image_proof(uuid,uuid,uuid,text,uuid,text,timestamptz,text)', 'b5c4ec9be8118374b374c1844b44f24d392cda265790e4a502551bdc2ff1a294')
+      ('public.wos_v1_renew_expired_image_proof(uuid,uuid,uuid,text,uuid,text,timestamptz,text)', '2725b8fec3727fd810b2ad2d407780b0635c32db02254aa888088c791c449e1f')
     ) expected(signature,definition_sha)
     LEFT JOIN pg_catalog.pg_proc p
       ON p.oid=to_regprocedure(expected.signature)

@@ -71,6 +71,17 @@ export type WosP2M2Action =
   | z.infer<typeof baselineConfirm>
   | z.infer<typeof finalReadiness>;
 
+const startRelease = z.object({
+  ...identity,
+  action: z.literal('START_RELEASE'),
+  payload: z.object({
+    baselineId: z.string().uuid(),
+    note,
+  }).strict(),
+}).strict();
+
+export type WosV1StartRelease = z.infer<typeof startRelease>;
+
 export function parseWosP2M2Action(value: unknown): WosP2M2Action | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   const action = (value as Record<string, unknown>).action;
@@ -84,6 +95,13 @@ export function parseWosP2M2Action(value: unknown): WosP2M2Action | null {
   return result?.success ? result.data : null;
 }
 
+export function parseWosV1StartRelease(
+  value: unknown,
+): WosV1StartRelease | null {
+  const result = startRelease.safeParse(value);
+  return result.success ? result.data : null;
+}
+
 export function canActOnWosP2M2(action: unknown, role: unknown): boolean {
   if (typeof role !== 'string') return false;
   if (action === 'MATERIAL_RECORD' || action === 'BASELINE_WORKSHOP_CONFIRM'
@@ -94,6 +112,10 @@ export function canActOnWosP2M2(action: unknown, role: unknown): boolean {
     return ['admin', 'manager', 'sales'].includes(role);
   }
   return false;
+}
+
+export function canAuthorizeWosV1ProductionStart(role: unknown): boolean {
+  return role === 'admin' || role === 'manager';
 }
 
 export function isWosP2M2Enabled(env: {
@@ -119,6 +141,16 @@ export function wosP2M2RpcArgs(action: WosP2M2Action) {
     p_request_id: action.requestId,
     p_action: action.action,
     p_payload: action.payload,
+  } as const;
+}
+
+export function wosV1StartReleaseRpcArgs(action: WosV1StartRelease) {
+  return {
+    p_order_id: action.orderId,
+    p_expected_version: action.expectedVersion,
+    p_request_id: action.requestId,
+    p_baseline_id: action.payload.baselineId,
+    p_note: action.payload.note,
   } as const;
 }
 
@@ -148,4 +180,36 @@ export function isWosP2M2Result(
     && (action.action === 'FINAL_READINESS_CONFIRM'
       ? row.workflowStatus === 'READINESS_CHECK'
       : row.workflowStatus === 'WAITING_MATERIAL' || row.workflowStatus === 'READINESS_CHECK');
+}
+
+export function isWosV1StartReleaseResult(
+  value: unknown,
+  action: WosV1StartRelease,
+): value is {
+  status: 'AUTHORIZED' | 'REPLAYED';
+  orderId: string;
+  requestId: string;
+  version: number;
+  productionVersionLabel: string;
+  workflowStatus: 'READY_TO_START';
+  baselineId: string;
+  proofSetDigest: string;
+  manualStartAuthorized: true;
+  productionStarted: false;
+  canStart: false;
+} {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const row = value as Record<string, unknown>;
+  return (row.status === 'AUTHORIZED' || row.status === 'REPLAYED')
+    && row.orderId === action.orderId
+    && row.requestId === action.requestId
+    && row.version === action.expectedVersion + 1
+    && typeof row.productionVersionLabel === 'string'
+    && row.workflowStatus === 'READY_TO_START'
+    && row.baselineId === action.payload.baselineId
+    && typeof row.proofSetDigest === 'string'
+    && /^[a-f0-9]{64}$/.test(row.proofSetDigest)
+    && row.manualStartAuthorized === true
+    && row.productionStarted === false
+    && row.canStart === false;
 }

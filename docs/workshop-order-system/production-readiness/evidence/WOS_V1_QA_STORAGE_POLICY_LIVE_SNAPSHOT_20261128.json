@@ -1,0 +1,77 @@
+{
+  "bucket": {
+    "id": "wos-private",
+    "public": false,
+    "fileSizeLimit": 20971520,
+    "allowedMimeTypes": [
+      "image/jpeg",
+      "image/png",
+      "image/webp"
+    ]
+  },
+  "policies": [
+    {
+      "name": "quotation_item_image_insert",
+      "qual": null,
+      "roles": [
+        "authenticated"
+      ],
+      "command": "INSERT",
+      "withCheck": "((bucket_id = 'commercial-quotation-item-images'::text) AND (name ~* '^[0-9a-f]{8}-([0-9a-f]{4}-){3}[0-9a-f]{12}/[0-9a-f]{8}-([0-9a-f]{4}-){3}[0-9a-f]{12}/[0-9a-f]{8}-([0-9a-f]{4}-){3}[0-9a-f]{12}[.](jpg|png|webp)$'::text) AND (EXISTS ( SELECT 1\n   FROM profiles p\n  WHERE ((p.user_id = ( SELECT auth.uid() AS uid)) AND p.is_active AND (p.role = ANY (ARRAY['admin'::text, 'manager'::text, 'operator'::text, 'sales'::text])) AND ((p.org_id)::text = (storage.foldername(objects.name))[1]) AND ((p.id)::text = (storage.foldername(objects.name))[2])))))",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "quotation_item_image_select",
+      "qual": "((bucket_id = 'commercial-quotation-item-images'::text) AND (EXISTS ( SELECT 1\n   FROM profiles p\n  WHERE ((p.user_id = ( SELECT auth.uid() AS uid)) AND p.is_active AND (p.role = ANY (ARRAY['admin'::text, 'manager'::text, 'operator'::text, 'sales'::text])) AND ((p.org_id)::text = (storage.foldername(objects.name))[1]) AND (((p.id)::text = (storage.foldername(objects.name))[2]) OR (p.role = ANY (ARRAY['admin'::text, 'manager'::text])))))))",
+      "roles": [
+        "authenticated"
+      ],
+      "command": "SELECT",
+      "withCheck": null,
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "wos_p7_private_object_insert",
+      "qual": null,
+      "roles": [
+        "authenticated"
+      ],
+      "command": "INSERT",
+      "withCheck": "((bucket_id = 'wos-private'::text) AND ((storage.foldername(name))[1] = 'organizations'::text) AND ((storage.foldername(name))[3] = 'wos'::text) AND ((storage.foldername(name))[4] = 'production-order'::text) AND ((storage.foldername(name))[6] = 'images'::text) AND ((storage.foldername(name))[7] = ANY (ARRAY['film-pattern'::text, 'product'::text, 'customer-approved-sample'::text, 'signed-sample'::text, 'packaging-label'::text, 'defect-risk'::text, 'other'::text])) AND ((storage.foldername(name))[8] = 'versions'::text) AND ((storage.foldername(name))[9] ~ '^V[1-9][0-9]{0,20}$'::text) AND ((storage.foldername(name))[10] ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'::text) AND (storage.filename(name) ~ '^[A-Za-z0-9][A-Za-z0-9._-]{0,199}\\.(jpg|jpeg|png|webp)$'::text) AND (POSITION(('..'::text) IN (storage.filename(name))) = 0) AND (EXISTS ( SELECT 1\n   FROM (profiles p\n     JOIN wos_production_orders po ON ((po.organization_id = p.org_id)))\n  WHERE ((p.user_id = auth.uid()) AND p.is_active AND (p.role = ANY (ARRAY['admin'::text, 'manager'::text, 'sales'::text])) AND ((p.org_id)::text = (storage.foldername(objects.name))[2]) AND ((po.id)::text = (storage.foldername(objects.name))[5]) AND (po.workflow_status = 'DRAFT'::text) AND (po.version_label = (storage.foldername(objects.name))[9]) AND ((p.role <> 'sales'::text) OR ((p.id = po.created_by_profile_id) OR (p.id = po.sales_owner_profile_id)))))))",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "wos_p7_private_object_select",
+      "qual": "((bucket_id = 'wos-private'::text) AND ((storage.foldername(name))[1] = 'organizations'::text) AND ((storage.foldername(name))[3] = 'wos'::text) AND ((storage.foldername(name))[4] = 'production-order'::text) AND (EXISTS ( SELECT 1\n   FROM (profiles p\n     JOIN wos_production_orders po ON ((po.organization_id = p.org_id)))\n  WHERE ((p.user_id = auth.uid()) AND p.is_active AND ((p.org_id)::text = (storage.foldername(objects.name))[2]) AND ((po.id)::text = (storage.foldername(objects.name))[5]) AND ((p.role = ANY (ARRAY['admin'::text, 'manager'::text])) OR ((p.role = 'sales'::text) AND ((p.id = po.created_by_profile_id) OR (p.id = po.sales_owner_profile_id))) OR ((p.role = ANY (ARRAY['operator'::text, 'workshop'::text, 'technician'::text])) AND (po.workflow_status = 'SUBMITTED'::text)))))))",
+      "roles": [
+        "authenticated"
+      ],
+      "command": "SELECT",
+      "withCheck": null,
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "wos_p7_storage_reader_roles",
+      "qual": "((bucket_id IS DISTINCT FROM 'wos-private'::text) OR (EXISTS ( SELECT 1\n   FROM profiles p\n  WHERE ((p.user_id = auth.uid()) AND (p.is_active = true) AND (p.role = ANY (ARRAY['admin'::text, 'manager'::text, 'sales'::text, 'operator'::text, 'workshop'::text, 'technician'::text])) AND ((p.org_id)::text = (storage.foldername(objects.name))[2])))))",
+      "roles": [
+        "authenticated"
+      ],
+      "command": "SELECT",
+      "withCheck": null,
+      "permissive": "RESTRICTIVE"
+    },
+    {
+      "name": "wos_qa_revision_object_insert",
+      "qual": null,
+      "roles": [
+        "authenticated"
+      ],
+      "command": "INSERT",
+      "withCheck": "((bucket_id = 'wos-private'::text) AND ((storage.foldername(name))[1] = 'organizations'::text) AND ((storage.foldername(name))[3] = 'wos'::text) AND ((storage.foldername(name))[4] = 'production-order'::text) AND ((storage.foldername(name))[6] = 'images'::text) AND ((storage.foldername(name))[7] = ANY (ARRAY['film-pattern'::text, 'product'::text, 'customer-approved-sample'::text, 'signed-sample'::text])) AND ((storage.foldername(name))[8] = 'versions'::text) AND ((storage.foldername(name))[9] ~ '^QA-R[1-9][0-9]*$'::text) AND ((storage.foldername(name))[10] ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'::text) AND (storage.filename(name) ~ '^[A-Za-z0-9][A-Za-z0-9._-]{0,199}\\.png$'::text) AND (POSITION(('..'::text) IN (storage.filename(name))) = 0) AND (EXISTS ( SELECT 1\n   FROM (profiles p\n     JOIN wos_production_orders po ON ((po.organization_id = p.org_id)))\n  WHERE ((p.user_id = auth.uid()) AND p.is_active AND (p.role = ANY (ARRAY['admin'::text, 'manager'::text, 'sales'::text])) AND ((p.org_id)::text = (storage.foldername(objects.name))[2]) AND ((po.id)::text = (storage.foldername(objects.name))[5]) AND (po.workflow_status = ANY (ARRAY['WAITING_MATERIAL'::text, 'READINESS_CHECK'::text])) AND (po.version_label = (storage.foldername(objects.name))[9]) AND ((p.role <> 'sales'::text) OR ((p.id = po.created_by_profile_id) OR (p.id = po.sales_owner_profile_id))) AND wos_qa_revision_gate_allows(po.id, po.organization_id, p.id)))))",
+      "permissive": "PERMISSIVE"
+    }
+  ],
+  "capturedAt": "2026-11-28T00:43:04.840727+00:00",
+  "wosFingerprint": "f9759e0644e82ff4264efa42ac54e57c",
+  "nonWosFingerprint": "f64fe08ac8669875ee9f7f3d4bbbc60f"
+}

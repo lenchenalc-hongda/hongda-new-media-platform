@@ -38,7 +38,66 @@ psql_run -q -d "$DB" < \
 } | psql_run -q -d "$DB"
 
 psql_run -q -d "$DB" < \
+  "$ROOT/tests/sql/wos-proof-service-guard-pg17-old-definitions.sql"
+
+{
+  printf "SET wos_v1.qa_project = 'xulmpqaknlwqqculbsek';\n"
+  printf "SET wos_v1.qa_v2_proof_guard_install_authorized = 'yes';\n"
+  cat "$ROOT/docs/workshop-order-system/production-readiness/sql/WOS_V1_QA_UAT_V2_PROOF_GUARD_COMPAT_INSTALL_NOT_AUTHORIZED.sql"
+} | psql_run -q -d "$DB"
+
+psql_run -q -d "$DB" < \
   "$ROOT/tests/sql/wos-v1-hosted-qa-dependencies-pg17-assertions.sql"
+
+{
+  printf "SET wos_v1.qa_project = 'xulmpqaknlwqqculbsek';\n"
+  printf "SET wos_v1.qa_v2_proof_guard_rollback_authorized = 'yes';\n"
+  cat "$ROOT/docs/workshop-order-system/production-readiness/sql/WOS_V1_QA_UAT_V2_PROOF_GUARD_COMPAT_ROLLBACK_NOT_AUTHORIZED.sql"
+} | psql_run -q -d "$DB"
+
+psql_run -q -d "$DB" < \
+  "$ROOT/tests/sql/wos-qa-live-p7-proof-definition-20261128.sql"
+psql_run -q -d "$DB" < "$ROOT/tests/sql/wos-qa-existing-proof-guard-fixture.sql"
+
+{
+  printf "SET wos_v1.qa_project = 'xulmpqaknlwqqculbsek';\n"
+  printf "SET wos_v1.qa_v2_proof_guard_install_authorized = 'yes';\n"
+  cat "$ROOT/docs/workshop-order-system/production-readiness/sql/WOS_V1_QA_UAT_V2_PROOF_GUARD_COMPAT_INSTALL_NOT_AUTHORIZED.sql"
+} | psql_run -q -d "$DB"
+
+live_post_state=$(psql_run -qAt -d "$DB" -c "
+  SELECT encode(sha256(convert_to(
+    pg_get_functiondef(
+      'public.wos_p7_record_trusted_image_proof(uuid,uuid,uuid,text,uuid,text,timestamptz,text)'::regprocedure
+    ),
+    'UTF8'
+  )), 'hex') || ':' || encode(sha256(convert_to(
+    pg_get_functiondef('public.wos_qa_proof_write_guard()'::regprocedure),
+    'UTF8'
+  )), 'hex')
+")
+[[ "$live_post_state" = \
+  '0f1dcb8da6ae26da22150e0bed35e025e9618824d64993d0af5eec0a92cb7216:f0944a6afc0ebc0017849274aa3e88b27f81cab6d5fee3e0aa7b0dc5d964c0db' ]]
+
+{
+  printf "SET wos_v1.qa_project = 'xulmpqaknlwqqculbsek';\n"
+  printf "SET wos_v1.qa_v2_proof_guard_rollback_authorized = 'yes';\n"
+  cat "$ROOT/docs/workshop-order-system/production-readiness/sql/WOS_V1_QA_UAT_V2_PROOF_GUARD_COMPAT_ROLLBACK_NOT_AUTHORIZED.sql"
+} | psql_run -q -d "$DB"
+
+live_restore_state=$(psql_run -qAt -d "$DB" -c "
+  SELECT encode(sha256(convert_to(
+    pg_get_functiondef(
+      'public.wos_p7_record_trusted_image_proof(uuid,uuid,uuid,text,uuid,text,timestamptz,text)'::regprocedure
+    ),
+    'UTF8'
+  )), 'hex') || ':' || encode(sha256(convert_to(
+    pg_get_functiondef('public.wos_qa_proof_write_guard()'::regprocedure),
+    'UTF8'
+  )), 'hex')
+")
+[[ "$live_restore_state" = \
+  '1433bdd5244077b1a34a2e7e58b37e5b665c7b5b59a1605544bb5e6854d87772:9a91e8e6441e0beee2c4fa3d4d410582784d3d310939c99007ac65f06d7a63fd' ]]
 
 before_proofs=$(psql_run -qAt -d "$DB" \
   -c "select count(*) from public.wos_qa_verified_image_proofs")
@@ -74,5 +133,9 @@ after_state=$(psql_run -qAt -d "$DB" -c "
 [[ "$after_state" = 'PASS' ]]
 
 echo 'WOS_V1_HOSTED_QA_DEPENDENCIES_PG17=PASS'
+echo 'WOS_V1_HOSTED_QA_V2_PROOF_GUARD_COMPAT=PASS'
+echo 'WOS_V1_HOSTED_QA_V2_PROOF_GUARD_ROLLBACK=PASS'
+echo 'WOS_V1_HOSTED_QA_V2_PROOF_GUARD_LIVE_UPGRADE=PASS'
+echo 'WOS_V1_HOSTED_QA_V2_PROOF_GUARD_LIVE_ROLLBACK=PASS'
 echo 'WOS_V1_HOSTED_QA_ROLLBACK_PRESERVES_PROOF_HISTORY=PASS'
 echo 'WOS_V1_HOSTED_QA_BROWSER_ACCESS=DENIED'

@@ -1,0 +1,173 @@
+{
+  "schemaVersion": 1,
+  "authorizationId": "WOS-V1-PRODUCTION-M2-QA-UAT-005",
+  "sourceParentHead": "7bbeeeccd58f23f10cf2fa9ec040b8f56bdb924c",
+  "pr": 283,
+  "qaProject": "xulmpqaknlwqqculbsek",
+  "qaOrganizationId": "0ff53d93-2b9e-48b9-8113-a4768c39cdd2",
+  "previewProject": "hongda-wos-p00202-qa-preview",
+  "requestId": "ccd975a6-1516-4833-afd1-902077e70ed8",
+  "orderNumber": "QA-NONPROD-ccd975a6-1516-4833-afd1-902077e70ed8",
+  "orderIdBinding": "CREATE_RESPONSE_ORDER_ID",
+  "createPayload": {
+    "orderNumber": "QA-NONPROD-ccd975a6-1516-4833-afd1-902077e70ed8",
+    "customerId": "11f47ff8-a4de-4a9a-ae00-1f036c682f6f",
+    "customerNameSnapshot": "QA NONPRODUCTION ONLY - WOS CPC TEST CUSTOMER",
+    "projectId": "1ad314a0-f44f-49f3-b099-685ff0c2eaab",
+    "projectNameSnapshot": "QA NONPRODUCTION ONLY - WOS P1 TEST PROJECT",
+    "productName": "QA WOS M2 UAT printed plastic cup",
+    "priority": "HIGH",
+    "isUrgent": false,
+    "requestedQuantity": 1000,
+    "currentBatchQuantity": 1000,
+    "plannedShipDate": "2026-12-05",
+    "splitDelivery": false,
+    "productMaterial": "PP",
+    "surfaceTreatment": "QA synthetic matte",
+    "patternScope": "FULL",
+    "seamTolerance": "1mm",
+    "positionReference": "QA UAT position 15mm",
+    "customerAcceptanceStandard": "QA UAT acceptance",
+    "packagingMethod": "QA UAT carton",
+    "cartonQuantity": 100,
+    "labelMarkingRule": "QA UAT label"
+  },
+  "createPayloadFingerprint": "d9ac15360649430b3787ed24e5d26c7269ba770e22264f03e1c4088d4292ac05",
+  "cpc": {
+    "customerId": "11f47ff8-a4de-4a9a-ae00-1f036c682f6f",
+    "customerName": "QA NONPRODUCTION ONLY - WOS CPC TEST CUSTOMER",
+    "projectId": "1ad314a0-f44f-49f3-b099-685ff0c2eaab",
+    "projectName": "QA NONPRODUCTION ONLY - WOS P1 TEST PROJECT"
+  },
+  "actors": {
+    "office": {
+      "profileId": "f8adf44a-f04e-44b4-9c82-8b96508097bb",
+      "authUserId": "3c0d8866-498a-4e61-a602-28b7a83f75f5",
+      "role": "admin",
+      "keychainService": "WOS_V1_QA_IDENTITY_OFFICE_ADMIN",
+      "jwtPreflight": "REQUIRED"
+    },
+    "workshop": {
+      "profileId": "6068f9b4-0452-4f1c-9952-b667c1ee470e",
+      "authUserId": "a461ef01-e911-44e4-ae49-9b19a50c3c69",
+      "role": "operator",
+      "keychainService": "WOS_V1_QA_IDENTITY_OPERATOR",
+      "jwtPreflight": "REQUIRED"
+    },
+    "independentRelease": {
+      "profileId": "9164ac91-a50c-4023-836c-5c0887b619fb",
+      "authUserId": "b55ccc94-6352-4cad-8600-fad32955d014",
+      "email": "testingadmin@hongda.cn",
+      "role": "manager",
+      "organizationId": "0ff53d93-2b9e-48b9-8113-a4768c39cdd2",
+      "keychainService": "WOS_V1_QA_IDENTITY_INDEPENDENT_MANAGER",
+      "jwtPreflight": "REQUIRED"
+    }
+  },
+  "negativeActors": {
+    "viewer": {
+      "profileId": "a6226d03-bd17-4a1e-a725-3846eeef3f6c",
+      "authUserId": "7ebfb55d-1595-4417-8d14-3baf81d66aaa",
+      "organizationId": "0ff53d93-2b9e-48b9-8113-a4768c39cdd2",
+      "role": "viewer",
+      "keychainService": "WOS_V1_QA_IDENTITY_VIEWER"
+    },
+    "crossOrganizationManager": {
+      "profileId": "86f9acd7-812f-43a2-9dc7-ab773259c62f",
+      "authUserId": "967002b1-1adf-4d0b-98e5-00d1b4544291",
+      "organizationId": "fbdb0989-ae25-4ba4-92f9-3266cc845977",
+      "role": "manager",
+      "keychainService": "WOS_V1_QA_IDENTITY_CROSS_ORG_MANAGER"
+    }
+  },
+  "images": {
+    "v1": [
+      {
+        "category": "PRODUCT",
+        "imageId": "f14aab8c-1eef-4ae2-aa47-027ddfd4262c",
+        "source": "v1/product.png",
+        "sha256": "e0430395e9e874355fcc3b3f5fd6024da062871b950e9c08ca277a470ac8c779"
+      },
+      {
+        "category": "FILM_PATTERN",
+        "imageId": "f011c7ed-3c65-4c7a-8795-4174efc6fbe8",
+        "source": "v1/film-pattern.png",
+        "sha256": "35e9bc213701c0b8bd3d6408a8b1bc8c3810572ef46f13e14984b215ebfc52b5"
+      },
+      {
+        "category": "CUSTOMER_APPROVED_SAMPLE",
+        "imageId": "5f7eceaf-a6a4-4d9c-95a8-148d6d92fdb7",
+        "source": "v1/customer-approved-sample.png",
+        "sha256": "8233fcb096a91103c0065c9460d5f7d7764cd952dd73d4d42f30116c95f9528c"
+      },
+      {
+        "category": "SIGNED_SAMPLE",
+        "imageId": "ef91db73-8658-40c1-8e2d-e44a68b54312",
+        "source": "v1/signed-sample.png",
+        "sha256": "8770be76b5560d2b42d1ef25d7480a8c9a24800fb5c2254c859aa8208961f01d"
+      }
+    ],
+    "v2": [
+      {
+        "category": "PRODUCT",
+        "imageId": "27bf8629-9610-4907-a272-9fa85d33ffa0",
+        "source": "v2/product.png",
+        "sha256": "0a69f87137a41049dd734cbdc720abd2d3dd231167bb90414e0317c110e770be"
+      },
+      {
+        "category": "FILM_PATTERN",
+        "imageId": "ea0c228b-53b4-421f-b502-d3d874d7fa90",
+        "source": "v2/film-pattern.png",
+        "sha256": "cfd723729b799de8467270a39e5d01bd08ca571921c16f534453233e46592216"
+      },
+      {
+        "category": "CUSTOMER_APPROVED_SAMPLE",
+        "imageId": "590a59e8-21f6-44da-a943-a1eda9f42be3",
+        "source": "v2/customer-approved-sample.png",
+        "sha256": "9e3a422754b7ba0ff308b317412c3fdbc89d622d782970d2a7417e9c4ec4986f"
+      },
+      {
+        "category": "SIGNED_SAMPLE",
+        "imageId": "74b6580e-db19-4f49-bb82-1d718a277dc6",
+        "source": "v2/signed-sample.png",
+        "sha256": "a46f585ae3ca6ec04a6fd4ac945a22354a2c975189bddaef645473835a3ec69d"
+      }
+    ]
+  },
+  "environment": {
+    "VERCEL_ENV": "preview",
+    "AUTH_MODE": "supabase",
+    "NEXT_PUBLIC_SUPABASE_URL": "https://xulmpqaknlwqqculbsek.supabase.co",
+    "NEXT_PUBLIC_WOS_V1_QA_PREVIEW": "true",
+    "WOS_V1_QA_APP_ENABLED": "true",
+    "WOS_V1_QA_APP_WRITES_ENABLED": "true",
+    "WOS_V1_QA_UAT_AUTHORIZATION_ID": "WOS-V1-PRODUCTION-M2-QA-UAT-005",
+    "WOS_V1_QA_UAT_M2_ENABLED": "true",
+    "WOS_V1_QA_UAT_M2_WRITES_ENABLED": "true",
+    "NEXT_PUBLIC_WOS_V1_QA_UAT_EXECUTION_ID": "791577cc-23bb-4b8d-93dd-e90b6630abe2",
+    "NEXT_PUBLIC_WOS_V1_QA_UAT_CLOSER_NONCE": "97f12512-70fe-4e9f-b81a-574b48ed7fad"
+  },
+  "edgeEnvironment": {
+    "WOS_SUPABASE_ALLOWED_REFS": "xulmpqaknlwqqculbsek",
+    "WOS_V1_EDGE_ALLOWED_ORIGINS": "https://hongda-wos-p00202-qa-preview-git-0f95f1-lens-projects-3fc386bd.vercel.app",
+    "WOS_V1_EDGE_WRITES_ENABLED_BEFORE_ARM": false,
+    "WOS_V1_EDGE_WRITES_ENABLED_DURING_AUTHORIZED_GATE": true,
+    "WOS_V1_QA_REVISION_IMAGES_ENABLED": true,
+    "verify_jwt": true
+  },
+  "dbCloserEnvironment": {
+    "psqlClientImage": "postgres@sha256:f9cf3e1f0066f0eb0c48707d864f0ac5941e9ff454a072077d97a4d278d07d73"
+  },
+  "limits": {
+    "maxNewOrders": 1,
+    "maxValidCreateCalls": 1,
+    "qaUatGateMaxSeconds": 900,
+    "databaseCloserTargetSeconds": 480,
+    "databaseCloserMaxSeconds": 540,
+    "edgeCloserMaxSeconds": 840,
+    "proofValiditySeconds": 600,
+    "proofRenewal": "FORBIDDEN",
+    "reopenClosedGate": "FORBIDDEN"
+  },
+  "status": "SOURCE_AND_INPUTS_READY_AUTHORIZATION_REQUIRED"
+}

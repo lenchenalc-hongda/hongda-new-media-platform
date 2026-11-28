@@ -1,0 +1,84 @@
+{
+  "generatedAt": "2026-11-27T08:16:50Z",
+  "ownerExecutionRecord": "WOS-V1-PRODUCTION-M2-QA-CLOSER-REHEARSAL-20261127-03",
+  "authorizationId": "WOS-V1-PRODUCTION-M2-QA-UAT-003",
+  "exactHead": "94f1fb9157cc92224da440ff9506e27fdf2b7345",
+  "exactHeadCi": 45959805920,
+  "executionId": "9d375980-42f3-4f94-85cf-f45652d1501b",
+  "edgeProcessNonce": "6aa2c612-0e33-4918-b156-9b1bb3fee1d1",
+  "codeSha256": "a601eb785bac26b90ac80c76e375cb03ec0f50cb8f2691978d5683a5826bd628",
+  "edgeDeployment": {
+    "version": 40,
+    "verifyJwt": true,
+    "bundleSha256": "1719a173a9d4c5b7196c4074cccaa895383f1ecfecd8d3b8093457c2873522e6",
+    "downloadedIndexSha256": "de7a0e9e1afa995d5ca5afe08b2ed91de5c5a17fd3f7e80c183291516726e4fb",
+    "downloadedCoreSha256": "9f242dca3200d694cf4993acffe57208b6106a0817c69fe1d343bcbdde6b57f9"
+  },
+  "dbCloser": {
+    "cronJobId": 3,
+    "openedAt": "2026-11-27T08:04:35.410816Z",
+    "writeDeadlineAt": "2026-11-27T08:12:35.410816Z",
+    "cleanupDeadlineAt": "2026-11-27T08:13:35.410816Z",
+    "closedAt": "2026-11-27T08:12:36.967945Z",
+    "elapsedSeconds": 481.557129,
+    "within540Seconds": true,
+    "within480Target": false,
+    "cronRemovedAutomatically": true
+  },
+  "edgeCloser": {
+    "launchAgentLabel": "com.hongda.wos.qa-edge-closer.9d37598042f34f9485cff45652d1501b",
+    "openedAt": "2026-11-27T08:04:35.410816Z",
+    "writeDeadlineAt": "2026-11-27T08:12:35.410816Z",
+    "cleanupDeadlineAt": "2026-11-27T08:18:35.410816Z",
+    "closedAt": "2026-11-27T08:12:40.741624Z",
+    "elapsedSeconds": 485.330808,
+    "within840Seconds": true,
+    "automaticClose": true,
+    "hostedProbeStatus": 503,
+    "hostedProbeCode": "WOS_V1_QA_EDGE_CLOSED",
+    "launchAgentUnloaded": true,
+    "localReceiptAutoWrite": false,
+    "receiptRecoveredFrom": "DB_CLOSE_RECEIPT_AND_HOSTED_HTTP_503",
+    "reconstructedReceiptSha256": "bf155406bcead6bdd420d16fb0f3003b37ce64ab77e947228ae00284335a7506"
+  },
+  "observedDefects": [
+    {
+      "code": "EDGE_SELF_UNLOAD_BEFORE_RECEIPT_WRITE",
+      "securityImpact": "NONE_GATE_ALREADY_CLOSED_AND_PROBE_VERIFIED",
+      "status": "FIXED_AND_LOCALLY_TESTED",
+      "evidence": [
+        "DETACHED_PARENT_EXIT_FINALIZER_PASS",
+        "LAUNCHCTL_MISSING_FAIL_CLOSED",
+        "LAUNCHCTL_REJECTED_FAIL_CLOSED"
+      ]
+    },
+    {
+      "code": "DB_CRON_REPLAY_UNSCHEDULE_FALSE_WHEN_ALREADY_ABSENT",
+      "securityImpact": "NONE_CRON_ALREADY_ABSENT",
+      "status": "FIXED_AND_PG17_TESTED",
+      "evidence": [
+        "CRON_MISSING_EXCEPTION_BRANCH_EXERCISED",
+        "CLOSE_REPLAY_IDEMPOTENT"
+      ]
+    }
+  ],
+  "recovery": {
+    "rollbackSql": "WOS_V1_QA_CLOSER_ONLY_ROLLBACK_NOT_AUTHORIZED.sql",
+    "rollbackResult": "PASS",
+    "publicApiOwner": "NONE",
+    "controlsRetained": 1,
+    "armReceiptsRetained": 2,
+    "closeReceiptsRetained": 2,
+    "qaCronJobs": 0,
+    "dedicatedEdgeSecretRemoved": true,
+    "keychainEntriesRemoved": true,
+    "hostedRestoredVersion": 41,
+    "hostedRestoredBundleSha256": "21fd1a8d31508662c6c0790e9304b793e864ffb321de5b77bcc8145e91f18450",
+    "hostedVerifyJwt": true,
+    "edgeWritesDisabled": true,
+    "historicalFingerprintsUnchanged": true
+  },
+  "businessWrites": false,
+  "orderCreated": false,
+  "productionWrites": false
+}

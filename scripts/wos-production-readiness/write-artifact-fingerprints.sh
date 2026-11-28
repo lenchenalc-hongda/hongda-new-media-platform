@@ -15,6 +15,30 @@ files=(
   docs/workshop-order-system/production-readiness/sql/WOS_V1_PRODUCTION_RUNTIME_FORWARD_NOT_AUTHORIZED.sql
   docs/workshop-order-system/production-readiness/sql/WOS_V1_PRODUCTION_RUNTIME_ROLLBACK_NOT_AUTHORIZED.sql
   docs/workshop-order-system/production-readiness/sql/WOS_V1_PRODUCTION_RUNTIME_SMOKE_PG17.sql
+  supabase/migrations/20261126090000_wos_v1_production_m2_signoff.sql
+  docs/workshop-order-system/production-readiness/sql/WOS_V1_PRODUCTION_M2_ACTIVATION_NOT_AUTHORIZED.sql
+  docs/workshop-order-system/production-readiness/sql/WOS_V1_PRODUCTION_M2_DEACTIVATE_NOT_AUTHORIZED.sql
+  docs/workshop-order-system/production-readiness/sql/WOS_V1_PRODUCTION_M2_ROLLBACK_NOT_AUTHORIZED.sql
+  docs/workshop-order-system/production-readiness/sql/WOS_V1_QA_UAT_M2_INSTALL_NOT_AUTHORIZED.sql
+  docs/workshop-order-system/production-readiness/sql/WOS_V1_QA_UAT_M2_ACTIVATE_NOT_AUTHORIZED.sql
+  docs/workshop-order-system/production-readiness/sql/WOS_V1_QA_UAT_M2_DEACTIVATE_NOT_AUTHORIZED.sql
+  docs/workshop-order-system/production-readiness/sql/WOS_V1_QA_UAT_M2_ROLLBACK_NOT_AUTHORIZED.sql
+  docs/workshop-order-system/production-readiness/sql/WOS_V1_QA_UAT_APP_ACTIVATE_NOT_AUTHORIZED.sql
+  docs/workshop-order-system/production-readiness/sql/WOS_V1_QA_UAT_APP_DEACTIVATE_NOT_AUTHORIZED.sql
+  docs/workshop-order-system/production-readiness/sql/WOS_V1_QA_UAT_STORAGE_COMPAT_INSTALL_NOT_AUTHORIZED.sql
+  docs/workshop-order-system/production-readiness/sql/WOS_V1_QA_UAT_STORAGE_COMPAT_ROLLBACK_NOT_AUTHORIZED.sql
+  docs/workshop-order-system/production-readiness/sql/WOS_V1_QA_UAT_V2_PROOF_GUARD_COMPAT_INSTALL_NOT_AUTHORIZED.sql
+  docs/workshop-order-system/production-readiness/sql/WOS_V1_QA_UAT_V2_PROOF_GUARD_COMPAT_ROLLBACK_NOT_AUTHORIZED.sql
+  docs/workshop-order-system/production-readiness/sql/WOS_V1_QA_UAT_CURRENT_ORDER_PROOF_COMPAT_INSTALL_NOT_AUTHORIZED.sql
+  docs/workshop-order-system/production-readiness/sql/WOS_V1_QA_UAT_CURRENT_ORDER_PROOF_COMPAT_ROLLBACK_NOT_AUTHORIZED.sql
+  docs/workshop-order-system/production-readiness/sql/WOS_V1_QA_UAT_V2_IMAGE_REGISTER_COMPAT_INSTALL_NOT_AUTHORIZED.sql
+  docs/workshop-order-system/production-readiness/sql/WOS_V1_QA_UAT_V2_IMAGE_REGISTER_COMPAT_ROLLBACK_NOT_AUTHORIZED.sql
+  docs/workshop-order-system/production-readiness/sql/WOS_V1_QA_UAT_VERIFIED_PROOF_MIRROR_INSTALL_NOT_AUTHORIZED.sql
+  docs/workshop-order-system/production-readiness/sql/WOS_V1_QA_UAT_VERIFIED_PROOF_MIRROR_ROLLBACK_NOT_AUTHORIZED.sql
+  docs/workshop-order-system/production-readiness/sql/WOS_V1_QA_CLOSER_ONLY_INSTALL_NOT_AUTHORIZED.sql
+  docs/workshop-order-system/production-readiness/sql/WOS_V1_QA_CLOSER_ONLY_ROLLBACK_NOT_AUTHORIZED.sql
+  docs/workshop-order-system/production-readiness/sql/WOS_V1_PRODUCTION_P7_INSTALL.sql
+  docs/workshop-order-system/production-readiness/sql/WOS_V1_PRODUCTION_P7_SERVICE_PROOF_SQL.sql
   docs/workshop-order-system/production-readiness/sql/WOS_V1_PRODUCTION_RPC_ACTIVATION_TEMPLATE_NOT_AUTHORIZED.sql
   docs/workshop-order-system/production-readiness/sql/WOS_V1_PRODUCTION_RPC_DEACTIVATE_NOT_AUTHORIZED.sql
   docs/workshop-order-system/production-readiness/sql/WOS_V1_PRODUCTION_FOUNDATION_CONTAINMENT_NOT_AUTHORIZED.sql
@@ -24,9 +48,14 @@ files=(
   docs/workshop-order-system/production-readiness/sql/WOS_V1_HOSTED_QA_DEPENDENCIES_ROLLBACK_NOT_AUTHORIZED.sql
   src/app/api/workshop-orders/v1/route.ts
   src/app/api/workshop-orders/v1-qa/route.ts
+  src/app/api/workshop-orders/v1-qa/m2/route.ts
+  src/app/api/workshop-orders/v1/m2/route.ts
   src/app/workshop-orders/inbox/page.tsx
   src/app/workshop-orders/production/new/page.tsx
+  src/components/layout/AppLayout.tsx
+  src/components/layout/Sidebar.tsx
   src/components/workshop-orders/ProductionOfficeOrders.tsx
+  src/components/workshop-orders/ProductionM2Workbench.tsx
   src/components/workshop-orders/ProductionOfficeWorkflow.tsx
   src/components/workshop-orders/ProductionOrderForm.tsx
   src/components/workshop-orders/ProductionWorkshopInbox.tsx
@@ -34,6 +63,14 @@ files=(
   src/lib/workshop-orders/production-app-contract.ts
   src/lib/workshop-orders/production-app-handler.ts
   src/lib/workshop-orders/production-app-server.ts
+  src/lib/workshop-orders/production-m2-client.ts
+  src/lib/workshop-orders/production-m2-handler.ts
+  src/lib/workshop-orders/bounded-request-body.ts
+  src/lib/workshop-orders/p2-m2-contract.ts
+  scripts/wos-production-readiness/wos-v1-qa-uat-db-closer.mjs
+  scripts/wos-production-readiness/wos-v1-qa-uat-edge-closer.mjs
+  scripts/wos-production-readiness/wos-v1-qa-business-uat.mjs
+  tsconfig.json
   supabase/functions/_shared/wos-png-integrity.ts
   supabase/functions/wos-p7-verify-image/png.ts
   supabase/functions/wos-v1-verify-image/core.ts
@@ -41,8 +78,38 @@ files=(
   tests/unit/workshop-order-production-app-contract.test.ts
   tests/unit/workshop-order-production-app-http.test.ts
   tests/unit/workshop-order-production-edge-core.test.ts
+  tests/unit/workshop-order-production-m2-contract.test.ts
+  tests/unit/wos-v1-qa-closers.test.ts
+  tests/unit/wos-v1-qa-storage-compat.test.ts
+  tests/unit/wos-v1-qa-uat017-packaging.test.ts
+  tests/integration/wos-v1-qa-edge-entry-http.deno.test.ts
+  tests/integration/wos-v1-qa-edge-entry-http.test.ts
+  tests/live/wos-v1-qa-edge-closer-process-kill.mjs
+  tests/live/wos-v1-qa-edge-finalizer.mjs
+  tests/live/wos-v1-qa-edge-finalizer.test.ts
+  tests/live/wos-v1-qa-edge-probe-envelope.test.ts
+  tests/sql/run-wos-v1-production-m2-pg17.sh
+  tests/sql/run-wos-v1-production-m2-concurrency-pg17.sh
+  tests/sql/run-wos-v1-production-m2-qa-uat-pg17.sh
+  tests/sql/run-wos-v1-qa-v2-image-register-pg17.sh
+  tests/sql/run-wos-v1-qa-proof-mirror-pg17.sh
+  tests/sql/run-wos-v1-qa-current-order-proof-pg17.sh
+  tests/sql/wos-v1-live-proof-function-postguard-20261128.sql
+  tests/sql/run-wos-v1-production-proof-lifecycle-pg17.sh
+  tests/sql/wos-v1-production-proof-lifecycle-pg17.sql
+  tests/sql/wos-v1-production-proof-renewal-test-prerequisites.sql
+  tests/sql/run-wos-v1-qa-closer-only-pg17.sh
+  tests/sql/wos-qa-existing-v2-image-register-fixture.sql
+  tests/sql/wos-v1-production-m2-pg17-fixture.sql
+  tests/sql/wos-v1-production-m2-pg17-assertions.sql
+  tests/sql/wos-v1-production-m2-qa-uat-closed-gate-assertion.sql
+  tests/sql/wos-v1-production-m2-qa-uat-pg17-assertions.sql
+  tests/sql/wos-v1-rc04-storage-api-smoke.mjs
+  tests/sql/wos-v1-uat006-continuity-pg17.sql
+  tests/sql/wos-v1-uat006-resume-pg17.sql
   tests/sql/wos-v1-hosted-qa-dependencies-pg17-assertions.sql
   tests/sql/wos-v1-hosted-qa-dependencies-pg17-suite.sh
+  tests/sql/wos-qa-live-p7-proof-definition-20261128.sql
   tests/sql/wos-v1-hosted-qa-existing-prerequisites.sql
   tests/sql/wos_production_bootstrap_fixture.sql
   tests/sql/wos_production_app_schema_signatures.sql
@@ -78,12 +145,103 @@ files=(
   docs/workshop-order-system/production-readiness/V1_APP_01_IMPLEMENTATION_REPORT.md
   docs/workshop-order-system/production-readiness/V1_APP_01_ROUTE_AND_EDGE_CONFIG.md
   docs/workshop-order-system/production-readiness/WOS_V1_INT_01_HOSTED_QA_READINESS.md
+  docs/workshop-order-system/production-readiness/WOS_V1_PRODUCTION_BUSINESS_CONTRACT_AUDIT_20261126.md
+  docs/workshop-order-system/production-readiness/WOS_V1_BUSINESS_UAT_CHECKLISTS_20261126.md
+  docs/workshop-order-system/production-readiness/WOS_V1_GO_NO_GO_20261126.md
+  docs/workshop-order-system/production-readiness/WOS_V1_PRODUCTION_RELEASE_PACKAGE_20261128.md
+  docs/workshop-order-system/production-readiness/evidence/WOS_V1_PRODUCTION_PROOF_LIFECYCLE_EVIDENCE_20261128.md
+  docs/workshop-order-system/production-readiness/evidence/WOS_V1_PRODUCTION_PROOF_LIFECYCLE_INDEPENDENT_REVIEW_20261128.md
+  docs/workshop-order-system/production-readiness/WOS_V1_PRODUCTION_M2_QA_UAT_OWNER_GATE_20261126.md
+  docs/workshop-order-system/production-readiness/WOS_V1_PRODUCTION_M2_QA_CLOSER_REHEARSAL_OWNER_GATE_20261127.md
+  docs/workshop-order-system/production-readiness/WOS_V1_PRODUCTION_M2_QA_CLOSER_REHEARSAL_OWNER_GATE_20261127_R2.md
+  docs/workshop-order-system/production-readiness/WOS_V1_PRODUCTION_M2_QA_BUSINESS_UAT_OWNER_GATE_20261127.md
+  docs/workshop-order-system/production-readiness/WOS_V1_QA_UAT_CLOSER_IMPLEMENTATION_20261126.md
+  docs/workshop-order-system/production-readiness/evidence/WOS_V1_PRODUCTION_READONLY_20261126.json
+  docs/workshop-order-system/production-readiness/evidence/WOS_V1_PRODUCTION_M2_QA_UAT_PREFLIGHT_20261126.json
+  docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_UAT_CLOSER_LOCAL_EVIDENCE_20261126.json
+  docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_CLOSER_ONLY_LOCAL_EVIDENCE_20261127.json
+  docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_CLOSER_INDEPENDENT_REVIEW_20261127.md
+  docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_CLOSER_REMOTE_FAIL_CLOSED_20261127.json
+  docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_CLOSER_REMOTE_R2_EVIDENCE_20261127.json
+  docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_UAT_APP_ACTIVATION_INDEPENDENT_REVIEW_20261127.md
+  docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_UAT_006_CLOSER_ONLY_PG17_FINAL_20261127.log
+  docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_UAT_006_PG17_STORAGE_FINAL_20261127.log
+  docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_UAT_006_SOURCE_REGRESSION_20261127.json
+  docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_UAT_006_FAIL_CLOSED_20261128.md
+  docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_UAT_007_FAIL_CLOSED_20261128.md
+  docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_UAT_007_IDENTITY_REFRESH_20261128.log
+  docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_UAT_007_PG17_STORAGE_FINAL_20261128.log
+  docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_UAT_007_CLOSER_ONLY_PG17_FINAL_20261128.log
+  docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_UAT_007_SOURCE_REGRESSION_20261128.json
+  docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_UAT_007_INDEPENDENT_REVIEW_20261128.md
+  docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_UAT_008_FAIL_CLOSED_20261128.md
+  docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_UAT_008_IDENTITY_REFRESH_20261128.log
+  docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_UAT_008_PG17_STORAGE_FINAL_20261128.log
+  docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_UAT_008_CLOSER_ONLY_PG17_FINAL_20261128.log
+  docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_UAT_008_BUILD_FINAL_20261128.log
+  docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_UAT_008_SOURCE_REGRESSION_20261128.json
+  docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_UAT_008_INDEPENDENT_REVIEW_20261128.md
+  docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_UAT_009_PG17_STORAGE_FINAL_20261128.log
+  docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_UAT_009_CLOSER_ONLY_PG17_FINAL_20261128.log
+  docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_UAT_009_BUILD_FINAL_20261128.log
+  docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_UAT_009_SOURCE_REGRESSION_20261128.json
+  docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_UAT_009_INDEPENDENT_REVIEW_20261128.md
+  docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_UAT_009_FAIL_CLOSED_20261128.md
+  docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_UAT_009_RECOVERY_VERIFY_20261128.json
+  docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_UAT_010_SOURCE_REGRESSION_20261128.json
+  docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_UAT_010_INDEPENDENT_REVIEW_20261128.md
+  docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_UAT_010_PG17_STORAGE_FINAL_20261128.log
+  docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_UAT_010_CLOSER_ONLY_PG17_FINAL_20261128.log
+  docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_UAT_010_BUILD_FINAL_20261128.log
+  docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_UAT_011_SOURCE_REGRESSION_20261128.json
+  docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_UAT_011_INDEPENDENT_REVIEW_20261128.md
+  docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_UAT_011_OPEN_CLOSED_HTTP_PROBE_20261128.log
+  docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_UAT_011_PREFLIGHT_20261128.json
+  docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_UAT_011_HISTORY_VERIFY_20261128.json
+  docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_UAT_011_FAIL_CLOSED_20261128.md
+  docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_UAT_013_FAIL_CLOSED_20261128.md
+  docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_UAT_014_FAIL_CLOSED_20261128.md
+  docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_UAT_012_FAIL_CLOSED_20261128.md
+  docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_UAT_012_FINAL_INDEPENDENT_REVIEW_20261128.md
+  docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_UAT_013_FINAL_INDEPENDENT_REVIEW_20261128.md
+  docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_UAT_014_TECHNICAL_REVIEW_20261128.md
+  docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_UAT_014_FINAL_INDEPENDENT_REVIEW_20261128.md
+  docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_UAT_015_TECHNICAL_REVIEW_20261128.md
+  docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_UAT_015_FINAL_INDEPENDENT_REVIEW_20261128.md
+  docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_UAT_016_TECHNICAL_REVIEW_20261128.md
+  docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_UAT_016_FINAL_INDEPENDENT_REVIEW_20261128.md
+  docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_UAT_016_FAIL_CLOSED_20261128.md
+  docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_UAT_017_TECHNICAL_REVIEW_20261128.md
+  docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_UAT_017_FINAL_INDEPENDENT_REVIEW_20261128.md
+  docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_STORAGE_POLICY_LIVE_SNAPSHOT_20261128.json
+  docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_EDGE_V34_PRESERVATION_20261127.json
+  docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_EDGE_V36_PRESERVATION_20261127.json
+  docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_EDGE_V34_SOURCE_20261127/index.ts
+  docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_EDGE_V34_SOURCE_20261127/core.ts
+  docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_EDGE_V34_SOURCE_20261127/wos-png-integrity.ts
+  docs/workshop-order-system/qa-fixture/production-m2-uat-20261126/inputs.json
+  docs/workshop-order-system/qa-fixture/production-m2-uat-20261126/inputs-uat009.json
+  docs/workshop-order-system/qa-fixture/production-m2-uat-20261126/inputs-uat010.json
+  docs/workshop-order-system/qa-fixture/production-m2-uat-20261126/inputs-uat011.json
+  docs/workshop-order-system/qa-fixture/production-m2-uat-20261126/inputs-uat013.json
+  docs/workshop-order-system/qa-fixture/production-m2-uat-20261126/inputs-uat014.json
+  docs/workshop-order-system/qa-fixture/production-m2-uat-20261126/inputs-uat015.json
+  docs/workshop-order-system/qa-fixture/production-m2-uat-20261126/inputs-uat017.json
+  docs/workshop-order-system/qa-fixture/WOS_V1_RC05_POST_RECOVERY_RUNTIME_REACTIVATE_NOT_AUTHORIZED.sql
+  docs/workshop-order-system/qa-fixture/production-m2-uat-20261126/v1/product.png
+  docs/workshop-order-system/qa-fixture/production-m2-uat-20261126/v1/film-pattern.png
+  docs/workshop-order-system/qa-fixture/production-m2-uat-20261126/v1/customer-approved-sample.png
+  docs/workshop-order-system/qa-fixture/production-m2-uat-20261126/v1/signed-sample.png
+  docs/workshop-order-system/qa-fixture/production-m2-uat-20261126/v2/product.png
+  docs/workshop-order-system/qa-fixture/production-m2-uat-20261126/v2/film-pattern.png
+  docs/workshop-order-system/qa-fixture/production-m2-uat-20261126/v2/customer-approved-sample.png
+  docs/workshop-order-system/qa-fixture/production-m2-uat-20261126/v2/signed-sample.png
   scripts/wos-production-readiness/write-artifact-fingerprints.sh
 )
 
 {
   echo "# WOS V1 Production Readiness Artifact Fingerprints"
-  echo "# Generated: 2026-11-23"
+  echo "# Generated: $(date -u +%Y-%m-%d)"
   echo "# Format: SHA256  GIT_BLOB_SHA1  PATH"
   echo
   for file in "${files[@]}"; do

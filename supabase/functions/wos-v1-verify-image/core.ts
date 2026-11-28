@@ -141,6 +141,9 @@ export function evaluateWosV1ImageAccess(input: WosV1ImageAccessInput): {
   }
   if (order.workflow_status === 'WAITING_MATERIAL'
     || order.workflow_status === 'READINESS_CHECK') {
+    if (/^V[2-9][0-9]{0,20}$/.test(order.version_label)) {
+      return { allowed: true, code: 'ALLOWED' };
+    }
     if (input.qaRevisionAuthorized !== true) {
       return { allowed: false, code: 'STATUS_DENIED' };
     }
@@ -149,6 +152,176 @@ export function evaluateWosV1ImageAccess(input: WosV1ImageAccessInput): {
       : { allowed: false, code: 'VERSION_INVALID' };
   }
   return { allowed: false, code: 'STATUS_DENIED' };
+}
+
+// The platform verifies the caller's legacy JWT with verify_jwt=true.
+// Supabase's sb_secret_* Admin key is distinct and must never serve as a JWT.
+export function selectWosV1AdminApiKey(
+  secretKeysJson: string | undefined,
+  legacyServiceRoleJwt: string | undefined,
+): string {
+  try {
+    const keys = JSON.parse(secretKeysJson || '{}');
+    if (typeof keys.default === 'string' && keys.default) return keys.default;
+  } catch {
+    // Legacy-only project fallback.
+  }
+  return legacyServiceRoleJwt || '';
+}
+
+export function wosV1EdgeWritesEnabled(value: string | undefined): boolean {
+  return value === 'true';
+}
+
+function decodeLegacyServiceRoleJwtPayload(
+  jwt: string,
+): Record<string, unknown> | null {
+  const parts = jwt.split('.');
+  if (parts.length !== 3) return null;
+  try {
+    const base64 = parts[1]
+      .replace(/-/g, '+')
+      .replace(/_/g, '/')
+      .padEnd(Math.ceil(parts[1].length / 4) * 4, '=');
+    const bytes = Uint8Array.from(
+      atob(base64),
+      character => character.charCodeAt(0),
+    );
+    const value = JSON.parse(new TextDecoder().decode(bytes));
+    return value && typeof value === 'object' && !Array.isArray(value)
+      ? value as Record<string, unknown>
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+export function matchesLegacyQaCloserJwt(
+  authorization: string | null,
+  legacyServiceRoleJwt: string | undefined,
+): boolean {
+  if (typeof legacyServiceRoleJwt !== 'string'
+    || authorization !== (legacyServiceRoleJwt
+      ? `Bearer ${legacyServiceRoleJwt}`
+      : '')
+    || !/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(
+      legacyServiceRoleJwt,
+    )) {
+    return false;
+  }
+  // Exact configured-env equality is the trust anchor. The claims are an
+  // additional QA-project and role guard; platform verify_jwt remains required.
+  const claims = decodeLegacyServiceRoleJwtPayload(legacyServiceRoleJwt);
+  return claims?.role === 'service_role'
+    && claims?.ref === 'xulmpqaknlwqqculbsek';
+}
+
+export type WosV1QaCloserProbeAuthResult =
+  | { allowed: true }
+  | {
+      allowed: false;
+      code: string;
+      status: 503;
+      data?: Record<string, unknown>;
+    };
+
+export function evaluateWosV1QaCloserProbeAuth(input: {
+  expectedAuthorizationId: string;
+  authorizationId: string | null;
+  executionId: string | null;
+  processNonce: string | null;
+  authorization: string | null;
+  adminKey: string;
+  dedicatedCloserJwt: string | undefined;
+}): WosV1QaCloserProbeAuthResult {
+  const uuidPattern =
+    /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
+  const authorizationPattern =
+    /^WOS-V1-PRODUCTION-M2-QA-UAT-[0-9]{3}$/;
+  if (!authorizationPattern.test(input.expectedAuthorizationId)
+    || input.authorizationId !== input.expectedAuthorizationId
+    || !uuidPattern.test(input.executionId || '')
+    || !uuidPattern.test(input.processNonce || '')) {
+    return {
+      allowed: false,
+      code: 'WOS_V1_QA_EDGE_AUTHORIZATION_REQUIRED',
+      status: 503,
+    };
+  }
+  if (!input.adminKey) {
+    return {
+      allowed: false,
+      code: 'WOS_V1_EDGE_SERVER_CONFIG_INCOMPLETE',
+      status: 503,
+    };
+  }
+  if (!input.dedicatedCloserJwt) {
+    return {
+      allowed: false,
+      code: 'WOS_V1_QA_EDGE_CLOSER_CREDENTIAL_MISSING',
+      status: 503,
+    };
+  }
+  if (!matchesLegacyQaCloserJwt(
+    input.authorization,
+    input.dedicatedCloserJwt,
+  )) {
+    return {
+      allowed: false,
+      code: 'WOS_V1_QA_EDGE_CLOSER_CREDENTIAL_MISMATCH',
+      status: 503,
+    };
+  }
+  return { allowed: true };
+}
+
+export function evaluateWosV1QaCloserProbeGate(input: {
+  error: boolean;
+  executionId: string;
+  processNonce: string;
+  control:
+    | {
+        status?: unknown;
+        executionId?: unknown;
+        edgeProcessNonce?: unknown;
+        closedAt?: unknown;
+      }
+    | null;
+}): WosV1QaCloserProbeAuthResult {
+  if (input.error) {
+    return {
+      allowed: false,
+      code: 'WOS_V1_QA_EDGE_GATE_UNAVAILABLE',
+      status: 503,
+    };
+  }
+  const status = String(input.control?.status || '');
+  const responseNonce = input.control?.edgeProcessNonce;
+  if (String(input.control?.executionId || '') !== input.executionId
+    || status === 'DENIED'
+    || (responseNonce != null
+      && String(responseNonce) !== input.processNonce)
+    || (status === 'OPEN'
+      && String(responseNonce || '') !== input.processNonce)) {
+    return {
+      allowed: false,
+      code: 'WOS_V1_QA_EDGE_PROBE_SCOPE_DENIED',
+      status: 503,
+    };
+  }
+  if (status !== 'OPEN') {
+    return {
+      allowed: false,
+      code: 'WOS_V1_QA_EDGE_CLOSED',
+      status: 503,
+      data: {
+        gateStatus: status,
+        executionId: input.executionId,
+        closedAt: input.control?.closedAt ?? null,
+      },
+    };
+  }
+  return { allowed: true };
 }
 
 export function parseAllowedSupabaseRefs(value: string | undefined): readonly string[] {
@@ -229,8 +402,9 @@ export function snapshotMatchesUpload(
   snapshot: WosV1ObjectSnapshot,
   userId: string,
   fileSize: number,
+  requireOwner = true,
 ): boolean {
-  return snapshot.ownerId === userId
+  return (!requireOwner || snapshot.ownerId === userId)
     && snapshot.mimeType === 'image/png'
     && uuid.test(snapshot.id)
     && typeof snapshot.version === 'string'
@@ -268,9 +442,14 @@ export function isWosV1ProofResult(
 ): boolean {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
   const row = value as Record<string, unknown>;
-  return ['VERIFIED', 'REPLAYED'].includes(String(row.status))
+  const expectedCategory = input.category.toUpperCase().replaceAll('-', '_');
+  const actualCategory = String(row.category || '')
+    .toUpperCase()
+    .replaceAll('-', '_');
+  return ['VERIFIED', 'REPLAYED', 'RENEWED', 'UNCHANGED'].includes(
+    String(row.status),
+  )
     && row.imageId === input.imageId
-    && row.category === input.category.toLowerCase().replaceAll('_', '-')
-      .replaceAll('-', '_')
+    && actualCategory === expectedCategory
     && row.sha256 === input.sha256;
 }

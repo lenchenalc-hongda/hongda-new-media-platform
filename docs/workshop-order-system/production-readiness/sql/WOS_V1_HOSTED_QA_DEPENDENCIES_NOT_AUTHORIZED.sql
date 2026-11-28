@@ -177,6 +177,10 @@ BEGIN
         AND v_order.version_label ~ '^V[1-9][0-9]{0,20}$'
       )
       OR (
+        v_order.workflow_status = 'NEEDS_INFORMATION'
+        AND v_order.version_label ~ '^V[2-9][0-9]{0,20}$'
+      )
+      OR (
         v_order.workflow_status IN ('WAITING_MATERIAL', 'READINESS_CHECK')
         AND v_order.version_label ~ '^QA-R[1-9][0-9]*$'
       )
@@ -187,7 +191,7 @@ BEGIN
   THEN
     RAISE EXCEPTION 'PROOF_ORDER_NOT_EDITABLE' USING ERRCODE = '42501';
   END IF;
-  IF v_order.workflow_status <> 'DRAFT'
+  IF v_order.workflow_status NOT IN ('DRAFT', 'NEEDS_INFORMATION')
     AND NOT (
       v_order.workflow_status IN ('WAITING_MATERIAL', 'READINESS_CHECK')
       AND v_order.version_label ~ '^QA-R[1-9][0-9]*$'
@@ -441,6 +445,10 @@ BEGIN
         AND v_order.version_label ~ '^V[1-9][0-9]{0,20}$'
       )
       OR (
+        v_order.workflow_status = 'NEEDS_INFORMATION'
+        AND v_order.version_label ~ '^V[2-9][0-9]{0,20}$'
+      )
+      OR (
         v_order.workflow_status IN ('WAITING_MATERIAL', 'READINESS_CHECK')
         AND v_order.version_label ~ '^QA-R[1-9][0-9]*$'
       )
@@ -451,7 +459,7 @@ BEGIN
   THEN
     RAISE EXCEPTION 'RENEWAL_ORDER_NOT_EDITABLE' USING ERRCODE = '42501';
   END IF;
-  IF v_order.workflow_status <> 'DRAFT'
+  IF v_order.workflow_status NOT IN ('DRAFT', 'NEEDS_INFORMATION')
     AND NOT (
       v_order.workflow_status IN ('WAITING_MATERIAL', 'READINESS_CHECK')
       AND public.wos_qa_revision_gate_allows(

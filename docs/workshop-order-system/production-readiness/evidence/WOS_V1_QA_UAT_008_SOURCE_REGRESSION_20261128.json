@@ -1,0 +1,58 @@
+{
+  "schemaVersion": 1,
+  "capturedAt": "2026-11-28T02:51:27Z",
+  "status": "SOURCE_REGRESSION_PASS",
+  "validation": {
+    "wosSuite": "PASS",
+    "typecheck": "PASS",
+    "build": "PASS",
+    "buildLogSha256": "26a4074822eb164fdab990d08532b3394bd725280d4efc0c322ee24cbdb1ea8b",
+    "pg17StorageAndBusiness": "PASS",
+    "pg17StorageAndBusinessLogSha256": "ffae8e0f5a059f607c2b0c457c1676164f26bbb65203193b15c3699afa4afb3a",
+    "closerOnlyPg17": "PASS",
+    "closerOnlyPg17LogSha256": "afa798e66abe19ffde4f664de82f7a3a6ea605b95e060668566beb2c81f3b2ac",
+    "storageLivePolicyFingerprints": "PASS",
+    "independentReview": "PASS",
+    "independentReviewP0": 0,
+    "independentReviewP1": 0,
+    "independentReviewP2": 0
+  },
+  "storageLivePolicyProof": {
+    "snapshotPath": "docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_STORAGE_POLICY_LIVE_SNAPSHOT_20261128.json",
+    "snapshotSha256": "b111ad2ee9af0e97b4338d91182bfd6427fc47fa7014e56c5758dce494c82805",
+    "wosPolicyMd5": "f9759e0644e82ff4264efa42ac54e57c",
+    "nonWosPolicyMd5": "f64fe08ac8669875ee9f7f3d4bbbc60f",
+    "pg17Recomputed": true
+  },
+  "uat008": {
+    "mode": "RESUME_EXISTING_ORDER",
+    "authorizationId": "WOS-V1-PRODUCTION-M2-QA-UAT-008",
+    "executionId": "f07cec5d-48f6-4f3f-9cc4-54bd013263f0",
+    "edgeProcessNonce": "167df9ca-b5de-48b5-957a-160595b3905b",
+    "orderId": "3ade0180-e6bf-49da-b80b-fd00cd1948a8",
+    "expectedStartVersion": 5,
+    "expectedStartLabel": "V2",
+    "expectedStartStatus": "NEEDS_INFORMATION",
+    "maxNewOrders": 0,
+    "maxCreateCalls": 0,
+    "inputsSha256": "4a6ee564e8c9e85f330b9056f973c91849b8323fcf525894dac1b52c0ec0fff8"
+  },
+  "uat007HistoricalEvidence": {
+    "failClosedRecordSha256": "4e88a74ee74446878986883643f1d8cc793bc36b424b19eb27c2ffdd5a30e1ec",
+    "identityRefreshLogSha256": "5d9139100be03428a4f226cf8c071ee3309a5417361e1f1188e4a14f1af5e76e",
+    "consumed": true,
+    "businessWrites": false
+  },
+  "edgeCredentialReadiness": {
+    "dedicatedServiceRoleSecretConfigured": true,
+    "verifyJwt": true,
+    "writesEnabled": false,
+    "readonlyVerifyEnabled": false
+  },
+  "remoteState": {
+    "uat008SqlInstalled": false,
+    "uat008EdgeDeployed": false,
+    "uat008ArmPerformed": false,
+    "uat008BusinessWrites": false
+  }
+}
