@@ -80,6 +80,7 @@ files=(
   tests/unit/workshop-order-production-app-http.test.ts
   tests/unit/workshop-order-production-edge-core.test.ts
   tests/unit/workshop-order-production-m2-contract.test.ts
+  tests/unit/wos-v1-production-operator-readiness.test.ts
   tests/unit/wos-v1-qa-closers.test.ts
   tests/unit/wos-v1-qa-storage-compat.test.ts
   tests/unit/wos-v1-qa-uat017-packaging.test.ts
