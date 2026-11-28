@@ -71,12 +71,13 @@ files=(
   tests/unit/workshop-order-production-m2-contract.test.ts
   tests/unit/wos-v1-qa-closers.test.ts
   tests/unit/wos-v1-qa-storage-compat.test.ts
-  tests/unit/wos-v1-qa-uat010-packaging.test.ts
+  tests/unit/wos-v1-qa-uat011-packaging.test.ts
   tests/integration/wos-v1-qa-edge-entry-http.deno.test.ts
   tests/integration/wos-v1-qa-edge-entry-http.test.ts
   tests/live/wos-v1-qa-edge-closer-process-kill.mjs
   tests/live/wos-v1-qa-edge-finalizer.mjs
   tests/live/wos-v1-qa-edge-finalizer.test.ts
+  tests/live/wos-v1-qa-edge-probe-envelope.test.ts
   tests/sql/run-wos-v1-production-m2-pg17.sh
   tests/sql/run-wos-v1-production-m2-concurrency-pg17.sh
   tests/sql/run-wos-v1-production-m2-qa-uat-pg17.sh
@@ -170,6 +171,11 @@ files=(
   docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_UAT_010_PG17_STORAGE_FINAL_20261128.log
   docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_UAT_010_CLOSER_ONLY_PG17_FINAL_20261128.log
   docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_UAT_010_BUILD_FINAL_20261128.log
+  docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_UAT_011_SOURCE_REGRESSION_20261128.json
+  docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_UAT_011_INDEPENDENT_REVIEW_20261128.md
+  docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_UAT_011_OPEN_CLOSED_HTTP_PROBE_20261128.log
+  docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_UAT_011_PREFLIGHT_20261128.json
+  docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_UAT_011_HISTORY_VERIFY_20261128.json
   docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_STORAGE_POLICY_LIVE_SNAPSHOT_20261128.json
   docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_EDGE_V34_PRESERVATION_20261127.json
   docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_EDGE_V36_PRESERVATION_20261127.json
@@ -179,6 +185,7 @@ files=(
   docs/workshop-order-system/qa-fixture/production-m2-uat-20261126/inputs.json
   docs/workshop-order-system/qa-fixture/production-m2-uat-20261126/inputs-uat009.json
   docs/workshop-order-system/qa-fixture/production-m2-uat-20261126/inputs-uat010.json
+  docs/workshop-order-system/qa-fixture/production-m2-uat-20261126/inputs-uat011.json
   docs/workshop-order-system/qa-fixture/production-m2-uat-20261126/v1/product.png
   docs/workshop-order-system/qa-fixture/production-m2-uat-20261126/v1/film-pattern.png
   docs/workshop-order-system/qa-fixture/production-m2-uat-20261126/v1/customer-approved-sample.png

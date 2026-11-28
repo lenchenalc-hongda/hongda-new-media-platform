@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 
 const input = JSON.parse(readFileSync(
   'docs/workshop-order-system/qa-fixture/'
-    + 'production-m2-uat-20261126/inputs-uat010.json',
+    + 'production-m2-uat-20261126/inputs-uat011.json',
   'utf8',
 ));
 const runner = readFileSync(
@@ -29,7 +29,7 @@ const closerOnlyInstall = readFileSync(
   'utf8',
 );
 
-assert.equal(input.authorizationId, 'WOS-V1-PRODUCTION-M2-QA-UAT-010');
+assert.equal(input.authorizationId, 'WOS-V1-PRODUCTION-M2-QA-UAT-011');
 assert.equal(input.mode, 'RESUME_EXISTING_ORDER');
 assert.equal(
   input.resumeOrderId,
@@ -85,10 +85,10 @@ assert(edgeCloser.includes('CLOSE_UNVERIFIED'));
 assert(edgeCloser.includes('probeEdgeOnce'));
 assert(edgeCloser.includes('attempt <= 3'));
 assert(dbCloser.includes('WOS_V1_QA_APP_EXECUTION_ID'));
-assert(dbCloser.includes('54d03da8-79a2-42b1-af64-11cb2608517c'));
+assert(dbCloser.includes('f5149801-df08-4ce7-b336-df6d449c9aec'));
 assert(
   runner.includes(
-    'WOS_V1_PRODUCTION_M2_QA_BUSINESS_UAT_010_20261128.json',
+    'WOS_V1_PRODUCTION_M2_QA_BUSINESS_UAT_011_20261128.json',
   ),
 );
 assert(
@@ -96,13 +96,13 @@ assert(
     'WOS_V1_PRODUCTION_M2_QA_BUSINESS_UAT_006_20261127.json',
   ),
 );
-assert(appActivate.includes('WOS-V1-PRODUCTION-M2-QA-UAT-010'));
-assert(appActivate.includes('54d03da8-79a2-42b1-af64-11cb2608517c'));
+assert(appActivate.includes('WOS-V1-PRODUCTION-M2-QA-UAT-011'));
+assert(appActivate.includes('f5149801-df08-4ce7-b336-df6d449c9aec'));
 assert(
   closerOnlyInstall.includes(
-    "p_authorization_id<>'WOS-V1-PRODUCTION-M2-QA-UAT-010'",
+    "p_authorization_id<>'WOS-V1-PRODUCTION-M2-QA-UAT-011'",
   ),
 );
 assert(!closerOnlyInstall.includes('WOS-V1-PRODUCTION-M2-QA-UAT-005'));
 
-console.log('wos-v1-qa-uat010-packaging.test.ts: PASS');
+console.log('wos-v1-qa-uat011-packaging.test.ts: PASS');
