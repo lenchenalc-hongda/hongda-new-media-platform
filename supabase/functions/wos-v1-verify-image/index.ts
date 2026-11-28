@@ -9,6 +9,7 @@ import {
   evaluateWosV1ImageAccess,
   evaluateWosV1QaCloserProbeAuth,
   evaluateWosV1QaCloserProbeGate,
+  isWosV1RevisionLabel,
   isWosV1ProofResult,
   objectSnapshotStable,
   selectWosV1AdminApiKey,
@@ -397,7 +398,7 @@ export async function handleWosV1VerifyImageRequest(
         const currentOrderReverification =
           (order.workflow_status === 'WAITING_MATERIAL'
             || order.workflow_status === 'READINESS_CHECK')
-          && /^V[2-9][0-9]{0,20}$/.test(order.version_label);
+          && isWosV1RevisionLabel(order.version_label);
         if (!currentOrderReverification) {
           return output(request, 'REVERIFY_CURRENT_ORDER_REQUIRED', 409);
         }
@@ -466,7 +467,7 @@ export async function handleWosV1VerifyImageRequest(
       const currentOrderReverification =
         (order.workflow_status === 'WAITING_MATERIAL'
           || order.workflow_status === 'READINESS_CHECK')
-        && /^V[2-9][0-9]{0,20}$/.test(order.version_label);
+        && isWosV1RevisionLabel(order.version_label);
       if (!first
         || !snapshotMatchesUpload(
           first,

@@ -69,6 +69,11 @@ export interface WosV1ObjectSnapshot {
 const uuid = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
 const sha256 = /^[a-f0-9]{64}$/;
 const versionLabel = /^V[1-9][0-9]{0,20}$/;
+const revisionVersionLabel = /^V(?:[2-9]|[1-9][0-9]{1,20})$/;
+
+export function isWosV1RevisionLabel(value: unknown): value is string {
+  return typeof value === 'string' && revisionVersionLabel.test(value);
+}
 
 export function parseWosV1ImageVerificationBody(
   value: unknown,
@@ -160,7 +165,7 @@ export function evaluateWosV1ImageAccess(input: WosV1ImageAccessInput): {
   }
   if (order.workflow_status === 'WAITING_MATERIAL'
     || order.workflow_status === 'READINESS_CHECK') {
-    if (/^V[2-9][0-9]{0,20}$/.test(order.version_label)) {
+    if (isWosV1RevisionLabel(order.version_label)) {
       return { allowed: true, code: 'ALLOWED' };
     }
     if (input.qaRevisionAuthorized !== true) {

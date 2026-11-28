@@ -253,6 +253,9 @@ assert(workbench.includes('!finalReadinessActor'));
 assert(workbench.includes('canStart=false'));
 assert(workbench.includes('renewWosV1CurrentImageProofs'));
 assert(workbench.includes('重新核验当前四图 Proof'));
+assert(workbench.includes('failedProofCategories'));
+assert(workbench.includes('重试失败图片'));
+assert(workbench.includes('proofResults'));
 const draftBaselineSelection = workbench.indexOf(
   "value.status === 'DRAFT'",
 );

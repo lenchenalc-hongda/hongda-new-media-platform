@@ -84,7 +84,7 @@ BEGIN
       )
       OR (
         v_order.workflow_status = 'NEEDS_INFORMATION'
-        AND v_order.version_label ~ '^V[2-9][0-9]{0,20}$'
+        AND v_order.version_label ~ '^V(?:[2-9]|[1-9][0-9]{1,20})$'
       )
       OR (
         v_order.workflow_status IN ('WAITING_MATERIAL', 'READINESS_CHECK')

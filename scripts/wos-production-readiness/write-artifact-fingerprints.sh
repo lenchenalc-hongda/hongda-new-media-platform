@@ -16,6 +16,7 @@ files=(
   docs/workshop-order-system/production-readiness/sql/WOS_V1_PRODUCTION_RUNTIME_ROLLBACK_NOT_AUTHORIZED.sql
   docs/workshop-order-system/production-readiness/sql/WOS_V1_PRODUCTION_RUNTIME_SMOKE_PG17.sql
   supabase/migrations/20261126090000_wos_v1_production_m2_signoff.sql
+  supabase/migrations/20261128162000_wos_v1_proof_renewal_v2plus.sql
   docs/workshop-order-system/production-readiness/sql/WOS_V1_PRODUCTION_M2_ACTIVATION_NOT_AUTHORIZED.sql
   docs/workshop-order-system/production-readiness/sql/WOS_V1_PRODUCTION_M2_DEACTIVATE_NOT_AUTHORIZED.sql
   docs/workshop-order-system/production-readiness/sql/WOS_V1_PRODUCTION_M2_ROLLBACK_NOT_AUTHORIZED.sql
@@ -45,6 +46,7 @@ files=(
   docs/workshop-order-system/production-readiness/sql/WOS_V1_PRODUCTION_FOUNDATION_CONTAINMENT_NOT_AUTHORIZED.sql
   docs/workshop-order-system/production-readiness/sql/V1_APP_01_PROOF_RENEWAL_NOT_AUTHORIZED.sql
   docs/workshop-order-system/production-readiness/sql/V1_APP_01_PROOF_RENEWAL_ROLLBACK_NOT_AUTHORIZED.sql
+  docs/workshop-order-system/production-readiness/sql/WOS_V1_PROOF_RENEWAL_V2PLUS_ROLLBACK_NOT_AUTHORIZED.sql
   docs/workshop-order-system/production-readiness/sql/WOS_V1_HOSTED_QA_DEPENDENCIES_NOT_AUTHORIZED.sql
   docs/workshop-order-system/production-readiness/sql/WOS_V1_HOSTED_QA_DEPENDENCIES_ROLLBACK_NOT_AUTHORIZED.sql
   src/app/api/workshop-orders/v1/route.ts
@@ -78,6 +80,7 @@ files=(
   supabase/functions/wos-v1-verify-image/index.ts
   tests/unit/workshop-order-production-app-contract.test.ts
   tests/unit/workshop-order-production-app-http.test.ts
+  tests/unit/workshop-order-production-current-proof-renewal.test.ts
   tests/unit/workshop-order-production-edge-core.test.ts
   tests/unit/workshop-order-production-m2-contract.test.ts
   tests/unit/wos-v1-production-operator-readiness.test.ts
@@ -148,6 +151,9 @@ files=(
   docs/workshop-order-system/production-readiness/V1_APP_01_ROUTE_AND_EDGE_CONFIG.md
   docs/workshop-order-system/production-readiness/WOS_V1_INT_01_HOSTED_QA_READINESS.md
   docs/workshop-order-system/production-readiness/WOS_V1_PRODUCTION_BUSINESS_CONTRACT_AUDIT_20261126.md
+  docs/workshop-order-system/production-readiness/WOS_V1_OFFICE_OPERATION_GUIDE_20261128.md
+  docs/workshop-order-system/production-readiness/WOS_V1_WORKSHOP_OPERATION_GUIDE_20261128.md
+  docs/workshop-order-system/production-readiness/WOS_V1_MANAGER_RELEASE_GUIDE_20261128.md
   docs/workshop-order-system/production-readiness/WOS_V1_BUSINESS_UAT_CHECKLISTS_20261126.md
   docs/workshop-order-system/production-readiness/WOS_V1_GO_NO_GO_20261126.md
   docs/workshop-order-system/production-readiness/WOS_V1_PRODUCTION_RELEASE_PACKAGE_20261128.md

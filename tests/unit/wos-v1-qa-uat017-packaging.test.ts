@@ -231,7 +231,7 @@ assert(
 );
 assert(
   imageRegisterInstall.includes(
-    "v_order.version_label ~ '^V[2-9][0-9]{0,20}$'",
+    "v_order.version_label ~ '^V(?:[2-9]|[1-9][0-9]{1,20})$'",
   ),
 );
 assert(
@@ -288,7 +288,7 @@ assert(currentOrderProofInstall.includes(
   "'wos_v1.qa_current_order_proof'",
 ));
 assert(currentOrderProofInstall.includes(
-  'v_order.version_label ~ \'^V[2-9][0-9]{0,20}$\'',
+  'v_order.version_label ~ \'^V(?:[2-9]|[1-9][0-9]{1,20})$\'',
 ));
 assert(currentOrderProofRollback.includes(
   'WOS_V1_QA_UAT_CURRENT_ORDER_PROOF_RESTORE_MISMATCH',
