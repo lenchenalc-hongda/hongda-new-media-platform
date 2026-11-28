@@ -10,10 +10,10 @@ import { fileURLToPath } from 'node:url';
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '../..');
 const AUTH_ID =
   process.env.WOS_V1_QA_AUTHORIZATION_ID
-  || 'WOS-V1-PRODUCTION-M2-QA-UAT-012';
+  || 'WOS-V1-PRODUCTION-M2-QA-UAT-013';
 const QA_APP_EXECUTION_ID =
   process.env.WOS_V1_QA_APP_EXECUTION_ID
-  || 'c32a81d1-b997-4cfa-a346-871461a1af47';
+  || 'd9627b1e-5a75-454a-9489-4fbb602c8b46';
 const PROJECT_REF = 'xulmpqaknlwqqculbsek';
 const ARM_KEYCHAIN = 'WOS_V1_QA_DB_CLOSER_ARM_TOKEN';
 const OWNED_TEST_CONTAINER =
@@ -43,6 +43,14 @@ const STORAGE_COMPAT_INSTALL = join(
 const STORAGE_COMPAT_ROLLBACK = join(
   ROOT,
   'docs/workshop-order-system/production-readiness/sql/WOS_V1_QA_UAT_STORAGE_COMPAT_ROLLBACK_NOT_AUTHORIZED.sql',
+);
+const V2_PROOF_GUARD_COMPAT_INSTALL = join(
+  ROOT,
+  'docs/workshop-order-system/production-readiness/sql/WOS_V1_QA_UAT_V2_PROOF_GUARD_COMPAT_INSTALL_NOT_AUTHORIZED.sql',
+);
+const V2_PROOF_GUARD_COMPAT_ROLLBACK = join(
+  ROOT,
+  'docs/workshop-order-system/production-readiness/sql/WOS_V1_QA_UAT_V2_PROOF_GUARD_COMPAT_ROLLBACK_NOT_AUTHORIZED.sql',
 );
 
 function fail(code) {
@@ -340,6 +348,41 @@ function rollbackStorageCompat() {
   process.stdout.write('WOS_V1_QA_DB_CLOSER_STORAGE_COMPAT_ROLLBACK=PASS\n');
 }
 
+function installV2ProofGuardCompat() {
+  const sql = [
+    projectSettingsSql(),
+    "SET wos_v1.qa_v2_proof_guard_install_authorized='yes';",
+    readFileSync(V2_PROOF_GUARD_COMPAT_INSTALL, 'utf8'),
+  ].join('\n');
+  runSql(sql);
+  process.stdout.write(
+    'WOS_V1_QA_DB_CLOSER_V2_PROOF_GUARD_INSTALL=PASS\n',
+  );
+}
+
+function rollbackV2ProofGuardCompat() {
+  const installed = runSql(`
+    SELECT to_regclass(
+      'wos_v1_qa_v2_proof_compat.definition_backup'
+    ) IS NOT NULL;
+  `).split('\n').filter(Boolean).at(-1);
+  if (installed !== 't') {
+    process.stdout.write(
+      'WOS_V1_QA_DB_CLOSER_V2_PROOF_GUARD_ROLLBACK=SKIPPED_NOT_INSTALLED\n',
+    );
+    return;
+  }
+  const sql = [
+    projectSettingsSql(),
+    "SET wos_v1.qa_v2_proof_guard_rollback_authorized='yes';",
+    readFileSync(V2_PROOF_GUARD_COMPAT_ROLLBACK, 'utf8'),
+  ].join('\n');
+  runSql(sql);
+  process.stdout.write(
+    'WOS_V1_QA_DB_CLOSER_V2_PROOF_GUARD_ROLLBACK=PASS\n',
+  );
+}
+
 function installCloserOnly() {
   const sql = [
     projectSettingsSql(),
@@ -589,6 +632,11 @@ function recover() {
     recoveryError ??= error;
   }
   try {
+    rollbackV2ProofGuardCompat();
+  } catch (error) {
+    recoveryError ??= error;
+  }
+  try {
     const sql = [
       projectSettingsSql(),
       "SET wos_v1.qa_uat_close_authorized='yes';",
@@ -665,6 +713,11 @@ try {
   else if (command === 'deactivate-qa-app') deactivateQaApp();
   else if (command === 'install-storage-compat') installStorageCompat();
   else if (command === 'rollback-storage-compat') rollbackStorageCompat();
+  else if (command === 'install-v2-proof-guard-compat') {
+    installV2ProofGuardCompat();
+  } else if (command === 'rollback-v2-proof-guard-compat') {
+    rollbackV2ProofGuardCompat();
+  }
   else if (command === 'arm') await arm(false);
   else if (command === 'arm-closer-only') await arm(true);
   else if (command === 'status') status(false);

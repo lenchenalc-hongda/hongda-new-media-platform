@@ -150,7 +150,7 @@ for (const marker of [
   'WOS_V1_QA_EDGE_CLOSE_RECEIPT_HASH_MISMATCH',
   'WOS_V1_QA_EDGE_CLOSE_RECEIPT_MISSING',
   "process.env.WOS_V1_QA_APP_EXECUTION_ID",
-  "|| 'c32a81d1-b997-4cfa-a346-871461a1af47'",
+  "|| 'd9627b1e-5a75-454a-9489-4fbb602c8b46'",
   'WOS_V1_QA_APP_EXECUTION_ID_MISMATCH',
   'WOS_V1_QA_APP_LOCAL_TEST_SCOPE_REQUIRED',
   "wos_v1.qa_local_test",
@@ -158,8 +158,12 @@ for (const marker of [
   'deactivate-qa-app',
   'install-storage-compat',
   'rollback-storage-compat',
+  'install-v2-proof-guard-compat',
+  'rollback-v2-proof-guard-compat',
   'WOS_V1_QA_DB_CLOSER_STORAGE_COMPAT_INSTALL',
   'WOS_V1_QA_DB_CLOSER_STORAGE_COMPAT_ROLLBACK',
+  'WOS_V1_QA_DB_CLOSER_V2_PROOF_GUARD_INSTALL',
+  'WOS_V1_QA_DB_CLOSER_V2_PROOF_GUARD_ROLLBACK',
 ]) {
   assert(dbCloser.includes(marker), `DB closer runner missing ${marker}`);
 }

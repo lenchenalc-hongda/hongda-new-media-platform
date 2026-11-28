@@ -5,7 +5,7 @@ import {
   type WosV1VerifyImageHandlerOptions,
 } from '../../supabase/functions/wos-v1-verify-image/index.ts';
 
-const authId = 'WOS-V1-PRODUCTION-M2-QA-UAT-012';
+const authId = 'WOS-V1-PRODUCTION-M2-QA-UAT-013';
 const executionId = 'efddb60c-4a70-4b46-bf18-46629a4397d2';
 const processNonce = '77ac7769-25a2-495a-8892-467d16abb00e';
 const qaProjectRef = 'xulmpqaknlwqqculbsek';

@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 
 const input = JSON.parse(readFileSync(
   'docs/workshop-order-system/qa-fixture/'
-    + 'production-m2-uat-20261126/inputs-uat012.json',
+    + 'production-m2-uat-20261126/inputs-uat013.json',
   'utf8',
 ));
 const runner = readFileSync(
@@ -29,10 +29,10 @@ const closerOnlyInstall = readFileSync(
   'utf8',
 );
 
-assert.equal(input.authorizationId, 'WOS-V1-PRODUCTION-M2-QA-UAT-012');
+assert.equal(input.authorizationId, 'WOS-V1-PRODUCTION-M2-QA-UAT-013');
 assert(
   runner.includes(
-    'production-m2-uat-20261126/inputs-uat012.json',
+    'production-m2-uat-20261126/inputs-uat013.json',
   ),
 );
 assert(!runner.includes(
@@ -40,7 +40,7 @@ assert(!runner.includes(
 ));
 assert.equal(
   input.sourceParentHead,
-  '5a9e62e4254d59cb874f9d84d2911c9b916d04b7',
+  '7d8d18d950115d9e7f65e46fb5ba8e0fe6905ecb',
 );
 assert.equal(input.mode, 'RESUME_EXISTING_ORDER');
 assert.equal(
@@ -61,17 +61,21 @@ assert.equal(input.images.v2.length, 4);
 assert.equal(new Set(input.images.v2.map(
   (image: { imageId: string }) => image.imageId,
 )).size, 4);
-const consumedUat011V2Ids = new Set([
+const consumedV2Ids = new Set([
   '43eaf924-a0c1-48df-a17e-88c8b0069444',
   '6ff1d4dc-5526-4392-be79-65baf96cdab9',
   '39e079c2-d88d-4332-8a97-6a5fa5362d14',
   '51004463-2410-4e7c-a32d-e6dfc860523b',
+  'c06a3c22-1293-4d91-8f36-ccb8dbf955a7',
+  '189e03ce-20b9-4956-9827-9b77faa8f644',
+  '23b69b5e-683c-4126-b9e8-d3651c114179',
+  'ec4a9034-aae5-4e64-9464-5ae820556601',
 ]);
 for (const image of input.images.v2) {
   assert.match(image.imageId, /^[a-f0-9-]{36}$/i);
   assert(
-    !consumedUat011V2Ids.has(image.imageId),
-    `UAT-012 reuses consumed V2 image ID ${image.imageId}`,
+    !consumedV2Ids.has(image.imageId),
+    `UAT-013 reuses consumed V2 image ID ${image.imageId}`,
   );
 }
 
@@ -107,10 +111,10 @@ assert(edgeCloser.includes('CLOSE_UNVERIFIED'));
 assert(edgeCloser.includes('probeEdgeOnce'));
 assert(edgeCloser.includes('attempt <= 3'));
 assert(dbCloser.includes('WOS_V1_QA_APP_EXECUTION_ID'));
-assert(dbCloser.includes('c32a81d1-b997-4cfa-a346-871461a1af47'));
+assert(dbCloser.includes('d9627b1e-5a75-454a-9489-4fbb602c8b46'));
 assert(
   runner.includes(
-    'WOS_V1_PRODUCTION_M2_QA_BUSINESS_UAT_012_20261128.json',
+    'WOS_V1_PRODUCTION_M2_QA_BUSINESS_UAT_013_20261128.json',
   ),
 );
 assert(
@@ -118,13 +122,13 @@ assert(
     'WOS_V1_PRODUCTION_M2_QA_BUSINESS_UAT_006_20261127.json',
   ),
 );
-assert(appActivate.includes('WOS-V1-PRODUCTION-M2-QA-UAT-012'));
-assert(appActivate.includes('c32a81d1-b997-4cfa-a346-871461a1af47'));
+assert(appActivate.includes('WOS-V1-PRODUCTION-M2-QA-UAT-013'));
+assert(appActivate.includes('d9627b1e-5a75-454a-9489-4fbb602c8b46'));
 assert(
   closerOnlyInstall.includes(
-    "p_authorization_id<>'WOS-V1-PRODUCTION-M2-QA-UAT-012'",
+    "p_authorization_id<>'WOS-V1-PRODUCTION-M2-QA-UAT-013'",
   ),
 );
 assert(!closerOnlyInstall.includes('WOS-V1-PRODUCTION-M2-QA-UAT-005'));
 
-console.log('wos-v1-qa-uat012-packaging.test.ts: PASS');
+console.log('wos-v1-qa-uat013-packaging.test.ts: PASS');

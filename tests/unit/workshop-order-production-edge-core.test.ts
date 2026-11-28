@@ -294,6 +294,10 @@ const qaDependencies = readFileSync(
   'docs/workshop-order-system/production-readiness/sql/WOS_V1_HOSTED_QA_DEPENDENCIES_NOT_AUTHORIZED.sql',
   'utf8',
 );
+const v2ProofGuardCompat = readFileSync(
+  'docs/workshop-order-system/production-readiness/sql/WOS_V1_QA_UAT_V2_PROOF_GUARD_COMPAT_INSTALL_NOT_AUTHORIZED.sql',
+  'utf8',
+);
 const edgeIndex = readFileSync(
   'supabase/functions/wos-v1-verify-image/index.ts',
   'utf8',
@@ -314,6 +318,28 @@ assert(!runtime.includes(
 assert(qaDependencies.indexOf('pg_advisory_xact_lock') <
   qaDependencies.indexOf('SELECT * INTO v_order'));
 assert(qaDependencies.includes("'wos-qa-m2:' || p_order_id::text"));
+assert(qaDependencies.includes(
+  "v_order.workflow_status = 'NEEDS_INFORMATION'",
+));
+assert(qaDependencies.includes(
+  "v_order.version_label ~ '^V[2-9][0-9]{0,20}$'",
+));
+assert(qaDependencies.includes(
+  "v_order.workflow_status NOT IN ('DRAFT', 'NEEDS_INFORMATION')",
+));
+for (const sourceHash of [
+  '1433bdd5244077b1a34a2e7e58b37e5b665c7b5b59a1605544bb5e6854d87772',
+  '2c1c1d46469159bc71a1ce17ab40a86eed854816cc2b6a69496f43148faab1e2',
+  'b8af269c21de84bb490591ce5c71f379baef9e51e422a7978064eee3b0fefdde',
+  '0f1dcb8da6ae26da22150e0bed35e025e9618824d64993d0af5eec0a92cb7216',
+  '9a91e8e6441e0beee2c4fa3d4d410582784d3d310939c99007ac65f06d7a63fd',
+  'f0944a6afc0ebc0017849274aa3e88b27f81cab6d5fee3e0aa7b0dc5d964c0db',
+]) {
+  assert(
+    v2ProofGuardCompat.includes(sourceHash),
+    `V2 proof guard compatibility missing source hash ${sourceHash}`,
+  );
+}
 assert(edgeIndex.includes("request.method === 'OPTIONS'"));
 assert(edgeIndex.includes('WOS_V1_EDGE_ALLOWED_ORIGINS'));
 assert(edgeIndex.includes("'Access-Control-Allow-Methods'"));
