@@ -10,10 +10,10 @@ import { fileURLToPath } from 'node:url';
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '../..');
 const AUTH_ID =
   process.env.WOS_V1_QA_AUTHORIZATION_ID
-  || 'WOS-V1-PRODUCTION-M2-QA-UAT-014';
+  || 'WOS-V1-PRODUCTION-M2-QA-UAT-015';
 const QA_APP_EXECUTION_ID =
   process.env.WOS_V1_QA_APP_EXECUTION_ID
-  || 'e646bb29-0fb2-47e5-ad4e-d59428d3ca22';
+  || '1dc0f65d-ecc3-4a89-bb16-e2d4b3843395';
 const PROJECT_REF = 'xulmpqaknlwqqculbsek';
 const ARM_KEYCHAIN = 'WOS_V1_QA_DB_CLOSER_ARM_TOKEN';
 const OWNED_TEST_CONTAINER =
@@ -59,6 +59,14 @@ const V2_IMAGE_REGISTER_COMPAT_INSTALL = join(
 const V2_IMAGE_REGISTER_COMPAT_ROLLBACK = join(
   ROOT,
   'docs/workshop-order-system/production-readiness/sql/WOS_V1_QA_UAT_V2_IMAGE_REGISTER_COMPAT_ROLLBACK_NOT_AUTHORIZED.sql',
+);
+const VERIFIED_PROOF_MIRROR_INSTALL = join(
+  ROOT,
+  'docs/workshop-order-system/production-readiness/sql/WOS_V1_QA_UAT_VERIFIED_PROOF_MIRROR_INSTALL_NOT_AUTHORIZED.sql',
+);
+const VERIFIED_PROOF_MIRROR_ROLLBACK = join(
+  ROOT,
+  'docs/workshop-order-system/production-readiness/sql/WOS_V1_QA_UAT_VERIFIED_PROOF_MIRROR_ROLLBACK_NOT_AUTHORIZED.sql',
 );
 
 function fail(code) {
@@ -426,6 +434,41 @@ function rollbackV2ImageRegisterCompat() {
   );
 }
 
+function installVerifiedProofMirror() {
+  const sql = [
+    projectSettingsSql(),
+    "SET wos_v1.qa_verified_proof_mirror_install_authorized='yes';",
+    readFileSync(VERIFIED_PROOF_MIRROR_INSTALL, 'utf8'),
+  ].join('\n');
+  runSql(sql);
+  process.stdout.write(
+    'WOS_V1_QA_DB_CLOSER_VERIFIED_PROOF_MIRROR_INSTALL=PASS\n',
+  );
+}
+
+function rollbackVerifiedProofMirror() {
+  const installed = runSql(`
+    SELECT to_regclass(
+      'wos_v1_qa_proof_mirror_compat.install_state'
+    ) IS NOT NULL;
+  `).split('\n').filter(Boolean).at(-1);
+  if (installed !== 't') {
+    process.stdout.write(
+      'WOS_V1_QA_DB_CLOSER_VERIFIED_PROOF_MIRROR_ROLLBACK=SKIPPED_NOT_INSTALLED\n',
+    );
+    return;
+  }
+  const sql = [
+    projectSettingsSql(),
+    "SET wos_v1.qa_verified_proof_mirror_rollback_authorized='yes';",
+    readFileSync(VERIFIED_PROOF_MIRROR_ROLLBACK, 'utf8'),
+  ].join('\n');
+  runSql(sql);
+  process.stdout.write(
+    'WOS_V1_QA_DB_CLOSER_VERIFIED_PROOF_MIRROR_ROLLBACK=PASS\n',
+  );
+}
+
 function installCloserOnly() {
   const sql = [
     projectSettingsSql(),
@@ -675,6 +718,11 @@ function recover() {
     recoveryError ??= error;
   }
   try {
+    rollbackVerifiedProofMirror();
+  } catch (error) {
+    recoveryError ??= error;
+  }
+  try {
     rollbackV2ImageRegisterCompat();
   } catch (error) {
     recoveryError ??= error;
@@ -769,6 +817,10 @@ try {
     installV2ImageRegisterCompat();
   } else if (command === 'rollback-v2-image-register-compat') {
     rollbackV2ImageRegisterCompat();
+  } else if (command === 'install-verified-proof-mirror') {
+    installVerifiedProofMirror();
+  } else if (command === 'rollback-verified-proof-mirror') {
+    rollbackVerifiedProofMirror();
   }
   else if (command === 'arm') await arm(false);
   else if (command === 'arm-closer-only') await arm(true);

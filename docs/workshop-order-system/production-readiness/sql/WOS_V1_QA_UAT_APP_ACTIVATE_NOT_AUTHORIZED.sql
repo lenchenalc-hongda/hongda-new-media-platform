@@ -26,10 +26,10 @@ BEGIN
     RAISE EXCEPTION 'WOS_V1_QA_UAT_APP_PROJECT_MISMATCH';
   END IF;
   IF current_setting('wos_v1.qa_authorization_id', true)
-      IS DISTINCT FROM 'WOS-V1-PRODUCTION-M2-QA-UAT-014'
+      IS DISTINCT FROM 'WOS-V1-PRODUCTION-M2-QA-UAT-015'
     OR (
       current_setting('wos_v1.qa_execution_id', true)
-        IS DISTINCT FROM 'e646bb29-0fb2-47e5-ad4e-d59428d3ca22'
+        IS DISTINCT FROM '1dc0f65d-ecc3-4a89-bb16-e2d4b3843395'
       AND current_setting('wos_v1.qa_local_test', true)
         IS DISTINCT FROM 'yes'
     )
@@ -67,6 +67,40 @@ BEGIN
     ) IS NULL
   THEN
     RAISE EXCEPTION 'WOS_V1_QA_UAT_APP_RPC_NOT_INSTALLED';
+  END IF;
+  IF current_setting('wos_v1.qa_local_test', true)
+      IS DISTINCT FROM 'yes'
+    AND encode(
+      sha256(convert_to(
+        pg_get_functiondef(
+          'public.wos_register_uploaded_reference_image(uuid,uuid,text,text)'::regprocedure
+        ),
+        'UTF8'
+      )),
+      'hex'
+    ) IS DISTINCT FROM
+      'd8250a39ce42e185b3376f016714899fa7c831341ee314708e90a9a21bcb1db7'
+  THEN
+    RAISE EXCEPTION 'WOS_V1_QA_UAT_V2_IMAGE_REGISTER_COMPAT_REQUIRED';
+  END IF;
+  IF current_setting('wos_v1.qa_local_test', true)
+      IS DISTINCT FROM 'yes'
+    AND (
+      to_regprocedure(
+      'public.wos_v1_qa_uat_mirror_verified_proof()'
+      ) IS NULL
+      OR NOT EXISTS (
+        SELECT 1
+        FROM pg_trigger trigger_row
+        WHERE trigger_row.tgname='wos_v1_qa_uat_verified_proof_mirror'
+          AND trigger_row.tgrelid=
+            to_regclass('public.wos_qa_verified_image_proofs')
+          AND trigger_row.tgenabled='O'
+          AND NOT trigger_row.tgisinternal
+      )
+    )
+  THEN
+    RAISE EXCEPTION 'WOS_V1_QA_UAT_VERIFIED_PROOF_MIRROR_REQUIRED';
   END IF;
   IF NOT EXISTS (
     SELECT 1

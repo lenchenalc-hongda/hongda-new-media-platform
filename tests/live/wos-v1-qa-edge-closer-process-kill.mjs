@@ -64,7 +64,7 @@ try {
   server = http.createServer((request, response) => {
     const authorized = request.headers.authorization === 'Bearer test-service-key'
       && request.headers['x-wos-qa-uat-authorization-id']
-        === 'WOS-V1-PRODUCTION-M2-QA-UAT-014'
+        === 'WOS-V1-PRODUCTION-M2-QA-UAT-015'
       && request.headers['x-wos-qa-uat-execution-id'] === executionId
       && request.headers['x-wos-qa-uat-closer-nonce'] === processNonce
       && request.headers['x-wos-qa-closer-probe'] === '1';
@@ -104,7 +104,7 @@ try {
     schemaVersion: 1,
     status: 'ARMED',
     executionId,
-    authorizationId: 'WOS-V1-PRODUCTION-M2-QA-UAT-014',
+    authorizationId: 'WOS-V1-PRODUCTION-M2-QA-UAT-015',
     projectRef: 'xulmpqaknlwqqculbsek',
     codeSha256: codeSha,
     functionUrl: `http://127.0.0.1:${address.port}/`,

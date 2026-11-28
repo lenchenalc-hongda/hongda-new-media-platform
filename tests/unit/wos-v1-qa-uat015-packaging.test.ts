@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 
 const input = JSON.parse(readFileSync(
   'docs/workshop-order-system/qa-fixture/'
-    + 'production-m2-uat-20261126/inputs-uat014.json',
+    + 'production-m2-uat-20261126/inputs-uat015.json',
   'utf8',
 ));
 const runner = readFileSync(
@@ -38,11 +38,21 @@ const imageRegisterRollback = readFileSync(
     + 'WOS_V1_QA_UAT_V2_IMAGE_REGISTER_COMPAT_ROLLBACK_NOT_AUTHORIZED.sql',
   'utf8',
 );
+const proofMirrorInstall = readFileSync(
+  'docs/workshop-order-system/production-readiness/sql/'
+    + 'WOS_V1_QA_UAT_VERIFIED_PROOF_MIRROR_INSTALL_NOT_AUTHORIZED.sql',
+  'utf8',
+);
+const proofMirrorRollback = readFileSync(
+  'docs/workshop-order-system/production-readiness/sql/'
+    + 'WOS_V1_QA_UAT_VERIFIED_PROOF_MIRROR_ROLLBACK_NOT_AUTHORIZED.sql',
+  'utf8',
+);
 
-assert.equal(input.authorizationId, 'WOS-V1-PRODUCTION-M2-QA-UAT-014');
+assert.equal(input.authorizationId, 'WOS-V1-PRODUCTION-M2-QA-UAT-015');
 assert(
   runner.includes(
-    'production-m2-uat-20261126/inputs-uat014.json',
+    'production-m2-uat-20261126/inputs-uat015.json',
   ),
 );
 assert(!runner.includes(
@@ -50,7 +60,7 @@ assert(!runner.includes(
 ));
 assert.equal(
   input.sourceParentHead,
-  'c50bae4c7234c690e33d47450f4ce7aee599b385',
+  'c0132a49683be7f7186e0b3482fdebf31e79480a',
 );
 assert.equal(input.mode, 'RESUME_EXISTING_ORDER');
 assert.equal(
@@ -84,12 +94,16 @@ const consumedV2Ids = new Set([
   'c4fdc9d7-0a60-45ca-bbd0-29ef2fa0f741',
   'b9687a0b-8d5b-4783-ae10-ed9cc415c545',
   '1bc10d50-ac7d-4311-a6fa-48329ae8f6d6',
+  '16eef570-9940-4661-9f04-c48ebfaac513',
+  '41bb8791-60ed-4fcc-a707-795967330065',
+  '443077ce-1c21-4d7d-b592-3e89a3a10f79',
+  '98506522-729f-4feb-9789-2a630aaee54a',
 ]);
 for (const image of input.images.v2) {
   assert.match(image.imageId, /^[a-f0-9-]{36}$/i);
   assert(
     !consumedV2Ids.has(image.imageId),
-    `UAT-014 reuses consumed V2 image ID ${image.imageId}`,
+    `UAT-015 reuses consumed V2 image ID ${image.imageId}`,
   );
 }
 
@@ -125,12 +139,14 @@ assert(edgeCloser.includes('CLOSE_UNVERIFIED'));
 assert(edgeCloser.includes('probeEdgeOnce'));
 assert(edgeCloser.includes('attempt <= 3'));
 assert(dbCloser.includes('WOS_V1_QA_APP_EXECUTION_ID'));
-assert(dbCloser.includes('e646bb29-0fb2-47e5-ad4e-d59428d3ca22'));
+assert(dbCloser.includes('1dc0f65d-ecc3-4a89-bb16-e2d4b3843395'));
 assert(dbCloser.includes('install-v2-image-register-compat'));
 assert(dbCloser.includes('rollback-v2-image-register-compat'));
+assert(dbCloser.includes('install-verified-proof-mirror'));
+assert(dbCloser.includes('rollback-verified-proof-mirror'));
 assert(
   runner.includes(
-    'WOS_V1_PRODUCTION_M2_QA_BUSINESS_UAT_014_20261128.json',
+    'WOS_V1_PRODUCTION_M2_QA_BUSINESS_UAT_015_20261128.json',
   ),
 );
 assert(
@@ -138,11 +154,21 @@ assert(
     'WOS_V1_PRODUCTION_M2_QA_BUSINESS_UAT_006_20261127.json',
   ),
 );
-assert(appActivate.includes('WOS-V1-PRODUCTION-M2-QA-UAT-014'));
-assert(appActivate.includes('e646bb29-0fb2-47e5-ad4e-d59428d3ca22'));
+assert(appActivate.includes('WOS-V1-PRODUCTION-M2-QA-UAT-015'));
+assert(appActivate.includes('1dc0f65d-ecc3-4a89-bb16-e2d4b3843395'));
+assert(
+  appActivate.includes(
+    'WOS_V1_QA_UAT_V2_IMAGE_REGISTER_COMPAT_REQUIRED',
+  ),
+);
+assert(
+  appActivate.includes(
+    'WOS_V1_QA_UAT_VERIFIED_PROOF_MIRROR_REQUIRED',
+  ),
+);
 assert(
   closerOnlyInstall.includes(
-    "p_authorization_id<>'WOS-V1-PRODUCTION-M2-QA-UAT-014'",
+    "p_authorization_id<>'WOS-V1-PRODUCTION-M2-QA-UAT-015'",
   ),
 );
 assert(!closerOnlyInstall.includes('WOS-V1-PRODUCTION-M2-QA-UAT-005'));
@@ -153,7 +179,7 @@ assert(
 );
 assert(
   imageRegisterInstall.includes(
-    '40231c055eae538f101ca7394880e1f746adcccb8265b07a832909238b678f0d',
+    'd8250a39ce42e185b3376f016714899fa7c831341ee314708e90a9a21bcb1db7',
   ),
 );
 assert(
@@ -167,9 +193,35 @@ assert(
   ),
 );
 assert(
+  imageRegisterInstall.includes('IMAGE_SUPERSESSION_CONFLICT'),
+);
+assert(
+  imageRegisterInstall.includes('supersedes_image_id'),
+);
+assert(
   imageRegisterRollback.includes(
     'WOS_V1_QA_UAT_V2_IMAGE_REGISTER_RESTORE_MISMATCH',
   ),
 );
+assert(
+  proofMirrorInstall.includes(
+    'wos_v1_qa_uat_edge_write_allowed',
+  ),
+);
+assert(
+  proofMirrorInstall.includes(
+    'QA_VERIFIED_PROOF_MIRROR_GATE_REQUIRED',
+  ),
+);
+assert(
+  proofMirrorInstall.includes(
+    'public.wos_verified_image_proofs',
+  ),
+);
+assert(
+  proofMirrorRollback.includes(
+    'WOS_V1_QA_UAT_VERIFIED_PROOF_MIRROR_TAMPERED',
+  ),
+);
 
-console.log('wos-v1-qa-uat014-packaging.test.ts: PASS');
+console.log('wos-v1-qa-uat015-packaging.test.ts: PASS');

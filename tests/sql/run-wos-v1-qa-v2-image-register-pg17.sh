@@ -114,6 +114,9 @@ CREATE TABLE public.wos_reference_images(
   category text NOT NULL,
   storage_bucket text NOT NULL,
   storage_path text NOT NULL,
+  supersedes_image_id uuid,
+  superseded_at timestamptz,
+  uploaded_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   file_name text NOT NULL,
   mime_type text NOT NULL,
   file_size bigint NOT NULL,
@@ -137,6 +140,26 @@ CREATE TABLE public.wos_qa_verified_image_proofs(
   storage_object_version text,
   storage_object_updated_at timestamptz,
   expires_at timestamptz
+);
+
+INSERT INTO public.wos_reference_images(
+  id,organization_id,entity_type,entity_id,category,storage_bucket,storage_path,
+  file_name,mime_type,file_size,version_label,image_status,
+  uploaded_by_profile_id
+) VALUES(
+  '8a9da229-499f-44cf-80dd-c124ab2e7d69',
+  '0ff53d93-2b9e-48b9-8113-a4768c39cdd2',
+  'PRODUCTION_ORDER',
+  '3ade0180-e6bf-49da-b80b-fd00cd1948a8',
+  'PRODUCT',
+  'wos-private',
+  'organizations/0ff53d93-2b9e-48b9-8113-a4768c39cdd2/wos/production-order/3ade0180-e6bf-49da-b80b-fd00cd1948a8/images/product/versions/V2/8a9da229-499f-44cf-80dd-c124ab2e7d69/source.png',
+  'source.png',
+  'image/png',
+  1353,
+  'V2',
+  'READY',
+  'f8adf44a-f04e-44b4-9c82-8b96508097bb'
 );
 SQL
 
@@ -215,7 +238,7 @@ installed_sha="$(psql_db "$DB" -qAt -c "
   )), 'hex')
 ")"
 [[ "$installed_sha" = \
-  '40231c055eae538f101ca7394880e1f746adcccb8265b07a832909238b678f0d' ]] \
+  'd8250a39ce42e185b3376f016714899fa7c831341ee314708e90a9a21bcb1db7' ]] \
   || fail 'TARGET_HASH_MISMATCH'
 
 registered="$(psql_db "$DB" -qAt -c "
@@ -227,6 +250,15 @@ registered="$(psql_db "$DB" -qAt -c "
   )->>'status'
 ")"
 [[ "$registered" = 'CREATED' ]] || fail 'V2_REGISTER_NOT_CREATED'
+[[ "$(psql_db "$DB" -qAt -c "
+  SELECT image_status FROM public.wos_reference_images
+  WHERE id='8a9da229-499f-44cf-80dd-c124ab2e7d69'
+")" = 'SUPERSEDED' ]] || fail 'PREVIOUS_IMAGE_NOT_SUPERSEDED'
+[[ "$(psql_db "$DB" -qAt -c "
+  SELECT supersedes_image_id FROM public.wos_reference_images
+  WHERE id='16eef570-9940-4661-9f04-c48ebfaac513'
+")" = '8a9da229-499f-44cf-80dd-c124ab2e7d69' ]] \
+  || fail 'SUPERSESSION_LINK_MISSING'
 
 {
   printf "SET wos_v1.qa_project='xulmpqaknlwqqculbsek';\n"

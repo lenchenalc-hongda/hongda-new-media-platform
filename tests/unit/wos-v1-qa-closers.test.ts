@@ -150,7 +150,7 @@ for (const marker of [
   'WOS_V1_QA_EDGE_CLOSE_RECEIPT_HASH_MISMATCH',
   'WOS_V1_QA_EDGE_CLOSE_RECEIPT_MISSING',
   "process.env.WOS_V1_QA_APP_EXECUTION_ID",
-  "|| 'e646bb29-0fb2-47e5-ad4e-d59428d3ca22'",
+  "|| '1dc0f65d-ecc3-4a89-bb16-e2d4b3843395'",
   'WOS_V1_QA_APP_EXECUTION_ID_MISMATCH',
   'WOS_V1_QA_APP_LOCAL_TEST_SCOPE_REQUIRED',
   "wos_v1.qa_local_test",
@@ -162,12 +162,16 @@ for (const marker of [
   'rollback-v2-proof-guard-compat',
   'install-v2-image-register-compat',
   'rollback-v2-image-register-compat',
+  'install-verified-proof-mirror',
+  'rollback-verified-proof-mirror',
   'WOS_V1_QA_DB_CLOSER_STORAGE_COMPAT_INSTALL',
   'WOS_V1_QA_DB_CLOSER_STORAGE_COMPAT_ROLLBACK',
   'WOS_V1_QA_DB_CLOSER_V2_PROOF_GUARD_INSTALL',
   'WOS_V1_QA_DB_CLOSER_V2_PROOF_GUARD_ROLLBACK',
   'WOS_V1_QA_DB_CLOSER_V2_IMAGE_REGISTER_INSTALL',
   'WOS_V1_QA_DB_CLOSER_V2_IMAGE_REGISTER_ROLLBACK',
+  'WOS_V1_QA_DB_CLOSER_VERIFIED_PROOF_MIRROR_INSTALL',
+  'WOS_V1_QA_DB_CLOSER_VERIFIED_PROOF_MIRROR_ROLLBACK',
 ]) {
   assert(dbCloser.includes(marker), `DB closer runner missing ${marker}`);
 }

@@ -13,9 +13,11 @@ DECLARE
   v_source_sha256 text;
   v_target_sha256 text;
   v_expected_target_sha256 constant text :=
-    '40231c055eae538f101ca7394880e1f746adcccb8265b07a832909238b678f0d';
+    'd8250a39ce42e185b3376f016714899fa7c831341ee314708e90a9a21bcb1db7';
   v_old_clause text;
   v_new_clause text;
+  v_old_insert text;
+  v_new_insert text;
 BEGIN
   IF current_setting(
     'wos_v1.qa_v2_image_register_install_authorized',
@@ -77,6 +79,58 @@ BEGIN
     RAISE EXCEPTION 'WOS_V1_QA_UAT_V2_IMAGE_REGISTER_CLAUSE_MISSING';
   END IF;
   v_definition := replace(v_definition, v_old_clause, v_new_clause);
+
+  v_old_insert := $old_insert$
+ INSERT INTO public.wos_reference_images(
+  id,organization_id,entity_type,entity_id,category,storage_bucket,storage_path,
+  file_name,mime_type,file_size,version_label,image_status,uploaded_by_profile_id)
+ VALUES(p_image_id,v_actor.org_id,'PRODUCTION_ORDER',p_order_id,p_category,'wos-private',
+ p_storage_path,v_filename,v_mime,v_size,v_order.version_label,'READY',v_actor.id);$old_insert$;
+  v_new_insert := $new_insert$
+ SELECT image.id INTO v_previous_image_id
+ FROM public.wos_reference_images image
+ WHERE image.organization_id=v_actor.org_id
+   AND image.entity_type='PRODUCTION_ORDER'
+   AND image.entity_id=p_order_id
+   AND image.category=p_category
+   AND image.version_label=v_order.version_label
+   AND image.image_status='READY'
+   AND image.superseded_at IS NULL
+   AND image.id<>p_image_id
+ ORDER BY image.uploaded_at DESC,image.id DESC
+ LIMIT 1
+ FOR UPDATE;
+ IF v_previous_image_id IS NOT NULL THEN
+  UPDATE public.wos_reference_images
+  SET image_status='SUPERSEDED',superseded_at=clock_timestamp()
+  WHERE id=v_previous_image_id
+    AND organization_id=v_actor.org_id
+    AND entity_id=p_order_id
+    AND category=p_category
+    AND version_label=v_order.version_label
+    AND image_status='READY'
+    AND superseded_at IS NULL;
+  IF NOT FOUND THEN
+   RAISE EXCEPTION 'IMAGE_SUPERSESSION_CONFLICT' USING ERRCODE='PT409';
+  END IF;
+ END IF;
+ INSERT INTO public.wos_reference_images(
+  id,organization_id,entity_type,entity_id,category,storage_bucket,storage_path,
+  file_name,mime_type,file_size,version_label,image_status,supersedes_image_id,
+  uploaded_by_profile_id)
+ VALUES(p_image_id,v_actor.org_id,'PRODUCTION_ORDER',p_order_id,p_category,'wos-private',
+ p_storage_path,v_filename,v_mime,v_size,v_order.version_label,'READY',
+ v_previous_image_id,v_actor.id);$new_insert$;
+  IF position(v_old_insert IN v_definition) = 0 THEN
+    RAISE EXCEPTION 'WOS_V1_QA_UAT_V2_IMAGE_REGISTER_INSERT_MISSING';
+  END IF;
+  v_definition := replace(v_definition, v_old_insert, v_new_insert);
+  v_definition := replace(
+    v_definition,
+    ' v_size bigint;',
+    ' v_size bigint;
+ v_previous_image_id uuid;'
+  );
   v_target_sha256 := encode(
     sha256(convert_to(v_definition, 'UTF8')),
     'hex'
