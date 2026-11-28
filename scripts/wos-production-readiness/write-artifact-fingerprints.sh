@@ -37,6 +37,8 @@ files=(
   docs/workshop-order-system/production-readiness/sql/WOS_V1_QA_UAT_VERIFIED_PROOF_MIRROR_ROLLBACK_NOT_AUTHORIZED.sql
   docs/workshop-order-system/production-readiness/sql/WOS_V1_QA_CLOSER_ONLY_INSTALL_NOT_AUTHORIZED.sql
   docs/workshop-order-system/production-readiness/sql/WOS_V1_QA_CLOSER_ONLY_ROLLBACK_NOT_AUTHORIZED.sql
+  docs/workshop-order-system/production-readiness/sql/WOS_V1_PRODUCTION_P7_INSTALL.sql
+  docs/workshop-order-system/production-readiness/sql/WOS_V1_PRODUCTION_P7_SERVICE_PROOF_SQL.sql
   docs/workshop-order-system/production-readiness/sql/WOS_V1_PRODUCTION_RPC_ACTIVATION_TEMPLATE_NOT_AUTHORIZED.sql
   docs/workshop-order-system/production-readiness/sql/WOS_V1_PRODUCTION_RPC_DEACTIVATE_NOT_AUTHORIZED.sql
   docs/workshop-order-system/production-readiness/sql/WOS_V1_PRODUCTION_FOUNDATION_CONTAINMENT_NOT_AUTHORIZED.sql

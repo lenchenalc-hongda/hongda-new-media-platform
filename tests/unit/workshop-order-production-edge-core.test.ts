@@ -328,7 +328,7 @@ for (const status of ['RENEWED', 'UNCHANGED']) {
 }
 
 const candidate = readFileSync(
-  'tests/sql/wos_p8_p7_production_compatible_candidate.sql',
+  'docs/workshop-order-system/production-readiness/sql/WOS_V1_PRODUCTION_P7_INSTALL.sql',
   'utf8',
 );
 const runtime = readFileSync(

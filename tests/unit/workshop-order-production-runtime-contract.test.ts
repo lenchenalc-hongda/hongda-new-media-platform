@@ -99,7 +99,7 @@ const runtimeRollbackSql = readFileSync(resolve(
   'WOS_V1_PRODUCTION_RUNTIME_ROLLBACK_NOT_AUTHORIZED.sql',
 ), 'utf8');
 const p7CandidateSql = readFileSync(resolve(
-  'tests/sql/wos_p8_p7_production_compatible_candidate.sql',
+  'docs/workshop-order-system/production-readiness/sql/WOS_V1_PRODUCTION_P7_INSTALL.sql',
 ), 'utf8');
 const proofRenewalSql = readFileSync(resolve(
   'docs/workshop-order-system/production-readiness/sql/',
