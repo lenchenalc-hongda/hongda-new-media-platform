@@ -38,7 +38,7 @@ assert.equal(livePolicySnapshot.policies.length, 6);
 for (const marker of [
   "wos_v1.qa_storage_compat_install_authorized",
   "'xulmpqaknlwqqculbsek'",
-  "WOS-V1-PRODUCTION-M2-QA-UAT-009",
+  "WOS-V1-PRODUCTION-M2-QA-UAT-010",
   'wos_v1_qa_storage_compat.policy_backup',
   'wos_v1_qa_storage_compat.install_state',
   'wos_p7_private_object_insert',

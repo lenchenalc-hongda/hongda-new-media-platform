@@ -10,10 +10,10 @@ import { fileURLToPath } from 'node:url';
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '../..');
 const AUTH_ID =
   process.env.WOS_V1_QA_AUTHORIZATION_ID
-  || 'WOS-V1-PRODUCTION-M2-QA-UAT-009';
+  || 'WOS-V1-PRODUCTION-M2-QA-UAT-010';
 const QA_APP_EXECUTION_ID =
   process.env.WOS_V1_QA_APP_EXECUTION_ID
-  || '6ee17c06-fd16-46dc-9054-c9e5c5da139d';
+  || '54d03da8-79a2-42b1-af64-11cb2608517c';
 const PROJECT_REF = 'xulmpqaknlwqqculbsek';
 const ARM_KEYCHAIN = 'WOS_V1_QA_DB_CLOSER_ARM_TOKEN';
 const OWNED_TEST_CONTAINER =
@@ -35,6 +35,14 @@ const APP_ACTIVATE = join(
 const APP_DEACTIVATE = join(
   ROOT,
   'docs/workshop-order-system/production-readiness/sql/WOS_V1_QA_UAT_APP_DEACTIVATE_NOT_AUTHORIZED.sql',
+);
+const STORAGE_COMPAT_INSTALL = join(
+  ROOT,
+  'docs/workshop-order-system/production-readiness/sql/WOS_V1_QA_UAT_STORAGE_COMPAT_INSTALL_NOT_AUTHORIZED.sql',
+);
+const STORAGE_COMPAT_ROLLBACK = join(
+  ROOT,
+  'docs/workshop-order-system/production-readiness/sql/WOS_V1_QA_UAT_STORAGE_COMPAT_ROLLBACK_NOT_AUTHORIZED.sql',
 );
 
 function fail(code) {
@@ -310,6 +318,26 @@ function deactivateQaApp() {
   ].join('\n');
   runSql(sql);
   process.stdout.write('WOS_V1_QA_DB_CLOSER_APP_DEACTIVATE=PASS\n');
+}
+
+function installStorageCompat() {
+  const sql = [
+    projectSettingsSql(),
+    "SET wos_v1.qa_storage_compat_install_authorized='yes';",
+    readFileSync(STORAGE_COMPAT_INSTALL, 'utf8'),
+  ].join('\n');
+  runSql(sql);
+  process.stdout.write('WOS_V1_QA_DB_CLOSER_STORAGE_COMPAT_INSTALL=PASS\n');
+}
+
+function rollbackStorageCompat() {
+  const sql = [
+    projectSettingsSql(),
+    "SET wos_v1.qa_storage_compat_rollback_authorized='yes';",
+    readFileSync(STORAGE_COMPAT_ROLLBACK, 'utf8'),
+  ].join('\n');
+  runSql(sql);
+  process.stdout.write('WOS_V1_QA_DB_CLOSER_STORAGE_COMPAT_ROLLBACK=PASS\n');
 }
 
 function installCloserOnly() {
@@ -635,6 +663,8 @@ try {
   else if (command === 'activate-full-m2') activateFullM2();
   else if (command === 'activate-qa-app') activateQaApp();
   else if (command === 'deactivate-qa-app') deactivateQaApp();
+  else if (command === 'install-storage-compat') installStorageCompat();
+  else if (command === 'rollback-storage-compat') rollbackStorageCompat();
   else if (command === 'arm') await arm(false);
   else if (command === 'arm-closer-only') await arm(true);
   else if (command === 'status') status(false);

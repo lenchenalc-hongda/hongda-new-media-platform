@@ -19,7 +19,7 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '../..');
 const SCRIPT = fileURLToPath(import.meta.url);
 const AUTH_ID =
   process.env.WOS_V1_QA_AUTHORIZATION_ID
-  || 'WOS-V1-PRODUCTION-M2-QA-UAT-009';
+  || 'WOS-V1-PRODUCTION-M2-QA-UAT-010';
 const PROJECT_REF = 'xulmpqaknlwqqculbsek';
 const ARM_KEYCHAIN = 'WOS_V1_QA_DB_CLOSER_ARM_TOKEN';
 const SERVICE_KEYCHAIN = 'WOS_V1_QA_EDGE_CLOSER_SERVICE_ROLE_KEY';
@@ -166,6 +166,13 @@ function label(id) {
   return `com.hongda.wos.qa-edge-closer.${id.replaceAll('-', '')}`;
 }
 
+function configuredEdgeProxy() {
+  return process.env.WOS_V1_QA_EDGE_PROXY
+    || process.env.HTTPS_PROXY
+    || process.env.https_proxy
+    || '';
+}
+
 function plistPath(id) {
   return join(plistDir(), `${label(id)}.plist`);
 }
@@ -182,6 +189,10 @@ function xml(value) {
 function plistContent(id, path) {
   const output = join(stateDir(), `${id}.log`);
   const error = join(stateDir(), `${id}.error.log`);
+  const proxy = configuredEdgeProxy();
+  const proxyEnvironment = proxy
+    ? `    <key>WOS_V1_QA_EDGE_PROXY</key><string>${xml(proxy)}</string>\n`
+    : '';
   return `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -203,7 +214,7 @@ function plistContent(id, path) {
   <dict>
     <key>PATH</key><string>${xml(process.env.PATH || '/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin')}</string>
     <key>WOS_V1_QA_EDGE_LAUNCHD</key><string>1</string>
-  </dict>
+${proxyEnvironment}  </dict>
   <key>StandardOutPath</key><string>${xml(output)}</string>
   <key>StandardErrorPath</key><string>${xml(error)}</string>
 </dict>
@@ -558,24 +569,54 @@ function readState(path) {
 async function probeEdgeOnce(state, mode) {
   const service = serviceKey();
   const credentialPreflight = mode === 'CREDENTIAL';
-  const response = await fetch(state.functionUrl, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${service}`,
-      apikey: service,
-      'Content-Type': 'application/json',
-      'x-wos-qa-uat-authorization-id': AUTH_ID,
-      'x-wos-qa-uat-execution-id': state.executionId,
-      'x-wos-qa-uat-closer-nonce': state.processNonce,
-      'x-wos-qa-closer-probe': '1',
-      ...(credentialPreflight
-        ? { 'x-wos-qa-closer-credential-preflight': '1' }
-        : {}),
-    },
-    body: '{}',
-    signal: AbortSignal.timeout(30_000),
+  const quote = value => `"${String(value)
+    .replaceAll('\\', '\\\\')
+    .replaceAll('"', '\\"')}"`;
+  const target = new URL(state.functionUrl);
+  const localTarget = ['127.0.0.1', 'localhost'].includes(target.hostname);
+  const proxy = localTarget ? '' : configuredEdgeProxy();
+  const headers = [
+    `Authorization: Bearer ${service}`,
+    `apikey: ${service}`,
+    'Content-Type: application/json',
+    `x-wos-qa-uat-authorization-id: ${AUTH_ID}`,
+    `x-wos-qa-uat-execution-id: ${state.executionId}`,
+    `x-wos-qa-uat-closer-nonce: ${state.processNonce}`,
+    'x-wos-qa-closer-probe: 1',
+    ...(credentialPreflight
+      ? ['x-wos-qa-closer-credential-preflight: 1']
+      : []),
+  ];
+  const config = [
+    `url = ${quote(state.functionUrl)}`,
+    'request = "POST"',
+    'silent',
+    'show-error',
+    'max-time = 30',
+    ...(proxy ? [`proxy = ${quote(proxy)}`] : []),
+    ...headers.map(header => `header = ${quote(header)}`),
+    'data = "{}"',
+    'write-out = "\\n%{http_code}"',
+  ].join('\n');
+  const result = spawnSync('curl', ['-q', '--config', '-'], {
+    input: config,
+    encoding: 'utf8',
+    maxBuffer: 1024 * 1024,
   });
-  const payload = await response.json().catch(() => null);
+  if (result.error || result.status !== 0) {
+    throw result.error || new Error('WOS_V1_QA_EDGE_PROBE_CURL_FAILED');
+  }
+  const lines = String(result.stdout || '').trimEnd().split('\n');
+  const status = Number(lines.pop());
+  if (!Number.isInteger(status)) {
+    throw new Error('WOS_V1_QA_EDGE_PROBE_STATUS_MISSING');
+  }
+  let payload = null;
+  try {
+    payload = JSON.parse(lines.join('\n'));
+  } catch {
+    payload = null;
+  }
   const data = payload?.data && typeof payload.data === 'object'
     ? payload.data
     : null;
@@ -584,20 +625,20 @@ async function probeEdgeOnce(state, mode) {
     && typeof payload === 'object'
     && data?.executionId === state.executionId;
   return {
-    status: response.status,
+    status,
     code: payload && typeof payload === 'object'
       ? String(payload.code || '')
       : '',
     ok: mode === 'CREDENTIAL'
-      ? response.status === 200
+      ? status === 200
         && payload?.code === 'WOS_V1_QA_EDGE_CREDENTIAL_VERIFIED'
         && commonOk
       : mode === 'OPEN'
-      ? response.status === 200
+      ? status === 200
         && payload?.code === 'WOS_V1_QA_EDGE_OPEN_PROBE'
         && data?.gateStatus === 'OPEN'
         && commonOk
-      : response.status === 503
+      : status === 503
         && payload?.code === 'WOS_V1_QA_EDGE_CLOSED'
         && data?.gateStatus === 'CLOSED'
         && commonOk

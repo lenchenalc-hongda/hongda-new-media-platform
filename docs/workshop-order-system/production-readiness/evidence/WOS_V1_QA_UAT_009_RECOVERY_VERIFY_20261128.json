@@ -1,0 +1,105 @@
+{
+  "schemaVersion": 1,
+  "capturedAt": "2026-11-28T03:29:26.282958+00:00",
+  "projectRef": "xulmpqaknlwqqculbsek",
+  "authorizationId": "WOS-V1-PRODUCTION-M2-QA-UAT-009",
+  "executionId": "6ee17c06-fd16-46dc-9054-c9e5c5da139d",
+  "status": "RECOVERED_WITH_RETAINED_DATA",
+  "source": {
+    "head": "962e6797dca220b3ca2ef169fc4bd6f72fae99a7",
+    "ciRunId": 46101570089,
+    "ciResult": "SUCCESS"
+  },
+  "counts": {
+    "orphan_claims": 0,
+    "runtime_proofs": 36,
+    "create_receipts": 6,
+    "office_revisions": 9,
+    "operator_action_receipts": 10,
+    "operator_review_receipts": 4
+  },
+  "historicalDataSha256": "ee71ed883953449043dfaa0e788906454349902fec2af164f9d290a83555fca8",
+  "expectedHistoricalDataSha256": "ee71ed883953449043dfaa0e788906454349902fec2af164f9d290a83555fca8",
+  "orderRetained": {
+    "id": "3ade0180-e6bf-49da-b80b-fd00cd1948a8",
+    "version": 5,
+    "orderNumber": "QA-NONPROD-ccd975a6-1516-4833-afd1-902077e70ed8",
+    "versionLabel": "V2",
+    "organizationId": "0ff53d93-2b9e-48b9-8113-a4768c39cdd2",
+    "workflowStatus": "NEEDS_INFORMATION"
+  },
+  "control": {
+    "dbState": "CLOSED",
+    "openedAt": "2026-11-28T03:23:01.606812+00:00",
+    "edgeState": "CLOSED",
+    "dbClosedAt": "2026-11-28T03:23:39.650604+00:00",
+    "executionId": "6ee17c06-fd16-46dc-9054-c9e5c5da139d",
+    "edgeClosedAt": "2026-11-28T03:23:29.014419+00:00",
+    "authorizationId": "WOS-V1-PRODUCTION-M2-QA-UAT-009",
+    "writeDeadlineAt": "2026-11-28T03:31:01.606812+00:00"
+  },
+  "closeReceipts": [
+    {
+      "reason": "DB_CLOSE_REQUESTED",
+      "timely": true,
+      "closedAt": "2026-11-28T03:23:39.650604+00:00",
+      "closerKind": "DB",
+      "cleanupDeadlineAt": "2026-11-28T03:32:01.606812+00:00"
+    },
+    {
+      "reason": "WOS_V1_QA_EDGE_OPEN_PROBE_EXCEPTION",
+      "timely": true,
+      "closedAt": "2026-11-28T03:23:29.014419+00:00",
+      "closerKind": "EDGE",
+      "cleanupDeadlineAt": "2026-11-28T03:37:01.606812+00:00"
+    }
+  ],
+  "writeGatesOpen": 0,
+  "cronJobCount": 0,
+  "launchAgentLoaded": false,
+  "edgeArmStatus": "PENDING",
+  "edgeAutomaticClose": "NOT_ARMED",
+  "storage": {
+    "bucket": {
+      "id": "wos-private",
+      "public": false,
+      "fileSizeLimit": 20971520,
+      "allowedMimeTypes": [
+        "image/jpeg",
+        "image/png",
+        "image/webp"
+      ]
+    },
+    "policyNames": [
+      "wos_p7_private_object_insert",
+      "wos_p7_private_object_select",
+      "wos_p7_storage_reader_roles",
+      "wos_qa_revision_object_insert"
+    ],
+    "wosPolicyMd5": "f9759e0644e82ff4264efa42ac54e57c",
+    "nonWosPolicyMd5": "f64fe08ac8669875ee9f7f3d4bbbc60f",
+    "compatSchemaPresent": false
+  },
+  "functions": {
+    "qaM2": false,
+    "qaStart": false,
+    "qaM2Authenticated": false,
+    "createAuthenticated": false,
+    "qaStartAuthenticated": false,
+    "productionM2Authenticated": false,
+    "productionStartAuthenticated": false
+  },
+  "edgeRestore": {
+    "verifyJwt": true,
+    "writeIndexSha256": "95942d03618a67201b8b810f1a5075c98a040b9140aa9dd6e06add9f9a70d433",
+    "writeCoreSha256": "9336bf738a550d6e701420d2cedd0a3ce78c9ab16fec690310fede91e3d57b65",
+    "readOnlyIndexSha256": "4ce6360bfd077dfb59a2f3e824275134eb706a79fa1db673cb719c6d06ee02ee",
+    "readOnlyHandlerSha256": "04f00051ad761bbc01ca61ef30c03874613bc32bab953f9e7cbd6bf179d70a87",
+    "readOnlyCoreSha256": "b65d7290a5e8d45034ee81288939e70bb39a0fe6409b65d28c99922fc54ad396",
+    "sharedPngIntegritySha256": "fa2690fdb01030f478552aff19893520d94615dd6f52a2b13672448eaa62ecdf"
+  },
+  "productionChanged": false,
+  "pr281Merged": false,
+  "pr283Merged": false,
+  "canStart": false
+}
