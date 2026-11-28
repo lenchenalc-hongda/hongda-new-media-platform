@@ -472,7 +472,7 @@ function imageStoragePath(orderId, versionLabel, image) {
   ].join('/');
 }
 
-async function issueImageProof(
+async function callImageProof(
   identity,
   orderId,
   versionLabel,
@@ -507,11 +507,32 @@ async function issueImageProof(
     status: edgeResponse.status,
     payload: edge,
   });
-  assert.equal(edgeResponse.status, 200);
-  assert.equal(edge?.ok, true);
-  assert.equal(edge?.code, 'WOS_V1_TRUSTED_IMAGE_PROOF_ISSUED');
-  assert.equal(edge?.data?.sha256, sha256);
-  assert(['VERIFIED', 'REPLAYED'].includes(edge?.data?.proofStatus));
+  return { status: edgeResponse.status, payload: edge };
+}
+
+async function issueImageProof(
+  identity,
+  orderId,
+  versionLabel,
+  image,
+  storagePath,
+  sha256,
+) {
+  const result = await callImageProof(
+    identity,
+    orderId,
+    versionLabel,
+    image,
+    storagePath,
+    sha256,
+  );
+  assert.equal(result.status, 200);
+  assert.equal(result.payload?.ok, true);
+  assert.equal(result.payload?.code, 'WOS_V1_TRUSTED_IMAGE_PROOF_ISSUED');
+  assert.equal(result.payload?.data?.sha256, sha256);
+  assert(
+    ['VERIFIED', 'REPLAYED'].includes(result.payload?.data?.proofStatus),
+  );
 }
 
 async function uploadAndVerify(identity, orderId, versionLabel, image) {
@@ -1341,6 +1362,41 @@ async function main() {
     canStart: readonlyPositive.body?.data?.canStart,
   };
 
+  let observedState = state;
+  if (RESUME_AT_MATERIAL
+    && input.postReleaseProofRefreshProbe === true) {
+    assert.equal(state.workflowStatus, 'READY_TO_START');
+    const proofProbe = await callImageProof(
+      identities.office,
+      orderId,
+      'V2',
+      v2Images[0],
+      v2Images[0].storagePath,
+      v2Images[0].sha256,
+    );
+    test.postReleaseProofRefreshProbe = {
+      status: proofProbe.status,
+      code: proofProbe.payload?.code ?? null,
+      expected: 'REJECTED_AND_RELEASE_RETAINED',
+    };
+    assert([403, 409].includes(proofProbe.status));
+    const unchangedState = JSON.parse(runSql(`
+      SELECT jsonb_build_object(
+        'id',id,
+        'version',version,
+        'versionLabel',version_label,
+        'workflowStatus',workflow_status
+      )::text
+      FROM public.wos_production_orders
+      WHERE id=${sqlLiteral(orderId)}::uuid;
+    `).split('\n').filter(Boolean).at(-1));
+    assert.equal(unchangedState.version, state.version);
+    assert.equal(unchangedState.versionLabel, 'V2');
+    assert.equal(unchangedState.workflowStatus, 'READY_TO_START');
+    test.postReleaseVerifiedState = unchangedState;
+    observedState = unchangedState;
+  }
+
   writeFileSync(
     EVIDENCE_PATH,
     `${JSON.stringify(test, null, 2)}\n`,
@@ -1349,9 +1405,11 @@ async function main() {
   process.stdout.write(`${JSON.stringify({
     status: 'PASS',
     orderId,
-    finalVersion: state.version,
-    finalLabel: state.versionLabel,
-    finalWorkflowStatus: state.workflowStatus,
+    releasePositiveVersion: state.version,
+    releasePositiveWorkflowStatus: state.workflowStatus,
+    finalVersion: observedState.version,
+    finalLabel: observedState.versionLabel,
+    finalWorkflowStatus: observedState.workflowStatus,
     evidence: EVIDENCE_PATH,
     writeDeadlineAt: control.writeDeadlineAt,
   })}\n`);

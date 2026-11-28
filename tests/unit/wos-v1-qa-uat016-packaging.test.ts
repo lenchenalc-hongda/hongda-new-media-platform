@@ -73,6 +73,7 @@ assert.equal(input.resumeExpectedVersionLabel, 'V2');
 assert.equal(input.resumeExpectedWorkflowStatus, 'WAITING_MATERIAL');
 assert.equal(input.limits.maxNewOrders, 0);
 assert.equal(input.limits.maxCreateCalls, 0);
+assert.equal(input.postReleaseProofRefreshProbe, true);
 assert.equal(input.environment.WOS_V1_QA_APP_WRITES_ENABLED, 'false');
 assert.equal(
   input.environment.WOS_V1_QA_UAT_M2_WRITES_ENABLED,
@@ -115,6 +116,9 @@ for (const marker of [
   'MATERIAL_INPUTS_READY',
   'WOS_UAT_RESUME_STAGE_UNSUPPORTED',
   'reverifyExistingImage',
+  'postReleaseProofRefreshProbe',
+  'postReleaseVerifiedState',
+  'callImageProof',
   "existingOrder.workflowStatus",
   "input.resumeExpectedWorkflowStatus",
   "if (!RESUME_MODE)",

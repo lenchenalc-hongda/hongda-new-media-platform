@@ -16,6 +16,7 @@
   "createPayloadFingerprint": "d9ac15360649430b3787ed24e5d26c7269ba770e22264f03e1c4088d4292ac05",
   "executionId": "11c9a114-4381-49fb-9cd6-04591c7b833b",
   "edgeProcessNonce": "c0091f69-8b97-4e1c-a270-a9ff4f199965",
+  "postReleaseProofRefreshProbe": true,
   "actors": {
     "office": {
       "profileId": "f8adf44a-f04e-44b4-9c82-8b96508097bb",

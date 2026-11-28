@@ -10,6 +10,9 @@ Status: `READY_FOR_OWNER_REVIEW`
 - Refresh the same four V2 Proofs before material readiness.
 - Complete four material records, the current image baseline, Office and
   Workshop signoff, atomic readiness, and independent Manager release.
+- Save the positive release state, then probe one post-release V2 Proof
+  refresh. The hosted path must reject it and retain `READY_TO_START`.
+  Actual evidence-change invalidation remains covered by isolated PG17 tests.
 
 ## Root Cause From UAT-015
 
