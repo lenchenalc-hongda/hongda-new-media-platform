@@ -1,0 +1,477 @@
+
+> hongda-nmc@0.1.0 build
+> pnpm build:meta && node node_modules/next/dist/bin/next build
+
+$ node scripts/build-meta.mjs
+[build-meta] {"sha":"dev","timestamp":"2026-11-28T02:49:16.167Z","buildNumber":1795834156168}
+  ▲ Next.js 14.2.35
+
+   Creating an optimized production build ...
+ ✓ Compiled successfully
+   Linting and checking validity of types ...
+   Collecting page data ...
+[scoring] Bad script = 0 pts, F grade
+[scoring] Weaknesses: [
+  '单点聚焦不足：讲了3个核心点，应只讲1个',
+  '口语化程度不足：句子偏长，需要更短的分句、缺少口语化连接词、像文章而不像口播',
+  '工厂判断逻辑不足：缺少工厂逻辑判断',
+  '转化动作不足：没有下一步动作引导',
+  '没有下一步动作'
+]
+[scoring] Bad script = 0 pts, F grade
+[scoring] Weaknesses: [
+  '单点聚焦不足：讲了3个核心点，应只讲1个',
+  '口语化程度不足：句子偏长，需要更短的分句、缺少口语化连接词、像文章而不像口播',
+  '工厂判断逻辑不足：缺少工厂逻辑判断',
+  '转化动作不足：没有下一步动作引导',
+  '没有下一步动作'
+]
+[scoring] Bad script = 0 pts, F grade
+[scoring] Weaknesses: [
+  '单点聚焦不足：讲了3个核心点，应只讲1个',
+  '口语化程度不足：句子偏长，需要更短的分句、缺少口语化连接词、像文章而不像口播',
+  '工厂判断逻辑不足：缺少工厂逻辑判断',
+  '转化动作不足：没有下一步动作引导',
+  '没有下一步动作'
+]
+[scoring] Bad script = 0 pts, F grade
+[scoring] Weaknesses: [
+  '单点聚焦不足：讲了3个核心点，应只讲1个',
+  '口语化程度不足：句子偏长，需要更短的分句、缺少口语化连接词、像文章而不像口播',
+  '工厂判断逻辑不足：缺少工厂逻辑判断',
+  '转化动作不足：没有下一步动作引导',
+  '没有下一步动作'
+]
+[scoring] Bad script = 0 pts, F grade
+[scoring] Weaknesses: [
+  '单点聚焦不足：讲了3个核心点，应只讲1个',
+  '口语化程度不足：句子偏长，需要更短的分句、缺少口语化连接词、像文章而不像口播',
+  '工厂判断逻辑不足：缺少工厂逻辑判断',
+  '转化动作不足：没有下一步动作引导',
+  '没有下一步动作'
+]
+[scoring] Bad script = 0 pts, F grade
+[scoring] Weaknesses: [
+  '单点聚焦不足：讲了3个核心点，应只讲1个',
+  '口语化程度不足：句子偏长，需要更短的分句、缺少口语化连接词、像文章而不像口播',
+  '工厂判断逻辑不足：缺少工厂逻辑判断',
+  '转化动作不足：没有下一步动作引导',
+  '没有下一步动作'
+]
+   Generating static pages (0/131) ...
+[scoring] Bad script = 0 pts, F grade
+[scoring] Weaknesses: [
+  '单点聚焦不足：讲了3个核心点，应只讲1个',
+  '口语化程度不足：句子偏长，需要更短的分句、缺少口语化连接词、像文章而不像口播',
+  '工厂判断逻辑不足：缺少工厂逻辑判断',
+  '转化动作不足：没有下一步动作引导',
+  '没有下一步动作'
+]
+[scoring] Bad script = 0 pts, F grade
+[scoring] Weaknesses: [
+  '单点聚焦不足：讲了3个核心点，应只讲1个',
+  '口语化程度不足：句子偏长，需要更短的分句、缺少口语化连接词、像文章而不像口播',
+  '工厂判断逻辑不足：缺少工厂逻辑判断',
+  '转化动作不足：没有下一步动作引导',
+  '没有下一步动作'
+]
+[scoring] Bad script = 0 pts, F grade
+[scoring] Weaknesses: [
+  '单点聚焦不足：讲了3个核心点，应只讲1个',
+  '口语化程度不足：句子偏长，需要更短的分句、缺少口语化连接词、像文章而不像口播',
+  '工厂判断逻辑不足：缺少工厂逻辑判断',
+  '转化动作不足：没有下一步动作引导',
+  '没有下一步动作'
+]
+   Generating static pages (32/131) 
+[auth-perf] {"scope":"server-readonly","outcome":"error","totalMs":0}
+[auth-perf] {"scope":"server-readonly","outcome":"error","totalMs":0}
+[auth-perf] {"scope":"server-readonly","outcome":"error","totalMs":0}
+[auth-perf] {"scope":"server-readonly","outcome":"error","totalMs":0}
+[auth-perf] {"scope":"server-readonly","outcome":"error","totalMs":1}
+[auth-perf] {"scope":"server-readonly","outcome":"error","totalMs":0}
+[auth-perf] {"scope":"server-readonly","outcome":"error","totalMs":0}
+[auth-perf] {"scope":"server-readonly","outcome":"error","totalMs":0}
+[auth-perf] {"scope":"server-readonly","outcome":"error","totalMs":0}
+[auth-perf] {"scope":"server-readonly","outcome":"error","totalMs":0}
+[auth-perf] {"scope":"server-readonly","outcome":"error","totalMs":0}
+[auth-perf] {"scope":"server-readonly","outcome":"error","totalMs":0}
+[auth-perf] {"scope":"server-readonly","outcome":"error","totalMs":0}
+[auth-perf] {"scope":"server-readonly","outcome":"error","totalMs":0}
+[auth-perf] {"scope":"server-readonly","outcome":"error","totalMs":0}
+[auth-perf] {"scope":"server-readonly","outcome":"error","totalMs":0}
+[auth-perf] {"scope":"server-readonly","outcome":"error","totalMs":0}
+[auth-perf] {"scope":"server-readonly","outcome":"error","totalMs":0}
+[auth-perf] {"scope":"server-readonly","outcome":"error","totalMs":0}
+[auth-perf] {"scope":"server-readonly","outcome":"error","totalMs":0}
+[auth-perf] {"scope":"server-readonly","outcome":"error","totalMs":0}
+[auth-perf] {"scope":"server-readonly","outcome":"error","totalMs":0}
+[auth-perf] {"scope":"server-readonly","outcome":"error","totalMs":0}
+[auth-perf] {"scope":"server-readonly","outcome":"error","totalMs":0}
+[auth-perf] {"scope":"server-readonly","outcome":"error","totalMs":0}
+[auth-perf] {"scope":"server-readonly","outcome":"error","totalMs":0}
+[Debug] MOCK_ACCOUNTS from import: 5 items
+[auth-perf] {"scope":"server-readonly","outcome":"error","totalMs":0}
+[auth-perf] {"scope":"server-readonly","outcome":"error","totalMs":0}
+[auth-perf] {"scope":"server-readonly","outcome":"error","totalMs":0}
+[auth-perf] {"scope":"server-readonly","outcome":"error","totalMs":0}
+[auth-perf] {"scope":"server-readonly","outcome":"error","totalMs":0}
+[auth-perf] {"scope":"server-readonly","outcome":"error","totalMs":0}
+[auth-perf] {"scope":"server-readonly","outcome":"error","totalMs":0}
+[auth-perf] {"scope":"server-readonly","outcome":"error","totalMs":0}
+[auth-perf] {"scope":"server-readonly","outcome":"error","totalMs":0}
+[auth-perf] {"scope":"server-readonly","outcome":"error","totalMs":0}
+[auth-perf] {"scope":"server-readonly","outcome":"error","totalMs":0}
+[auth-perf] {"scope":"server-readonly","outcome":"error","totalMs":0}
+[auth-perf] {"scope":"server-readonly","outcome":"error","totalMs":0}
+[auth-perf] {"scope":"server-readonly","outcome":"error","totalMs":0}
+[auth-perf] {"scope":"server-readonly","outcome":"error","totalMs":0}
+[auth-perf] {"scope":"server-readonly","outcome":"error","totalMs":0}
+[auth-perf] {"scope":"server-readonly","outcome":"error","totalMs":0}
+[auth-perf] {"scope":"server-readonly","outcome":"error","totalMs":0}
+[auth-perf] {"scope":"server-readonly","outcome":"error","totalMs":0}
+[auth-perf] {"scope":"server-readonly","outcome":"error","totalMs":0}
+[auth-perf] {"scope":"server-readonly","outcome":"error","totalMs":0}
+[auth-perf] {"scope":"server-readonly","outcome":"error","totalMs":0}
+[auth-perf] {"scope":"server-readonly","outcome":"error","totalMs":0}
+[auth-perf] {"scope":"server-readonly","outcome":"error","totalMs":1}
+[auth-perf] {"scope":"server-readonly","outcome":"error","totalMs":1}
+[auth-perf] {"scope":"server-readonly","outcome":"error","totalMs":0}
+[auth-perf] {"scope":"server-readonly","outcome":"error","totalMs":0}
+[auth-perf] {"scope":"server-readonly","outcome":"error","totalMs":0}
+[auth-perf] {"scope":"server-readonly","outcome":"error","totalMs":1}
+[auth-perf] {"scope":"server-readonly","outcome":"error","totalMs":0}
+   Generating static pages (65/131) 
+[auth-perf] {"scope":"server-readonly","outcome":"error","totalMs":0}
+[auth-perf] {"scope":"server-readonly","outcome":"error","totalMs":0}
+[auth-perf] {"scope":"server-readonly","outcome":"error","totalMs":0}
+[auth-perf] {"scope":"server-readonly","outcome":"error","totalMs":0}
+[auth-perf] {"scope":"server-readonly","outcome":"error","totalMs":0}
+[auth-perf] {"scope":"server-readonly","outcome":"error","totalMs":0}
+[auth-perf] {"scope":"server-readonly","outcome":"error","totalMs":0}
+[auth-perf] {"scope":"server-readonly","outcome":"error","totalMs":0}
+[auth-perf] {"scope":"server-readonly","outcome":"error","totalMs":0}
+[auth-perf] {"scope":"server-readonly","outcome":"error","totalMs":0}
+[auth-perf] {"scope":"server-readonly","outcome":"error","totalMs":0}
+[auth-perf] {"scope":"server-readonly","outcome":"error","totalMs":0}
+[auth-perf] {"scope":"server-readonly","outcome":"error","totalMs":0}
+[auth-perf] {"scope":"server-readonly","outcome":"error","totalMs":0}
+[auth-perf] {"scope":"server-readonly","outcome":"error","totalMs":0}
+[auth-perf] {"scope":"server-readonly","outcome":"error","totalMs":0}
+[auth-perf] {"scope":"server-readonly","outcome":"error","totalMs":0}
+[auth-perf] {"scope":"server-readonly","outcome":"error","totalMs":0}
+[auth-perf] {"scope":"server-readonly","outcome":"error","totalMs":0}
+[auth-perf] {"scope":"server-readonly","outcome":"error","totalMs":0}
+[auth-perf] {"scope":"server-readonly","outcome":"error","totalMs":0}
+[auth-perf] {"scope":"server-readonly","outcome":"error","totalMs":0}
+[auth-perf] {"scope":"server-readonly","outcome":"error","totalMs":0}
+[auth-perf] {"scope":"server-readonly","outcome":"error","totalMs":0}
+[auth-perf] {"scope":"server-readonly","outcome":"error","totalMs":0}
+[auth-perf] {"scope":"server-readonly","outcome":"error","totalMs":0}
+[auth-perf] {"scope":"server-readonly","outcome":"error","totalMs":0}
+[auth-perf] {"scope":"server-readonly","outcome":"error","totalMs":0}
+[auth-perf] {"scope":"server-readonly","outcome":"error","totalMs":0}
+[auth-perf] {"scope":"server-readonly","outcome":"error","totalMs":0}
+[scoring] Bad script = 0 pts, F grade
+[scoring] Weaknesses: [
+  '单点聚焦不足：讲了3个核心点，应只讲1个',
+  '口语化程度不足：句子偏长，需要更短的分句、缺少口语化连接词、像文章而不像口播',
+  '工厂判断逻辑不足：缺少工厂逻辑判断',
+  '转化动作不足：没有下一步动作引导',
+  '没有下一步动作'
+]
+[auth-perf] {"scope":"server-readonly","outcome":"error","totalMs":0}
+[auth-perf] {"scope":"server-readonly","outcome":"error","totalMs":0}
+[auth-perf] {"scope":"server-readonly","outcome":"error","totalMs":0}
+[auth-perf] {"scope":"server-readonly","outcome":"error","totalMs":0}
+[auth-perf] {"scope":"server-readonly","outcome":"error","totalMs":0}
+[auth-perf] {"scope":"server-readonly","outcome":"error","totalMs":0}
+[auth-perf] {"scope":"server-readonly","outcome":"error","totalMs":0}
+[auth-perf] {"scope":"server-readonly","outcome":"error","totalMs":0}
+[auth-perf] {"scope":"server-readonly","outcome":"error","totalMs":0}
+[auth-perf] {"scope":"server-readonly","outcome":"error","totalMs":0}
+[auth-perf] {"scope":"server-readonly","outcome":"error","totalMs":0}
+[auth-perf] {"scope":"server-readonly","outcome":"error","totalMs":0}
+[auth-perf] {"scope":"server-readonly","outcome":"error","totalMs":0}
+[auth-perf] {"scope":"server-readonly","outcome":"error","totalMs":0}
+[auth-perf] {"scope":"server-readonly","outcome":"error","totalMs":0}
+[auth-perf] {"scope":"server-readonly","outcome":"error","totalMs":0}
+[auth-perf] {"scope":"server-readonly","outcome":"error","totalMs":0}
+[auth-perf] {"scope":"server-readonly","outcome":"error","totalMs":0}
+[auth-perf] {"scope":"server-readonly","outcome":"error","totalMs":0}
+[auth-perf] {"scope":"server-readonly","outcome":"error","totalMs":1}
+   Generating static pages (98/131) 
+[auth-perf] {"scope":"server-readonly","outcome":"error","totalMs":0}
+[auth-perf] {"scope":"server-readonly","outcome":"error","totalMs":0}
+[auth-perf] {"scope":"server-readonly","outcome":"error","totalMs":0}
+[auth-perf] {"scope":"server-readonly","outcome":"error","totalMs":0}
+[auth-perf] {"scope":"server-readonly","outcome":"error","totalMs":0}
+[auth-perf] {"scope":"server-readonly","outcome":"error","totalMs":0}
+[auth-perf] {"scope":"server-readonly","outcome":"error","totalMs":1}
+[auth-perf] {"scope":"server-readonly","outcome":"error","totalMs":0}
+ ✓ Generating static pages (131/131)
+   Finalizing page optimization ...
+   Collecting build traces ...
+
+Route (app)                                                                     Size     First Load JS
+┌ ○ /                                                                           147 B          87.5 kB
+├ ○ /_not-found                                                                 876 B          88.2 kB
+├ ○ /accounts                                                                   3.31 kB         135 kB
+├ ƒ /accounts/[id]                                                              2.61 kB         132 kB
+├ ƒ /api/ai/account-diagnosis                                                   0 B                0 B
+├ ƒ /api/ai/check-script-risk                                                   0 B                0 B
+├ ƒ /api/ai/generate-script                                                     0 B                0 B
+├ ƒ /api/ai/generate-script-draft                                               0 B                0 B
+├ ƒ /api/ai/generate-script-pipeline                                            0 B                0 B
+├ ƒ /api/ai/generate-script-strategy                                            0 B                0 B
+├ ƒ /api/ai/generate-topics                                                     0 B                0 B
+├ ƒ /api/ai/health                                                              0 B                0 B
+├ ƒ /api/ai/lead-reply                                                          0 B                0 B
+├ ƒ /api/ai/lead-score                                                          0 B                0 B
+├ ƒ /api/ai/polish-script                                                       0 B                0 B
+├ ƒ /api/ai/post-review                                                         0 B                0 B
+├ ƒ /api/ai/retrieve-context                                                    0 B                0 B
+├ ƒ /api/ai/rewrite-script                                                      0 B                0 B
+├ ƒ /api/ai/score-script                                                        0 B                0 B
+├ ƒ /api/ai/script/angles                                                       0 B                0 B
+├ ƒ /api/ai/script/batch                                                        0 B                0 B
+├ ƒ /api/ai/script/duplicate-rewrite                                            0 B                0 B
+├ ƒ /api/ai/script/hooks                                                        0 B                0 B
+├ ƒ /api/ai/script/jobs/[jobId]                                                 0 B                0 B
+├ ƒ /api/ai/script/jobs/process                                                 0 B                0 B
+├ ƒ /api/ai/script/optimize                                                     0 B                0 B
+├ ƒ /api/ai/script/pipeline                                                     0 B                0 B
+├ ƒ /api/ai/script/recommend-knowledge                                          0 B                0 B
+├ ƒ /api/ai/script/suggest-pains                                                0 B                0 B
+├ ƒ /api/ai/script/suggest-products                                             0 B                0 B
+├ ƒ /api/ai/test-deepseek                                                       0 B                0 B
+├ ƒ /api/ai/viral-teardown                                                      0 B                0 B
+├ ƒ /api/ai/weekly-report                                                       0 B                0 B
+├ ƒ /api/auth/login                                                             0 B                0 B
+├ ƒ /api/auth/logout                                                            0 B                0 B
+├ ƒ /api/commercial-documents/confirmed                                         0 B                0 B
+├ ƒ /api/commercial-documents/confirmed/[id]                                    0 B                0 B
+├ ƒ /api/commercial-documents/customer-options                                  0 B                0 B
+├ ƒ /api/commercial-documents/drafts                                            0 B                0 B
+├ ƒ /api/commercial-documents/drafts/[id]                                       0 B                0 B
+├ ƒ /api/commercial-documents/drafts/[id]/revisions                             0 B                0 B
+├ ƒ /api/commercial-documents/item-images                                       0 B                0 B
+├ ƒ /api/commercial-documents/payment-methods                                   0 B                0 B
+├ ƒ /api/commercial-documents/payment-methods/[id]/image                        0 B                0 B
+├ ƒ /api/commercial-documents/production-orders/confirmed                       0 B                0 B
+├ ƒ /api/commercial-documents/production-orders/confirmed/[id]                  0 B                0 B
+├ ƒ /api/commercial-documents/production-orders/drafts                          0 B                0 B
+├ ƒ /api/commercial-documents/production-orders/drafts/[id]                     0 B                0 B
+├ ƒ /api/csv/export                                                             0 B                0 B
+├ ƒ /api/csv/import                                                             0 B                0 B
+├ ƒ /api/customer-projects/ai-drafts                                            0 B                0 B
+├ ƒ /api/customer-projects/ai-drafts/[id]/accept                                0 B                0 B
+├ ƒ /api/customer-projects/ai-drafts/[id]/reject                                0 B                0 B
+├ ƒ /api/customer-projects/customer-ratings                                     0 B                0 B
+├ ƒ /api/customer-projects/customer-references                                  0 B                0 B
+├ ƒ /api/customer-projects/customer-workspace                                   0 B                0 B
+├ ƒ /api/customer-projects/customers                                            0 B                0 B
+├ ƒ /api/customer-projects/customers/[id]                                       0 B                0 B
+├ ƒ /api/customer-projects/customers/[id]/follow-up                             0 B                0 B
+├ ƒ /api/customer-projects/customers/[id]/relationship-follow-up                0 B                0 B
+├ ƒ /api/customer-projects/customers/provisional                                0 B                0 B
+├ ƒ /api/customer-projects/integration-status                                   0 B                0 B
+├ ƒ /api/customer-projects/projects                                             0 B                0 B
+├ ƒ /api/customer-projects/projects/[id]                                        0 B                0 B
+├ ƒ /api/customer-projects/projects/[id]/progress                               0 B                0 B
+├ ƒ /api/customer-projects/projects/[id]/transition                             0 B                0 B
+├ ƒ /api/customer-projects/projects/[id]/waiting                                0 B                0 B
+├ ƒ /api/customer-projects/reports                                              0 B                0 B
+├ ƒ /api/customer-projects/reports/[id]/correction                              0 B                0 B
+├ ƒ /api/customer-projects/reports/[id]/narrative                               0 B                0 B
+├ ƒ /api/customer-projects/reports/[id]/narrative/accept                        0 B                0 B
+├ ƒ /api/customer-projects/reports/[id]/narrative/regenerate                    0 B                0 B
+├ ƒ /api/customer-projects/reports/[id]/narrative/reject                        0 B                0 B
+├ ƒ /api/customer-projects/reports/[id]/submit                                  0 B                0 B
+├ ƒ /api/customer-projects/reports/daily/generate                               0 B                0 B
+├ ƒ /api/customer-projects/reports/review                                       0 B                0 B
+├ ƒ /api/customer-projects/reports/review/weekly                                0 B                0 B
+├ ƒ /api/customer-projects/reports/weekly                                       0 B                0 B
+├ ƒ /api/customer-projects/reports/weekly/[id]/correction                       0 B                0 B
+├ ƒ /api/customer-projects/reports/weekly/[id]/suggestions                      0 B                0 B
+├ ƒ /api/customer-projects/reports/weekly/generate                              0 B                0 B
+├ ƒ /api/customer-projects/tasks                                                0 B                0 B
+├ ƒ /api/customer-projects/team                                                 0 B                0 B
+├ ƒ /api/customer-projects/work-items/[id]/reschedule                           0 B                0 B
+├ ƒ /api/customer-projects/work-items/[id]/transition                           0 B                0 B
+├ ƒ /api/customer-projects/workbench                                            0 B                0 B
+├ ƒ /api/data                                                                   0 B                0 B
+├ ƒ /api/data/diagnostic                                                        0 B                0 B
+├ ƒ /api/data/migrate                                                           0 B                0 B
+├ ƒ /api/digital-transfer-quote                                                 0 B                0 B
+├ ƒ /api/global-lead-hub/ads                                                    0 B                0 B
+├ ƒ /api/global-lead-hub/dashboard                                              0 B                0 B
+├ ƒ /api/global-lead-hub/inbox                                                  0 B                0 B
+├ ƒ /api/global-lead-hub/inbox/actions                                          0 B                0 B
+├ ƒ /api/global-lead-hub/leads                                                  0 B                0 B
+├ ƒ /api/global-lead-hub/leads/[leadId]/assign                                  0 B                0 B
+├ ƒ /api/global-lead-hub/leads/[leadId]/stage                                   0 B                0 B
+├ ƒ /api/global-lead-hub/leads/manual                                           0 B                0 B
+├ ƒ /api/global-lead-hub/tasks                                                  0 B                0 B
+├ ƒ /api/global-lead-hub/tasks/complete                                         0 B                0 B
+├ ƒ /api/global-lead-hub/webhooks/whatsapp                                      0 B                0 B
+├ ○ /api/health                                                                 0 B                0 B
+├ ƒ /api/knowledge/embed                                                        0 B                0 B
+├ ƒ /api/knowledge/generate-script                                              0 B                0 B
+├ ƒ /api/knowledge/generate-topic                                               0 B                0 B
+├ ƒ /api/knowledge/retrieve                                                     0 B                0 B
+├ ○ /api/oa/analytics                                                           0 B                0 B
+├ ƒ /api/oa/connect                                                             0 B                0 B
+├ ƒ /api/oa/create-experiment                                                   0 B                0 B
+├ ƒ /api/oa/generate-article                                                    0 B                0 B
+├ ƒ /api/oa/generate-monthly-plan                                               0 B                0 B
+├ ƒ /api/oa/mock-publish                                                        0 B                0 B
+├ ƒ /api/oa/monthly-report                                                      0 B                0 B
+├ ƒ /api/oa/publish                                                             0 B                0 B
+├ ƒ /api/oa/publish-status/[id]                                                 0 B                0 B
+├ ƒ /api/oa/push-insight-to-knowledge                                           0 B                0 B
+├ ƒ /api/oa/render-template                                                     0 B                0 B
+├ ƒ /api/oa/save-draft                                                          0 B                0 B
+├ ƒ /api/oa/upload-media                                                        0 B                0 B
+├ ƒ /api/review-center/analytics                                                0 B                0 B
+├ ƒ /api/review-center/case-candidates                                          0 B                0 B
+├ ƒ /api/review-center/cases                                                    0 B                0 B
+├ ƒ /api/review-center/cases/[caseNo]                                           0 B                0 B
+├ ƒ /api/review-center/cases/[caseNo]/admin                                     0 B                0 B
+├ ƒ /api/review-center/cases/[caseNo]/audit                                     0 B                0 B
+├ ƒ /api/review-center/cases/[caseNo]/hide                                      0 B                0 B
+├ ƒ /api/review-center/cases/[caseNo]/publish                                   0 B                0 B
+├ ƒ /api/review-center/cases/[caseNo]/reopen                                    0 B                0 B
+├ ƒ /api/review-center/dashboard                                                0 B                0 B
+├ ƒ /api/review-center/me                                                       0 B                0 B
+├ ƒ /api/review-center/metadata/options                                         0 B                0 B
+├ ƒ /api/review-center/profile-directory                                        0 B                0 B
+├ ƒ /api/review-center/reviews                                                  0 B                0 B
+├ ƒ /api/review-center/reviews/[id]                                             0 B                0 B
+├ ƒ /api/review-center/reviews/[id]/actions                                     0 B                0 B
+├ ƒ /api/review-center/reviews/[id]/actions/[actionId]                          0 B                0 B
+├ ƒ /api/review-center/reviews/[id]/actions/[actionId]/cancel                   0 B                0 B
+├ ƒ /api/review-center/reviews/[id]/actions/[actionId]/return                   0 B                0 B
+├ ƒ /api/review-center/reviews/[id]/actions/[actionId]/start                    0 B                0 B
+├ ƒ /api/review-center/reviews/[id]/actions/[actionId]/submit-for-verification  0 B                0 B
+├ ƒ /api/review-center/reviews/[id]/actions/[actionId]/verify                   0 B                0 B
+├ ƒ /api/review-center/reviews/[id]/assignments                                 0 B                0 B
+├ ƒ /api/review-center/reviews/[id]/audit-logs                                  0 B                0 B
+├ ƒ /api/review-center/reviews/[id]/close                                       0 B                0 B
+├ ƒ /api/review-center/reviews/[id]/members                                     0 B                0 B
+├ ƒ /api/review-center/reviews/[id]/members/[memberId]                          0 B                0 B
+├ ƒ /api/review-center/reviews/[id]/members/[memberId]/primary                  0 B                0 B
+├ ƒ /api/review-center/reviews/[id]/metadata                                    0 B                0 B
+├ ƒ /api/review-center/reviews/[id]/reopen                                      0 B                0 B
+├ ƒ /api/review-center/reviews/[id]/submit                                      0 B                0 B
+├ ƒ /api/review-center/reviews/[id]/timeline                                    0 B                0 B
+├ ƒ /api/review-center/reviews/[id]/type-details                                0 B                0 B
+├ ƒ /api/workshop-orders/inbox                                                  0 B                0 B
+├ ƒ /api/workshop-orders/p2/actions                                             0 B                0 B
+├ ƒ /api/workshop-orders/p2/m2                                                  0 B                0 B
+├ ƒ /api/workshop-orders/p2/office-revisions                                    0 B                0 B
+├ ƒ /api/workshop-orders/p2/returns                                             0 B                0 B
+├ ƒ /api/workshop-orders/production                                             0 B                0 B
+├ ƒ /api/workshop-orders/production/cpc-drafts                                  0 B                0 B
+├ ƒ /api/workshop-orders/qa-image-verify                                        0 B                0 B
+├ ƒ /api/workshop-orders/sampling                                               0 B                0 B
+├ ƒ /api/workshop-orders/v1                                                     0 B                0 B
+├ ƒ /api/workshop-orders/v1-qa                                                  0 B                0 B
+├ ƒ /api/workshop-orders/v1-qa/m2                                               0 B                0 B
+├ ƒ /api/workshop-orders/v1/m2                                                  0 B                0 B
+├ ○ /calendar                                                                   1.44 kB         134 kB
+├ ƒ /commercial-documents                                                       21.8 kB         135 kB
+├ ƒ /commercial-documents/confirmed                                             1.93 kB         115 kB
+├ ƒ /commercial-documents/drafts                                                2.68 kB         108 kB
+├ ƒ /commercial-documents/production-orders                                     6.88 kB         112 kB
+├ ƒ /commercial-documents/statement                                             5.89 kB         111 kB
+├ ƒ /customer-projects                                                          6.91 kB         112 kB
+├ ƒ /customer-projects/customers                                                7.28 kB         113 kB
+├ ƒ /customer-projects/customers/[id]                                           13.8 kB         119 kB
+├ ƒ /customer-projects/projects                                                 4.99 kB         110 kB
+├ ƒ /customer-projects/projects/[id]                                            8.82 kB         114 kB
+├ ○ /customer-projects/projects/new                                             6.89 kB         112 kB
+├ ○ /customer-projects/reports                                                  6.43 kB         115 kB
+├ ○ /customer-projects/reports/review                                           2.61 kB         111 kB
+├ ○ /customer-projects/settings                                                 2.49 kB         108 kB
+├ ƒ /customer-projects/tasks                                                    6.14 kB         111 kB
+├ ƒ /customer-projects/team                                                     6.58 kB         112 kB
+├ ○ /dashboard                                                                  2.6 kB          132 kB
+├ ƒ /global-lead-hub                                                            512 B           106 kB
+├ ƒ /global-lead-hub/ads                                                        512 B           106 kB
+├ ƒ /global-lead-hub/dashboard                                                  511 B           106 kB
+├ ƒ /global-lead-hub/inbox                                                      3.8 kB          109 kB
+├ ƒ /global-lead-hub/leads                                                      512 B           106 kB
+├ ƒ /global-lead-hub/leads/[leadId]                                             4.91 kB         125 kB
+├ ƒ /global-lead-hub/leads/new                                                  4.27 kB         125 kB
+├ ƒ /global-lead-hub/tasks                                                      2.37 kB         108 kB
+├ ○ /knowledge                                                                  6.27 kB         138 kB
+├ ○ /leads                                                                      4.63 kB         137 kB
+├ ○ /login                                                                      3.04 kB        90.3 kB
+├ ○ /oa                                                                         2.2 kB          107 kB
+├ ○ /oa/analytics                                                               9.61 kB         139 kB
+├ ○ /oa/article-factory                                                         9.94 kB         154 kB
+├ ○ /oa/articles                                                                6.36 kB         150 kB
+├ ○ /oa/assets                                                                  716 B           106 kB
+├ ○ /oa/calendar                                                                2.63 kB         108 kB
+├ ○ /oa/publish-queue                                                           2.07 kB         107 kB
+├ ○ /oa/source-cards                                                            5.05 kB         142 kB
+├ ○ /oa/templates                                                               4.72 kB         148 kB
+├ ○ /official/analytics                                                         801 B           106 kB
+├ ○ /official/article-factory                                                   801 B           106 kB
+├ ○ /official/articles                                                          800 B           106 kB
+├ ○ /official/assets                                                            806 B           106 kB
+├ ○ /official/calendar                                                          802 B           106 kB
+├ ○ /official/queue                                                             801 B           106 kB
+├ ○ /official/templates                                                         802 B           106 kB
+├ ○ /posts                                                                      2.28 kB         132 kB
+├ ○ /reports                                                                    2.58 kB         132 kB
+├ ○ /review-center                                                              6.34 kB         112 kB
+├ ○ /review-center/actions                                                      960 B           106 kB
+├ ○ /review-center/actions/overdue                                              867 B           106 kB
+├ ○ /review-center/actions/verification                                         879 B           106 kB
+├ ○ /review-center/analytics                                                    4.58 kB         110 kB
+├ ○ /review-center/analytics/customers                                          893 B           106 kB
+├ ○ /review-center/analytics/issues                                             892 B           106 kB
+├ ○ /review-center/analytics/losses                                             876 B           106 kB
+├ ○ /review-center/analytics/people                                             890 B           106 kB
+├ ○ /review-center/analytics/projects                                           890 B           106 kB
+├ ○ /review-center/approvals                                                    4.75 kB         110 kB
+├ ○ /review-center/cases                                                        3.9 kB          128 kB
+├ ƒ /review-center/cases/[caseNo]                                               2.16 kB         126 kB
+├ ƒ /review-center/cases/[caseNo]/manage                                        8.8 kB          133 kB
+├ ○ /review-center/cases/candidates                                             3.75 kB         128 kB
+├ ○ /review-center/cases/repeated                                               877 B           106 kB
+├ ○ /review-center/downloads                                                    925 B           106 kB
+├ ○ /review-center/knowledge                                                    887 B           106 kB
+├ ○ /review-center/new                                                          2.14 kB         107 kB
+├ ○ /review-center/reviews                                                      269 B           108 kB
+├ ƒ /review-center/reviews/[id]                                                 19.7 kB         144 kB
+├ ƒ /review-center/reviews/[id]/edit                                            12.9 kB         124 kB
+├ ○ /review-center/reviews/mine                                                 269 B           108 kB
+├ ○ /review-center/settings                                                     1.09 kB         106 kB
+├ ○ /scripts                                                                    31 kB           163 kB
+├ ○ /scripts-minimal                                                            445 B           130 kB
+├ ○ /settings                                                                   9.34 kB         139 kB
+├ ○ /teardowns                                                                  2.11 kB         132 kB
+├ ○ /test-page                                                                  544 B           106 kB
+├ ○ /topics                                                                     9.51 kB         142 kB
+├ ƒ /workshop-orders                                                            512 B           106 kB
+├ ƒ /workshop-orders/inbox                                                      12.8 kB         208 kB
+├ ƒ /workshop-orders/production/new                                             24.6 kB         225 kB
+├ ƒ /workshop-orders/qa-handoff-readonly                                        161 B           191 kB
+├ ƒ /workshop-orders/readiness                                                  161 B           191 kB
+├ ƒ /workshop-orders/sampling/new                                               3.33 kB         114 kB
+├ ƒ /workshop-orders/schedule                                                   512 B           106 kB
+└ ○ /workspace-home                                                             5.27 kB         106 kB
++ First Load JS shared by all                                                   87.3 kB
+  ├ chunks/2200cc46-d19d731e08b868ab.js                                         53.6 kB
+  ├ chunks/2945-e2cd1cc8ea5e72cc.js                                             31.7 kB
+  └ other shared chunks (total)                                                 1.96 kB
+
+
+ƒ Middleware                                                                    85.4 kB
+
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand
+

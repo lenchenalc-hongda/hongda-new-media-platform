@@ -71,7 +71,7 @@ files=(
   tests/unit/workshop-order-production-m2-contract.test.ts
   tests/unit/wos-v1-qa-closers.test.ts
   tests/unit/wos-v1-qa-storage-compat.test.ts
-  tests/unit/wos-v1-qa-uat007-packaging.test.ts
+  tests/unit/wos-v1-qa-uat008-packaging.test.ts
   tests/integration/wos-v1-qa-edge-entry-http.deno.test.ts
   tests/integration/wos-v1-qa-edge-entry-http.test.ts
   tests/live/wos-v1-qa-edge-closer-process-kill.mjs
@@ -145,10 +145,17 @@ files=(
   docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_UAT_006_PG17_STORAGE_FINAL_20261127.log
   docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_UAT_006_SOURCE_REGRESSION_20261127.json
   docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_UAT_006_FAIL_CLOSED_20261128.md
+  docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_UAT_007_FAIL_CLOSED_20261128.md
+  docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_UAT_007_IDENTITY_REFRESH_20261128.log
   docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_UAT_007_PG17_STORAGE_FINAL_20261128.log
   docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_UAT_007_CLOSER_ONLY_PG17_FINAL_20261128.log
   docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_UAT_007_SOURCE_REGRESSION_20261128.json
   docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_UAT_007_INDEPENDENT_REVIEW_20261128.md
+  docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_UAT_008_PG17_STORAGE_FINAL_20261128.log
+  docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_UAT_008_CLOSER_ONLY_PG17_FINAL_20261128.log
+  docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_UAT_008_BUILD_FINAL_20261128.log
+  docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_UAT_008_SOURCE_REGRESSION_20261128.json
+  docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_UAT_008_INDEPENDENT_REVIEW_20261128.md
   docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_STORAGE_POLICY_LIVE_SNAPSHOT_20261128.json
   docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_EDGE_V34_PRESERVATION_20261127.json
   docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_EDGE_V36_PRESERVATION_20261127.json
@@ -156,7 +163,7 @@ files=(
   docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_EDGE_V34_SOURCE_20261127/core.ts
   docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_EDGE_V34_SOURCE_20261127/wos-png-integrity.ts
   docs/workshop-order-system/qa-fixture/production-m2-uat-20261126/inputs.json
-  docs/workshop-order-system/qa-fixture/production-m2-uat-20261126/inputs-uat007.json
+  docs/workshop-order-system/qa-fixture/production-m2-uat-20261126/inputs-uat008.json
   docs/workshop-order-system/qa-fixture/production-m2-uat-20261126/v1/product.png
   docs/workshop-order-system/qa-fixture/production-m2-uat-20261126/v1/film-pattern.png
   docs/workshop-order-system/qa-fixture/production-m2-uat-20261126/v1/customer-approved-sample.png

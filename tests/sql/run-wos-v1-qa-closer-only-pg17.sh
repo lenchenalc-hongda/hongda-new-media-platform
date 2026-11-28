@@ -721,7 +721,7 @@ BEGIN
     edge_process_nonce,db_cron_job_id
   ) VALUES(
     '$TICK_EXECUTION_ID',
-    'WOS-V1-PRODUCTION-M2-QA-UAT-007',
+    'WOS-V1-PRODUCTION-M2-QA-UAT-008',
     'xulmpqaknlwqqculbsek',
     repeat('b',64),
     '$ARM_TOKEN',
