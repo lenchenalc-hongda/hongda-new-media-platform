@@ -4,15 +4,15 @@ import http from 'node:http';
 
 const SCRIPT =
   'scripts/wos-production-readiness/wos-v1-qa-uat-edge-closer.mjs';
-const EXECUTION_ID = 'f5149801-df08-4ce7-b336-df6d449c9aec';
-const NONCE = 'f45beece-2a4a-4c3b-ae7b-d262347a4091';
+const EXECUTION_ID = 'c32a81d1-b997-4cfa-a346-871461a1af47';
+const NONCE = 'dc068291-4ec1-426a-ae2d-bec50a32c937';
 const CODE_SHA =
   'c7c9c37a657fa6457baac095e6adcdeea222b36d1aa4542f7130bc870e45cc24';
 
 function probeEnv(overrides: Record<string, string | undefined> = {}) {
   return {
     ...process.env,
-    WOS_V1_QA_AUTHORIZATION_ID: 'WOS-V1-PRODUCTION-M2-QA-UAT-011',
+    WOS_V1_QA_AUTHORIZATION_ID: 'WOS-V1-PRODUCTION-M2-QA-UAT-012',
     WOS_V1_QA_EXECUTION_ID: EXECUTION_ID,
     WOS_V1_QA_CODE_SHA256: CODE_SHA,
     WOS_V1_QA_EDGE_PROCESS_NONCE: NONCE,
@@ -39,7 +39,7 @@ async function probeAgainstLocalHttp(
       && request.headers.authorization === 'Bearer test-service-key'
       && request.headers.apikey === 'test-service-key'
       && request.headers['x-wos-qa-uat-authorization-id']
-        === 'WOS-V1-PRODUCTION-M2-QA-UAT-011'
+        === 'WOS-V1-PRODUCTION-M2-QA-UAT-012'
       && request.headers['x-wos-qa-uat-execution-id'] === EXECUTION_ID
       && request.headers['x-wos-qa-uat-closer-nonce'] === NONCE
       && request.headers['x-wos-qa-closer-probe'] === '1';

@@ -331,6 +331,27 @@ assert(edgeCore.includes('WOS_V1_QA_EDGE_GATE_UNAVAILABLE'));
 assert(edgeIndex.includes('evaluateWosV1QaCloserProbeAuth('));
 assert(edgeIndex.includes('evaluateWosV1QaCloserProbeGate('));
 assert(edgeIndex.includes('WOS_V1_QA_EDGE_CLOSER_SERVICE_ROLE_KEY'));
+const adminDownload = edgeIndex.indexOf(
+  "const downloaded = await admin.storage.from('wos-private').download(path);",
+);
+assert(adminDownload >= 0);
+assert(!edgeIndex.includes(
+  "const downloaded = await userDb.storage.from('wos-private').download(path);",
+));
+for (const priorGuard of [
+  'const auth = await userDb.auth.getUser(token);',
+  'const access = evaluateWosV1ImageAccess({',
+  "const gate = await admin.rpc('wos_v1_qa_uat_edge_write_allowed'",
+  'const path = canonicalWosV1ImagePath({',
+  "return output(request, 'PRIVATE_OBJECT_NOT_VERIFIED', 409);",
+]) {
+  const guardIndex = edgeIndex.indexOf(priorGuard);
+  assert(guardIndex >= 0, `missing guard before admin download: ${priorGuard}`);
+  assert(
+    guardIndex < adminDownload,
+    `admin download precedes guard: ${priorGuard}`,
+  );
+}
 assert(
   /function closerProbeDedicatedJwt\(\)[\s\S]{0,180}WOS_V1_QA_EDGE_CLOSER_SERVICE_ROLE_KEY/.test(
     edgeIndex,

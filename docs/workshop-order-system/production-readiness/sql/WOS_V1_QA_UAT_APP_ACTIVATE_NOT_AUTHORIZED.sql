@@ -26,10 +26,10 @@ BEGIN
     RAISE EXCEPTION 'WOS_V1_QA_UAT_APP_PROJECT_MISMATCH';
   END IF;
   IF current_setting('wos_v1.qa_authorization_id', true)
-      IS DISTINCT FROM 'WOS-V1-PRODUCTION-M2-QA-UAT-011'
+      IS DISTINCT FROM 'WOS-V1-PRODUCTION-M2-QA-UAT-012'
     OR (
       current_setting('wos_v1.qa_execution_id', true)
-        IS DISTINCT FROM 'f5149801-df08-4ce7-b336-df6d449c9aec'
+        IS DISTINCT FROM 'c32a81d1-b997-4cfa-a346-871461a1af47'
       AND current_setting('wos_v1.qa_local_test', true)
         IS DISTINCT FROM 'yes'
     )

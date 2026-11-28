@@ -403,7 +403,10 @@ export async function handleWosV1VerifyImageRequest(
         || !snapshotMatchesUpload(first, auth.data.user.id, declaredSize)) {
         return output(request, 'PRIVATE_OBJECT_NOT_VERIFIED', 409);
       }
-      const downloaded = await userDb.storage.from('wos-private').download(path);
+      // The canonical-path, actor, Gate and immutable object snapshot checks
+      // above authorize the server-side byte read. User-side Storage SELECT
+      // remains proof-bound and cannot read the object before this proof exists.
+      const downloaded = await admin.storage.from('wos-private').download(path);
       if (downloaded.error || !downloaded.data
         || downloaded.data.size !== declaredSize) {
         return output(request, 'PRIVATE_BINARY_UNAVAILABLE', 409);
