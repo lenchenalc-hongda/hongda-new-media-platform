@@ -1,0 +1,58 @@
+# WOS V1 Production M2 Release
+
+Date: 2026-11-28
+
+Result:
+`PRODUCTION_M2_RELEASE_ACTIVE`
+
+## Activation
+
+```ini
+ACTIVATED_AT_UTC=2026-11-28T14:00:35Z
+PROJECT_REF=amqpvxrurenevniilhtl
+M2_ACTION_AUTHENTICATED_EXECUTE=true
+RELEASE_AUTHENTICATED_EXECUTE=true
+ANON_M2_EXECUTE=false
+ANON_RELEASE_EXECUTE=false
+DIRECT_M2_RECEIPTS_INSERT=false
+DIRECT_START_RELEASES_INSERT=false
+```
+
+## Inputs
+
+```text
+80a35f0e8d88b18b5678e95a120bb84d0129afbf00abd73ac9ed938e27fbf474  supabase/migrations/20261126090000_wos_v1_production_m2_signoff.sql
+af1ae9561a32eca6df3b904de5f2973c8f4f47bf4fc936e4035c4b311afb665c  docs/workshop-order-system/production-readiness/sql/WOS_V1_PRODUCTION_M2_ACTIVATION_NOT_AUTHORIZED.sql
+c2e89381a321409fa78fa7d64edef8b8d0be4a48e843d42d20852adb7ad95e7e  docs/workshop-order-system/production-readiness/sql/WOS_V1_PRODUCTION_M2_DEACTIVATE_NOT_AUTHORIZED.sql
+```
+
+## UAT Evidence Preserved
+
+```ini
+ORDER_ID=159544a2-ecae-4fd8-9943-970a4f2c51fe
+ORDER_STATUS=READY_TO_START
+VERSION_LABEL=V2
+VERSION=12
+M2_RECEIPTS=4
+RESOURCE_READINESS_ROWS=4
+START_RELEASES=1
+TOTAL_ORDERS=2
+TOTAL_IMAGES=16
+TOTAL_PROOFS=16
+WOS_PRIVATE_STORAGE_OBJECTS=16
+PRODUCTION_STARTED=false
+CAN_START=false
+```
+
+## Backup
+
+```ini
+PHYSICAL_BACKUP_ID=2395476301
+PHYSICAL_BACKUP_UTC=2026-11-27T16:30:33.572Z
+PITR_ENABLED=false
+```
+
+## Stop Switch
+
+`sql/WOS_V1_PRODUCTION_M2_DEACTIVATE_NOT_AUTHORIZED.sql` revokes both
+authenticated entry points without deleting business or audit data.

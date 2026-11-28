@@ -3,10 +3,10 @@
 Date: 2026-11-28
 
 Base master:
-`affc84cfe623650a903675a65fd468072eb754d0`
+`6f107ce40cf0f921b2f2586ea62ee293f296c10c`
 
 Status:
-`PRODUCTION_M2_UAT_PASS / M2_RPCS_CLOSED / RELEASE_GO_NOT_AUTHORIZED`
+`PRODUCTION_M2_RELEASE_ACTIVE`
 
 ## Scope
 
@@ -18,9 +18,10 @@ Live Production currently has:
 
 ```ini
 PLAN_A_ORDER_LIFECYCLE=ACTIVE
-WOS_V1_M2_ACTION=INSTALLED_INACTIVE
-WOS_V1_AUTHORIZE_PRODUCTION_START=INSTALLED_INACTIVE
-M2_AUTHENTICATED_EXECUTE=NONE
+WOS_V1_M2_ACTION=ACTIVE_FOR_AUTHENTICATED
+WOS_V1_AUTHORIZE_PRODUCTION_START=ACTIVE_FOR_AUTHENTICATED
+ANON_EXECUTE=NONE
+DIRECT_M2_TABLE_DML=NONE
 ```
 
 ## Verified Contracts
@@ -49,6 +50,7 @@ PRODUCTION_M2_UAT=PASS
 PRODUCTION_M2_AUTO_CLOSE=PASS
 POST_CLOSE_M2_WRITE_DENIED=PASS
 DATA_RETENTION=PASS
+PRODUCTION_M2_RELEASE_ACTIVATED=PASS
 ```
 
 ## Exact M2 Inputs
@@ -101,10 +103,28 @@ PRODUCTION_STARTED=false
 CAN_START=false
 ```
 
-## Remaining Release Gate
+## Release State
 
-M2 business acceptance is complete. Opening the M2 RPCs for normal Production
-use is still not authorized. A separate Owner release decision must define the
-release window, RPC activation, monitoring, and data-retaining rollback. PITR
-is not enabled, so the release record must remain bound to the latest completed
-physical backup.
+The Owner approved `M2 Production Release Gate`. The two reviewed RPCs were
+activated for `authenticated` only on `2026-11-28T14:00:35Z`.
+
+```ini
+M2_ACTION_AUTHENTICATED_EXECUTE=true
+RELEASE_AUTHENTICATED_EXECUTE=true
+ANON_M2_EXECUTE=false
+ANON_RELEASE_EXECUTE=false
+DIRECT_M2_RECEIPTS_INSERT=false
+DIRECT_START_RELEASES_INSERT=false
+UAT_ORDER=159544a2-ecae-4fd8-9943-970a4f2c51fe
+UAT_ORDER_STATUS=READY_TO_START
+```
+
+The operational stop switch is:
+
+```text
+docs/workshop-order-system/production-readiness/sql/WOS_V1_PRODUCTION_M2_DEACTIVATE_NOT_AUTHORIZED.sql
+```
+
+Executing that file revokes both RPCs and retains all business, signoff,
+release, Proof and audit records. PITR remains disabled; incident recovery is
+bound to the latest completed physical backup and forward-fix/deactivation.
