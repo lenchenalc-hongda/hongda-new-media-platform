@@ -310,10 +310,14 @@ assert(qaAppActivate.includes(
 ));
 assert(qaAppActivate.includes('WOS_V1_QA_UAT_APP_EXECUTION_MISMATCH'));
 assert(qaAppActivate.includes(
-  "'1dc0f65d-ecc3-4a89-bb16-e2d4b3843395'",
+  "'11c9a114-4381-49fb-9cd6-04591c7b833b'",
 ));
 assert(qaAppActivate.includes('WOS_V1_QA_UAT_APP_RPC_NOT_INSTALLED'));
 assert(qaAppActivate.includes('WOS_V1_QA_UAT_APP_BROAD_TABLE_ACCESS'));
+assert(qaAppActivate.includes(
+  'WOS_V1_QA_UAT_APP_REQUIRES_WRAPPER_ACTIVATION',
+));
+assert(qaAppActivate.includes('(trigger_row.tgtype & 16) <> 0'));
 assert(qaAppActivate.includes(
   'REVOKE INSERT, UPDATE, DELETE ON public.wos_production_orders',
 ));
@@ -379,13 +383,14 @@ assert(qaClose.includes('REVOKE EXECUTE ON FUNCTION public.wos_v1_qa_uat_m2_acti
 const uatRoot =
   'docs/workshop-order-system/qa-fixture/production-m2-uat-20261126';
 const uat = JSON.parse(
-  readFileSync(`${uatRoot}/inputs-uat015.json`, 'utf8'),
+  readFileSync(`${uatRoot}/inputs-uat016.json`, 'utf8'),
 ) as {
   readonly requestId: string;
   readonly orderNumber: string;
   readonly qaProject: string;
   readonly qaOrganizationId: string;
   readonly mode: string;
+  readonly resumeStage: string;
   readonly resumeOrderId: string;
   readonly resumeExpectedVersion: number;
   readonly resumeExpectedVersionLabel: string;
@@ -432,9 +437,9 @@ assert.equal(
   uat.resumeOrderId,
   '3ade0180-e6bf-49da-b80b-fd00cd1948a8',
 );
-assert.equal(uat.resumeExpectedVersion, 5);
+assert.equal(uat.resumeExpectedVersion, 7);
 assert.equal(uat.resumeExpectedVersionLabel, 'V2');
-assert.equal(uat.resumeExpectedWorkflowStatus, 'NEEDS_INFORMATION');
+assert.equal(uat.resumeExpectedWorkflowStatus, 'WAITING_MATERIAL');
 assert.equal(new Set(
   Object.values(uat.actors).map(actor => actor.profileId),
 ).size, 3);
@@ -537,7 +542,7 @@ assert(uatRunner.includes(
   '9164ac91-a50c-4023-836c-5c0887b619fb',
 ));
 assert(
-  /SELECT public\.wos_v1_qa_uat_open_gate\(\s*'WOS-V1-PRODUCTION-M2-QA-UAT-015'[\s\S]*?'\$UAT_MANAGER_PROFILE'[\s\S]*?ARRAY\['START_RELEASE'\]/
+  /SELECT public\.wos_v1_qa_uat_open_gate\(\s*'WOS-V1-PRODUCTION-M2-QA-UAT-016'[\s\S]*?'\$UAT_MANAGER_PROFILE'[\s\S]*?ARRAY\['START_RELEASE'\]/
     .test(uatRunner),
 );
 for (const stale of [
@@ -555,9 +560,12 @@ assert.equal(
 );
 assert.equal(uat.environment.WOS_V1_QA_UAT_M2_ENABLED, 'true');
 assert.equal(uat.environment.WOS_V1_QA_UAT_M2_WRITES_ENABLED, 'false');
+assert.equal(uat.resumeStage, 'MATERIAL_INPUTS_READY');
+assert.equal(uat.resumeExpectedVersion, 7);
+assert.equal(uat.resumeExpectedWorkflowStatus, 'WAITING_MATERIAL');
 assert.equal(
   uat.environment.WOS_V1_QA_UAT_AUTHORIZATION_ID,
-  'WOS-V1-PRODUCTION-M2-QA-UAT-015',
+  'WOS-V1-PRODUCTION-M2-QA-UAT-016',
 );
 for (const version of ['v1', 'v2']) {
   const images = uat.images[version];

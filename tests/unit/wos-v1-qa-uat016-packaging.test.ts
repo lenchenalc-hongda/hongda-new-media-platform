@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 
 const input = JSON.parse(readFileSync(
   'docs/workshop-order-system/qa-fixture/'
-    + 'production-m2-uat-20261126/inputs-uat015.json',
+    + 'production-m2-uat-20261126/inputs-uat016.json',
   'utf8',
 ));
 const runner = readFileSync(
@@ -49,10 +49,10 @@ const proofMirrorRollback = readFileSync(
   'utf8',
 );
 
-assert.equal(input.authorizationId, 'WOS-V1-PRODUCTION-M2-QA-UAT-015');
+assert.equal(input.authorizationId, 'WOS-V1-PRODUCTION-M2-QA-UAT-016');
 assert(
   runner.includes(
-    'production-m2-uat-20261126/inputs-uat015.json',
+    'production-m2-uat-20261126/inputs-uat016.json',
   ),
 );
 assert(!runner.includes(
@@ -60,16 +60,17 @@ assert(!runner.includes(
 ));
 assert.equal(
   input.sourceParentHead,
-  'c0132a49683be7f7186e0b3482fdebf31e79480a',
+  '5fe9ffb885192402f2724a6e8d74ff7db2504c21',
 );
 assert.equal(input.mode, 'RESUME_EXISTING_ORDER');
+assert.equal(input.resumeStage, 'MATERIAL_INPUTS_READY');
 assert.equal(
   input.resumeOrderId,
   '3ade0180-e6bf-49da-b80b-fd00cd1948a8',
 );
-assert.equal(input.resumeExpectedVersion, 5);
+assert.equal(input.resumeExpectedVersion, 7);
 assert.equal(input.resumeExpectedVersionLabel, 'V2');
-assert.equal(input.resumeExpectedWorkflowStatus, 'NEEDS_INFORMATION');
+assert.equal(input.resumeExpectedWorkflowStatus, 'WAITING_MATERIAL');
 assert.equal(input.limits.maxNewOrders, 0);
 assert.equal(input.limits.maxCreateCalls, 0);
 assert.equal(input.environment.WOS_V1_QA_APP_WRITES_ENABLED, 'false');
@@ -103,13 +104,17 @@ for (const image of input.images.v2) {
   assert.match(image.imageId, /^[a-f0-9-]{36}$/i);
   assert(
     !consumedV2Ids.has(image.imageId),
-    `UAT-015 reuses consumed V2 image ID ${image.imageId}`,
+    `UAT-016 reuses consumed V2 image ID ${image.imageId}`,
   );
 }
 
 for (const marker of [
   'WOS_UAT_RESUME_ORDER_ID',
   'RESUME_EXISTING_ORDER',
+  'RESUME_AT_MATERIAL',
+  'MATERIAL_INPUTS_READY',
+  'WOS_UAT_RESUME_STAGE_UNSUPPORTED',
+  'reverifyExistingImage',
   "existingOrder.workflowStatus",
   "input.resumeExpectedWorkflowStatus",
   "if (!RESUME_MODE)",
@@ -131,6 +136,10 @@ assert(
   runner.indexOf('if (RESUME_MODE)')
     < runner.indexOf('createBody = {'),
 );
+assert(
+  runner.indexOf('WOS_UAT_RESUME_STAGE_UNSUPPORTED')
+    < runner.indexOf('const identities ='),
+);
 
 assert(edgeCloser.includes('WOS_V1_QA_EDGE_CLOSER_SERVICE_ROLE_KEY'));
 assert(edgeCloser.includes('credential-preflight'));
@@ -139,14 +148,14 @@ assert(edgeCloser.includes('CLOSE_UNVERIFIED'));
 assert(edgeCloser.includes('probeEdgeOnce'));
 assert(edgeCloser.includes('attempt <= 3'));
 assert(dbCloser.includes('WOS_V1_QA_APP_EXECUTION_ID'));
-assert(dbCloser.includes('1dc0f65d-ecc3-4a89-bb16-e2d4b3843395'));
+assert(dbCloser.includes('11c9a114-4381-49fb-9cd6-04591c7b833b'));
 assert(dbCloser.includes('install-v2-image-register-compat'));
 assert(dbCloser.includes('rollback-v2-image-register-compat'));
 assert(dbCloser.includes('install-verified-proof-mirror'));
 assert(dbCloser.includes('rollback-verified-proof-mirror'));
 assert(
   runner.includes(
-    'WOS_V1_PRODUCTION_M2_QA_BUSINESS_UAT_015_20261128.json',
+    'WOS_V1_PRODUCTION_M2_QA_BUSINESS_UAT_016_20261128.json',
   ),
 );
 assert(
@@ -154,8 +163,13 @@ assert(
     'WOS_V1_PRODUCTION_M2_QA_BUSINESS_UAT_006_20261127.json',
   ),
 );
-assert(appActivate.includes('WOS-V1-PRODUCTION-M2-QA-UAT-015'));
-assert(appActivate.includes('1dc0f65d-ecc3-4a89-bb16-e2d4b3843395'));
+assert(appActivate.includes('WOS-V1-PRODUCTION-M2-QA-UAT-016'));
+assert(appActivate.includes('11c9a114-4381-49fb-9cd6-04591c7b833b'));
+assert(
+  appActivate.includes(
+    'WOS_V1_QA_UAT_APP_REQUIRES_WRAPPER_ACTIVATION',
+  ),
+);
 assert(
   appActivate.includes(
     'WOS_V1_QA_UAT_V2_IMAGE_REGISTER_COMPAT_REQUIRED',
@@ -168,7 +182,7 @@ assert(
 );
 assert(
   closerOnlyInstall.includes(
-    "p_authorization_id<>'WOS-V1-PRODUCTION-M2-QA-UAT-015'",
+    "p_authorization_id<>'WOS-V1-PRODUCTION-M2-QA-UAT-016'",
   ),
 );
 assert(!closerOnlyInstall.includes('WOS-V1-PRODUCTION-M2-QA-UAT-005'));
@@ -213,6 +227,13 @@ assert(
     'QA_VERIFIED_PROOF_MIRROR_GATE_REQUIRED',
   ),
 );
+assert(proofMirrorInstall.includes(
+  'AFTER INSERT OR UPDATE ON public.wos_qa_verified_image_proofs',
+));
+assert(proofMirrorInstall.includes(
+  'QA_VERIFIED_PROOF_MIRROR_WRITE_ONLY',
+));
+assert(proofMirrorInstall.includes('(trigger_row.tgtype & 16) <> 0'));
 assert(
   proofMirrorInstall.includes(
     'public.wos_verified_image_proofs',
@@ -224,4 +245,4 @@ assert(
   ),
 );
 
-console.log('wos-v1-qa-uat015-packaging.test.ts: PASS');
+console.log('wos-v1-qa-uat016-packaging.test.ts: PASS');

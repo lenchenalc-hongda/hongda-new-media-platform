@@ -88,6 +88,7 @@ node scripts/wos-production-readiness/wos-v1-qa-uat-db-closer.mjs close-closer-o
 node scripts/wos-production-readiness/wos-v1-qa-uat-db-closer.mjs recover-closer-only
 node scripts/wos-production-readiness/wos-v1-qa-uat-db-closer.mjs install-full-m2
 node scripts/wos-production-readiness/wos-v1-qa-uat-db-closer.mjs activate-full-m2
+node scripts/wos-production-readiness/wos-v1-qa-uat-db-closer.mjs activate
 node scripts/wos-production-readiness/wos-v1-qa-uat-db-closer.mjs arm
 node scripts/wos-production-readiness/wos-v1-qa-uat-db-closer.mjs status
 node scripts/wos-production-readiness/wos-v1-qa-uat-db-closer.mjs close
@@ -104,6 +105,11 @@ order bindings or authenticated grants. It never reads the Activate SQL.
 
 The full M2 install and activation are separate explicit commands. A closer-only
 rehearsal cannot silently activate either authenticated wrapper.
+
+The combined `activate` command grants the formal QA wrappers first and then
+activates the seven application RPCs. Application activation fails closed when
+either QA wrapper ACL is missing, so a material request cannot be attempted
+against an unactivated M2 contract.
 
 ARM registers a `pg_cron` job every 10 seconds. Every tick before the write
 deadline records the DB executor heartbeat; a tick at or after the deadline

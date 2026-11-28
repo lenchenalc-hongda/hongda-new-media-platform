@@ -26,10 +26,10 @@ BEGIN
     RAISE EXCEPTION 'WOS_V1_QA_UAT_APP_PROJECT_MISMATCH';
   END IF;
   IF current_setting('wos_v1.qa_authorization_id', true)
-      IS DISTINCT FROM 'WOS-V1-PRODUCTION-M2-QA-UAT-015'
+      IS DISTINCT FROM 'WOS-V1-PRODUCTION-M2-QA-UAT-016'
     OR (
       current_setting('wos_v1.qa_execution_id', true)
-        IS DISTINCT FROM '1dc0f65d-ecc3-4a89-bb16-e2d4b3843395'
+        IS DISTINCT FROM '11c9a114-4381-49fb-9cd6-04591c7b833b'
       AND current_setting('wos_v1.qa_local_test', true)
         IS DISTINCT FROM 'yes'
     )
@@ -96,6 +96,8 @@ BEGIN
           AND trigger_row.tgrelid=
             to_regclass('public.wos_qa_verified_image_proofs')
           AND trigger_row.tgenabled='O'
+          AND (trigger_row.tgtype & 4) <> 0
+          AND (trigger_row.tgtype & 16) <> 0
           AND NOT trigger_row.tgisinternal
       )
     )
@@ -143,6 +145,19 @@ BEGIN
     )
   THEN
     RAISE EXCEPTION 'WOS_V1_QA_UAT_APP_PRIVATE_RPC_EXPOSED';
+  END IF;
+  IF NOT has_function_privilege(
+      'authenticated',
+      'public.wos_v1_qa_uat_m2_action(text,uuid,integer,uuid,text,jsonb)',
+      'EXECUTE'
+    )
+    OR NOT has_function_privilege(
+      'authenticated',
+      'public.wos_v1_qa_uat_authorize_production_start(text,uuid,integer,uuid,uuid,text)',
+      'EXECUTE'
+    )
+  THEN
+    RAISE EXCEPTION 'WOS_V1_QA_UAT_APP_REQUIRES_WRAPPER_ACTIVATION';
   END IF;
   IF has_table_privilege(
       'authenticated', 'public.wos_production_orders', 'INSERT'

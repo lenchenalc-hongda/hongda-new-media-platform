@@ -82,8 +82,8 @@ DECLARE
   v_actor public.profiles%ROWTYPE;
   v_existing public.wos_verified_image_proofs%ROWTYPE;
 BEGIN
-  IF TG_OP IS DISTINCT FROM 'INSERT' THEN
-    RAISE EXCEPTION 'QA_VERIFIED_PROOF_MIRROR_INSERT_ONLY'
+  IF TG_OP IS NULL OR TG_OP NOT IN ('INSERT','UPDATE') THEN
+    RAISE EXCEPTION 'QA_VERIFIED_PROOF_MIRROR_WRITE_ONLY'
       USING ERRCODE='42501';
   END IF;
 
@@ -131,21 +131,21 @@ BEGIN
   IF FOUND THEN
     IF v_existing.organization_id IS DISTINCT FROM NEW.organization_id
       OR v_existing.order_id IS DISTINCT FROM NEW.order_id
-      OR v_existing.actor_user_id IS DISTINCT FROM NEW.actor_user_id
       OR v_existing.storage_bucket IS DISTINCT FROM NEW.storage_bucket
       OR v_existing.storage_path IS DISTINCT FROM NEW.storage_path
-      OR v_existing.storage_object_id IS DISTINCT FROM NEW.storage_object_id
-      OR v_existing.storage_object_version
-        IS DISTINCT FROM NEW.storage_object_version
-      OR v_existing.storage_object_updated_at
-        IS DISTINCT FROM NEW.storage_object_updated_at
-      OR v_existing.verified_sha256 IS DISTINCT FROM NEW.verified_sha256
-      OR v_existing.verified_at IS DISTINCT FROM NEW.verified_at
-      OR v_existing.expires_at IS DISTINCT FROM NEW.expires_at
     THEN
       RAISE EXCEPTION 'QA_VERIFIED_PROOF_MIRROR_CONFLICT'
         USING ERRCODE='23505';
     END IF;
+    UPDATE public.wos_verified_image_proofs
+    SET actor_user_id=NEW.actor_user_id,
+        storage_object_id=NEW.storage_object_id,
+        storage_object_version=NEW.storage_object_version,
+        storage_object_updated_at=NEW.storage_object_updated_at,
+        verified_sha256=NEW.verified_sha256,
+        verified_at=NEW.verified_at,
+        expires_at=NEW.expires_at
+    WHERE image_id=NEW.image_id;
     RETURN NEW;
   END IF;
 
@@ -183,7 +183,7 @@ $mirror$;
   REVOKE ALL ON FUNCTION public.wos_v1_qa_uat_mirror_verified_proof()
     FROM PUBLIC, anon, authenticated;
   CREATE TRIGGER wos_v1_qa_uat_verified_proof_mirror
-  AFTER INSERT ON public.wos_qa_verified_image_proofs
+  AFTER INSERT OR UPDATE ON public.wos_qa_verified_image_proofs
   FOR EACH ROW EXECUTE FUNCTION public.wos_v1_qa_uat_mirror_verified_proof();
 
   SELECT pg_get_functiondef(
@@ -211,6 +211,8 @@ $mirror$;
     WHERE trigger_row.tgname='wos_v1_qa_uat_verified_proof_mirror'
       AND trigger_row.tgrelid='public.wos_qa_verified_image_proofs'::regclass
       AND trigger_row.tgenabled='O'
+      AND (trigger_row.tgtype & 4) <> 0
+      AND (trigger_row.tgtype & 16) <> 0
       AND NOT trigger_row.tgisinternal
   ) THEN
     RAISE EXCEPTION 'WOS_V1_QA_UAT_VERIFIED_PROOF_MIRROR_POSTFLIGHT_FAILED';

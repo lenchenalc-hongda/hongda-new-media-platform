@@ -201,7 +201,7 @@ INSERT INTO wos_v1_qa_storage_compat.install_state(
   bucket_allowed_mime_types
 )
 SELECT
-  'WOS-V1-PRODUCTION-M2-QA-UAT-015',
+  'WOS-V1-PRODUCTION-M2-QA-UAT-016',
   md5(jsonb_build_object(
     'wosPolicies',(
       SELECT jsonb_agg(jsonb_build_object(
@@ -348,7 +348,7 @@ BEGIN
       SELECT 1
       FROM wos_v1_qa_uat.closeout_controls control
       WHERE control.authorization_id =
-          'WOS-V1-PRODUCTION-M2-QA-UAT-015'
+          'WOS-V1-PRODUCTION-M2-QA-UAT-016'
         AND control.project_ref = 'xulmpqaknlwqqculbsek'
         AND control.authorized_order_id = v_order.id
         AND control.authorized_organization_id = v_actor.org_id
@@ -459,7 +459,7 @@ BEGIN
       SELECT 1
       FROM wos_v1_qa_uat.closeout_controls control
       WHERE control.authorization_id =
-          'WOS-V1-PRODUCTION-M2-QA-UAT-015'
+          'WOS-V1-PRODUCTION-M2-QA-UAT-016'
         AND control.project_ref = 'xulmpqaknlwqqculbsek'
         AND control.authorized_order_id = v_order.id
         AND control.authorized_organization_id = v_actor.org_id

@@ -12,22 +12,22 @@ const ANON_KEY = process.env.WOS_QA_ANON_KEY || '';
 const DIRECT_RPC = process.env.WOS_UAT_DIRECT_RPC === 'true';
 const AUTHORIZATION_ID =
   process.env.WOS_V1_QA_AUTHORIZATION_ID
-  || 'WOS-V1-PRODUCTION-M2-QA-UAT-015';
+  || 'WOS-V1-PRODUCTION-M2-QA-UAT-016';
 const EXECUTION_ID =
   process.env.WOS_V1_QA_EXECUTION_ID
-  || '1dc0f65d-ecc3-4a89-bb16-e2d4b3843395';
+  || '11c9a114-4381-49fb-9cd6-04591c7b833b';
 const EDGE_NONCE =
   process.env.WOS_V1_QA_EDGE_PROCESS_NONCE
-  || '94e872da-4e3c-4b00-bdbe-91caf6a2c584';
+  || 'c0091f69-8b97-4e1c-a270-a9ff4f199965';
 const RESUME_ORDER_ID = process.env.WOS_UAT_RESUME_ORDER_ID || '';
 const PROJECT_REF = 'xulmpqaknlwqqculbsek';
 const SUPABASE_URL = `https://${PROJECT_REF}.supabase.co`;
 const INPUT_PATH =
   process.env.WOS_UAT_INPUT_PATH
-  || 'docs/workshop-order-system/qa-fixture/production-m2-uat-20261126/inputs-uat015.json';
+  || 'docs/workshop-order-system/qa-fixture/production-m2-uat-20261126/inputs-uat016.json';
 const EVIDENCE_PATH =
   process.env.WOS_UAT_EVIDENCE_PATH
-  || 'output/uat/WOS_V1_PRODUCTION_M2_QA_BUSINESS_UAT_015_20261128.json';
+  || 'output/uat/WOS_V1_PRODUCTION_M2_QA_BUSINESS_UAT_016_20261128.json';
 const PSQL_IMAGE =
   'postgres@sha256:f9cf3e1f0066f0eb0c48707d864f0ac5941e9ff454a072077d97a4d278d07d73';
 
@@ -38,6 +38,8 @@ if (!ORIGIN.startsWith('https://') || !ANON_KEY
 
 const input = JSON.parse(readFileSync(INPUT_PATH, 'utf8'));
 const RESUME_MODE = input.mode === 'RESUME_EXISTING_ORDER';
+const RESUME_AT_MATERIAL =
+  RESUME_MODE && input.resumeStage === 'MATERIAL_INPUTS_READY';
 const BOUND_RESUME_ORDER_ID =
   RESUME_ORDER_ID || input.resumeOrderId || '';
 if (RESUME_MODE) {
@@ -47,6 +49,29 @@ if (RESUME_MODE) {
   assert.equal(input.authorizationId, AUTHORIZATION_ID);
   assert.equal(input.executionId, EXECUTION_ID);
   assert.equal(input.edgeProcessNonce, EDGE_NONCE);
+  if (RESUME_AT_MATERIAL) {
+    assert.equal(input.resumeExpectedVersion, 7);
+    assert.equal(
+      input.resumeExpectedVersionLabel,
+      'V2',
+    );
+    assert.equal(
+      input.resumeExpectedWorkflowStatus,
+      'WAITING_MATERIAL',
+    );
+  } else if (input.resumeStage != null) {
+    throw new Error('WOS_UAT_RESUME_STAGE_UNSUPPORTED');
+  } else {
+    assert.equal(input.resumeExpectedVersion, 5);
+    assert.equal(
+      input.resumeExpectedVersionLabel,
+      'V2',
+    );
+    assert.equal(
+      input.resumeExpectedWorkflowStatus,
+      'NEEDS_INFORMATION',
+    );
+  }
 } else {
   assert.equal(input.limits?.maxNewOrders, 1);
   assert.equal(input.limits?.maxCreateCalls, 1);
@@ -57,6 +82,7 @@ const test = {
   edgeNonce: EDGE_NONCE,
   origin: ORIGIN,
   mode: RESUME_MODE ? 'RESUME_EXISTING_ORDER' : 'CREATE_NEW_ORDER',
+  resumeStage: input.resumeStage || null,
   requestId: input.requestId,
   orderNumber: input.orderNumber,
   createPayloadFingerprint: input.createPayloadFingerprint,
@@ -446,6 +472,48 @@ function imageStoragePath(orderId, versionLabel, image) {
   ].join('/');
 }
 
+async function issueImageProof(
+  identity,
+  orderId,
+  versionLabel,
+  image,
+  storagePath,
+  sha256,
+) {
+  const edgeResponse = await fetch(
+    `${SUPABASE_URL}/functions/v1/wos-v1-verify-image`,
+    {
+      method: 'POST',
+      headers: {
+        apikey: ANON_KEY,
+        authorization: `Bearer ${identity.access_token}`,
+        'content-type': 'application/json',
+        'x-wos-qa-uat-authorization-id': AUTHORIZATION_ID,
+        'x-wos-qa-uat-execution-id': EXECUTION_ID,
+        'x-wos-qa-uat-closer-nonce': EDGE_NONCE,
+      },
+      body: JSON.stringify({
+        orderId,
+        imageId: image.imageId,
+        category: image.category,
+        storagePath,
+        sha256,
+      }),
+      signal: AbortSignal.timeout(20_000),
+    },
+  );
+  const edge = await edgeResponse.json().catch(() => null);
+  record(`EDGE:${versionLabel}:${image.category}`, {
+    status: edgeResponse.status,
+    payload: edge,
+  });
+  assert.equal(edgeResponse.status, 200);
+  assert.equal(edge?.ok, true);
+  assert.equal(edge?.code, 'WOS_V1_TRUSTED_IMAGE_PROOF_ISSUED');
+  assert.equal(edge?.data?.sha256, sha256);
+  assert(['VERIFIED', 'REPLAYED'].includes(edge?.data?.proofStatus));
+}
+
 async function uploadAndVerify(identity, orderId, versionLabel, image) {
   const bytes = readFileSync(
     `docs/workshop-order-system/qa-fixture/production-m2-uat-20261126/${image.source}`,
@@ -481,38 +549,14 @@ async function uploadAndVerify(identity, orderId, versionLabel, image) {
       throw new Error('WOS_UAT_PRIVATE_UPLOAD_FAILED');
     }
   }
-  const edgeResponse = await fetch(
-    `${SUPABASE_URL}/functions/v1/wos-v1-verify-image`,
-    {
-      method: 'POST',
-      headers: {
-        apikey: ANON_KEY,
-        authorization: `Bearer ${identity.access_token}`,
-        'content-type': 'application/json',
-        'x-wos-qa-uat-authorization-id': AUTHORIZATION_ID,
-        'x-wos-qa-uat-execution-id': EXECUTION_ID,
-        'x-wos-qa-uat-closer-nonce': EDGE_NONCE,
-      },
-      body: JSON.stringify({
-        orderId,
-        imageId: image.imageId,
-        category: image.category,
-        storagePath,
-        sha256,
-      }),
-      signal: AbortSignal.timeout(20_000),
-    },
+  await issueImageProof(
+    identity,
+    orderId,
+    versionLabel,
+    image,
+    storagePath,
+    sha256,
   );
-  const edge = await edgeResponse.json().catch(() => null);
-  record(`EDGE:${versionLabel}:${image.category}`, {
-    status: edgeResponse.status,
-    payload: edge,
-  });
-  assert.equal(edgeResponse.status, 200);
-  assert.equal(edge?.ok, true);
-  assert.equal(edge?.code, 'WOS_V1_TRUSTED_IMAGE_PROOF_ISSUED');
-  assert.equal(edge?.data?.sha256, sha256);
-  assert(['VERIFIED', 'REPLAYED'].includes(edge?.data?.proofStatus));
 
   await expectApp(
     identity,
@@ -526,6 +570,18 @@ async function uploadAndVerify(identity, orderId, versionLabel, image) {
     'REGISTER_IMAGE_VERIFIED',
   );
   return { ...image, storagePath, sha256 };
+}
+
+async function reverifyExistingImage(identity, orderId, image, storagePath) {
+  await issueImageProof(
+    identity,
+    orderId,
+    'V2',
+    image,
+    storagePath,
+    image.sha256,
+  );
+  return { ...image, storagePath };
 }
 
 async function readonlyEdge(identity, payload) {
@@ -721,131 +777,176 @@ async function main() {
   `);
   assert.equal(openGates.split('\n').filter(Boolean).length >= 3, true);
 
-  const v1Images = [];
-  if (RESUME_MODE) {
-    const supersededV1 = Number(runSql(`
-      SELECT count(*)
+  const v1Images = input.images.v1.map(image => ({
+    ...image,
+    storagePath: imageStoragePath(orderId, 'V1', image),
+  }));
+  const v2Images = [];
+  if (RESUME_AT_MATERIAL) {
+    assert.equal(input.resumeExpectedVersion, 7);
+    assert.equal(input.resumeExpectedWorkflowStatus, 'WAITING_MATERIAL');
+    const currentImages = JSON.parse(runSql(`
+      SELECT coalesce(jsonb_agg(jsonb_build_object(
+        'imageId',id,
+        'category',category,
+        'versionLabel',version_label,
+        'imageStatus',image_status,
+        'storagePath',storage_path
+      )),'[]'::jsonb)::text
       FROM public.wos_reference_images
-      WHERE entity_id=${sqlLiteral(orderId)}::uuid
-        AND version_label='V1'
-        AND image_status='SUPERSEDED';
+      WHERE organization_id=${sqlLiteral(input.qaOrganizationId)}::uuid
+        AND entity_type='PRODUCTION_ORDER'
+        AND entity_id=${sqlLiteral(orderId)}::uuid
+        AND version_label='V2'
+        AND image_status='READY'
+        AND superseded_at IS NULL;
     `).split('\n').filter(Boolean).at(-1));
-    assert.equal(supersededV1, 4);
-    for (const image of input.images.v1) {
-      v1Images.push({
-        ...image,
-        storagePath: imageStoragePath(orderId, 'V1', image),
-      });
-    }
-    test.resumedAfterV1 = true;
-  } else {
-    for (const image of input.images.v1) {
-      v1Images.push(await uploadAndVerify(
+    assert.equal(currentImages.length, 4);
+    assert.deepEqual(
+      currentImages.map(image => image.imageId).sort(),
+      input.images.v2.map(image => image.imageId).sort(),
+    );
+    for (const image of input.images.v2) {
+      const current = currentImages.find(
+        item => item.imageId === image.imageId,
+      );
+      assert(current);
+      assert.equal(current.category, image.category);
+      assert.equal(current.versionLabel, 'V2');
+      assert.equal(current.imageStatus, 'READY');
+      assert.equal(
+        current.storagePath,
+        imageStoragePath(orderId, 'V2', image),
+      );
+      v2Images.push(await reverifyExistingImage(
         identities.office,
         orderId,
-        'V1',
+        image,
+        current.storagePath,
+      ));
+    }
+    test.resumedAtMaterial = true;
+  } else {
+    if (RESUME_MODE) {
+      const supersededV1 = Number(runSql(`
+        SELECT count(*)
+        FROM public.wos_reference_images
+        WHERE entity_id=${sqlLiteral(orderId)}::uuid
+          AND version_label='V1'
+          AND image_status='SUPERSEDED';
+      `).split('\n').filter(Boolean).at(-1));
+      assert.equal(supersededV1, 4);
+      test.resumedAfterV1 = true;
+    } else {
+      const uploadedV1 = [];
+      for (const image of input.images.v1) {
+        uploadedV1.push(await uploadAndVerify(
+          identities.office,
+          orderId,
+          'V1',
+          image,
+        ));
+      }
+      await expectApp(
+        identities.office,
+        {
+          operation: 'CONFIRM_OFFICE',
+          orderId,
+          expectedVersion: 1,
+          expectedLabel: 'V1',
+          note: 'Office confirms the four current V1 production images.',
+        },
+        'CONFIRM_OFFICE_VERIFIED',
+      );
+      const submitRequestId = randomUUID();
+      await expectApp(
+        identities.office,
+        {
+          operation: 'SUBMIT_ORDER',
+          orderId,
+          expectedVersion: 1,
+          expectedLabel: 'V1',
+          requestId: submitRequestId,
+        },
+        'SUBMIT_ORDER_VERIFIED',
+      );
+
+      const acceptRequestId = randomUUID();
+      await expectApp(
+        identities.operator,
+        {
+          operation: 'OPERATOR_ACTION',
+          orderId,
+          expectedVersion: 2,
+          requestId: acceptRequestId,
+          action: 'ACCEPT',
+          reason: 'Operator accepts the current V1 production request.',
+        },
+        'OPERATOR_ACTION_VERIFIED',
+      );
+      await expectApp(
+        identities.operator,
+        {
+          operation: 'OPERATOR_ACTION',
+          orderId,
+          expectedVersion: 3,
+          requestId: randomUUID(),
+          action: 'RETURN_FOR_INFORMATION',
+          reason: 'Office must complete the customer acceptance correction.',
+        },
+        'OPERATOR_ACTION_VERIFIED',
+      );
+      const saveRequestId = randomUUID();
+      await expectApp(
+        identities.office,
+        {
+          operation: 'SAVE_CORRECTION',
+          orderId,
+          expectedVersion: 4,
+          requestId: saveRequestId,
+          reason: 'Office updates the requested acceptance standard.',
+          patch: {
+            customerAcceptanceStandard:
+              'QA UAT acceptance updated for the current V2 printed sample.',
+          },
+        },
+        'SAVE_CORRECTION_VERIFIED',
+      );
+      v1Images.splice(0, v1Images.length, ...uploadedV1);
+    }
+    for (const image of input.images.v2) {
+      v2Images.push(await uploadAndVerify(
+        identities.office,
+        orderId,
+        'V2',
         image,
       ));
     }
+    const resubmitRequestId = randomUUID();
     await expectApp(
       identities.office,
       {
-        operation: 'CONFIRM_OFFICE',
+        operation: 'RESUBMIT_ORDER',
         orderId,
-        expectedVersion: 1,
-        expectedLabel: 'V1',
-        note: 'Office confirms the four current V1 production images.',
+        expectedVersion: 5,
+        requestId: resubmitRequestId,
+        reason: 'Office resubmits the complete V2 image set.',
       },
-      'CONFIRM_OFFICE_VERIFIED',
+      'RESUBMIT_ORDER_VERIFIED',
     );
-    const submitRequestId = randomUUID();
-    await expectApp(
-      identities.office,
-      {
-        operation: 'SUBMIT_ORDER',
-        orderId,
-        expectedVersion: 1,
-        expectedLabel: 'V1',
-        requestId: submitRequestId,
-      },
-      'SUBMIT_ORDER_VERIFIED',
-    );
-
-    const acceptRequestId = randomUUID();
+    const reviewRequestId = randomUUID();
     await expectApp(
       identities.operator,
       {
-        operation: 'OPERATOR_ACTION',
+        operation: 'REVIEW_CORRECTION',
         orderId,
-        expectedVersion: 2,
-        requestId: acceptRequestId,
-        action: 'ACCEPT',
-        reason: 'Operator accepts the current V1 production request.',
+        expectedVersion: 6,
+        requestId: reviewRequestId,
+        note: 'Operator reviews the immutable V2 resubmission.',
       },
-      'OPERATOR_ACTION_VERIFIED',
-    );
-    await expectApp(
-      identities.operator,
-      {
-        operation: 'OPERATOR_ACTION',
-        orderId,
-        expectedVersion: 3,
-        requestId: randomUUID(),
-        action: 'RETURN_FOR_INFORMATION',
-        reason: 'Office must complete the customer acceptance correction.',
-      },
-      'OPERATOR_ACTION_VERIFIED',
-    );
-    const saveRequestId = randomUUID();
-    await expectApp(
-      identities.office,
-      {
-        operation: 'SAVE_CORRECTION',
-        orderId,
-        expectedVersion: 4,
-        requestId: saveRequestId,
-        reason: 'Office updates the requested acceptance standard.',
-        patch: {
-          customerAcceptanceStandard:
-            'QA UAT acceptance updated for the current V2 printed sample.',
-        },
-      },
-      'SAVE_CORRECTION_VERIFIED',
+      'REVIEW_CORRECTION_VERIFIED',
     );
   }
-  const v2Images = [];
-  for (const image of input.images.v2) {
-    v2Images.push(await uploadAndVerify(
-      identities.office,
-      orderId,
-      'V2',
-      image,
-    ));
-  }
-  const resubmitRequestId = randomUUID();
-  await expectApp(
-    identities.office,
-    {
-      operation: 'RESUBMIT_ORDER',
-      orderId,
-      expectedVersion: 5,
-      requestId: resubmitRequestId,
-      reason: 'Office resubmits the complete V2 image set.',
-    },
-    'RESUBMIT_ORDER_VERIFIED',
-  );
-  const reviewRequestId = randomUUID();
-  await expectApp(
-    identities.operator,
-    {
-      operation: 'REVIEW_CORRECTION',
-      orderId,
-      expectedVersion: 6,
-      requestId: reviewRequestId,
-      note: 'Operator reviews the immutable V2 resubmission.',
-    },
-    'REVIEW_CORRECTION_VERIFIED',
-  );
 
   const v2Ids = input.images.v2.map(image => image.imageId);
   const now = new Date().toISOString();

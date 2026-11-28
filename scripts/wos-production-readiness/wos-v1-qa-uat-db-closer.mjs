@@ -10,10 +10,10 @@ import { fileURLToPath } from 'node:url';
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '../..');
 const AUTH_ID =
   process.env.WOS_V1_QA_AUTHORIZATION_ID
-  || 'WOS-V1-PRODUCTION-M2-QA-UAT-015';
+  || 'WOS-V1-PRODUCTION-M2-QA-UAT-016';
 const QA_APP_EXECUTION_ID =
   process.env.WOS_V1_QA_APP_EXECUTION_ID
-  || '1dc0f65d-ecc3-4a89-bb16-e2d4b3843395';
+  || '11c9a114-4381-49fb-9cd6-04591c7b833b';
 const PROJECT_REF = 'xulmpqaknlwqqculbsek';
 const ARM_KEYCHAIN = 'WOS_V1_QA_DB_CLOSER_ARM_TOKEN';
 const OWNED_TEST_CONTAINER =
@@ -317,6 +317,12 @@ function activateFullM2() {
   ].join('\n');
   runSql(sql);
   process.stdout.write('WOS_V1_QA_DB_CLOSER_FULL_M2_ACTIVATE=PASS\n');
+}
+
+function activate() {
+  activateFullM2();
+  activateQaApp();
+  process.stdout.write('WOS_V1_QA_DB_CLOSER_ACTIVATE=PASS\n');
 }
 
 function activateQaApp() {
@@ -805,6 +811,7 @@ try {
   if (command === 'install-closer-only') installCloserOnly();
   else if (command === 'install-full-m2') installFullM2();
   else if (command === 'activate-full-m2') activateFullM2();
+  else if (command === 'activate') activate();
   else if (command === 'activate-qa-app') activateQaApp();
   else if (command === 'deactivate-qa-app') deactivateQaApp();
   else if (command === 'install-storage-compat') installStorageCompat();

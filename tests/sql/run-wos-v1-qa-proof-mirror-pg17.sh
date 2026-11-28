@@ -197,6 +197,16 @@ proof_insert() {
   "
 }
 
+proof_refresh() {
+  local image_id="$1"
+  psql_db "$DB" -qAt -c "
+    UPDATE public.wos_qa_verified_image_proofs
+    SET verified_at=clock_timestamp(),
+        expires_at=clock_timestamp()+interval '10 minutes'
+    WHERE image_id='$image_id';
+  "
+}
+
 psql_db "$DB" -q -c "
   INSERT INTO storage.objects(id,bucket_id,name,version,updated_at)
   VALUES(
@@ -222,15 +232,15 @@ psql_db "$DB" -q -c "
     write_deadline_at,authorized_order_id,authorized_organization_id,
     edge_process_nonce,opened_at
   ) VALUES(
-    '1dc0f65d-ecc3-4a89-bb16-e2d4b3843395',
-    'WOS-V1-PRODUCTION-M2-QA-UAT-015',
+    '11c9a114-4381-49fb-9cd6-04591c7b833b',
+    'WOS-V1-PRODUCTION-M2-QA-UAT-016',
     'xulmpqaknlwqqculbsek',
     'ARMED',
     'ARMED',
     clock_timestamp()+interval '8 minutes',
     '3ade0180-e6bf-49da-b80b-fd00cd1948a8',
     '0ff53d93-2b9e-48b9-8113-a4768c39cdd2',
-    '94e872da-4e3c-4b00-bdbe-91caf6a2c584',
+    'c0091f69-8b97-4e1c-a270-a9ff4f199965',
     clock_timestamp()
   );
 " >/dev/null
@@ -253,6 +263,29 @@ proof_insert \
   WHERE image_id='5f9329e1-d9dd-4fb2-9fa7-837c6b2060db'
 ")" ]] || fail 'MIRROR_TIMESTAMPS_DIFFER'
 
+old_mirror_expiry="$(psql_db "$DB" -qAt -c "
+  SELECT expires_at::text
+  FROM public.wos_verified_image_proofs
+  WHERE image_id='5f9329e1-d9dd-4fb2-9fa7-837c6b2060db'
+")"
+proof_refresh '5f9329e1-d9dd-4fb2-9fa7-837c6b2060db' >/dev/null
+[[ "$(psql_db "$DB" -qAt -c "
+  SELECT verified_at::text||'|'||expires_at::text
+  FROM public.wos_verified_image_proofs
+  WHERE image_id='5f9329e1-d9dd-4fb2-9fa7-837c6b2060db'
+")" = "$(psql_db "$DB" -qAt -c "
+  SELECT verified_at::text||'|'||expires_at::text
+  FROM public.wos_qa_verified_image_proofs
+  WHERE image_id='5f9329e1-d9dd-4fb2-9fa7-837c6b2060db'
+")" ]] || fail 'MIRROR_REFRESH_TIMESTAMPS_DIFFER'
+new_mirror_expiry="$(psql_db "$DB" -qAt -c "
+  SELECT expires_at::text
+  FROM public.wos_verified_image_proofs
+  WHERE image_id='5f9329e1-d9dd-4fb2-9fa7-837c6b2060db'
+")"
+[[ "$new_mirror_expiry" > "$old_mirror_expiry" ]] \
+  || fail 'MIRROR_REFRESH_NOT_APPLIED'
+
 {
   printf "SET wos_v1.qa_project='xulmpqaknlwqqculbsek';\n"
   printf "SET wos_v1.qa_verified_proof_mirror_rollback_authorized='yes';\n"
@@ -274,4 +307,5 @@ proof_insert \
 echo 'WOS_V1_QA_PROOF_MIRROR_PG17=PASS'
 echo 'WOS_V1_QA_PROOF_MIRROR_GATE_REQUIRED=PASS'
 echo 'WOS_V1_QA_PROOF_MIRROR_EXACT_PROOF_COPY=PASS'
+echo 'WOS_V1_QA_PROOF_MIRROR_REFRESH=PASS'
 echo 'WOS_V1_QA_PROOF_MIRROR_ROLLBACK=PASS'
