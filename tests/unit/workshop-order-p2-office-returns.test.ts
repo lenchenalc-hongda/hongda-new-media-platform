@@ -111,7 +111,9 @@ assert(office.includes('disabled={!writeEnabled||pending}'),'write buttons must 
 assert(!office.includes('NEXT_PUBLIC_WOS_P2_QA_OFFICE_REVISION_ENABLED'));
 assert(!office.includes('localStorage'),'return reasons must come from real QA server');
 assert(office.includes('当前责任人'),'returned task must show the responsible profile');
-assert(page.includes('returnedReadEnabled && <LiveQaReturnedOrders />'),
+assert(page.includes(
+  'returnedReadEnabled && !qaRuntime.readsEnabled && <LiveQaReturnedOrders />',
+),
   'read-only returned tasks must not depend on P5C/P7 write gates');
 console.log('workshop-order-p2-office-returns.test.ts: PASS');
 console.log('WOS_P2_OFFICE_RETURN_READ_AND_SAFE_REVISION_UI=PASS');

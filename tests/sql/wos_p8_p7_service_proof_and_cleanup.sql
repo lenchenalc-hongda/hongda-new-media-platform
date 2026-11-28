@@ -258,7 +258,7 @@ WITH CHECK (
       AND p.role IN ('admin','manager','sales')
       AND p.org_id::text=(storage.foldername(storage.objects.name))[2]
       AND o.id::text=(storage.foldername(storage.objects.name))[5]
-      AND o.workflow_status='DRAFT'
+      AND o.workflow_status IN ('DRAFT','NEEDS_INFORMATION')
       AND o.version_label=(storage.foldername(storage.objects.name))[9]
       AND (p.role<>'sales' OR p.id=o.created_by_profile_id OR p.id=o.sales_owner_profile_id)
   )

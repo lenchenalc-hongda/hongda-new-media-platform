@@ -31,6 +31,9 @@ BEGIN
     OR to_regprocedure(
       'public.wos_v1_pre_runtime_record_trusted_image_proof(uuid,uuid,uuid,text,uuid,text,timestamptz,text)'
     ) IS NOT NULL
+    OR to_regprocedure(
+      'public.wos_v1_pre_runtime_register_uploaded_reference_image(uuid,uuid,text,text)'
+    ) IS NOT NULL
   THEN
     RAISE EXCEPTION 'WOS_V1_RUNTIME_ALREADY_PARTIALLY_INSTALLED';
   END IF;
@@ -63,6 +66,9 @@ BEGIN
     OR to_regprocedure(
       'public.wos_p7_record_trusted_image_proof(uuid,uuid,uuid,text,uuid,text,timestamptz,text)'
     ) IS NULL
+    OR to_regprocedure(
+      'public.wos_register_uploaded_reference_image(uuid,uuid,text,text)'
+    ) IS NULL
   THEN
     RAISE EXCEPTION 'WOS_V1_P7_PREREQUISITE_MISSING';
   END IF;
@@ -94,7 +100,7 @@ BEGIN
       AND policy.permissive = 'PERMISSIVE'
       AND policy.roles = ARRAY['authenticated']::name[]
       AND md5(COALESCE(policy.with_check, ''))
-        = '4178cd6c4759bd9d0ad33560415f6bc8'
+        = '1d7c6b603d04a29e848975adc0bc4dad'
       AND md5(COALESCE(policy.qual, ''))
         = 'd41d8cd98f00b204e9800998ecf8427e'
   ) OR NOT EXISTS (
@@ -108,8 +114,10 @@ BEGIN
       AND policy.roles = ARRAY['authenticated']::name[]
       AND md5(COALESCE(policy.with_check, ''))
         = 'd41d8cd98f00b204e9800998ecf8427e'
-      AND md5(COALESCE(policy.qual, ''))
-        = '365f79545fe118582bc24a32ccc15f57'
+      AND md5(COALESCE(policy.qual, '')) IN (
+        '365f79545fe118582bc24a32ccc15f57',
+        '5a84d8e45b2630833f805d2bae30485c'
+      )
   ) THEN
     RAISE EXCEPTION 'WOS_V1_PRIVATE_STORAGE_RLS_MISMATCH';
   END IF;
@@ -175,6 +183,9 @@ ALTER FUNCTION public.wos_submit_production_order(
 ALTER FUNCTION public.wos_p7_record_trusted_image_proof(
   uuid,uuid,uuid,text,uuid,text,timestamptz,text
 ) RENAME TO wos_v1_pre_runtime_record_trusted_image_proof;
+ALTER FUNCTION public.wos_register_uploaded_reference_image(
+  uuid,uuid,text,text
+) RENAME TO wos_v1_pre_runtime_register_uploaded_reference_image;
 
 CREATE TABLE public.wos_order_create_receipts (
   request_id uuid PRIMARY KEY,
@@ -349,6 +360,215 @@ REVOKE ALL ON FUNCTION public.wos_v1_assert_current_image_set(
   uuid,uuid,text
 ) FROM PUBLIC, anon, authenticated, service_role;
 
+CREATE OR REPLACE FUNCTION public.wos_register_uploaded_reference_image(
+  p_order_id uuid,
+  p_image_id uuid,
+  p_category text,
+  p_storage_path text
+) RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $register_image$
+DECLARE
+  v_actor public.profiles%ROWTYPE;
+  v_order public.wos_production_orders%ROWTYPE;
+  v_object storage.objects%ROWTYPE;
+  v_row public.wos_reference_images%ROWTYPE;
+  v_category_slug text;
+  v_prefix text;
+  v_filename text;
+  v_mime text;
+  v_size bigint;
+BEGIN
+  SELECT * INTO v_actor
+  FROM public.profiles profile
+  WHERE profile.user_id = auth.uid()
+    AND profile.is_active = true
+    AND profile.role IN ('admin', 'manager', 'sales');
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'NOT_AUTHORIZED' USING ERRCODE = '42501';
+  END IF;
+  IF p_order_id IS NULL
+    OR p_image_id IS NULL
+    OR p_storage_path IS NULL
+    OR length(p_storage_path) > 1024
+    OR p_category NOT IN (
+      'PRODUCT',
+      'FILM_PATTERN',
+      'CUSTOMER_APPROVED_SAMPLE',
+      'SIGNED_SAMPLE'
+    )
+  THEN
+    RAISE EXCEPTION 'INVALID_INPUT' USING ERRCODE = '22023';
+  END IF;
+
+  v_category_slug := replace(lower(p_category), '_', '-');
+  SELECT * INTO v_order
+  FROM public.wos_production_orders production_order
+  WHERE production_order.id = p_order_id
+  FOR UPDATE;
+  IF NOT FOUND
+    OR v_order.organization_id <> v_actor.org_id
+    OR (v_actor.role = 'sales' AND v_actor.id NOT IN (
+      v_order.created_by_profile_id,
+      v_order.sales_owner_profile_id
+    ))
+  THEN
+    RAISE EXCEPTION 'NOT_AUTHORIZED' USING ERRCODE = '42501';
+  END IF;
+  IF v_order.workflow_status NOT IN ('DRAFT', 'NEEDS_INFORMATION')
+    OR v_order.version_label !~ '^V[1-9][0-9]{0,20}$'
+  THEN
+    RAISE EXCEPTION 'UNSUPPORTED_ORDER_VERSION' USING ERRCODE = '23514';
+  END IF;
+
+  v_prefix := 'organizations/' || v_order.organization_id::text
+    || '/wos/production-order/' || v_order.id::text
+    || '/images/' || v_category_slug
+    || '/versions/' || v_order.version_label || '/'
+    || p_image_id::text || '/';
+  IF left(p_storage_path, length(v_prefix)) <> v_prefix
+    OR length(p_storage_path) <= length(v_prefix)
+  THEN
+    RAISE EXCEPTION 'INVALID_STORAGE_PATH' USING ERRCODE = '23514';
+  END IF;
+  v_filename := substring(p_storage_path FROM length(v_prefix) + 1);
+  IF v_filename !~ '^[A-Za-z0-9][A-Za-z0-9._-]{0,199}[.]png$'
+    OR position('..' in v_filename) > 0
+  THEN
+    RAISE EXCEPTION 'INVALID_STORAGE_FILE' USING ERRCODE = '23514';
+  END IF;
+
+  SELECT * INTO v_object
+  FROM storage.objects object
+  WHERE object.bucket_id = 'wos-private'
+    AND object.name = p_storage_path
+    AND object.owner_id = auth.uid()::text
+    AND object.is_delete_marker = false
+    AND object.archived_at IS NULL;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'PRIVATE_STORAGE_OBJECT_NOT_VERIFIED'
+      USING ERRCODE = '23514';
+  END IF;
+  v_mime := v_object.metadata->>'mimetype';
+  IF v_mime <> 'image/png'
+    OR COALESCE(v_object.metadata->>'size', '') !~ '^[0-9]+$'
+  THEN
+    RAISE EXCEPTION 'TRUSTED_PNG_ONLY' USING ERRCODE = '23514';
+  END IF;
+  v_size := (v_object.metadata->>'size')::bigint;
+  IF v_size NOT BETWEEN 60 AND 20971520 THEN
+    RAISE EXCEPTION 'UNSUPPORTED_IMAGE_SIZE' USING ERRCODE = '23514';
+  END IF;
+
+  SELECT * INTO v_row
+  FROM public.wos_reference_images image
+  WHERE image.id = p_image_id;
+  IF FOUND THEN
+    IF v_row.organization_id <> v_actor.org_id
+      OR v_row.entity_id <> p_order_id
+      OR v_row.storage_bucket <> 'wos-private'
+      OR v_row.storage_path <> p_storage_path
+      OR v_row.category <> p_category
+      OR v_row.image_status <> 'READY'
+      OR v_row.version_label <> v_order.version_label
+    THEN
+      RAISE EXCEPTION 'IMAGE_ID_CONFLICT' USING ERRCODE = '23505';
+    END IF;
+    RETURN jsonb_build_object(
+      'status', 'REPLAYED',
+      'imageId', v_row.id,
+      'bucket', 'wos-private'
+    );
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM public.wos_verified_image_proofs proof
+    WHERE proof.image_id = p_image_id
+      AND proof.order_id = p_order_id
+      AND proof.organization_id = v_actor.org_id
+      AND proof.actor_user_id = auth.uid()
+      AND proof.storage_bucket = 'wos-private'
+      AND proof.storage_path = p_storage_path
+      AND proof.storage_object_id = v_object.id
+      AND proof.storage_object_version
+        IS NOT DISTINCT FROM v_object.version
+      AND proof.storage_object_updated_at
+        IS NOT DISTINCT FROM v_object.updated_at
+      AND proof.expires_at > clock_timestamp()
+  ) THEN
+    RAISE EXCEPTION 'TRUSTED_BINARY_PROOF_REQUIRED' USING ERRCODE = '42501';
+  END IF;
+
+  INSERT INTO public.wos_reference_images (
+    id, organization_id, entity_type, entity_id, category,
+    storage_bucket, storage_path, file_name, mime_type, file_size,
+    version_label, image_status, uploaded_by_profile_id
+  ) VALUES (
+    p_image_id, v_actor.org_id, 'PRODUCTION_ORDER', p_order_id, p_category,
+    'wos-private', p_storage_path, v_filename, v_mime, v_size,
+    v_order.version_label, 'READY', v_actor.id
+  );
+  RETURN jsonb_build_object(
+    'status', 'CREATED',
+    'imageId', p_image_id,
+    'bucket', 'wos-private'
+  );
+END;
+$register_image$;
+
+REVOKE ALL ON FUNCTION public.wos_register_uploaded_reference_image(
+  uuid,uuid,text,text
+) FROM PUBLIC, anon, authenticated, service_role;
+
+CREATE FUNCTION public.wos_v1_assert_service_role_request()
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+STABLE
+AS $service_role_request$
+DECLARE
+  v_claims text;
+  v_claims_json jsonb;
+  v_transaction_role text;
+BEGIN
+  v_claims := NULLIF(current_setting('request.jwt.claims', true), '');
+  v_transaction_role := NULLIF(current_setting('role', true), '');
+  BEGIN
+    v_claims_json := v_claims::jsonb;
+  EXCEPTION WHEN OTHERS THEN
+    RAISE EXCEPTION 'SERVICE_ROLE_REQUIRED' USING ERRCODE = '42501';
+  END;
+  IF v_claims_json IS NULL
+    OR length(v_claims) > 16384
+    OR jsonb_typeof(v_claims_json) <> 'object'
+    OR v_claims_json->>'role' IS DISTINCT FROM 'service_role'
+    OR v_transaction_role IS DISTINCT FROM 'service_role'
+    OR (
+      session_user = 'authenticator'
+      AND (
+        NULLIF(current_setting('request.method', true), '') IS NULL
+        OR NULLIF(current_setting('request.path', true), '') NOT LIKE '/rpc/%'
+      )
+    )
+    OR (
+      session_user NOT IN ('authenticator', 'postgres', 'supabase_admin')
+    )
+    OR (
+      session_user IN ('postgres', 'supabase_admin')
+      AND current_database() NOT LIKE '%\_ci' ESCAPE '\'
+    )
+  THEN
+    RAISE EXCEPTION 'SERVICE_ROLE_REQUIRED' USING ERRCODE = '42501';
+  END IF;
+END;
+$service_role_request$;
+REVOKE ALL ON FUNCTION public.wos_v1_assert_service_role_request()
+FROM PUBLIC, anon, authenticated, service_role;
+
 CREATE FUNCTION public.wos_p7_record_trusted_image_proof(
   p_image_id uuid,
   p_order_id uuid,
@@ -373,11 +593,7 @@ DECLARE
   v_size bigint;
   v_proof_id uuid;
 BEGIN
-  IF current_setting('request.jwt.claim.role', true)
-      IS DISTINCT FROM 'service_role'
-  THEN
-    RAISE EXCEPTION 'SERVICE_ROLE_REQUIRED' USING ERRCODE = '42501';
-  END IF;
+  PERFORM public.wos_v1_assert_service_role_request();
   IF p_image_id IS NULL
     OR p_order_id IS NULL
     OR p_actor_user_id IS NULL
@@ -809,11 +1025,13 @@ DECLARE
   v_project_owner uuid;
   v_customer_id uuid;
   v_project_id uuid;
+  v_customer public.cpc_customer_references%ROWTYPE;
+  v_project public.cpc_projects%ROWTYPE;
+  v_project_owner_profile public.profiles%ROWTYPE;
   v_requested_quantity integer;
   v_batch_quantity integer;
   v_carton_quantity integer;
   v_planned_ship_date date;
-  v_owner_count integer;
 BEGIN
   IF auth.uid() IS NULL
     OR p_request_id IS NULL
@@ -846,23 +1064,22 @@ BEGIN
   END LOOP;
 
   IF length(btrim(COALESCE(p_payload->>'orderNumber', ''))) NOT BETWEEN 1 AND 80
-    OR length(btrim(COALESCE(p_payload->>'customerNameSnapshot', '')))
-      NOT BETWEEN 1 AND 300
     OR length(btrim(COALESCE(p_payload->>'productName', '')))
       NOT BETWEEN 1 AND 300
     OR length(btrim(COALESCE(p_payload->>'productMaterial', '')))
       NOT BETWEEN 1 AND 200
-    OR (p_payload->>'salesOwnerProfileId') !~* '^[0-9a-f-]{36}$'
-    OR (p_payload->>'projectOwnerProfileId') !~* '^[0-9a-f-]{36}$'
     OR (p_payload->>'priority') NOT IN ('LOW', 'MEDIUM', 'HIGH', 'CRITICAL')
     OR (p_payload->>'requestedQuantity') !~ '^[1-9][0-9]{0,9}$'
     OR (p_payload->>'currentBatchQuantity') !~ '^[1-9][0-9]{0,9}$'
   THEN
     RAISE EXCEPTION 'INVALID_INPUT' USING ERRCODE = '22023';
   END IF;
+  IF p_payload ? 'splitDelivery'
+    AND p_payload->'splitDelivery' IS DISTINCT FROM 'false'::jsonb
+  THEN
+    RAISE EXCEPTION 'SPLIT_DELIVERY_NOT_SUPPORTED' USING ERRCODE = '22023';
+  END IF;
 
-  v_sales_owner := (p_payload->>'salesOwnerProfileId')::uuid;
-  v_project_owner := (p_payload->>'projectOwnerProfileId')::uuid;
   v_customer_id := NULLIF(p_payload->>'customerId', '')::uuid;
   v_project_id := NULLIF(p_payload->>'projectId', '')::uuid;
   v_requested_quantity := (p_payload->>'requestedQuantity')::integer;
@@ -876,62 +1093,25 @@ BEGIN
     ELSE (p_payload->>'plannedShipDate')::date
   END;
 
-  IF v_customer_id IS NOT NULL
-    AND NOT EXISTS (
-      SELECT 1
-      FROM public.cpc_customer_references customer
-      WHERE customer.id = v_customer_id
-        AND customer.org_id = v_actor.org_id
-    )
-  THEN
-    RAISE EXCEPTION 'CUSTOMER_ORGANIZATION_MISMATCH' USING ERRCODE = '42501';
+  IF v_customer_id IS NULL OR v_project_id IS NULL THEN
+    RAISE EXCEPTION 'CPC_LINK_REQUIRED' USING ERRCODE = '42501';
   END IF;
-  IF v_project_id IS NOT NULL
-    AND NOT EXISTS (
-      SELECT 1
-      FROM public.cpc_projects project
-      WHERE project.id = v_project_id
-        AND project.org_id = v_actor.org_id
-    )
-  THEN
-    RAISE EXCEPTION 'PROJECT_ORGANIZATION_MISMATCH' USING ERRCODE = '42501';
-  END IF;
-  IF v_customer_id IS NOT NULL
-    AND v_project_id IS NOT NULL
-    AND NOT EXISTS (
-      SELECT 1
-      FROM public.cpc_projects project
-      WHERE project.id = v_project_id
-        AND project.org_id = v_actor.org_id
-        AND project.customer_reference_id = v_customer_id
-    )
-  THEN
-    RAISE EXCEPTION 'PROJECT_CUSTOMER_MISMATCH' USING ERRCODE = '42501';
-  END IF;
-
   IF v_batch_quantity > v_requested_quantity
     OR (v_carton_quantity IS NOT NULL AND v_carton_quantity < 1)
   THEN
     RAISE EXCEPTION 'INVALID_QUANTITY' USING ERRCODE = '22023';
   END IF;
 
-  SELECT count(*)::integer INTO v_owner_count
-  FROM public.profiles owner_profile
-  WHERE owner_profile.org_id = v_actor.org_id
-    AND owner_profile.is_active = true
-    AND owner_profile.id IN (v_sales_owner, v_project_owner);
-  IF v_owner_count <> (CASE WHEN v_sales_owner = v_project_owner THEN 1 ELSE 2 END) THEN
-    RAISE EXCEPTION 'INVALID_OWNER' USING ERRCODE = '42501';
-  END IF;
-  IF v_actor.role = 'sales' AND v_actor.id NOT IN (v_sales_owner, v_project_owner) THEN
-    RAISE EXCEPTION 'NOT_AUTHORIZED' USING ERRCODE = '42501';
-  END IF;
-
   v_fingerprint := encode(sha256(convert_to(jsonb_build_object(
     'requestId', p_request_id,
     'actorUserId', auth.uid(),
     'organizationId', v_actor.org_id,
-    'payload', p_payload
+    'payload', p_payload - ARRAY[
+      'customerNameSnapshot',
+      'projectNameSnapshot',
+      'salesOwnerProfileId',
+      'projectOwnerProfileId'
+    ]
   )::text, 'UTF8')), 'hex');
 
   PERFORM pg_advisory_xact_lock(
@@ -951,6 +1131,51 @@ BEGIN
       jsonb_build_object('status', 'REPLAYED');
   END IF;
 
+  SELECT * INTO v_customer
+  FROM public.cpc_customer_references customer
+  WHERE customer.id = v_customer_id
+    AND customer.org_id = v_actor.org_id
+    AND customer.status IN ('active', 'pending_review')
+    AND public.cpc_can_read_customer_reference(
+      customer.id, v_actor.org_id
+    );
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'CUSTOMER_ORGANIZATION_MISMATCH' USING ERRCODE = '42501';
+  END IF;
+  SELECT * INTO v_project
+  FROM public.cpc_projects project
+  WHERE project.id = v_project_id
+    AND project.org_id = v_actor.org_id
+    AND project.customer_reference_id = v_customer_id
+    AND project.status = 'active'
+    AND project.archived_at IS NULL
+    AND public.cpc_can_read_project(project.id, v_actor.org_id);
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'PROJECT_CUSTOMER_MISMATCH' USING ERRCODE = '42501';
+  END IF;
+  SELECT * INTO v_project_owner_profile
+  FROM public.profiles owner_profile
+  WHERE owner_profile.id = v_project.owner_profile_id
+    AND owner_profile.org_id = v_actor.org_id
+    AND owner_profile.is_active = true
+    AND owner_profile.role IN ('admin', 'manager', 'sales');
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'INVALID_PROJECT_OWNER' USING ERRCODE = '42501';
+  END IF;
+  v_sales_owner := v_actor.id;
+  v_project_owner := v_project.owner_profile_id;
+
+  PERFORM set_config(
+    'wos.v1.create_request_id',
+    p_request_id::text,
+    true
+  );
+  PERFORM set_config(
+    'wos.v1.create_payload_fingerprint',
+    v_fingerprint,
+    true
+  );
+
   INSERT INTO public.wos_production_orders (
     organization_id, customer_id, customer_name_snapshot, project_id,
     project_name_snapshot, order_number, product_name, sales_owner_profile_id,
@@ -962,8 +1187,8 @@ BEGIN
     label_marking_rule, created_by_profile_id, version
   ) VALUES (
     v_actor.org_id, v_customer_id,
-    btrim(p_payload->>'customerNameSnapshot'), v_project_id,
-    NULLIF(btrim(p_payload->>'projectNameSnapshot'), ''),
+    v_customer.display_name_snapshot, v_project_id,
+    v_project.title,
     btrim(p_payload->>'orderNumber'), btrim(p_payload->>'productName'),
     v_sales_owner, v_project_owner, p_payload->>'priority',
     COALESCE((p_payload->>'isUrgent')::boolean, false), 'V1', 'DRAFT',
@@ -1379,6 +1604,16 @@ BEGIN
     RAISE EXCEPTION 'VERSION_CONFLICT' USING ERRCODE = 'PT409';
   END IF;
 
+  UPDATE public.wos_reference_images
+  SET image_status = 'SUPERSEDED',
+      superseded_at = clock_timestamp()
+  WHERE organization_id = v_actor.org_id
+    AND entity_type = 'PRODUCTION_ORDER'
+    AND entity_id = p_order_id
+    AND version_label = v_order.version_label
+    AND image_status = 'READY'
+    AND superseded_at IS NULL;
+
   v_response := jsonb_build_object(
     'status', 'SAVED',
     'orderId', p_order_id,
@@ -1455,10 +1690,9 @@ DECLARE
   v_prior public.wos_office_revisions%ROWTYPE;
   v_saved public.wos_office_revisions%ROWTYPE;
   v_fingerprint text;
-  v_revision_number integer;
-  v_next_label text;
   v_after public.wos_production_orders%ROWTYPE;
   v_response jsonb;
+  v_baseline_id uuid;
 BEGIN
   IF auth.uid() IS NULL
     OR p_order_id IS NULL
@@ -1554,15 +1788,14 @@ BEGIN
     RAISE EXCEPTION 'DOCUMENT_BLOCKER_MISSING' USING ERRCODE = 'PT409';
   END IF;
 
-  SELECT count(*)::integer + 2 INTO v_revision_number
-  FROM public.wos_office_revisions revision
-  WHERE revision.order_id = p_order_id
-    AND revision.organization_id = v_actor.org_id;
-  v_next_label := 'V' || v_revision_number::text;
+  PERFORM public.wos_v1_assert_current_image_set(
+    p_order_id,
+    v_actor.org_id,
+    v_order.version_label
+  );
 
   UPDATE public.wos_production_orders
   SET workflow_status = 'WORKSHOP_REVIEW',
-      version_label = v_next_label,
       version = version + 1,
       updated_at = clock_timestamp()
   WHERE id = p_order_id
@@ -1573,6 +1806,39 @@ BEGIN
   IF NOT FOUND THEN
     RAISE EXCEPTION 'VERSION_CONFLICT' USING ERRCODE = 'PT409';
   END IF;
+
+  UPDATE public.wos_visual_baselines
+  SET status = 'SUPERSEDED',
+      superseded_at = clock_timestamp()
+  WHERE organization_id = v_actor.org_id
+    AND entity_type = 'PRODUCTION_ORDER'
+    AND entity_id = p_order_id
+    AND status = 'CURRENT'
+    AND superseded_at IS NULL;
+
+  v_baseline_id := gen_random_uuid();
+  INSERT INTO public.wos_visual_baselines (
+    id, organization_id, entity_type, entity_id,
+    version_label, status
+  ) VALUES (
+    v_baseline_id, v_actor.org_id, 'PRODUCTION_ORDER', p_order_id,
+    v_after.version_label, 'CURRENT'
+  );
+  INSERT INTO public.wos_visual_baseline_items (
+    baseline_id, reference_image_id, display_order, is_required
+  )
+  SELECT
+    v_baseline_id,
+    image.id,
+    row_number() OVER (ORDER BY image.category)::integer,
+    true
+  FROM public.wos_reference_images image
+  WHERE image.organization_id = v_actor.org_id
+    AND image.entity_type = 'PRODUCTION_ORDER'
+    AND image.entity_id = p_order_id
+    AND image.version_label = v_after.version_label
+    AND image.image_status = 'READY'
+    AND image.superseded_at IS NULL;
 
   v_response := jsonb_build_object(
     'status', 'RESUBMITTED',
@@ -1707,6 +1973,31 @@ BEGIN
     OR v_order.version <> p_expected_version
   THEN
     RAISE EXCEPTION 'REVISION_OR_VERSION_CONFLICT' USING ERRCODE = 'PT409';
+  END IF;
+
+  PERFORM public.wos_v1_assert_current_image_set(
+    p_order_id,
+    v_actor.org_id,
+    v_order.version_label
+  );
+  IF NOT EXISTS (
+    SELECT 1
+    FROM public.wos_visual_baselines baseline
+    WHERE baseline.organization_id = v_actor.org_id
+      AND baseline.entity_type = 'PRODUCTION_ORDER'
+      AND baseline.entity_id = p_order_id
+      AND baseline.version_label = v_order.version_label
+      AND baseline.status = 'CURRENT'
+      AND baseline.superseded_at IS NULL
+      AND (
+        SELECT count(*)
+        FROM public.wos_visual_baseline_items item
+        WHERE item.baseline_id = baseline.id
+          AND item.is_required = true
+      ) = 4
+  ) THEN
+    RAISE EXCEPTION 'CURRENT_VERSION_BASELINE_REQUIRED'
+      USING ERRCODE = 'PT409';
   END IF;
 
   SELECT * INTO v_revision

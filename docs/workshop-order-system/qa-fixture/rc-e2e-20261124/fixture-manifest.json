@@ -1,0 +1,58 @@
+{
+  "schemaVersion": 1,
+  "status": "LOCAL_ASSETS_READY / UPLOAD_NOT_AUTHORIZED",
+  "organizationId": "0ff53d93-2b9e-48b9-8113-a4768c39cdd2",
+  "orderId": "4aa6b131-c247-40e2-8340-473e4493369c",
+  "versionLabel": "V1",
+  "authorizationId": "WOS-V1-RC-INTEGRATED-HOSTED-QA-E2E",
+  "assets": [
+    {
+      "category": "PRODUCT",
+      "imageId": "ee363100-3b41-4c6b-be41-1ff59749c3be",
+      "sourceFile": "product.png",
+      "sha256": "e0430395e9e874355fcc3b3f5fd6024da062871b950e9c08ca277a470ac8c779",
+      "byteSize": 159,
+      "canonicalPath": "organizations/0ff53d93-2b9e-48b9-8113-a4768c39cdd2/wos/production-order/4aa6b131-c247-40e2-8340-473e4493369c/images/product/versions/V1/ee363100-3b41-4c6b-be41-1ff59749c3be/source.png",
+      "storageObjectId": null,
+      "storageObjectVersion": null,
+      "storageObjectUpdatedAt": null,
+      "uploadOrder": 1
+    },
+    {
+      "category": "FILM_PATTERN",
+      "imageId": "55e84425-01ea-4b32-bfb6-ff72e8e685f9",
+      "sourceFile": "film-pattern.png",
+      "sha256": "35e9bc213701c0b8bd3d6408a8b1bc8c3810572ef46f13e14984b215ebfc52b5",
+      "byteSize": 158,
+      "canonicalPath": "organizations/0ff53d93-2b9e-48b9-8113-a4768c39cdd2/wos/production-order/4aa6b131-c247-40e2-8340-473e4493369c/images/film-pattern/versions/V1/55e84425-01ea-4b32-bfb6-ff72e8e685f9/source.png",
+      "storageObjectId": null,
+      "storageObjectVersion": null,
+      "storageObjectUpdatedAt": null,
+      "uploadOrder": 2
+    },
+    {
+      "category": "CUSTOMER_APPROVED_SAMPLE",
+      "imageId": "b977698d-ce41-45f6-b0ae-031d101ac533",
+      "sourceFile": "customer-approved-sample.png",
+      "sha256": "8233fcb096a91103c0065c9460d5f7d7764cd952dd73d4d42f30116c95f9528c",
+      "byteSize": 158,
+      "canonicalPath": "organizations/0ff53d93-2b9e-48b9-8113-a4768c39cdd2/wos/production-order/4aa6b131-c247-40e2-8340-473e4493369c/images/customer-approved-sample/versions/V1/b977698d-ce41-45f6-b0ae-031d101ac533/source.png",
+      "storageObjectId": null,
+      "storageObjectVersion": null,
+      "storageObjectUpdatedAt": null,
+      "uploadOrder": 3
+    },
+    {
+      "category": "SIGNED_SAMPLE",
+      "imageId": "21a9a702-2012-4671-877e-7180f4d7d095",
+      "sourceFile": "signed-sample.png",
+      "sha256": "8770be76b5560d2b42d1ef25d7480a8c9a24800fb5c2254c859aa8208961f01d",
+      "byteSize": 158,
+      "canonicalPath": "organizations/0ff53d93-2b9e-48b9-8113-a4768c39cdd2/wos/production-order/4aa6b131-c247-40e2-8340-473e4493369c/images/signed-sample/versions/V1/21a9a702-2012-4671-877e-7180f4d7d095/source.png",
+      "storageObjectId": null,
+      "storageObjectVersion": null,
+      "storageObjectUpdatedAt": null,
+      "uploadOrder": 4
+    }
+  ]
+}

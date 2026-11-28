@@ -261,7 +261,9 @@ assert(returnedUi.includes('重新提交车间复核'));
 assert(returnedUi.includes('writeEnabled'));
 assert(returnedUi.includes('shouldApplyWosOfficeReturnedRead'));
 assert(!returnedUi.includes('NEXT_PUBLIC_WOS_P2_QA_OFFICE_REVISION_ENABLED'));
-assert(productionPage.includes('returnedReadEnabled && <LiveQaReturnedOrders />'));
+assert(productionPage.includes(
+  'returnedReadEnabled && !qaRuntime.readsEnabled && <LiveQaReturnedOrders />',
+));
 
 console.log('workshop-order-order-lifecycle-ui.test.ts: PASS');
 console.log('WOS_OPERATOR_ACCEPT_RETURN_REVIEW=PASS');

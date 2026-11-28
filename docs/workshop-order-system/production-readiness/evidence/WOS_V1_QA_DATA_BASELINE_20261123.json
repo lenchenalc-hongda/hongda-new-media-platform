@@ -1,0 +1,79 @@
+{
+  "counts": {
+    "action_receipts": 11,
+    "inbox": 82,
+    "m2_receipts": 4,
+    "office_revisions": 4,
+    "orders": 84,
+    "proof_receipts": 4,
+    "review_receipts": 2,
+    "submission_receipts": 82,
+    "verified_proofs": 31
+  },
+  "gates": {
+    "m2": [
+      {
+        "allowed_order_id": null,
+        "allowed_organization_id": null,
+        "approval_reference": "NOT_AUTHORIZED",
+        "enabled": false,
+        "enabled_until": null,
+        "gate_name": "M2_OFFICE_WRITES"
+      },
+      {
+        "allowed_order_id": null,
+        "allowed_organization_id": null,
+        "approval_reference": "NOT_AUTHORIZED",
+        "enabled": false,
+        "enabled_until": null,
+        "gate_name": "M2_OPERATOR_WRITES"
+      }
+    ],
+    "office": [
+      {
+        "activated_at": null,
+        "allowed_order_id": null,
+        "allowed_organization_id": null,
+        "allowed_profile_id": null,
+        "approval_reference": "NOT_AUTHORIZED",
+        "enabled": false,
+        "enabled_until": null,
+        "gate_name": "OFFICE_WRITES"
+      }
+    ],
+    "operator": [
+      {
+        "activated_at": null,
+        "allowed_order_id": null,
+        "allowed_organization_id": null,
+        "allowed_profile_id": null,
+        "approval_reference": "NOT_AUTHORIZED",
+        "enabled": false,
+        "enabled_until": null,
+        "gate_name": "OPERATOR_WRITES"
+      }
+    ]
+  },
+  "project_ref": "xulmpqaknlwqqculbsek",
+  "proof_version_nulls": {
+    "empty": 0,
+    "null": 0
+  },
+  "required_functions_present": {
+    "wos_p7_record_trusted_image_proof": false,
+    "wos_p7_service_storage_snapshot": false,
+    "wos_v1_renew_expired_image_proof": false
+  },
+  "target_order": {
+    "action_receipts": 2,
+    "id": "2071a963-1b35-4c96-81cd-709d8180ad49",
+    "m2_receipts": 0,
+    "office_revisions": 2,
+    "organization_id": "0ff53d93-2b9e-48b9-8113-a4768c39cdd2",
+    "review_receipts": 1,
+    "verified_proofs": 1,
+    "version": 7,
+    "version_label": "QA-R6",
+    "workflow_status": "WAITING_MATERIAL"
+  }
+}

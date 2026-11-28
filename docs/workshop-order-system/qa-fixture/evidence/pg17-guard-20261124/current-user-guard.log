@@ -1,0 +1,21 @@
+SET
+DO
+RESET
+SET
+DO
+RESET
+SET
+SET
+DO
+RESET
+RESET
+SET
+SET
+DO
+RESET
+RESET
+DO
+               result
+------------------------------------
+ CURRENT_USER_GUARD_ASSERTIONS=PASS
+(1 row)

@@ -1,0 +1,6 @@
+DO
+              result              
+----------------------------------
+ INSTALL_ROLLBACK_ASSERTIONS=PASS
+(1 row)
+

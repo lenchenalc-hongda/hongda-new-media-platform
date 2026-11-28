@@ -18,6 +18,32 @@ files=(
   docs/workshop-order-system/production-readiness/sql/WOS_V1_PRODUCTION_RPC_ACTIVATION_TEMPLATE_NOT_AUTHORIZED.sql
   docs/workshop-order-system/production-readiness/sql/WOS_V1_PRODUCTION_RPC_DEACTIVATE_NOT_AUTHORIZED.sql
   docs/workshop-order-system/production-readiness/sql/WOS_V1_PRODUCTION_FOUNDATION_CONTAINMENT_NOT_AUTHORIZED.sql
+  docs/workshop-order-system/production-readiness/sql/V1_APP_01_PROOF_RENEWAL_NOT_AUTHORIZED.sql
+  docs/workshop-order-system/production-readiness/sql/V1_APP_01_PROOF_RENEWAL_ROLLBACK_NOT_AUTHORIZED.sql
+  docs/workshop-order-system/production-readiness/sql/WOS_V1_HOSTED_QA_DEPENDENCIES_NOT_AUTHORIZED.sql
+  docs/workshop-order-system/production-readiness/sql/WOS_V1_HOSTED_QA_DEPENDENCIES_ROLLBACK_NOT_AUTHORIZED.sql
+  src/app/api/workshop-orders/v1/route.ts
+  src/app/api/workshop-orders/v1-qa/route.ts
+  src/app/workshop-orders/inbox/page.tsx
+  src/app/workshop-orders/production/new/page.tsx
+  src/components/workshop-orders/ProductionOfficeOrders.tsx
+  src/components/workshop-orders/ProductionOfficeWorkflow.tsx
+  src/components/workshop-orders/ProductionOrderForm.tsx
+  src/components/workshop-orders/ProductionWorkshopInbox.tsx
+  src/lib/workshop-orders/production-app-client.ts
+  src/lib/workshop-orders/production-app-contract.ts
+  src/lib/workshop-orders/production-app-handler.ts
+  src/lib/workshop-orders/production-app-server.ts
+  supabase/functions/_shared/wos-png-integrity.ts
+  supabase/functions/wos-p7-verify-image/png.ts
+  supabase/functions/wos-v1-verify-image/core.ts
+  supabase/functions/wos-v1-verify-image/index.ts
+  tests/unit/workshop-order-production-app-contract.test.ts
+  tests/unit/workshop-order-production-app-http.test.ts
+  tests/unit/workshop-order-production-edge-core.test.ts
+  tests/sql/wos-v1-hosted-qa-dependencies-pg17-assertions.sql
+  tests/sql/wos-v1-hosted-qa-dependencies-pg17-suite.sh
+  tests/sql/wos-v1-hosted-qa-existing-prerequisites.sql
   tests/sql/wos_production_bootstrap_fixture.sql
   tests/sql/wos_production_app_schema_signatures.sql
   tests/sql/wos_v1_production_runtime_security_signatures.sql
@@ -42,10 +68,16 @@ files=(
   docs/workshop-order-system/production-readiness/evidence/pg17_rehearsal_20261123.log
   docs/workshop-order-system/production-readiness/evidence/wos_v1_runtime_security_signatures_20261123.ndjson
   docs/workshop-order-system/production-readiness/evidence/supabase_production_migration_list_20261123.txt
+  docs/workshop-order-system/production-readiness/evidence/v1_app_01_pg17_rehearsal_20261123.log
+  docs/workshop-order-system/production-readiness/evidence/wos_v1_hosted_qa_dependencies_pg17_20261123.log
+  docs/workshop-order-system/production-readiness/evidence/WOS_V1_QA_DATA_BASELINE_20261123.json
   docs/workshop-order-system/production-readiness/WOS_V1_PRODUCTION_SCHEMA_COMPATIBILITY_REPORT_20261123.md
   docs/workshop-order-system/production-readiness/WOS_V1_PRODUCTION_MIGRATION_RUNBOOK_NOT_AUTHORIZED_20261123.md
   docs/workshop-order-system/production-readiness/WOS_V1_SOURCE_GAP_AUDIT_20261123.md
   docs/workshop-order-system/production-readiness/WOS_V1_FIRST_RELEASE_BLOCKERS_20261123.md
+  docs/workshop-order-system/production-readiness/V1_APP_01_IMPLEMENTATION_REPORT.md
+  docs/workshop-order-system/production-readiness/V1_APP_01_ROUTE_AND_EDGE_CONFIG.md
+  docs/workshop-order-system/production-readiness/WOS_V1_INT_01_HOSTED_QA_READINESS.md
   scripts/wos-production-readiness/write-artifact-fingerprints.sh
 )
 

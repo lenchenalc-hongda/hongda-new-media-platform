@@ -34,6 +34,13 @@ import './wos-p7-edge-png.test';
 import './workshop-order-local-integration.test';
 import './workshop-order-route-access.test';
 import './workshop-order-production-runtime-contract.test';
+import './workshop-order-production-app-contract.test';
+import './workshop-order-production-edge-core.test';
+import './workshop-order-production-app-http.test';
+import './workshop-order-production-office-correction.test';
+import './workshop-order-qa-readonly-byte-verifier.test';
+import './workshop-order-qa-readonly-request-order.test';
+import './workshop-order-rc-fixture-assets.test';
 
 // WOS project-owned test aggregator. Each new WOS test is imported here,
 // so the existing shared CI invokes it without modifying shared workflows.

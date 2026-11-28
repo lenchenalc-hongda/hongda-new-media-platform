@@ -168,6 +168,8 @@ BEGIN
         'orderNumber','WOS-PROD-CI-FOREIGN-CUSTOMER',
         'customerId','81000000-0000-4000-8000-000000000002',
         'customerNameSnapshot','Synthetic Foreign Customer',
+        'projectId','82000000-0000-4000-8000-000000000003',
+        'projectNameSnapshot','Synthetic Other Same Org Project',
         'productName','Synthetic Product',
         'salesOwnerProfileId','11111111-1111-4111-8111-111111111111',
         'projectOwnerProfileId','11111111-1111-4111-8111-111111111111',
@@ -187,8 +189,10 @@ BEGIN
       '51000000-0000-4000-8000-000000000092',
       jsonb_build_object(
         'orderNumber','WOS-PROD-CI-FOREIGN-PROJECT',
+        'customerId','81000000-0000-4000-8000-000000000001',
+        'customerNameSnapshot','Synthetic Same Org Customer',
         'projectId','82000000-0000-4000-8000-000000000002',
-        'customerNameSnapshot','Synthetic Customer',
+        'projectNameSnapshot','Synthetic Foreign Project',
         'productName','Synthetic Product',
         'salesOwnerProfileId','11111111-1111-4111-8111-111111111111',
         'projectOwnerProfileId','11111111-1111-4111-8111-111111111111',
@@ -225,11 +229,33 @@ BEGIN
     WHEN SQLSTATE '42501' THEN NULL;
   END;
 
+  BEGIN
+    PERFORM public.wos_create_production_order(
+      '51000000-0000-4000-8000-000000000094',
+      jsonb_build_object(
+        'orderNumber','WOS-PROD-CI-UNSUPPORTED-SPLIT',
+        'customerNameSnapshot','Synthetic Customer',
+        'productName','Synthetic Product',
+        'splitDelivery',true,
+        'salesOwnerProfileId','11111111-1111-4111-8111-111111111111',
+        'projectOwnerProfileId','11111111-1111-4111-8111-111111111111',
+        'priority','MEDIUM',
+        'requestedQuantity',100,
+        'currentBatchQuantity',100,
+        'productMaterial','Synthetic Material'
+      )
+    );
+    RAISE EXCEPTION 'UNSUPPORTED_SPLIT_DELIVERY_ACCEPTED';
+  EXCEPTION
+    WHEN SQLSTATE '22023' THEN NULL;
+  END;
+
   IF (SELECT count(*) FROM public.wos_production_orders) <> 0 THEN
     RAISE EXCEPTION 'CROSS_ORG_ORDER_ROW_PERSISTED';
   END IF;
 END;
 $cross_org_rejections$;
+\echo WOS_V1_CROSS_ORG_AND_UNSUPPORTED_SPLIT_DELIVERY_REJECTED=PASS
 
 SELECT (
   public.wos_create_production_order(
@@ -241,8 +267,8 @@ SELECT (
     'projectId','82000000-0000-4000-8000-000000000001',
     'projectNameSnapshot','Synthetic Same Org Project',
     'productName','Synthetic Product',
-    'salesOwnerProfileId','11111111-1111-4111-8111-111111111111',
-    'projectOwnerProfileId','11111111-1111-4111-8111-111111111111',
+    'salesOwnerProfileId','33333333-3333-4333-8333-333333333333',
+    'projectOwnerProfileId','33333333-3333-4333-8333-333333333333',
     'priority','MEDIUM',
     'requestedQuantity',100,
     'currentBatchQuantity',100,
@@ -257,6 +283,70 @@ SELECT 'organizations/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/wos/production-order/
   || :'order_id' || '/images/' AS order_prefix \gset
 SELECT set_config('wos_v1.smoke_order_id', :'order_id', false);
 SELECT set_config('wos_v1.smoke_order_prefix', :'order_prefix', false);
+
+RESET ROLE;
+UPDATE public.cpc_projects
+SET archived_at = clock_timestamp()
+WHERE id = '82000000-0000-4000-8000-000000000001';
+SET ROLE authenticated;
+
+DO $cpc_idempotent_replay$
+DECLARE
+  v_result jsonb;
+BEGIN
+  v_result := public.wos_create_production_order(
+    '51000000-0000-4000-8000-000000000099',
+    jsonb_build_object(
+      'orderNumber','WOS-PROD-CI-001',
+      'customerId','81000000-0000-4000-8000-000000000001',
+      'customerNameSnapshot','Ignored Retry Customer',
+      'projectId','82000000-0000-4000-8000-000000000001',
+      'projectNameSnapshot','Ignored Retry Project',
+      'productName','Synthetic Product',
+      'salesOwnerProfileId','33333333-3333-4333-8333-333333333333',
+      'projectOwnerProfileId','33333333-3333-4333-8333-333333333333',
+      'priority','MEDIUM',
+      'requestedQuantity',100,
+      'currentBatchQuantity',100,
+      'productMaterial','Synthetic Material',
+      'customerAcceptanceStandard','Synthetic acceptance standard',
+      'positionReference','Synthetic print position'
+    )
+  );
+  IF v_result->>'status' <> 'REPLAYED' THEN
+    RAISE EXCEPTION 'CPC_MUTABLE_RETRY_NOT_REPLAYED';
+  END IF;
+END;
+$cpc_idempotent_replay$;
+
+RESET ROLE;
+UPDATE public.cpc_projects
+SET archived_at = NULL
+WHERE id = '82000000-0000-4000-8000-000000000001';
+SET ROLE authenticated;
+
+DO $cpc_authoritative_binding$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM public.wos_production_orders production_order
+    JOIN public.cpc_customer_references customer
+      ON customer.id = production_order.customer_id
+    JOIN public.cpc_projects project
+      ON project.id = production_order.project_id
+    WHERE production_order.id = current_setting('wos_v1.smoke_order_id')::uuid
+      AND production_order.customer_name_snapshot =
+        customer.display_name_snapshot
+      AND production_order.project_name_snapshot = project.title
+      AND production_order.sales_owner_profile_id =
+        '11111111-1111-4111-8111-111111111111'
+      AND production_order.project_owner_profile_id =
+        project.owner_profile_id
+  ) THEN
+    RAISE EXCEPTION 'CPC_AUTHORITATIVE_BINDING_NOT_ENFORCED';
+  END IF;
+END;
+$cpc_authoritative_binding$;
 
 DO $storage_policy_negative$
 BEGIN
@@ -329,7 +419,8 @@ END;
 $office_storage_read$;
 
 RESET ROLE;
-SET request.jwt.claim.role='service_role';
+SET request.jwt.claims='{"role":"service_role"}';
+SET ROLE service_role;
 SELECT public.wos_p7_record_trusted_image_proof(
   '71000000-0000-4000-8000-000000000001',
   :'order_id',
@@ -370,6 +461,31 @@ SELECT public.wos_p7_record_trusted_image_proof(
   '2026-11-23T00:00:03.123456Z',
   repeat('4',64)
 );
+
+UPDATE public.wos_verified_image_proofs
+SET verified_at = clock_timestamp() - interval '11 minutes',
+    expires_at = clock_timestamp() - interval '1 minute'
+WHERE image_id = '71000000-0000-4000-8000-000000000001';
+
+DO $renew_expired_proof$
+BEGIN
+  IF public.wos_v1_renew_expired_image_proof(
+    '71000000-0000-4000-8000-000000000001',
+    current_setting('wos_v1.smoke_order_id')::uuid,
+    '10101010-1010-4010-8010-101010101010',
+    current_setting('wos_v1.smoke_order_prefix')
+      || 'product/versions/V1/71000000-0000-4000-8000-000000000001/proof.png',
+    '61000000-0000-4000-8000-000000000001',
+    'v-product-1',
+    '2026-11-23T00:00:00.123456Z',
+    repeat('1',64)
+  )->>'status' <> 'RENEWED'
+  THEN
+    RAISE EXCEPTION 'EXPIRED_PROOF_RENEWAL_FAILED';
+  END IF;
+END;
+$renew_expired_proof$;
+\echo WOS_V1_EXPIRED_PROOF_RENEWAL=PASS
 
 SET request.jwt.claim.role='authenticated';
 SET request.jwt.claim.sub='10101010-1010-4010-8010-101010101010';
@@ -459,6 +575,120 @@ SELECT public.wos_office_save_correction(
   ),
   'Synthetic Office correction after Operator return'
 ) AS office_save;
+RESET ROLE;
+
+INSERT INTO storage.objects (
+  id, bucket_id, name, owner_id, metadata, version, updated_at
+) VALUES
+  (
+    '63000000-0000-4000-8000-000000000001',
+    'wos-private',
+    :'order_prefix' || 'product/versions/V2/73000000-0000-4000-8000-000000000001/proof.png',
+    '10101010-1010-4010-8010-101010101010',
+    '{"mimetype":"image/png","size":"100"}'::jsonb,
+    'v2-product-1',
+    '2026-11-23T00:01:00.123456Z'
+  ),
+  (
+    '63000000-0000-4000-8000-000000000002',
+    'wos-private',
+    :'order_prefix' || 'film-pattern/versions/V2/73000000-0000-4000-8000-000000000002/proof.png',
+    '10101010-1010-4010-8010-101010101010',
+    '{"mimetype":"image/png","size":"100"}'::jsonb,
+    'v2-film-1',
+    '2026-11-23T00:01:01.123456Z'
+  ),
+  (
+    '63000000-0000-4000-8000-000000000003',
+    'wos-private',
+    :'order_prefix' || 'customer-approved-sample/versions/V2/73000000-0000-4000-8000-000000000003/proof.png',
+    '10101010-1010-4010-8010-101010101010',
+    '{"mimetype":"image/png","size":"100"}'::jsonb,
+    'v2-customer-1',
+    '2026-11-23T00:01:02.123456Z'
+  ),
+  (
+    '63000000-0000-4000-8000-000000000004',
+    'wos-private',
+    :'order_prefix' || 'signed-sample/versions/V2/73000000-0000-4000-8000-000000000004/proof.png',
+    '10101010-1010-4010-8010-101010101010',
+    '{"mimetype":"image/png","size":"100"}'::jsonb,
+    'v2-signed-1',
+    '2026-11-23T00:01:03.123456Z'
+  );
+
+SET request.jwt.claims='{"role":"service_role"}';
+SET request.jwt.claim.sub='';
+SET ROLE service_role;
+SELECT public.wos_p7_record_trusted_image_proof(
+  '73000000-0000-4000-8000-000000000001',
+  :'order_id',
+  '10101010-1010-4010-8010-101010101010',
+  :'order_prefix' || 'product/versions/V2/73000000-0000-4000-8000-000000000001/proof.png',
+  '63000000-0000-4000-8000-000000000001',
+  'v2-product-1',
+  '2026-11-23T00:01:00.123456Z',
+  repeat('5',64)
+);
+SELECT public.wos_p7_record_trusted_image_proof(
+  '73000000-0000-4000-8000-000000000002',
+  :'order_id',
+  '10101010-1010-4010-8010-101010101010',
+  :'order_prefix' || 'film-pattern/versions/V2/73000000-0000-4000-8000-000000000002/proof.png',
+  '63000000-0000-4000-8000-000000000002',
+  'v2-film-1',
+  '2026-11-23T00:01:01.123456Z',
+  repeat('6',64)
+);
+SELECT public.wos_p7_record_trusted_image_proof(
+  '73000000-0000-4000-8000-000000000003',
+  :'order_id',
+  '10101010-1010-4010-8010-101010101010',
+  :'order_prefix' || 'customer-approved-sample/versions/V2/73000000-0000-4000-8000-000000000003/proof.png',
+  '63000000-0000-4000-8000-000000000003',
+  'v2-customer-1',
+  '2026-11-23T00:01:02.123456Z',
+  repeat('7',64)
+);
+SELECT public.wos_p7_record_trusted_image_proof(
+  '73000000-0000-4000-8000-000000000004',
+  :'order_id',
+  '10101010-1010-4010-8010-101010101010',
+  :'order_prefix' || 'signed-sample/versions/V2/73000000-0000-4000-8000-000000000004/proof.png',
+  '63000000-0000-4000-8000-000000000004',
+  'v2-signed-1',
+  '2026-11-23T00:01:03.123456Z',
+  repeat('8',64)
+);
+RESET ROLE;
+
+SET request.jwt.claim.role='authenticated';
+SET request.jwt.claim.sub='10101010-1010-4010-8010-101010101010';
+SET ROLE authenticated;
+SELECT public.wos_register_uploaded_reference_image(
+  :'order_id',
+  '73000000-0000-4000-8000-000000000001',
+  'PRODUCT',
+  :'order_prefix' || 'product/versions/V2/73000000-0000-4000-8000-000000000001/proof.png'
+);
+SELECT public.wos_register_uploaded_reference_image(
+  :'order_id',
+  '73000000-0000-4000-8000-000000000002',
+  'FILM_PATTERN',
+  :'order_prefix' || 'film-pattern/versions/V2/73000000-0000-4000-8000-000000000002/proof.png'
+);
+SELECT public.wos_register_uploaded_reference_image(
+  :'order_id',
+  '73000000-0000-4000-8000-000000000003',
+  'CUSTOMER_APPROVED_SAMPLE',
+  :'order_prefix' || 'customer-approved-sample/versions/V2/73000000-0000-4000-8000-000000000003/proof.png'
+);
+SELECT public.wos_register_uploaded_reference_image(
+  :'order_id',
+  '73000000-0000-4000-8000-000000000004',
+  'SIGNED_SAMPLE',
+  :'order_prefix' || 'signed-sample/versions/V2/73000000-0000-4000-8000-000000000004/proof.png'
+);
 SELECT public.wos_office_resubmit_order(
   :'order_id',
   5,
@@ -492,7 +722,7 @@ BEGIN
 
   IF v_order.workflow_status <> 'WAITING_MATERIAL'
     OR v_order.version <> 7
-    OR v_order.version_label <> 'V3'
+    OR v_order.version_label <> 'V2'
     OR (SELECT count(*) FROM public.wos_submission_receipts
         WHERE order_id=v_order.id) <> 1
     OR (SELECT count(*) FROM public.wos_workshop_inbox
@@ -506,6 +736,15 @@ BEGIN
     OR (SELECT count(*) FROM public.wos_blockers
         WHERE entity_id=v_order.id AND status='RESOLVED'
           AND blocker_code='P2_DOCUMENTS_INCOMPLETE') <> 1
+    OR (SELECT count(*) FROM public.wos_visual_baselines
+        WHERE entity_id=v_order.id AND version_label='V2'
+          AND status='CURRENT' AND superseded_at IS NULL) <> 1
+    OR (SELECT count(*) FROM public.wos_visual_baseline_items item
+        JOIN public.wos_visual_baselines baseline
+          ON baseline.id=item.baseline_id
+        WHERE baseline.entity_id=v_order.id
+          AND baseline.version_label='V2'
+          AND baseline.status='CURRENT') <> 4
     OR v_history <> 7
   THEN
     RAISE EXCEPTION 'WOS_V1_LIFECYCLE_ASSERTION_FAILED';

@@ -27,8 +27,17 @@ BEGIN
     OR to_regprocedure(
       'public.wos_v1_pre_runtime_record_trusted_image_proof(uuid,uuid,uuid,text,uuid,text,timestamptz,text)'
     ) IS NULL
+    OR to_regprocedure(
+      'public.wos_v1_pre_runtime_register_uploaded_reference_image(uuid,uuid,text,text)'
+    ) IS NULL
   THEN
     RAISE EXCEPTION 'WOS_V1_RUNTIME_ROLLBACK_BACKUP_MISSING';
+  END IF;
+  IF to_regprocedure(
+      'public.wos_v1_renew_expired_image_proof(uuid,uuid,uuid,text,uuid,text,timestamptz,text)'
+    ) IS NOT NULL
+  THEN
+    RAISE EXCEPTION 'WOS_V1_PROOF_RENEWAL_ROLLBACK_REQUIRED';
   END IF;
 
   FOREACH v_table IN ARRAY ARRAY[
@@ -77,6 +86,10 @@ DROP FUNCTION public.wos_submit_production_order(
 DROP FUNCTION public.wos_p7_record_trusted_image_proof(
   uuid,uuid,uuid,text,uuid,text,timestamptz,text
 );
+DROP FUNCTION public.wos_register_uploaded_reference_image(
+  uuid,uuid,text,text
+);
+DROP FUNCTION IF EXISTS public.wos_v1_assert_service_role_request();
 
 ALTER FUNCTION public.wos_v1_pre_runtime_confirm_office_completeness(
   uuid,integer,text,text
@@ -87,6 +100,9 @@ ALTER FUNCTION public.wos_v1_pre_runtime_submit_production_order(
 ALTER FUNCTION public.wos_v1_pre_runtime_record_trusted_image_proof(
   uuid,uuid,uuid,text,uuid,text,timestamptz,text
 ) RENAME TO wos_p7_record_trusted_image_proof;
+ALTER FUNCTION public.wos_v1_pre_runtime_register_uploaded_reference_image(
+  uuid,uuid,text,text
+) RENAME TO wos_register_uploaded_reference_image;
 
 DROP TABLE IF EXISTS public.wos_operator_review_receipts;
 DROP TABLE IF EXISTS public.wos_office_revisions;
@@ -111,6 +127,9 @@ BEGIN
       'public.wos_v1_pre_runtime_record_trusted_image_proof(uuid,uuid,uuid,text,uuid,text,timestamptz,text)'
     ) IS NOT NULL
     OR to_regprocedure(
+      'public.wos_v1_pre_runtime_register_uploaded_reference_image(uuid,uuid,text,text)'
+    ) IS NOT NULL
+    OR to_regprocedure(
       'public.wos_confirm_office_completeness(uuid,integer,text,text)'
     ) IS NULL
     OR to_regprocedure(
@@ -119,6 +138,11 @@ BEGIN
     OR to_regprocedure(
       'public.wos_p7_record_trusted_image_proof(uuid,uuid,uuid,text,uuid,text,timestamptz,text)'
     ) IS NULL
+    OR to_regprocedure(
+      'public.wos_register_uploaded_reference_image(uuid,uuid,text,text)'
+    ) IS NULL
+    OR to_regprocedure('public.wos_v1_assert_service_role_request()')
+      IS NOT NULL
   THEN
     RAISE EXCEPTION 'WOS_V1_RUNTIME_ROLLBACK_INCOMPLETE';
   END IF;

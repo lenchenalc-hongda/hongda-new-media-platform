@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
   "phase": "activated",
-  "row_count": 62,
-  "aggregate_sha256": "7ff324a0c27ee77d712f9057cfaa59795d54aa1fc7f01d772c5e487f76b91b6d",
+  "row_count": 65,
+  "aggregate_sha256": "27b81d95512edb82fef2b950f0f1eeb091574d3f499ef38a2d725ff6bb147d40",
   "rows": [
     {
       "acl": [
@@ -49,7 +49,7 @@
       "config": [
         "search_path=\"\""
       ],
-      "definition_md5": "b8f50431655553c48b1875934b59d590",
+      "definition_md5": "bd91fc2c91e8a10b2409d73cbb5528f8",
       "security_definer": true
     },
     {
@@ -73,7 +73,7 @@
       "config": [
         "search_path=\"\""
       ],
-      "definition_md5": "0255ead12cee641e58140d4bf1bf8448",
+      "definition_md5": "39488698bbf680cc47898de7b059bc73",
       "security_definer": true
     },
     {
@@ -97,7 +97,7 @@
       "config": [
         "search_path=\"\""
       ],
-      "definition_md5": "f7ddb3ced161afa418b66c500a5c8503",
+      "definition_md5": "27002cf618a89f775c6ac39bb6e7d945",
       "security_definer": true
     },
     {
@@ -145,7 +145,7 @@
       "config": [
         "search_path=\"\""
       ],
-      "definition_md5": "0f670e458a43bac5a41caae8637c4b7d",
+      "definition_md5": "a5c74f24b614a51d5a55770ef37dfeba",
       "security_definer": true
     },
     {
@@ -241,7 +241,7 @@
       "config": [
         "search_path=\"\""
       ],
-      "definition_md5": "4f891564a755ee64cc8c63733f8c0487",
+      "definition_md5": "0d1f43c7fa30384a2f8b130f32248934",
       "security_definer": true
     },
     {
@@ -313,7 +313,7 @@
       "config": [
         "search_path=\"\""
       ],
-      "definition_md5": "cc6431a805b5472e5ac0bf17f80fa041",
+      "definition_md5": "21d98f8e9c1a0d41ba0bacb859a7fd40",
       "security_definer": true
     },
     {
@@ -368,6 +368,24 @@
         }
       ],
       "kind": "function",
+      "name": "wos_v1_assert_service_role_request()",
+      "owner": "postgres",
+      "config": [
+        "search_path=\"\""
+      ],
+      "definition_md5": "28006956f28c6f87b710e5e7fcc1e214",
+      "security_definer": true
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantor": "postgres",
+          "privilege": "EXECUTE",
+          "is_grantable": false
+        }
+      ],
+      "kind": "function",
       "name": "wos_v1_pre_runtime_confirm_office_completeness(uuid,integer,text,text)",
       "owner": "postgres",
       "config": [
@@ -410,12 +428,54 @@
         }
       ],
       "kind": "function",
+      "name": "wos_v1_pre_runtime_register_uploaded_reference_image(uuid,uuid,text,text)",
+      "owner": "postgres",
+      "config": [
+        "search_path=\"\""
+      ],
+      "definition_md5": "c79cd19d321d27f9eee045433a8893f0",
+      "security_definer": true
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantor": "postgres",
+          "privilege": "EXECUTE",
+          "is_grantable": false
+        }
+      ],
+      "kind": "function",
       "name": "wos_v1_pre_runtime_submit_production_order(uuid,integer,text,uuid)",
       "owner": "postgres",
       "config": [
         "search_path=\"\""
       ],
       "definition_md5": "8f3d3a47464ad90d03f4da27257c236e",
+      "security_definer": true
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantor": "postgres",
+          "privilege": "EXECUTE",
+          "is_grantable": false
+        },
+        {
+          "grantee": "service_role",
+          "grantor": "postgres",
+          "privilege": "EXECUTE",
+          "is_grantable": false
+        }
+      ],
+      "kind": "function",
+      "name": "wos_v1_renew_expired_image_proof(uuid,uuid,uuid,text,uuid,text,timestamp with time zone,text)",
+      "owner": "postgres",
+      "config": [
+        "search_path=\"\""
+      ],
+      "definition_md5": "6aa9b9443b454e8d6ed69925066cd460",
       "security_definer": true
     },
     {
@@ -657,7 +717,7 @@
       ],
       "command": "INSERT",
       "permissive": "PERMISSIVE",
-      "check_expression_md5": "4178cd6c4759bd9d0ad33560415f6bc8",
+      "check_expression_md5": "1d7c6b603d04a29e848975adc0bc4dad",
       "using_expression_md5": "d41d8cd98f00b204e9800998ecf8427e"
     },
     {
