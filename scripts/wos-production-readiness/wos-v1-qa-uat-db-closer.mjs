@@ -10,10 +10,10 @@ import { fileURLToPath } from 'node:url';
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '../..');
 const AUTH_ID =
   process.env.WOS_V1_QA_AUTHORIZATION_ID
-  || 'WOS-V1-PRODUCTION-M2-QA-UAT-016';
+  || 'WOS-V1-PRODUCTION-M2-QA-UAT-017';
 const QA_APP_EXECUTION_ID =
   process.env.WOS_V1_QA_APP_EXECUTION_ID
-  || '11c9a114-4381-49fb-9cd6-04591c7b833b';
+  || '67527336-0d2b-48ba-bd41-4d6f8d6781ff';
 const PROJECT_REF = 'xulmpqaknlwqqculbsek';
 const ARM_KEYCHAIN = 'WOS_V1_QA_DB_CLOSER_ARM_TOKEN';
 const OWNED_TEST_CONTAINER =
@@ -51,6 +51,14 @@ const V2_PROOF_GUARD_COMPAT_INSTALL = join(
 const V2_PROOF_GUARD_COMPAT_ROLLBACK = join(
   ROOT,
   'docs/workshop-order-system/production-readiness/sql/WOS_V1_QA_UAT_V2_PROOF_GUARD_COMPAT_ROLLBACK_NOT_AUTHORIZED.sql',
+);
+const CURRENT_ORDER_PROOF_COMPAT_INSTALL = join(
+  ROOT,
+  'docs/workshop-order-system/production-readiness/sql/WOS_V1_QA_UAT_CURRENT_ORDER_PROOF_COMPAT_INSTALL_NOT_AUTHORIZED.sql',
+);
+const CURRENT_ORDER_PROOF_COMPAT_ROLLBACK = join(
+  ROOT,
+  'docs/workshop-order-system/production-readiness/sql/WOS_V1_QA_UAT_CURRENT_ORDER_PROOF_COMPAT_ROLLBACK_NOT_AUTHORIZED.sql',
 );
 const V2_IMAGE_REGISTER_COMPAT_INSTALL = join(
   ROOT,
@@ -405,6 +413,41 @@ function rollbackV2ProofGuardCompat() {
   );
 }
 
+function installCurrentOrderProofCompat() {
+  const sql = [
+    projectSettingsSql(),
+    "SET wos_v1.qa_current_order_proof_install_authorized='yes';",
+    readFileSync(CURRENT_ORDER_PROOF_COMPAT_INSTALL, 'utf8'),
+  ].join('\n');
+  runSql(sql);
+  process.stdout.write(
+    'WOS_V1_QA_DB_CLOSER_CURRENT_ORDER_PROOF_INSTALL=PASS\n',
+  );
+}
+
+function rollbackCurrentOrderProofCompat() {
+  const installed = runSql(`
+    SELECT to_regclass(
+      'wos_v1_qa_current_order_proof_compat.definition_backup'
+    ) IS NOT NULL;
+  `);
+  if (installed !== 't') {
+    process.stdout.write(
+      'WOS_V1_QA_DB_CLOSER_CURRENT_ORDER_PROOF_ROLLBACK=SKIPPED_NOT_INSTALLED\n',
+    );
+    return;
+  }
+  const sql = [
+    projectSettingsSql(),
+    "SET wos_v1.qa_current_order_proof_rollback_authorized='yes';",
+    readFileSync(CURRENT_ORDER_PROOF_COMPAT_ROLLBACK, 'utf8'),
+  ].join('\n');
+  runSql(sql);
+  process.stdout.write(
+    'WOS_V1_QA_DB_CLOSER_CURRENT_ORDER_PROOF_ROLLBACK=PASS\n',
+  );
+}
+
 function installV2ImageRegisterCompat() {
   const sql = [
     projectSettingsSql(),
@@ -734,6 +777,11 @@ function recover() {
     recoveryError ??= error;
   }
   try {
+    rollbackCurrentOrderProofCompat();
+  } catch (error) {
+    recoveryError ??= error;
+  }
+  try {
     rollbackV2ProofGuardCompat();
   } catch (error) {
     recoveryError ??= error;
@@ -820,6 +868,10 @@ try {
     installV2ProofGuardCompat();
   } else if (command === 'rollback-v2-proof-guard-compat') {
     rollbackV2ProofGuardCompat();
+  } else if (command === 'install-current-order-proof-compat') {
+    installCurrentOrderProofCompat();
+  } else if (command === 'rollback-current-order-proof-compat') {
+    rollbackCurrentOrderProofCompat();
   } else if (command === 'install-v2-image-register-compat') {
     installV2ImageRegisterCompat();
   } else if (command === 'rollback-v2-image-register-compat') {

@@ -24,6 +24,7 @@ export interface WosV1ImageAccessInput {
   readonly runtimeAuthorized: boolean;
   readonly writesEnabled: boolean;
   readonly qaRevisionAuthorized?: boolean;
+  readonly qaUatCurrentOrderAuthorized?: boolean;
   readonly profile: WosV1ImageProfile | null | undefined;
   readonly order: WosV1ImageOrder | null | undefined;
 }
@@ -141,6 +142,10 @@ export function evaluateWosV1ImageAccess(input: WosV1ImageAccessInput): {
   }
   if (order.workflow_status === 'WAITING_MATERIAL'
     || order.workflow_status === 'READINESS_CHECK') {
+    if (input.qaUatCurrentOrderAuthorized === true
+      && /^V[2-9][0-9]{0,20}$/.test(order.version_label)) {
+      return { allowed: true, code: 'ALLOWED' };
+    }
     if (input.qaRevisionAuthorized !== true) {
       return { allowed: false, code: 'STATUS_DENIED' };
     }

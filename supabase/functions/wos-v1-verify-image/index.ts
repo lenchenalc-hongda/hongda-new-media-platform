@@ -350,6 +350,7 @@ export async function handleWosV1VerifyImageRequest(
         writesEnabled: true,
         qaRevisionAuthorized:
           Deno.env.get('WOS_V1_QA_REVISION_IMAGES_ENABLED') === 'true',
+        qaUatCurrentOrderAuthorized: qaUatRuntime,
         profile,
         order,
       });

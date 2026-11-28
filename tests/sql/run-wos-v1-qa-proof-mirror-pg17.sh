@@ -232,15 +232,15 @@ psql_db "$DB" -q -c "
     write_deadline_at,authorized_order_id,authorized_organization_id,
     edge_process_nonce,opened_at
   ) VALUES(
-    '11c9a114-4381-49fb-9cd6-04591c7b833b',
-    'WOS-V1-PRODUCTION-M2-QA-UAT-016',
+    '67527336-0d2b-48ba-bd41-4d6f8d6781ff',
+    'WOS-V1-PRODUCTION-M2-QA-UAT-017',
     'xulmpqaknlwqqculbsek',
     'ARMED',
     'ARMED',
     clock_timestamp()+interval '8 minutes',
     '3ade0180-e6bf-49da-b80b-fd00cd1948a8',
     '0ff53d93-2b9e-48b9-8113-a4768c39cdd2',
-    'c0091f69-8b97-4e1c-a270-a9ff4f199965',
+    'c72eedf2-869d-49b6-a3fd-b6084018b6df',
     clock_timestamp()
   );
 " >/dev/null

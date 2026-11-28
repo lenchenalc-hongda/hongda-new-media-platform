@@ -26,10 +26,10 @@ BEGIN
     RAISE EXCEPTION 'WOS_V1_QA_UAT_APP_PROJECT_MISMATCH';
   END IF;
   IF current_setting('wos_v1.qa_authorization_id', true)
-      IS DISTINCT FROM 'WOS-V1-PRODUCTION-M2-QA-UAT-016'
+      IS DISTINCT FROM 'WOS-V1-PRODUCTION-M2-QA-UAT-017'
     OR (
       current_setting('wos_v1.qa_execution_id', true)
-        IS DISTINCT FROM '11c9a114-4381-49fb-9cd6-04591c7b833b'
+        IS DISTINCT FROM '67527336-0d2b-48ba-bd41-4d6f8d6781ff'
       AND current_setting('wos_v1.qa_local_test', true)
         IS DISTINCT FROM 'yes'
     )
@@ -103,6 +103,40 @@ BEGIN
     )
   THEN
     RAISE EXCEPTION 'WOS_V1_QA_UAT_VERIFIED_PROOF_MIRROR_REQUIRED';
+  END IF;
+  IF current_setting('wos_v1.qa_local_test', true)
+      IS DISTINCT FROM 'yes'
+    AND (
+      to_regclass(
+        'wos_v1_qa_current_order_proof_compat.definition_backup'
+      ) IS NULL
+      OR NOT EXISTS (
+        SELECT 1
+        FROM
+          wos_v1_qa_current_order_proof_compat.definition_backup backup
+        WHERE backup.singleton=true
+          AND backup.source_sha256=
+            '0f1dcb8da6ae26da22150e0bed35e025e9618824d64993d0af5eec0a92cb7216'
+          AND backup.patched_sha256=encode(
+            sha256(convert_to(
+              pg_get_functiondef(
+                'public.wos_p7_record_trusted_image_proof(uuid,uuid,uuid,text,uuid,text,timestamptz,text)'::regprocedure
+              ),
+              'UTF8'
+            )),
+            'hex'
+          )
+          AND position(
+            'wos_v1.qa_current_order_proof'
+            IN pg_get_functiondef(
+              'public.wos_p7_record_trusted_image_proof(uuid,uuid,uuid,text,uuid,text,timestamptz,text)'::regprocedure
+            )
+          )>0
+      )
+    )
+  THEN
+    RAISE EXCEPTION
+      'WOS_V1_QA_UAT_CURRENT_ORDER_PROOF_COMPAT_REQUIRED';
   END IF;
   IF NOT EXISTS (
     SELECT 1

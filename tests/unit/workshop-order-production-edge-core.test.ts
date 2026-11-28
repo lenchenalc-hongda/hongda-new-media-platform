@@ -182,6 +182,35 @@ assert.equal(evaluateWosV1ImageAccess({
 assert.equal(evaluateWosV1ImageAccess({
   runtimeAuthorized: true,
   writesEnabled: true,
+  qaUatCurrentOrderAuthorized: true,
+  profile,
+  order: { ...order, workflow_status: 'WAITING_MATERIAL', version_label: 'V2' },
+}).code, 'ALLOWED');
+assert.equal(evaluateWosV1ImageAccess({
+  runtimeAuthorized: true,
+  writesEnabled: true,
+  qaUatCurrentOrderAuthorized: true,
+  profile,
+  order: { ...order, workflow_status: 'READINESS_CHECK', version_label: 'V2' },
+}).code, 'ALLOWED');
+assert.equal(evaluateWosV1ImageAccess({
+  runtimeAuthorized: true,
+  writesEnabled: true,
+  qaUatCurrentOrderAuthorized: true,
+  profile,
+  order: { ...order, workflow_status: 'WAITING_MATERIAL', version_label: 'V1' },
+}).code, 'STATUS_DENIED');
+assert.equal(evaluateWosV1ImageAccess({
+  runtimeAuthorized: true,
+  writesEnabled: true,
+  qaRevisionAuthorized: true,
+  qaUatCurrentOrderAuthorized: true,
+  profile,
+  order: { ...order, workflow_status: 'WAITING_MATERIAL', version_label: 'QA-R6' },
+}).code, 'ALLOWED');
+assert.equal(evaluateWosV1ImageAccess({
+  runtimeAuthorized: true,
+  writesEnabled: true,
   qaRevisionAuthorized: true,
   profile,
   order: { ...order, workflow_status: 'WAITING_MATERIAL', version_label: 'V1' },

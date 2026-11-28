@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 
 const input = JSON.parse(readFileSync(
   'docs/workshop-order-system/qa-fixture/'
-    + 'production-m2-uat-20261126/inputs-uat016.json',
+    + 'production-m2-uat-20261126/inputs-uat017.json',
   'utf8',
 ));
 const runner = readFileSync(
@@ -48,11 +48,21 @@ const proofMirrorRollback = readFileSync(
     + 'WOS_V1_QA_UAT_VERIFIED_PROOF_MIRROR_ROLLBACK_NOT_AUTHORIZED.sql',
   'utf8',
 );
+const currentOrderProofInstall = readFileSync(
+  'docs/workshop-order-system/production-readiness/sql/'
+    + 'WOS_V1_QA_UAT_CURRENT_ORDER_PROOF_COMPAT_INSTALL_NOT_AUTHORIZED.sql',
+  'utf8',
+);
+const currentOrderProofRollback = readFileSync(
+  'docs/workshop-order-system/production-readiness/sql/'
+    + 'WOS_V1_QA_UAT_CURRENT_ORDER_PROOF_COMPAT_ROLLBACK_NOT_AUTHORIZED.sql',
+  'utf8',
+);
 
-assert.equal(input.authorizationId, 'WOS-V1-PRODUCTION-M2-QA-UAT-016');
+assert.equal(input.authorizationId, 'WOS-V1-PRODUCTION-M2-QA-UAT-017');
 assert(
   runner.includes(
-    'production-m2-uat-20261126/inputs-uat016.json',
+    'production-m2-uat-20261126/inputs-uat017.json',
   ),
 );
 assert(!runner.includes(
@@ -60,7 +70,7 @@ assert(!runner.includes(
 ));
 assert.equal(
   input.sourceParentHead,
-  '5fe9ffb885192402f2724a6e8d74ff7db2504c21',
+  '1e50c1c3aa21bc5a0385e02ea7d7b1041022677a',
 );
 assert.equal(input.mode, 'RESUME_EXISTING_ORDER');
 assert.equal(input.resumeStage, 'MATERIAL_INPUTS_READY');
@@ -105,7 +115,7 @@ for (const image of input.images.v2) {
   assert.match(image.imageId, /^[a-f0-9-]{36}$/i);
   assert(
     !consumedV2Ids.has(image.imageId),
-    `UAT-016 reuses consumed V2 image ID ${image.imageId}`,
+    `UAT-017 reuses consumed V2 image ID ${image.imageId}`,
   );
 }
 
@@ -152,14 +162,16 @@ assert(edgeCloser.includes('CLOSE_UNVERIFIED'));
 assert(edgeCloser.includes('probeEdgeOnce'));
 assert(edgeCloser.includes('attempt <= 3'));
 assert(dbCloser.includes('WOS_V1_QA_APP_EXECUTION_ID'));
-assert(dbCloser.includes('11c9a114-4381-49fb-9cd6-04591c7b833b'));
+assert(dbCloser.includes('67527336-0d2b-48ba-bd41-4d6f8d6781ff'));
 assert(dbCloser.includes('install-v2-image-register-compat'));
 assert(dbCloser.includes('rollback-v2-image-register-compat'));
 assert(dbCloser.includes('install-verified-proof-mirror'));
 assert(dbCloser.includes('rollback-verified-proof-mirror'));
+assert(dbCloser.includes('install-current-order-proof-compat'));
+assert(dbCloser.includes('rollback-current-order-proof-compat'));
 assert(
   runner.includes(
-    'WOS_V1_PRODUCTION_M2_QA_BUSINESS_UAT_016_20261128.json',
+    'WOS_V1_PRODUCTION_M2_QA_BUSINESS_UAT_017_20261128.json',
   ),
 );
 assert(
@@ -167,13 +179,16 @@ assert(
     'WOS_V1_PRODUCTION_M2_QA_BUSINESS_UAT_006_20261127.json',
   ),
 );
-assert(appActivate.includes('WOS-V1-PRODUCTION-M2-QA-UAT-016'));
-assert(appActivate.includes('11c9a114-4381-49fb-9cd6-04591c7b833b'));
+assert(appActivate.includes('WOS-V1-PRODUCTION-M2-QA-UAT-017'));
+assert(appActivate.includes('67527336-0d2b-48ba-bd41-4d6f8d6781ff'));
 assert(
   appActivate.includes(
     'WOS_V1_QA_UAT_APP_REQUIRES_WRAPPER_ACTIVATION',
   ),
 );
+assert(appActivate.includes(
+  'WOS_V1_QA_UAT_CURRENT_ORDER_PROOF_COMPAT_REQUIRED',
+));
 assert(
   appActivate.includes(
     'WOS_V1_QA_UAT_V2_IMAGE_REGISTER_COMPAT_REQUIRED',
@@ -186,7 +201,7 @@ assert(
 );
 assert(
   closerOnlyInstall.includes(
-    "p_authorization_id<>'WOS-V1-PRODUCTION-M2-QA-UAT-016'",
+    "p_authorization_id<>'WOS-V1-PRODUCTION-M2-QA-UAT-017'",
   ),
 );
 assert(!closerOnlyInstall.includes('WOS-V1-PRODUCTION-M2-QA-UAT-005'));
@@ -248,5 +263,14 @@ assert(
     'WOS_V1_QA_UAT_VERIFIED_PROOF_MIRROR_TAMPERED',
   ),
 );
+assert(currentOrderProofInstall.includes(
+  "'wos_v1.qa_current_order_proof'",
+));
+assert(currentOrderProofInstall.includes(
+  'v_order.version_label ~ \'^V[2-9][0-9]{0,20}$\'',
+));
+assert(currentOrderProofRollback.includes(
+  'WOS_V1_QA_UAT_CURRENT_ORDER_PROOF_RESTORE_MISMATCH',
+));
 
-console.log('wos-v1-qa-uat016-packaging.test.ts: PASS');
+console.log('wos-v1-qa-uat017-packaging.test.ts: PASS');
