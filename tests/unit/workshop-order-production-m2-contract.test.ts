@@ -251,6 +251,16 @@ assert(workbench.includes('!finalDatesReady'));
 assert(workbench.includes('const finalReadinessActor'));
 assert(workbench.includes('!finalReadinessActor'));
 assert(workbench.includes('canStart=false'));
+assert(workbench.includes('renewWosV1CurrentImageProofs'));
+assert(workbench.includes('重新核验当前四图 Proof'));
+const draftBaselineSelection = workbench.indexOf(
+  "value.status === 'DRAFT'",
+);
+const currentBaselineSelection = workbench.indexOf(
+  "value.status === 'CURRENT'",
+);
+assert(draftBaselineSelection >= 0);
+assert(currentBaselineSelection > draftBaselineSelection);
 
 const m2Client = readFileSync(
   'src/lib/workshop-orders/production-m2-client.ts',

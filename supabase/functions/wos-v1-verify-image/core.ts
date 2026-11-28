@@ -12,13 +12,24 @@ export const WOS_V1_IMAGE_CATEGORY_SLUGS = {
   SIGNED_SAMPLE: 'signed-sample',
 } as const;
 
-export interface WosV1ImageVerificationBody {
+export interface WosV1ImageUploadVerificationBody {
   readonly category: (typeof WOS_V1_IMAGE_CATEGORIES)[number];
   readonly imageId: string;
   readonly orderId: string;
   readonly sha256: string;
   readonly storagePath: string;
 }
+
+export interface WosV1ImageExistingProofVerificationBody {
+  readonly category: (typeof WOS_V1_IMAGE_CATEGORIES)[number];
+  readonly imageId: string;
+  readonly orderId: string;
+  readonly reverifyExistingProof: true;
+}
+
+export type WosV1ImageVerificationBody =
+  | WosV1ImageUploadVerificationBody
+  | WosV1ImageExistingProofVerificationBody;
 
 export interface WosV1ImageAccessInput {
   readonly runtimeAuthorized: boolean;
@@ -64,17 +75,25 @@ export function parseWosV1ImageVerificationBody(
 ): WosV1ImageVerificationBody | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   const row = value as Record<string, unknown>;
-  if (Object.keys(row).sort().join(',')
-      !== 'category,imageId,orderId,sha256,storagePath'
-    || typeof row.category !== 'string'
+  if (typeof row.category !== 'string'
     || !(WOS_V1_IMAGE_CATEGORIES as readonly string[]).includes(row.category)
     || typeof row.imageId !== 'string' || !uuid.test(row.imageId)
-    || typeof row.orderId !== 'string' || !uuid.test(row.orderId)
-    || typeof row.sha256 !== 'string' || !sha256.test(row.sha256)
-    || typeof row.storagePath !== 'string'
-    || row.storagePath.length > 600
-    || row.storagePath.includes('..')) return null;
-  return row as unknown as WosV1ImageVerificationBody;
+    || typeof row.orderId !== 'string' || !uuid.test(row.orderId)) {
+    return null;
+  }
+  const keys = Object.keys(row).sort().join(',');
+  if (keys === 'category,imageId,orderId,sha256,storagePath') {
+    if (typeof row.sha256 !== 'string' || !sha256.test(row.sha256)
+      || typeof row.storagePath !== 'string'
+      || row.storagePath.length > 600
+      || row.storagePath.includes('..')) return null;
+    return row as unknown as WosV1ImageUploadVerificationBody;
+  }
+  if (keys === 'category,imageId,orderId,reverifyExistingProof'
+    && row.reverifyExistingProof === true) {
+    return row as unknown as WosV1ImageExistingProofVerificationBody;
+  }
+  return null;
 }
 
 export function canonicalWosV1ImagePath(input: {

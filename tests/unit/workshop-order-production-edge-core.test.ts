@@ -46,6 +46,7 @@ const body = parseWosV1ImageVerificationBody({
   }),
 });
 assert(body);
+assert('storagePath' in body);
 assert.equal(parseWosV1ImageVerificationBody({
   ...body,
   orgId: organizationId,
@@ -54,6 +55,30 @@ assert.equal(parseWosV1ImageVerificationBody({
   ...body,
   storagePath: body.storagePath.replace('product', 'other'),
   category: 'OTHER',
+}), null);
+assert.deepEqual(parseWosV1ImageVerificationBody({
+  category: 'PRODUCT',
+  imageId,
+  orderId,
+  reverifyExistingProof: true,
+}), {
+  category: 'PRODUCT',
+  imageId,
+  orderId,
+  reverifyExistingProof: true,
+});
+assert.equal(parseWosV1ImageVerificationBody({
+  category: 'PRODUCT',
+  imageId,
+  orderId,
+  reverifyExistingProof: false,
+}), null);
+assert.equal(parseWosV1ImageVerificationBody({
+  category: 'PRODUCT',
+  imageId,
+  orderId,
+  reverifyExistingProof: true,
+  sha256: hash(png),
 }), null);
 
 assert.deepEqual(parseAllowedSupabaseRefs(
@@ -421,7 +446,7 @@ for (const priorGuard of [
   'const auth = await userDb.auth.getUser(token);',
   'const access = evaluateWosV1ImageAccess({',
   "const gate = await admin.rpc('wos_v1_qa_uat_edge_write_allowed'",
-  'const path = canonicalWosV1ImagePath({',
+  'const canonicalPath = canonicalWosV1ImagePath({',
   "return output(request, 'PRIVATE_OBJECT_NOT_VERIFIED', 409);",
 ]) {
   const guardIndex = edgeIndex.indexOf(priorGuard);
@@ -431,6 +456,29 @@ for (const priorGuard of [
     `admin download precedes guard: ${priorGuard}`,
   );
 }
+for (const marker of [
+  'REVERIFY_CURRENT_ORDER_REQUIRED',
+  'REVERIFY_CURRENT_IMAGE_NOT_FOUND',
+  'REVERIFY_PROOF_NOT_FOUND',
+  'REVERIFY_PROOF_OBJECT_CHANGED',
+  'existingProofObject',
+  'expectedSha256 = proof.verified_sha256',
+  'pngValid(bytes, expectedSha256)',
+  'reverifiedExistingProof:',
+]) {
+  assert(edgeIndex.includes(marker), `missing existing-proof reverify guard: ${marker}`);
+}
+const reverifyAbsentGuard = edgeIndex.indexOf(
+  "renewalStatus === 'ABSENT'\n        && 'reverifyExistingProof' in body",
+);
+const recordTrustedProof = edgeIndex.indexOf(
+  "'wos_p7_record_trusted_image_proof'",
+);
+assert(reverifyAbsentGuard >= 0);
+assert(recordTrustedProof > reverifyAbsentGuard);
+assert(edgeIndex.includes(
+  "proof.storage_path !== canonicalPath",
+));
 assert(
   /function closerProbeDedicatedJwt\(\)[\s\S]{0,180}WOS_V1_QA_EDGE_CLOSER_SERVICE_ROLE_KEY/.test(
     edgeIndex,
