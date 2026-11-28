@@ -3,7 +3,7 @@
 Date: 2026-11-28
 
 Status:
-`JAKE_OFFICE_PATH_VERIFIED / OPERATOR_INVITE_BLOCKED_UNTIL_OWNER_INPUT`
+`JAKE_OFFICE_PATH_VERIFIED / INDEPENDENT_OPERATOR_BOUND_AND_VERIFIED`
 
 ## Jake Office Path
 
@@ -50,6 +50,9 @@ An independent Workshop operator must be a separate confirmed Auth user in the
 same Production organization with exactly one active Profile:
 
 ```ini
+EMAIL=dg.operator@hongda.cn
+AUTH_USER_ID=2a8ccb8c-38e2-4130-8a80-3d889d196672
+PROFILE_ID=bce5fe27-18a9-43d4-8fed-2251f3ab4174
 ROLE=operator
 ORGANIZATION_ID=e610c38c-d627-4518-a679-1a67958fb0f8
 IS_ACTIVE=true
@@ -60,22 +63,22 @@ The Operator receives no new table grants. The existing authenticated RPC
 grants enforce active Profile, organization, role, order scope, version CAS,
 and receipt checks.
 
-## Invitation And Binding
+The Auth user was already email-confirmed and had completed a real login before
+this verification. No duplicate invitation, password reset, Auth user creation,
+or Profile overwrite was performed.
 
-No operator account is created by this package because no real employee email
-has been approved yet.
+## Binding Verification
 
-After the Owner supplies a real mailbox and authorizes the role assignment:
+Verified:
 
-1. Send a standard Supabase Auth invitation to that mailbox.
-2. The employee confirms the email and completes the existing login flow.
-3. Read the resulting `auth.users.id` and confirm `email_confirmed_at`.
-4. Set the five exact session values required by
-   `sql/WOS_V1_PRODUCTION_OPERATOR_PROFILE_BIND_NOT_AUTHORIZED.sql`.
-5. Apply that SQL once in a transaction.
-6. Verify one active Operator Profile in the correct organization.
-7. Sign in separately and verify `/workshop-orders/inbox`.
-8. Verify Jake remains Sales and is not a Workshop actor.
+1. Auth email is confirmed.
+2. The user has one Profile, in the correct Production organization.
+3. The Profile is active and has role `operator`.
+4. Jake Wu remains an active Sales profile.
+5. The authenticated Operator can read the organization's Production order.
+6. Authenticated EXECUTE is present only for the reviewed Plan A operator RPCs.
+7. Production M2 function count remains zero.
+8. No direct WOS table DML was granted.
 
 The binding template rejects:
 
@@ -85,17 +88,14 @@ The binding template rejects:
 - existing Admin, Manager, or Sales Profiles;
 - Jake's Auth user or email.
 
-## Required Owner Input
+## Next Decision
 
-Provide one real employee mailbox and explicitly authorize:
+The Office and Workshop identities are now independent. The next Owner decision
+is a separately bounded Production M2 UAT window, which must include a fresh
+backup decision, M2 migration installation in inactive state, one-time RPC
+activation, a real three-role business flow, and data-retaining deactivation.
 
 ```ini
-PRODUCTION_OPERATOR_INVITE=YES
-EMAIL=<real employee mailbox>
-ORGANIZATION_ID=e610c38c-d627-4518-a679-1a67958fb0f8
-ROLE=operator
-JAKE_ROLE_CHANGE=NO
+PRODUCTION_OPERATOR_INVITE=COMPLETED_OR_EXISTING
+OWNER_PRODUCTION_M2_UAT_GATE=NOT_AUTHORIZED
 ```
-
-Until then, Jake can start the Office portion of the pilot while operator
-invitation and binding remain intentionally blocked.

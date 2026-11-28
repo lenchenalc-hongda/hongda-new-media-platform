@@ -50,7 +50,9 @@ assert(!operatorSql.includes('INSERT INTO auth.users'));
 assert(!operatorSql.includes('UPDATE auth.users'));
 assert(!operatorSql.includes('GRANT '));
 assert(pilotDoc.includes('Jake must not be promoted to Operator'));
-assert(pilotDoc.includes('No operator account is created by this package'));
+assert(pilotDoc.includes(
+  'No duplicate invitation, password reset, Auth user creation,',
+));
 
 console.log('wos-v1-production-operator-readiness.test.ts: PASS');
 console.log('WOS_V1_JAKE_OFFICE_ROLE=PASS');
