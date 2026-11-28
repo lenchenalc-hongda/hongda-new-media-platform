@@ -1,0 +1,52 @@
+{
+  "schemaVersion": 1,
+  "capturedAt": "2026-11-28T03:08:43Z",
+  "status": "SOURCE_REGRESSION_PASS",
+  "validation": {
+    "wosSuite": "PASS",
+    "typecheck": "PASS",
+    "build": "PASS",
+    "buildLogSha256": "17ce34e2a04a6a00c8da74a464f15f4bbb5d773a188deaead7ef5677ab3643d9",
+    "pg17StorageAndBusiness": "PASS",
+    "pg17StorageAndBusinessLogSha256": "1f6908b07c8dc20c619a85f3e9d334dbb33ca2633f47057783fc1ed01e244a9f",
+    "closerOnlyPg17": "PASS",
+    "closerOnlyPg17LogSha256": "eb9cdebefce05e4a46f563a77d10bcb61102b7440a57e05d4e05dbbb41fe2253",
+    "edgeProbeBoundedRetry": "PASS",
+    "independentReview": "PASS",
+    "independentReviewP0": 0,
+    "independentReviewP1": 0,
+    "independentReviewP2": 0
+  },
+  "edgeProbe": {
+    "attempts": 3,
+    "perAttemptTimeoutSeconds": 30,
+    "networkExceptionOnly": true,
+    "authorizationChecksUnchanged": true
+  },
+  "uat009": {
+    "mode": "RESUME_EXISTING_ORDER",
+    "authorizationId": "WOS-V1-PRODUCTION-M2-QA-UAT-009",
+    "executionId": "6ee17c06-fd16-46dc-9054-c9e5c5da139d",
+    "edgeProcessNonce": "4bee8f3c-4ad5-4f85-80a5-29fe09235f9d",
+    "orderId": "3ade0180-e6bf-49da-b80b-fd00cd1948a8",
+    "expectedStartVersion": 5,
+    "expectedStartLabel": "V2",
+    "expectedStartStatus": "NEEDS_INFORMATION",
+    "maxNewOrders": 0,
+    "maxCreateCalls": 0
+  },
+  "uat008HistoricalEvidence": {
+    "failClosedReason": "WOS_V1_QA_EDGE_OPEN_PROBE_EXCEPTION",
+    "identityRefreshLogSha256": "b79c9629c2d9c14bbcbffebf23cd20ad52506bfcf6c60e24312c6a889581daf0",
+    "businessWrites": false,
+    "consumed": true
+  },
+  "remoteState": {
+    "uat009SqlInstalled": false,
+    "uat009EdgeDeployed": false,
+    "uat009ArmPerformed": false,
+    "uat009BusinessWrites": false,
+    "hostedWritesEnabled": false,
+    "hostedReadonlyVerifyEnabled": false
+  }
+}

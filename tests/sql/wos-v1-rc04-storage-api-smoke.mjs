@@ -273,7 +273,7 @@ try {
       USING (true)
       WITH CHECK (true);
     `);
-    const authId = 'WOS-V1-PRODUCTION-M2-QA-UAT-008';
+    const authId = 'WOS-V1-PRODUCTION-M2-QA-UAT-009';
     const organizationId = '0ff53d93-2b9e-48b9-8113-a4768c39cdd2';
     const orderId = psqlScalar(`
       SELECT id::text

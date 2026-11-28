@@ -1,0 +1,36 @@
+{
+  "status": "PASS",
+  "projectRelated": "xulmpqaknlwqqculbsek",
+  "identities": [
+    {
+      "service": "WOS_V1_QA_IDENTITY_OFFICE_ADMIN",
+      "authUserMatch": true,
+      "profileIdMatch": true,
+      "expiresAt": "2026-11-28T04:02:37.000Z"
+    },
+    {
+      "service": "WOS_V1_QA_IDENTITY_OPERATOR",
+      "authUserMatch": true,
+      "profileIdMatch": true,
+      "expiresAt": "2026-11-28T04:02:38.000Z"
+    },
+    {
+      "service": "WOS_V1_QA_IDENTITY_INDEPENDENT_MANAGER",
+      "authUserMatch": true,
+      "profileIdMatch": true,
+      "expiresAt": "2026-11-28T04:02:39.000Z"
+    },
+    {
+      "service": "WOS_V1_QA_IDENTITY_VIEWER",
+      "authUserMatch": true,
+      "profileIdMatch": true,
+      "expiresAt": "2026-11-28T04:02:40.000Z"
+    },
+    {
+      "service": "WOS_V1_QA_IDENTITY_CROSS_ORG_MANAGER",
+      "authUserMatch": true,
+      "profileIdMatch": true,
+      "expiresAt": "2026-11-28T04:02:41.000Z"
+    }
+  ]
+}

@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 
 const input = JSON.parse(readFileSync(
   'docs/workshop-order-system/qa-fixture/'
-    + 'production-m2-uat-20261126/inputs-uat008.json',
+    + 'production-m2-uat-20261126/inputs-uat009.json',
   'utf8',
 ));
 const runner = readFileSync(
@@ -29,7 +29,7 @@ const closerOnlyInstall = readFileSync(
   'utf8',
 );
 
-assert.equal(input.authorizationId, 'WOS-V1-PRODUCTION-M2-QA-UAT-008');
+assert.equal(input.authorizationId, 'WOS-V1-PRODUCTION-M2-QA-UAT-009');
 assert.equal(input.mode, 'RESUME_EXISTING_ORDER');
 assert.equal(
   input.resumeOrderId,
@@ -70,7 +70,9 @@ for (const marker of [
   assert(runner.includes(marker), `UAT runner missing ${marker}`);
 }
 assert(!runner.includes('WOS-V1-PRODUCTION-M2-QA-UAT-005'));
+assert(!runner.includes('WOS-V1-PRODUCTION-M2-QA-UAT-006'));
 assert(!runner.includes('WOS-V1-PRODUCTION-M2-QA-UAT-007'));
+assert(!runner.includes('WOS-V1-PRODUCTION-M2-QA-UAT-008'));
 assert(
   runner.indexOf('if (RESUME_MODE)')
     < runner.indexOf('createBody = {'),
@@ -80,11 +82,13 @@ assert(edgeCloser.includes('WOS_V1_QA_EDGE_CLOSER_SERVICE_ROLE_KEY'));
 assert(edgeCloser.includes('credential-preflight'));
 assert(edgeCloser.includes('WOS_V1_QA_EDGE_PROBE_EXPECT'));
 assert(edgeCloser.includes('CLOSE_UNVERIFIED'));
+assert(edgeCloser.includes('probeEdgeOnce'));
+assert(edgeCloser.includes('attempt <= 3'));
 assert(dbCloser.includes('WOS_V1_QA_APP_EXECUTION_ID'));
-assert(dbCloser.includes('f07cec5d-48f6-4f3f-9cc4-54bd013263f0'));
+assert(dbCloser.includes('6ee17c06-fd16-46dc-9054-c9e5c5da139d'));
 assert(
   runner.includes(
-    'WOS_V1_PRODUCTION_M2_QA_BUSINESS_UAT_008_20261128.json',
+    'WOS_V1_PRODUCTION_M2_QA_BUSINESS_UAT_009_20261128.json',
   ),
 );
 assert(
@@ -92,13 +96,13 @@ assert(
     'WOS_V1_PRODUCTION_M2_QA_BUSINESS_UAT_006_20261127.json',
   ),
 );
-assert(appActivate.includes('WOS-V1-PRODUCTION-M2-QA-UAT-008'));
-assert(appActivate.includes('f07cec5d-48f6-4f3f-9cc4-54bd013263f0'));
+assert(appActivate.includes('WOS-V1-PRODUCTION-M2-QA-UAT-009'));
+assert(appActivate.includes('6ee17c06-fd16-46dc-9054-c9e5c5da139d'));
 assert(
   closerOnlyInstall.includes(
-    "p_authorization_id<>'WOS-V1-PRODUCTION-M2-QA-UAT-008'",
+    "p_authorization_id<>'WOS-V1-PRODUCTION-M2-QA-UAT-009'",
   ),
 );
 assert(!closerOnlyInstall.includes('WOS-V1-PRODUCTION-M2-QA-UAT-005'));
 
-console.log('wos-v1-qa-uat008-packaging.test.ts: PASS');
+console.log('wos-v1-qa-uat009-packaging.test.ts: PASS');

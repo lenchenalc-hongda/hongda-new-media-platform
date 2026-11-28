@@ -19,7 +19,7 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '../..');
 const SCRIPT = fileURLToPath(import.meta.url);
 const AUTH_ID =
   process.env.WOS_V1_QA_AUTHORIZATION_ID
-  || 'WOS-V1-PRODUCTION-M2-QA-UAT-008';
+  || 'WOS-V1-PRODUCTION-M2-QA-UAT-009';
 const PROJECT_REF = 'xulmpqaknlwqqculbsek';
 const ARM_KEYCHAIN = 'WOS_V1_QA_DB_CLOSER_ARM_TOKEN';
 const SERVICE_KEYCHAIN = 'WOS_V1_QA_EDGE_CLOSER_SERVICE_ROLE_KEY';
@@ -555,7 +555,7 @@ function readState(path) {
   return state;
 }
 
-async function probeEdge(state, mode) {
+async function probeEdgeOnce(state, mode) {
   const service = serviceKey();
   const credentialPreflight = mode === 'CREDENTIAL';
   const response = await fetch(state.functionUrl, {
@@ -573,7 +573,7 @@ async function probeEdge(state, mode) {
         : {}),
     },
     body: '{}',
-    signal: AbortSignal.timeout(20_000),
+    signal: AbortSignal.timeout(30_000),
   });
   const payload = await response.json().catch(() => null);
   const data = payload?.data && typeof payload.data === 'object'
@@ -606,6 +606,21 @@ async function probeEdge(state, mode) {
     executionId: data?.executionId || null,
     closedAt: closedAt || null,
   };
+}
+
+async function probeEdge(state, mode) {
+  let lastError;
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    try {
+      return await probeEdgeOnce(state, mode);
+    } catch (error) {
+      lastError = error;
+      if (attempt < 3) {
+        await new Promise(resolve => setTimeout(resolve, attempt * 500));
+      }
+    }
+  }
+  throw lastError;
 }
 
 async function probeOpen(state) {
